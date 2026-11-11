@@ -10,7 +10,9 @@ Telegram is the first channel. The design and its threat model are in
 
 **On this page:** [What it does](#what-it-does) · [Set up Telegram](#set-up-telegram) ·
 [Commands](#commands) · [What you see on your phone](#what-you-see-on-your-phone) ·
-[Limits](#limits) · [Threats and what stops them](#threats-and-what-stops-them)
+[Files](#files) · [Limits](#limits) ·
+[Threats and what stops them](#threats-and-what-stops-them) ·
+[Adding a channel](#adding-a-channel)
 
 ## What it does
 
@@ -41,9 +43,9 @@ Telegram is the first channel. The design and its threat model are in
    ```
 
    Paste the token when asked. OpenMoat checks it with Telegram, then stores it in
-   `~/.moat/remote/telegram.token`, readable only by you. It never goes in a policy
-   file. To read it from a file instead, use `--token-file FILE` and delete the file
-   afterwards.
+   `~/.moat/remote/telegram/credential`, readable only by you. It never goes in a policy
+   file. To read it from a file instead, use `--credential-file FILE` and delete the
+   file afterwards.
 3. Send `/start` to your bot from your own Telegram account.
 4. Start the listener in a terminal of your own, and leave it running:
 
@@ -54,15 +56,19 @@ Telegram is the first channel. The design and its threat model are in
    When you message the bot, it prints your user id:
 
    ```text
-   14:02 message from @you (123456789), who is not an approver; `openmoat approvals allow 123456789` would make them one
+   14:02 message from @you (telegram:123456789), who is not an approver; `openmoat approvals allow telegram:123456789` would make them one
    ```
 
 5. In another terminal, allow that id, then send a test message:
 
    ```bash
-   openmoat approvals allow 123456789
+   openmoat approvals allow telegram:123456789
    openmoat approvals test
    ```
+
+   An approver id is the channel's name and the user id on it, so the same number on two
+   services is never the same approver. `allow 123456789` means the same on the
+   connected channel.
 
 From now on, every call held for review is also sent to you while `listen` runs.
 
@@ -70,13 +76,13 @@ From now on, every call held for review is also sent to you while `listen` runs.
 
 | Command | What it does | Who can run it |
 |---|---|---|
-| `openmoat approvals connect telegram [--token-file FILE] [--expires 5m]` | stores the bot token, makes the approval key, keeps approvers you already allowed | a person at a terminal |
-| `openmoat approvals allow <user-id>` | lets that Telegram user approve | a person at a terminal |
-| `openmoat approvals remove <user-id>` | takes that back; answers they gave that are not used yet stop counting | a person at a terminal |
+| `openmoat approvals connect <channel> [--credential-file FILE] [--set KEY=VALUE] [--expires 5m]` | checks the credential with the channel, stores it, makes the approval key, keeps approvers you already allowed on that channel; `--set` answers a channel's own questions (Telegram has none) | a person at a terminal |
+| `openmoat approvals allow <channel>:<user-id>` | lets that user approve (a bare user id means the connected channel) | a person at a terminal |
+| `openmoat approvals remove <channel>:<user-id>` | takes that back; answers they gave that are not used yet stop counting | a person at a terminal |
 | `openmoat approvals listen` | sends waiting requests and takes answers, until Ctrl-C | a person at a terminal |
 | `openmoat approvals test` | sends a test message to every approver | a person at a terminal |
-| `openmoat approvals status [--format json]` | shows the channel, the approvers, the expiry and how many requests wait; never the token | anyone |
-| `openmoat approvals disconnect` | removes the token and the settings | a person at a terminal |
+| `openmoat approvals status [--format json]` | shows the channel and its account, the approvers, the expiry and how many requests wait; never the credential | anyone |
+| `openmoat approvals disconnect` | removes the credential, the settings and the waiting requests | a person at a terminal |
 
 "A person at a terminal" means the command refuses to run from a hook, a script or an
 agent: it needs a terminal, and no agent and no `openmoat run` may be among the programs
@@ -107,6 +113,24 @@ What is sent: the agent's name, the session id, the folder, the rule ids and the
 The call passes through the audit log's redaction first (token shapes and your brokered
 secrets), invisible and control characters are shown as `?`, and it is cut to 1500
 characters. The content of a file write is never sent, only its size.
+
+On a channel without buttons, the message ends with two reply codes instead; send one
+back, alone, to answer. A code is checked exactly as a button press is. When a channel
+cannot show all of the call in one message, it offers Deny only: approve such a call
+where the agent runs.
+
+## Files
+
+Everything is under `~/.moat/remote/`, owner-only. The default policy denies agents
+reading any of it and writing anywhere under `~/.moat`.
+
+| File | What it holds |
+|---|---|
+| `approval.key` | the key every request, answer, button and settings file is signed with |
+| `settings.json` | the connected channel, the approver ids and the expiry, signed |
+| `<channel>/credential` | the channel's secret (the Telegram bot token) |
+| `<channel>/settings.json` | the channel's account (the bot's name) and its own settings, signed |
+| `requests/`, `answers/`, `used/` | calls waiting, answers given, approvals used |
 
 ## Limits
 
@@ -144,3 +168,44 @@ characters. The content of a file write is never sent, only its size.
 | The agent runs `openmoat approvals allow` | denied by the policy, and refused because an agent started it |
 | The agent edits the approver list | writes are denied, and the list is signed |
 | The agent's command tries to persuade you | OpenMoat writes the message, labels the agent's text, sends it as plain text with no link previews, and redacts secrets in it |
+| A user of another channel with the same number | approver ids carry the channel's name, set by OpenMoat, not by the channel |
+| A call too long for the channel, approved without being read | the channel is offered Deny only |
+
+## Adding a channel
+
+A channel is one folder and one registry row; nothing else changes. The core (the
+request, the signatures, the gate, the listener, the commands) never names a channel,
+and `crates/openmoat-cli/tests/architecture.rs` fails if it does. The design is in
+ADR-078, "Channel architecture". To add one called `example`:
+
+1. **Create `crates/openmoat-cli/src/remote/channels/example.rs`** with a type that
+   implements `Channel` (`remote/channel.rs`): `account` (the account the credential
+   belongs to; this call also proves the credential works), `send` (a `Prompt`: plain
+   text and, when the channel has buttons, its `choices`), `notify`, `poll` (each
+   message or button press as a `Reply`: the sender's id as the channel's server gives
+   it, a button's data or a message's text) and `settle`. Talk to the network only
+   through `remote/https.rs` or a reviewed transport; never read a credential from the
+   environment.
+2. **Define `pub const SPEC: Spec`** in the same file, with `name: "example"`:
+   - `capabilities`: `buttons` only if the server reports who pressed a button;
+     `button_bytes` (OpenMoat's data is 51 bytes; smaller means reply codes);
+     `max_text`, at least 1024;
+   - `ask_credential` and `valid_credential` (a strict shape check);
+   - `questions` for any other setting `connect` must ask (each with a check), else `&[]`;
+   - `user_id` and `valid_user`, a strict check of a user id on the channel;
+   - `open`, `next_steps` and `revoke`.
+3. **Put its tests in `channels/example/tests.rs`**, against a fake of the service's
+   API, as `channels/telegram/tests.rs` does: no network, no real credential.
+4. **Add the row** in `remote/channels.rs`: `mod example;` and `&example::SPEC` in
+   `REGISTRY`, in file-name order.
+5. **Document it**: a setup section on this page, its limits, its vendor facts and
+   threat rows in an amendment to ADR-078, and a changelog fragment.
+
+Then run `cargo test -p openmoat --test architecture` and the unit tests. You do not
+edit the commands, the gate, the listener, the settings or the policy: `connect
+example`, `allow example:<id>`, the per-channel files under `~/.moat/remote/example/`
+and the `kernel-self` deny that covers them all follow from the row.
+
+What a channel must never do: decide whether an answer counts (the core checks the
+approver, the signature, the expiry and single use), qualify its own user ids (the core
+does), render the text as markup, or follow links in it.
