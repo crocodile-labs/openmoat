@@ -37,6 +37,13 @@ const TOOL: &str = "isolation";
 pub enum Offered {
     /// No Isolated tier to start by default (macOS, Windows): `--isolate` is
     /// refused by the platform itself.
+    #[cfg_attr(
+        all(target_os = "linux", not(test)),
+        expect(
+            dead_code,
+            reason = "Linux always offers the tier or says why not; only other platforms build this"
+        )
+    )]
     Not,
     /// bubblewrap can make it here.
     Available,

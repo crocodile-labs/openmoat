@@ -1144,7 +1144,8 @@ probe_agent() {
 # A hook that hangs is not tried here: waiting out an agent's time limit
 # (30 s to 600 s) under every agent would outlast the job's own time limit.
 hook_fails() {
-    local mode=$1 fact limit=180 calls="$out/hook-failure-$mode-calls.log"
+    local mode=$1 fact limit=180
+    local calls="$out/hook-failure-$mode-calls.log"
     begin "hook fails: $mode"
     fact=$(check hook-failure-fact "$host" "$out/status.json" fails)
     mv "$moat" "$moat.real"
