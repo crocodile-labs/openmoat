@@ -21,20 +21,23 @@ fn an_opencode_definition_is_wrapped_as_one_list_and_unwrapped_exactly() {
             "command": [BIN, "mcp", "proxy", "--server", "db", "--", "npx", "-y", "--", "pkg"]})
     );
     assert_eq!(on.get("args"), None, "OpenCode's form has no `args`");
-    assert_eq!(unwrapped(&on).unwrap(), entry);
-    assert_eq!(sandboxed(&on), Some(false));
+    assert_eq!(unwrapped(&on, CommandList).unwrap(), entry);
+    assert_eq!(sandboxed(&on, CommandList), Some(false));
     assert!(
         wrapped_as(&on, Path::new(BIN), "db", false, CommandList).is_none(),
         "wrapped already"
     );
-    let named = with_host(&on, openmoat_hosts::Host::OpenCode).unwrap();
+    let named = with_host(&on, CommandList, openmoat_hosts::Host::OpenCode).unwrap();
     assert_eq!(named["command"][0], BIN);
     assert_eq!(named["command"][5], "--host");
-    assert_eq!(unwrapped(&named).unwrap(), entry);
-    let boxed = with_sandbox(&named, true).unwrap();
-    assert_eq!(sandboxed(&boxed), Some(true));
-    assert_eq!(unwrapped(&boxed).unwrap(), entry);
-    assert_eq!(proxy_args(&on).unwrap()[0..2], ["mcp", "proxy"]);
+    assert_eq!(unwrapped(&named, CommandList).unwrap(), entry);
+    let boxed = with_sandbox(&named, CommandList, true).unwrap();
+    assert_eq!(sandboxed(&boxed, CommandList), Some(true));
+    assert_eq!(unwrapped(&boxed, CommandList).unwrap(), entry);
+    assert_eq!(
+        proxy_args(&on, CommandList).unwrap()[0..2],
+        ["mcp", "proxy"]
+    );
 }
 
 #[test]
@@ -59,7 +62,7 @@ fn a_goose_definition_keeps_cmd_and_args() {
             "pkg"
         ])
     );
-    assert_eq!(unwrapped(&on).unwrap(), entry);
+    assert_eq!(unwrapped(&on, CmdArgs).unwrap(), entry);
 }
 
 /// What a host does not run is never read as what it does.
@@ -115,6 +118,14 @@ fn a_server_it_cannot_put_behind_the_proxy_is_named_and_a_remote_one_is_not() {
     }
     let remote = json!({"type": "remote", "url": "https://x"});
     assert_eq!(not_wrappable(&remote, CommandList), None);
+    // OpenCode entries with nothing to wrap are not warned about.
+    for nothing in [
+        json!({"enabled": false}),
+        json!({"url": "https://x"}),
+        json!({"type": "local"}),
+    ] {
+        assert_eq!(not_wrappable(&nothing, CommandList), None, "{nothing}");
+    }
     let ours = json!({"command": ["x"]});
     assert_eq!(not_wrappable(&ours, CommandArgs), None, "as before");
 }
@@ -134,14 +145,37 @@ fn what_starts_a_process_is_read_in_every_form() {
     ));
 }
 
-/// An entry with both keys is not read as wrapped: which of them runs is the
-/// host's business.
+/// goose runs `cmd` and OpenCode a `cmd` beside its list is not its own: an
+/// entry with both keys is never read as wrapped there.
 #[test]
-fn an_entry_with_both_keys_has_no_form_and_is_not_wrapped() {
+fn an_entry_with_both_keys_is_not_wrapped_where_the_host_reads_cmd() {
     let both = json!({"type": "stdio", "cmd": "evil", "command": "/b/openmoat",
         "args": ["mcp", "proxy", "--server", "x", "--", "ok"]});
-    assert_eq!(sandboxed(&both), None);
-    assert_eq!(proxy_args(&both), None);
-    assert_eq!(unwrapped(&both), None);
-    assert_eq!(read(&both), None);
+    let listed = json!({"type": "local", "cmd": "evil",
+        "command": ["/b/openmoat", "mcp", "proxy", "--server", "x", "--", "ok"]});
+    for (entry, form) in [(&both, CmdArgs), (&listed, CommandList)] {
+        assert_eq!(sandboxed(entry, form), None, "{entry}");
+        assert_eq!(proxy_args(entry, form), None, "{entry}");
+        assert_eq!(unwrapped(entry, form), None, "{entry}");
+        assert_eq!(parts(entry, form), None, "{entry}");
+    }
+}
+
+/// A host whose reader takes `command` and `args` ignores a `cmd` beside
+/// them: what wrapping writes there is read back in that form, so it gets its
+/// `--host`, and unwrapping restores it.
+#[test]
+fn a_stray_cmd_does_not_hide_a_wrap_from_a_host_that_reads_command() {
+    let entry = json!({"command": "npx", "args": ["pkg"], "cmd": "unused"});
+    let on = wrapped_as(&entry, Path::new(BIN), "gh", false, CommandArgs).unwrap();
+    assert_eq!(on["cmd"], "unused", "left as it was");
+    assert_eq!(sandboxed(&on, CommandArgs), Some(false));
+    let named = with_host(&on, CommandArgs, openmoat_hosts::Host::ClaudeCode).unwrap();
+    assert!(
+        proxy_args(&named, CommandArgs)
+            .unwrap()
+            .contains(&"--host".to_owned())
+    );
+    assert_eq!(unwrapped(&named, CommandArgs).unwrap(), entry);
+    assert!(with_sandbox(&named, CommandArgs, true).is_some());
 }

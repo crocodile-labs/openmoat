@@ -1,3 +1,4 @@
+use openmoat_hosts::McpCommandForm;
 use serde_json::json;
 
 use super::*;
@@ -22,8 +23,10 @@ fn wrapped(sandboxed: bool) -> Value {
 }
 
 fn judge(entry: &Value, accepted: bool, set_up: bool) -> (bool, String) {
-    judged(shape_of(entry), "gh", accepted, set_up, "Claude Code")
+    judged(shape_of(entry, FORM), "gh", accepted, set_up, "Claude Code")
 }
+
+const FORM: McpCommandForm = McpCommandForm::CommandArgs;
 
 #[test]
 fn a_wrapped_accepted_server_is_protected() {
@@ -49,7 +52,7 @@ fn an_unaccepted_wrapped_server_is_unprotected() {
 #[test]
 fn an_unwrapped_local_server_is_unprotected_and_names_the_fix() {
     let entry = json!({"command": "npx", "args": ["server"]});
-    assert_eq!(shape_of(&entry), Shape::Local);
+    assert_eq!(shape_of(&entry, FORM), Shape::Local { cannot_wrap: None });
     let (protected, why) = judge(&entry, true, true);
     assert!(!protected, "{why}");
     assert!(why.contains("openmoat mcp wrap gh"), "{why}");
@@ -58,7 +61,7 @@ fn an_unwrapped_local_server_is_unprotected_and_names_the_fix() {
 #[test]
 fn a_remote_server_depends_on_its_definition_being_accepted() {
     let entry = json!({"type": "http", "url": "https://example.test/mcp"});
-    assert_eq!(shape_of(&entry), Shape::Remote);
+    assert_eq!(shape_of(&entry, FORM), Shape::Remote);
     assert!(judge(&entry, true, true).0);
     assert!(!judge(&entry, false, true).0);
 }
@@ -67,16 +70,52 @@ fn a_remote_server_depends_on_its_definition_being_accepted() {
 #[test]
 fn an_unknown_shape_is_unprotected() {
     let entry = json!({"program": "server", "enabled": true});
-    assert_eq!(shape_of(&entry), Shape::Unknown);
+    assert_eq!(shape_of(&entry, FORM), Shape::Unknown);
     assert!(!judge(&entry, true, true).0);
 }
 
-/// goose's `cmd` starts a process: a local server, not an unknown shape.
+/// goose's `cmd` starts a local process, unprotected until it is wrapped.
 #[test]
 fn a_goose_command_is_a_local_server() {
-    let entry = json!({"cmd": "server", "enabled": true});
-    assert_eq!(shape_of(&entry), Shape::Local);
+    let entry = json!({"type": "stdio", "cmd": "server", "args": []});
+    assert_eq!(
+        shape_of(&entry, McpCommandForm::CmdArgs),
+        Shape::Local { cannot_wrap: None }
+    );
     assert!(!judge(&entry, true, true).0);
+}
+
+/// goose's inline Python runs on this machine but has no command to put
+/// behind the proxy: the advice is one a person can follow.
+#[test]
+fn inline_python_is_unprotected_and_not_told_to_wrap() {
+    let entry = json!({"type": "inline_python", "code": "print(1)"});
+    let shape = shape_of(&entry, McpCommandForm::CmdArgs);
+    assert!(
+        matches!(
+            shape,
+            Shape::Local {
+                cannot_wrap: Some(_)
+            }
+        ),
+        "{shape:?}"
+    );
+    let (protected, why) = judged(shape, "snake", true, true, "goose");
+    assert!(!protected, "{why}");
+    assert!(!why.contains("openmoat mcp wrap snake"), "{why}");
+    assert!(
+        why.contains("inline Python") && why.contains("remove it"),
+        "{why}"
+    );
+    let mut snake = server(entry);
+    snake.form = McpCommandForm::CmdArgs;
+    let status = status_of(Host::Goose, snake, true, true);
+    assert!(
+        !status.why.contains("openmoat mcp wrap snake"),
+        "{}",
+        status.why
+    );
+    assert!(status.fails_requirement, "still counted as unprotected");
 }
 
 #[test]
@@ -94,6 +133,7 @@ fn server(entry: Value) -> servers::Server {
         pointer: "/x".to_owned(),
         name: "gh".to_owned(),
         entry,
+        form: McpCommandForm::CommandArgs,
     }
 }
 

@@ -35,7 +35,7 @@ use crate::install::Recorded;
 mod form;
 mod preview;
 
-pub use form::not_wrappable;
+pub use form::{cannot_wrap_advice, not_wrappable};
 pub use preview::preview;
 
 /// Suffix of the copy taken before the first wrap changes a file.
@@ -109,24 +109,26 @@ pub fn wrapped_as(
     ))
 }
 
-/// The arguments `entry` gives `moat mcp proxy` (`mcp`, `proxy`, its flags,
-/// `--` and the server's command); `None` when it is not wrapped.
-pub fn proxy_args(entry: &Value) -> Option<Vec<String>> {
-    let (_, command, args) = form::read(entry)?;
+/// The arguments `entry`, a definition in `form`, gives `moat mcp proxy`
+/// (`mcp`, `proxy`, its flags, `--` and the server's command); `None` when it
+/// is not wrapped. Every question about a definition below reads it in the
+/// form its host's reader names, never guessed from its keys.
+pub fn proxy_args(entry: &Value, form: McpCommandForm) -> Option<Vec<String>> {
+    let (command, args) = form::parts(entry, form)?;
     original(&command, &args)?;
     Some(args)
 }
 
 /// Wrapped `entry` given the arguments `args` for the proxy.
-fn with_proxy_args(entry: &Value, args: Vec<String>) -> Option<Value> {
-    let (form, command, _) = form::read(entry)?;
+fn with_proxy_args(entry: &Value, form: McpCommandForm, args: Vec<String>) -> Option<Value> {
+    let (command, _) = form::parts(entry, form)?;
     Some(form::written(entry, form, command, args))
 }
 
 /// Whether wrapped `entry` starts its server in `moat run`'s sandbox; `None`
 /// when it is not wrapped.
-pub fn sandboxed(entry: &Value) -> Option<bool> {
-    let args = proxy_args(entry)?;
+pub fn sandboxed(entry: &Value, form: McpCommandForm) -> Option<bool> {
+    let args = proxy_args(entry, form)?;
     let split = args.iter().position(|a| a == "--")?;
     Some(args[..split].iter().any(|a| a == "--sandbox"))
 }
@@ -134,11 +136,11 @@ pub fn sandboxed(entry: &Value) -> Option<bool> {
 /// Wrapped `entry` with its sandbox switched to `on`; `None` when it is not
 /// wrapped or already so. Turning it off drops `--write`, which only the
 /// sandbox reads.
-pub fn with_sandbox(entry: &Value, on: bool) -> Option<Value> {
-    if sandboxed(entry)? == on {
+pub fn with_sandbox(entry: &Value, form: McpCommandForm, on: bool) -> Option<Value> {
+    if sandboxed(entry, form)? == on {
         return None;
     }
-    let args = proxy_args(entry)?;
+    let args = proxy_args(entry, form)?;
     let split = args.iter().position(|a| a == "--")?;
     let (flags, rest) = args.split_at(split);
     let mut kept: Vec<String> = Vec::new();
@@ -157,15 +159,15 @@ pub fn with_sandbox(entry: &Value, on: bool) -> Option<Value> {
         kept.push("--sandbox".to_owned());
     }
     kept.extend(rest.iter().cloned());
-    with_proxy_args(entry, kept)
+    with_proxy_args(entry, form, kept)
 }
 
 /// Wrapped `entry` with `--host <host>`, so the proxy takes only `host`'s hook
 /// decisions; `None` when it is not wrapped or names its host already. A
 /// definition wrapped before the proxy took `--host` is given it the next
 /// time it is wrapped.
-pub fn with_host(entry: &Value, host: Host) -> Option<Value> {
-    let args = proxy_args(entry)?;
+pub fn with_host(entry: &Value, form: McpCommandForm, host: Host) -> Option<Value> {
+    let args = proxy_args(entry, form)?;
     let split = args.iter().position(|a| a == "--")?;
     let flags = &args[..split];
     if flags
@@ -177,7 +179,7 @@ pub fn with_host(entry: &Value, host: Host) -> Option<Value> {
     let mut kept = flags.to_vec();
     kept.extend(["--host".to_owned(), host.id().to_owned()]);
     kept.extend(args[split..].iter().cloned());
-    with_proxy_args(entry, kept)
+    with_proxy_args(entry, form, kept)
 }
 
 /// Whether `entry` starts a local process: a `command` (a string, or a list
@@ -199,8 +201,8 @@ pub fn starts_process(entry: &Value) -> bool {
 }
 
 /// `entry` as it was before wrapping; `None` when it is not wrapped.
-pub fn unwrapped(entry: &Value) -> Option<Value> {
-    let (form, command, args) = form::read(entry)?;
+pub fn unwrapped(entry: &Value, form: McpCommandForm) -> Option<Value> {
+    let (command, args) = form::parts(entry, form)?;
     let (command, args) = original(&command, &args)?;
     Some(form::written(entry, form, command, args))
 }
@@ -235,7 +237,10 @@ pub fn write(home: &Home, edits: &[(Source, Done)], dry_run: bool) -> Result<()>
             .push(done);
     }
     for (path, (syntax, dones)) in by_file {
-        let (_, new) = rendered(&path, syntax, &dones)?;
+        let new = match rendered(&path, syntax, &dones)? {
+            Rendered::Text { after, .. } => after,
+            Rendered::ByHand(why) => bail!("{why}"),
+        };
         if dry_run {
             continue;
         }
@@ -245,56 +250,82 @@ pub fn write(home: &Home, edits: &[(Source, Done)], dry_run: bool) -> Result<()>
     Ok(())
 }
 
-/// The text of the file at `path` and what `dones` would make it; `Err` when
-/// OpenMoat does not rewrite such a file, with what to set by hand.
-fn rendered(path: &Path, syntax: McpSyntax, dones: &[&Done]) -> Result<(String, String)> {
+/// What rewriting one file comes to.
+#[derive(Debug)]
+enum Rendered {
+    /// The text of the file and what the edits make it.
+    Text { before: String, after: String },
+    /// A file OpenMoat deliberately does not rewrite (YAML, JSON5 with
+    /// comments): what a person sets by hand instead.
+    ByHand(String),
+}
+
+/// What `dones` would make the file at `path`. A file OpenMoat does not
+/// rewrite is [`Rendered::ByHand`]; any other failure (the file cannot be
+/// read or parsed, a server is no longer where it was) is an error.
+fn rendered(path: &Path, syntax: McpSyntax, dones: &[&Done]) -> Result<Rendered> {
     let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let new = match syntax {
+    let after = match syntax {
         McpSyntax::Json => edit_json(&text, dones)?,
         McpSyntax::Toml => edit_toml(&text, dones)?,
         McpSyntax::Json5 => {
             // JSON5 is written back as JSON, so a file with comments is not.
             let parsed = crate::install::json5_file::parse_or_empty(&text)
                 .with_context(|| format!("parsing {}", path.display()))?;
-            crate::install::json5_file::refuse_comments(&parsed, path)?;
+            if parsed.comments {
+                return Ok(Rendered::ByHand(
+                    crate::install::json5_file::comments_refusal(path),
+                ));
+            }
             edit_value(parsed.value, dones)?
         }
         // The host rewrites it and people keep comments in it; OpenMoat
         // edits only its own hook lines there.
-        McpSyntax::Yaml => bail!(
-            "{} is YAML, which `openmoat mcp {}` does not rewrite; set these by hand, \
-             then run `openmoat mcp accept`:\n{}",
-            path.display(),
-            if dones.iter().any(|d| original_of(&d.entry).is_some()) {
-                "wrap"
-            } else {
-                "unwrap"
-            },
-            by_hand(dones)
-        ),
+        McpSyntax::Yaml => {
+            return Ok(Rendered::ByHand(format!(
+                "{} is YAML, which `openmoat mcp {}` does not rewrite; set these by hand, \
+                 then run `openmoat mcp accept`:\n{}",
+                path.display(),
+                if dones
+                    .iter()
+                    .any(|d| original_of(&d.entry, d.server.form).is_some())
+                {
+                    "wrap"
+                } else {
+                    "unwrap"
+                },
+                by_hand(dones)
+            )));
+        }
     };
-    Ok((text, new))
+    Ok(Rendered::Text {
+        before: text,
+        after,
+    })
 }
 
 /// Whether `entry` (a definition as it is to be written) runs through the
 /// proxy: what it ran before, when it does.
-fn original_of(entry: &Value) -> Option<(String, Vec<String>)> {
-    let (_, command, args) = form::read(entry)?;
+fn original_of(entry: &Value, form: McpCommandForm) -> Option<(String, Vec<String>)> {
+    let (command, args) = form::parts(entry, form)?;
     original(&command, &args)
 }
 
-/// Each server's program and `args` as they are to be written, one line each.
+/// Each server's program and `args` as they are to be written, one line each,
+/// for the terminal: a name or argument from the file with control or
+/// hidden characters is shown with `?` in their place.
 fn by_hand(dones: &[&Done]) -> String {
     dones
         .iter()
         .map(|done| {
-            let key = form::program_key(&done.entry);
-            format!(
+            let key = form::program_key(done.server.form);
+            let line = format!(
                 "  {}: {key}: {}, args: {}",
                 done.server.name,
                 done.entry[key],
                 done.entry.get("args").unwrap_or(&Value::Null)
-            )
+            );
+            crate::render::clean(&line).into_owned()
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -357,6 +388,25 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    // These read a definition in the common form of a `command` and `args`.
+    const FORM: McpCommandForm = McpCommandForm::CommandArgs;
+
+    fn unwrapped(entry: &Value) -> Option<Value> {
+        super::unwrapped(entry, FORM)
+    }
+
+    fn sandboxed(entry: &Value) -> Option<bool> {
+        super::sandboxed(entry, FORM)
+    }
+
+    fn with_sandbox(entry: &Value, on: bool) -> Option<Value> {
+        super::with_sandbox(entry, FORM, on)
+    }
+
+    fn with_host(entry: &Value, host: Host) -> Option<Value> {
+        super::with_host(entry, FORM, host)
+    }
 
     #[test]
     fn wrapping_keeps_the_original_after_the_separator_and_unwrapping_restores_it() {
@@ -502,6 +552,7 @@ mod tests {
             pointer: "/mcp_servers/docs".to_owned(),
             name: "docs".to_owned(),
             entry: json!({}),
+            form: FORM,
         };
         let done = Done {
             entry: wrapped(
@@ -521,5 +572,28 @@ mod tests {
             "{out}"
         );
         assert!(out.contains("env = { A = \"1\" }"), "{out}");
+    }
+
+    /// A server's name comes from the agent's file: what is set by hand is
+    /// printed without the escape sequences it may hold.
+    #[test]
+    fn what_to_set_by_hand_is_printed_without_escape_sequences() {
+        let name = "gh\u{1b}[2J\u{202e}";
+        let server = Server {
+            id: String::new(),
+            host: Host::EVERY[0],
+            file: PathBuf::from("/c/config.yaml"),
+            pointer: "/mcp_servers/gh".to_owned(),
+            name: name.to_owned(),
+            entry: json!({}),
+            form: FORM,
+        };
+        let entry = wrapped(&json!({"command": "gh"}), Path::new("/b/moat"), name, false).unwrap();
+        let line = by_hand(&[&Done { server, entry }]);
+        assert!(
+            !line.contains('\u{1b}') && !line.contains('\u{202e}'),
+            "{line:?}"
+        );
+        assert!(line.starts_with("  gh?[2J?: command:"), "{line:?}");
     }
 }

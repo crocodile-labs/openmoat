@@ -230,6 +230,19 @@ pub fn accept(home: &Home, changes: &[Change]) -> Result<()> {
     lock.save(&path)
 }
 
+/// Rewrite the lock at `home` without the values an older version kept in
+/// clear in its MCP pins (`pins.rs`); how many it removed. Every definition
+/// stays pinned by the digest it had, so nothing is trusted that was not.
+pub fn scrub_lock(home: &Home) -> Result<usize> {
+    let path = home.lock_path();
+    let lock = Lock::load(&path)?;
+    let clear = lock.mcp_servers.as_ref().map_or(0, pins::clear_values);
+    if clear > 0 {
+        lock.save(&path)?;
+    }
+    Ok(clear)
+}
+
 /// Accept the current definitions with `ids`, the ones `moat mcp wrap` or
 /// `unwrap` just rewrote. Nothing when the lock does not pin MCP servers yet:
 /// pinning only these would hold back every other server.
