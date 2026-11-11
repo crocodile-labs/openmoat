@@ -7,11 +7,16 @@
 //! recorded in the audit log as an event of its own (rule
 //! [`OVERFLOW_RULE`]) and sent to the sink as a gap with its next request,
 //! so nothing is left out unseen. The skipped events stay in the local log.
+//!
+//! Each event is trimmed before it is sent (`delivery::pack`). A sink that
+//! still answers `413` gets half as many events per request; one event alone
+//! that gets `413` is skipped the same way (rule [`TOO_LARGE_RULE`]), so one
+//! event never pauses a sink.
 
 use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result};
-use openmoat_audit::delivery::{self, Gap, GapReason, Origin};
+use openmoat_audit::delivery::{self, Delivered, Gap, GapReason, Origin};
 use openmoat_audit::{EventId, KnownSecrets, NewEvent, Store};
 use openmoat_core::{Decision, Verdict};
 
@@ -23,6 +28,9 @@ use crate::time;
 
 /// Rule id of the audit event that records a skip.
 pub const OVERFLOW_RULE: &str = "audit-delivery-overflow";
+/// Rule id of the audit event that records an event the sink refused as too
+/// large (`413`) even alone.
+pub const TOO_LARGE_RULE: &str = "audit-delivery-too-large";
 /// Host id of the events delivery itself records.
 pub const DELIVERY_HOST: &str = "audit-delivery";
 
@@ -95,13 +103,22 @@ pub fn run(
             store: &store,
             config,
             sink,
-            ready: &ready,
             known: &known,
         };
         if state.cursor.is_none() {
             state.cursor = Some(start(&store, config.start, accepted_ms)?);
         }
-        sink_run.drain(&mut state, &mut run, &path, || started.elapsed() < budget)?;
+        let origin = Origin {
+            machine: &config.machine,
+            version: env!("CARGO_PKG_VERSION"),
+        };
+        sink_run.drain(
+            &mut state,
+            &mut run,
+            &path,
+            || started.elapsed() < budget,
+            |records, gaps, now| ready.send(sink, origin, records, gaps, now),
+        )?;
         runs.push(run);
     }
     Ok(runs)
@@ -120,44 +137,54 @@ struct Sinking<'a> {
     store: &'a Store,
     config: &'a Config,
     sink: &'a Sink,
-    ready: &'a Ready,
     known: &'a KnownSecrets,
 }
 
 impl Sinking<'_> {
-    /// Send batch after batch while `go_on` says so, saving the state after
-    /// each answer.
+    /// Send batch after batch with `send` while `go_on` says so, saving the
+    /// state after each answer.
     fn drain(
         &self,
         state: &mut State,
         run: &mut SinkRun,
         path: &std::path::Path,
         go_on: impl Fn() -> bool,
+        send: impl Fn(&[Delivered], &[Gap], i64) -> Result<Sent>,
     ) -> Result<()> {
-        let origin = Origin {
-            machine: &self.config.machine,
-            version: env!("CARGO_PKG_VERSION"),
-        };
+        // Halved after each `413`, for the rest of this run.
+        let mut batch_events = BATCH_EVENTS;
         while go_on() {
             run.skipped += self.overflow(state)?;
             state.save(path)?;
             let cursor = state.cursor.unwrap_or(EventId(0));
-            let events = self.store.export_after(cursor, BATCH_EVENTS)?;
+            let events = self.store.export_after(cursor, batch_events)?;
             if events.is_empty() && state.gaps.is_empty() {
                 return Ok(());
             }
             let records = delivery::pack(&events, self.known, self.config.batch_bytes)?;
             let now = time::now_ms();
-            match self
-                .ready
-                .send(self.sink, origin, &records, &state.gaps, now)?
-            {
+            match send(&records, &state.gaps, now)? {
                 Sent::Accepted => {
                     let count = u64::try_from(records.len()).unwrap_or(u64::MAX);
                     state.accepted(records.last().map(|r| r.id), count, now);
                     run.delivered += count;
                     state.save(path)?;
                 }
+                Sent::TooLarge => match records.as_slice() {
+                    // Only the gaps went, a few hundred bytes: the sink's
+                    // limit may be a passing one.
+                    [] => {
+                        state.failed("HTTP 413".to_owned(), None, now, jitter());
+                        state.save(path)?;
+                        run.stopped.clone_from(&state.last_error);
+                        return Ok(());
+                    }
+                    [only] => {
+                        run.skipped += self.skip_too_large(state, only.id)?;
+                        state.save(path)?;
+                    }
+                    more => batch_events = more.len() / 2,
+                },
                 Sent::Retry { why, retry_after_s } => {
                     state.failed(why, retry_after_s, now, jitter());
                     state.save(path)?;
@@ -198,18 +225,37 @@ impl Sinking<'_> {
             count,
             reason: GapReason::BacklogFull,
         };
-        record_overflow(self.store, &self.sink.id, &gap)?;
+        record_skip(self.store, &self.sink.id, OVERFLOW_RULE, &gap)?;
         state.cursor = Some(skip_to);
         state.skipped = state.skipped.saturating_add(count);
         state.gaps.push(gap);
         Ok(count)
     }
+
+    /// The sink refused event `id` as too large even alone (and trimmed,
+    /// `delivery::MAX_EVENT_BYTES`): skip it, record the skip, and keep the
+    /// gap to send, as an overflow does. Never a pause: one event must not
+    /// stop the sink for good. The number of events skipped.
+    fn skip_too_large(&self, state: &mut State, id: EventId) -> Result<u64> {
+        let gap = Gap {
+            first: id,
+            last: id,
+            count: 1,
+            reason: GapReason::TooLarge,
+        };
+        record_skip(self.store, &self.sink.id, TOO_LARGE_RULE, &gap)?;
+        state.cursor = Some(id);
+        state.skipped = state.skipped.saturating_add(1);
+        state.gaps.push(gap);
+        Ok(1)
+    }
 }
 
-/// The skip as an audit event: host [`DELIVERY_HOST`], the sink as its
-/// session, rule [`OVERFLOW_RULE`]. Verdict `defer`: it decides no call.
-fn record_overflow(store: &Store, sink: &str, gap: &Gap) -> Result<()> {
-    let decision = Decision::single(Verdict::Defer, OVERFLOW_RULE, gap.describe());
+/// A skip as an audit event: host [`DELIVERY_HOST`], the sink as its
+/// session, `rule` ([`OVERFLOW_RULE`] or [`TOO_LARGE_RULE`]). Verdict
+/// `defer`: it decides no call.
+fn record_skip(store: &Store, sink: &str, rule: &str, gap: &Gap) -> Result<()> {
+    let decision = Decision::single(Verdict::Defer, rule, gap.describe());
     store
         .record(&NewEvent {
             host: DELIVERY_HOST,
@@ -231,5 +277,109 @@ fn jitter() -> f64 {
     match getrandom::fill(&mut byte) {
         Ok(()) => f64::from(byte[0]) / 255.0,
         Err(_) => 0.0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+
+    use openmoat_core::Action;
+
+    use super::*;
+
+    fn record(store: &Store, command: &str) {
+        let decision = Decision::single(Verdict::Allow, "dev-shell", "ok");
+        let action = Action::Shell {
+            command: command.to_owned(),
+        };
+        store
+            .record(&NewEvent {
+                host: "some-agent",
+                session_id: "s1",
+                call_id: None,
+                cwd: None,
+                tool: "Bash",
+                action: Some(&action),
+                decision: &decision,
+                latency_us: 1,
+            })
+            .unwrap();
+    }
+
+    /// A sink that answers `413` to any request holding the event `BIG`, alone
+    /// or not: it gets the events before and after it, a gap for it, and is
+    /// never paused.
+    #[test]
+    fn an_event_a_sink_refuses_as_too_large_is_skipped_not_a_pause() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = Home::at(dir.path().join("state"));
+        let config = super::super::config::parse(
+            "version: 1\nmachine: m\nstart: all\nsinks:\n  - id: c\n    otlp: \
+             http://127.0.0.1:9/v1/logs\n",
+            &home,
+        )
+        .unwrap();
+        let store = Store::open_in_memory().unwrap();
+        for command in ["echo one", "echo BIG", "echo three"] {
+            record(&store, command);
+        }
+        let known = KnownSecrets::default();
+        let sinking = Sinking {
+            store: &store,
+            config: &config,
+            sink: &config.sinks[0],
+            known: &known,
+        };
+        let delivered = RefCell::new(Vec::new());
+        let gaps_sent = RefCell::new(Vec::new());
+        let send = |records: &[Delivered], gaps: &[Gap], _now: i64| {
+            if records.iter().any(|r| r.action.to_string().contains("BIG")) {
+                return Ok(Sent::TooLarge);
+            }
+            delivered
+                .borrow_mut()
+                .extend(records.iter().map(|r| r.action.to_string()));
+            gaps_sent.borrow_mut().extend(gaps.iter().cloned());
+            Ok(Sent::Accepted)
+        };
+        let mut state = State {
+            cursor: Some(EventId(0)),
+            ..State::default()
+        };
+        let mut run = SinkRun::default();
+        let path = dir.path().join("c.json");
+        sinking
+            .drain(&mut state, &mut run, &path, || true, send)
+            .unwrap();
+        assert_eq!(state.paused, None, "{state:?}");
+        assert_eq!((run.skipped, state.skipped), (1, 1), "{run:?}");
+        let delivered = delivered.into_inner();
+        assert!(
+            delivered.iter().any(|a| a.contains("echo one")),
+            "{delivered:?}"
+        );
+        assert!(
+            delivered.iter().any(|a| a.contains("echo three")),
+            "{delivered:?}"
+        );
+        assert!(
+            !delivered.iter().any(|a| a.contains("BIG")),
+            "{delivered:?}"
+        );
+        let gaps = gaps_sent.into_inner();
+        assert_eq!(gaps.len(), 1, "{gaps:?}");
+        assert_eq!((gaps[0].reason, gaps[0].count), (GapReason::TooLarge, 1));
+        assert_eq!(state.gaps, Vec::new(), "the gap was accepted");
+        let rules: Vec<String> = store
+            .export_after(EventId(0), 10)
+            .unwrap()
+            .iter()
+            .map(|e| e.rules.get().to_owned())
+            .collect();
+        assert!(
+            rules.iter().any(|r| r.contains(TOO_LARGE_RULE)),
+            "{rules:?}"
+        );
     }
 }

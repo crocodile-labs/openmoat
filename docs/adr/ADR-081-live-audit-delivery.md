@@ -163,7 +163,12 @@ starts the run: it is the crate that touches files, the environment and processe
   machines that failed together do not return together; a longer `Retry-After` in
   seconds wins, up to an hour. The OTLP specification names `429`, `502`, `503` and
   `504` as retryable; the others are common for webhooks and harmless to retry.
-- Any other answer (a `3xx`, `400`, `401`, `403`, `404`, `413`, …) and a URL or
+- `413`: each event is already trimmed, after masking, to the batch size and at most
+  256 KiB of JSON (every text over one length cut, with a marker and the bytes cut), so
+  a `413` halves the events per request for the rest of the run; one event alone that
+  still gets it is skipped like a backlog overflow (rule `audit-delivery-too-large`, a
+  gap sent with the next request), never a pause: one event must not stop delivery.
+- Any other answer (a `3xx`, `400`, `401`, `403`, `404`, …) and a URL or
   address the client refuses pause the sink: trying again cannot change them. Only a
   person's `flush` resumes it. `status` shows the reason.
 

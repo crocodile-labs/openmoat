@@ -38,11 +38,17 @@ pub enum Sent {
         why: String,
         retry_after_s: Option<u64>,
     },
+    /// `413`: the request is too large for the sink. Fewer events may pass;
+    /// one event alone that gets it is skipped, never a reason to pause.
+    TooLarge,
     /// An answer that trying again cannot change.
     Refused {
         why: String,
     },
 }
+
+/// The status a sink answers a request too large for it with.
+const TOO_LARGE: u16 = 413;
 
 impl Ready {
     /// Read the sink's key, header values and CA. `home` is the user's home
@@ -118,6 +124,7 @@ impl Ready {
         Ok(
             match self.poster.post(&sink.endpoint, &all, &body, STEP_TIMEOUT) {
                 Ok(answer) if answer.accepted() => Sent::Accepted,
+                Ok(answer) if answer.status == TOO_LARGE => Sent::TooLarge,
                 Ok(answer) if answer.retryable() => Sent::Retry {
                     why: format!("HTTP {}", answer.status),
                     retry_after_s: answer.retry_after_s,

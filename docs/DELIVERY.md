@@ -94,7 +94,9 @@ Each event of the audit log becomes one record: its id, time, agent (`host`), se
 call id, working directory, tool, action, verdict, rules, reasons, decision time, and
 its chain hash and the previous one. Every text is masked again before sending: the
 patterns the audit log uses, the values of the policy's brokered secrets with a file
-source, and the sink's own key and header values. The chain hash lets you match a SIEM
+source, and the sink's own key and header values. After masking, a record over the
+batch size or 256 KiB has its long texts cut to fit, each ending with `…[openmoat trimmed
+N bytes]`; the whole event stays in `openmoat audit export`. The chain hash lets you match a SIEM
 row with `openmoat audit export`; the chain itself is checked with `openmoat audit
 verify` on an export, not in the SIEM.
 
@@ -151,7 +153,7 @@ $ openmoat audit deliver test
 ✔ siem: accepted
 $ openmoat audit deliver status
 ✔ collector (otlp) → https://otel.example.com:4318/v1/logs
-   1204 delivered, 0 behind, 0 skipped (backlog full)
+   1204 delivered, 0 behind, 0 skipped (backlog full or too large)
    last accepted 2026-11-10 14:02:11 UTC
 ```
 
@@ -214,8 +216,9 @@ check the signature as above.
 | What happened | What OpenMoat does | `status` shows |
 |---|---|---|
 | network error, TLS error, `408`, `429`, `5xx` (not `501`, `505`) | waits 5 s, doubling to 15 min, or the `Retry-After` it got (up to 1 h), then sends the same events again | `✗`, the last failure and the next try |
-| any other answer (`3xx`, `400`, `401`, `403`, `404`, `413`, …), a refused address | pauses the sink; nothing more is sent to it | `paused (HTTP 401)` |
-| the sink falls more than `max_backlog` events behind | skips the oldest to nine tenths of the bound, records `audit-delivery-overflow`, and sends the gap with the next request | `N skipped (backlog full)` |
+| `413` (request too large) | sends half as many events per request; one event alone that still gets `413` is skipped, recorded as `audit-delivery-too-large`, and sent as a gap with the next request (the sink is never paused for it) | `N skipped (backlog full or too large)` |
+| any other answer (`3xx`, `400`, `401`, `403`, `404`, …), a refused address | pauses the sink; nothing more is sent to it | `paused (HTTP 401)` |
+| the sink falls more than `max_backlog` events behind | skips the oldest to nine tenths of the bound, records `audit-delivery-overflow`, and sends the gap with the next request | `N skipped (backlog full or too large)` |
 | `delivery.yaml` changed, or no person accepted it | every agent call is denied (`kernel-integrity`) and nothing is sent | `✗ nothing is sent: …` |
 
 After fixing a paused sink, run `openmoat audit deliver flush`.

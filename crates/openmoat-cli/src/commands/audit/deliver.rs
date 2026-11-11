@@ -140,7 +140,7 @@ fn status_text(home: &Home, status: &Status) -> Result<()> {
         match s.behind {
             Some(behind) => writeln!(
                 out,
-                "   {} delivered, {behind} behind, {} skipped (backlog full){}",
+                "   {} delivered, {behind} behind, {} skipped (backlog full or too large){}",
                 s.delivered,
                 s.skipped,
                 if s.pending_gaps > 0 {
@@ -205,6 +205,7 @@ pub fn test(args: &DeliverTestArgs) -> Result<Code> {
         let (accepted, answer) = match sent {
             Ok(Sent::Accepted) => (true, "accepted".to_owned()),
             Ok(Sent::Retry { why, .. } | Sent::Refused { why }) => (false, why),
+            Ok(Sent::TooLarge) => (false, "HTTP 413".to_owned()),
             Err(error) => (false, format!("{error:#}")),
         };
         results.push(TestResult {
@@ -283,7 +284,7 @@ pub fn flush(args: &DeliverFlushArgs) -> Result<Code> {
                 let mark = if r.stopped.is_none() { "✔" } else { "✗" };
                 write!(out, "{mark} {}: {} delivered", r.sink, r.delivered)?;
                 if r.skipped > 0 {
-                    write!(out, ", {} skipped (backlog full)", r.skipped)?;
+                    write!(out, ", {} skipped (backlog full or too large)", r.skipped)?;
                 }
                 match &r.stopped {
                     Some(why) => writeln!(out, "; stopped: {why}")?,

@@ -95,6 +95,37 @@ fn a_pack_stays_within_its_size_but_always_takes_one_event() {
     assert_eq!(pack(&events, &known, one + 1).unwrap().len(), 1);
 }
 
+/// One event far larger than a request may be is trimmed to fit, masked
+/// first, and still makes a valid body: it cannot stop the sink.
+#[test]
+fn an_oversized_event_is_trimmed_after_masking() {
+    let store = Store::open_in_memory().unwrap();
+    let huge = format!(
+        "echo {} {} {}",
+        "x".repeat(20_000),
+        late_secret(),
+        "é".repeat(5_000)
+    );
+    record(&store, Verdict::Deny, &huge, 1_000);
+    let events = store.export_after(EventId(0), 10).unwrap();
+    let known = KnownSecrets::new([late_secret().as_str()]).unwrap();
+    for max in [4 * 1024, 16 * 1024] {
+        let packed = pack(&events, &known, max).unwrap();
+        let json = serde_json::to_string(&packed[0]).unwrap();
+        assert!(json.len() <= max.min(MAX_EVENT_BYTES), "{}", json.len());
+        assert!(json.contains(TRIMMED), "{json}");
+        assert!(!json.contains("late-secret"), "masked before the cut");
+        assert_eq!(packed[0].id, events[0].id);
+        let body = otlp_logs(ORIGIN, 5_000, &packed, &[]).unwrap();
+        serde_json::from_slice::<Value>(&body).unwrap();
+    }
+    // An event that fits is sent as it is.
+    let small = seeded();
+    let events = small.export_after(EventId(0), 10).unwrap();
+    let packed = pack(&events, &KnownSecrets::default(), 1 << 20).unwrap();
+    assert!(!serde_json::to_string(&packed).unwrap().contains(TRIMMED));
+}
+
 #[test]
 fn the_webhook_body_names_its_format_machine_events_and_gaps() {
     let store = seeded();

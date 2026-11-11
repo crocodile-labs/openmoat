@@ -401,7 +401,7 @@ fn a_sink_too_far_behind_is_told_what_it_missed_and_the_log_records_it() {
     let out = sb.moat_as_person(&["audit", "deliver", "flush"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(
-        stdout(&out).contains("skipped (backlog full)"),
+        stdout(&out).contains("skipped (backlog full or too large)"),
         "{}",
         text(&out)
     );
