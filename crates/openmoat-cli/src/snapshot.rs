@@ -15,6 +15,7 @@
 
 mod capture;
 mod git;
+mod lock;
 mod paths;
 mod restore;
 mod retention;
@@ -33,6 +34,7 @@ use sha2::{Digest as _, Sha256};
 use crate::home::{Home, write_private};
 pub use capture::{Limits, Taken, relative};
 use git::ShadowGit;
+pub use lock::WAIT as LOCK_WAIT;
 pub use restore::{ChangeKind, Plan};
 pub use retention::Retention;
 pub use session::{RunSnapshots, denied, said};

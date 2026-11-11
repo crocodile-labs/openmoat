@@ -2,7 +2,11 @@
 
 use anyhow::Result;
 
+use super::lock::Held;
 use super::{Listed, Store};
+
+/// How old an object no snapshot holds must be before `gc` drops it.
+const PRUNE_GRACE: &str = "1.hour.ago";
 
 /// What a store keeps: the newest `keep` snapshots, none older than `max_age_ms`;
 /// the newest one always.
@@ -39,8 +43,11 @@ impl Retention {
 
 impl Store {
     /// Remove what `retention` does not keep, then let git drop their files;
-    /// the number removed.
-    pub fn prune(&self, retention: Retention, now_ms: i64) -> Result<usize> {
+    /// the number removed. Under the store's lock, and besides `gc` drops
+    /// only objects no snapshot holds that are older than [`PRUNE_GRACE`]: a
+    /// take's objects written before its ref stay whatever else goes wrong.
+    pub fn prune(&self, held: &Held, retention: Retention, now_ms: i64) -> Result<usize> {
+        self.check_held(held)?;
         let listed = self.list()?;
         let expired = retention.expired(&listed, now_ms);
         for snapshot in &expired {
@@ -51,7 +58,13 @@ impl Store {
         }
         if !expired.is_empty() {
             self.git.output(
-                &["-c", "gc.reflogExpire=now", "gc", "--quiet", "--prune=now"],
+                &[
+                    "-c",
+                    "gc.reflogExpire=now",
+                    "gc",
+                    "--quiet",
+                    &format!("--prune={PRUNE_GRACE}"),
+                ],
                 None,
             )?;
         }

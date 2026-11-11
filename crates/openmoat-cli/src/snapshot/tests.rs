@@ -5,6 +5,7 @@ use openmoat_core::{EvalContext, Policy};
 
 use super::capture::Denied;
 use super::git::ShadowGit;
+use super::lock::Held;
 use super::paths::{self, Blocked, in_state_folder, is_plain};
 use super::restore::{Applied, parse_raw_for_tests};
 use super::*;
@@ -77,11 +78,26 @@ impl Fixture {
     }
 
     fn take_with(&self, reason: Reason, limits: Limits) -> Listed {
-        self.store
-            .take(&self.denied, limits, reason, Some("run-1"))
+        self.try_take(limits, reason, Some("run-1"))
             .unwrap()
             .snapshot()
             .clone()
+    }
+
+    /// The store's lock. Waits like the commands do: a git child another
+    /// test thread forks keeps a copy of the lock file's descriptor until it
+    /// starts git, so a lock just let go may be held for a moment more.
+    fn held(&self) -> Held {
+        self.store.lock(LOCK_WAIT).unwrap()
+    }
+
+    fn try_take(&self, limits: Limits, reason: Reason, session: Option<&str>) -> Result<Taken> {
+        self.store
+            .take(&self.held(), &self.denied, limits, reason, session)
+    }
+
+    fn apply(&self, plan: &Plan) -> Applied {
+        self.store.apply(&self.held(), plan).unwrap()
     }
 
     fn files(&self, snapshot: &Listed) -> Vec<String> {
@@ -97,7 +113,7 @@ impl Fixture {
     fn restore(&self, target: &Listed) -> (Plan, Applied) {
         let undo = self.take(Reason::PreRestore);
         let plan = self.store.plan(target.clone(), undo, &[]).unwrap();
-        let applied = self.store.apply(&plan);
+        let applied = self.apply(&plan);
         (plan, applied)
     }
 }
@@ -179,8 +195,7 @@ fn an_unchanged_project_adds_no_snapshot() {
     f.write("a.txt", "a\n");
     let first = f.take(Reason::RunStart);
     let again = f
-        .store
-        .take(&f.denied, Limits::default(), Reason::RunExit, None)
+        .try_take(Limits::default(), Reason::RunExit, None)
         .unwrap();
     assert_eq!(again, Taken::Unchanged(first));
     assert_eq!(f.store.list().unwrap().len(), 1);
@@ -193,8 +208,7 @@ fn an_unchanged_project_adds_no_snapshot() {
 fn every_run_records_its_start_even_when_nothing_changed() {
     let f = fixture();
     let take = |reason, session: &str| {
-        f.store
-            .take(&f.denied, Limits::default(), reason, Some(session))
+        f.try_take(Limits::default(), reason, Some(session))
             .unwrap()
     };
     f.write("a.txt", "before run 1\n");
@@ -235,10 +249,7 @@ fn too_many_files_or_bytes_take_no_snapshot() {
         files: 1,
         ..Limits::default()
     };
-    let err = f
-        .store
-        .take(&f.denied, few, Reason::Manual, None)
-        .unwrap_err();
+    let err = f.try_take(few, Reason::Manual, None).unwrap_err();
     assert!(
         format!("{err:#}").contains("more than the limit of 1"),
         "{err:#}"
@@ -247,11 +258,7 @@ fn too_many_files_or_bytes_take_no_snapshot() {
         total_bytes: 4,
         ..Limits::default()
     };
-    assert!(
-        f.store
-            .take(&f.denied, small, Reason::Manual, None)
-            .is_err()
-    );
+    assert!(f.try_take(small, Reason::Manual, None).is_err());
     assert_eq!(f.store.list().unwrap(), []);
 }
 
@@ -325,7 +332,7 @@ fn a_restore_names_a_file_the_undo_snapshot_could_not_keep() {
         notes.no_copy.as_deref().unwrap().contains("ignore"),
         "{notes:?}"
     );
-    f.store.apply(&plan);
+    f.apply(&plan);
     assert_eq!(f.read("notes.txt"), "mine\n");
 }
 
@@ -339,7 +346,7 @@ fn a_restore_limited_to_paths_changes_only_those() {
     f.write("b.txt", "y\n");
     let undo = f.take(Reason::PreRestore);
     let plan = f.store.plan(before, undo, &["a.txt".to_owned()]).unwrap();
-    f.store.apply(&plan);
+    f.apply(&plan);
     assert_eq!(f.read("a.txt"), "a\n");
     assert_eq!(f.read("b.txt"), "y\n");
 }
@@ -447,10 +454,99 @@ fn pruning_removes_snapshots_from_the_store() {
         keep: 1,
         max_age_ms: i64::MAX,
     };
-    assert_eq!(f.store.prune(keep_one, crate::time::now_ms()).unwrap(), 2);
+    assert_eq!(
+        f.store
+            .prune(&f.held(), keep_one, crate::time::now_ms())
+            .unwrap(),
+        2
+    );
     let left = f.store.list().unwrap();
     assert_eq!(left.len(), 1);
     assert_eq!(f.files(&left[0]), ["a.txt"]);
+}
+
+#[test]
+fn one_process_at_a_time_holds_the_store() {
+    let f = fixture();
+    let held = f.held();
+    let busy = f.store.lock(std::time::Duration::ZERO).unwrap_err();
+    assert!(format!("{busy:#}").contains("try again"), "{busy:#}");
+    drop(held);
+    f.held();
+}
+
+/// Two takes and a prune at once, as two `openmoat run` in one project do:
+/// every snapshot left is whole, and no take failed on a shared index.
+#[test]
+fn takes_and_a_prune_at_once_lose_no_object() {
+    let f = fixture();
+    f.write("a.txt", "a\n");
+    let keep_two = Retention {
+        keep: 2,
+        max_age_ms: i64::MAX,
+    };
+    std::thread::scope(|s| {
+        for run in ["run-a", "run-b"] {
+            let f = &f;
+            s.spawn(move || {
+                for n in 0..3 {
+                    let held = f.store.lock(LOCK_WAIT).unwrap();
+                    f.write(&format!("{run}.txt"), &format!("{n}\n"));
+                    f.store
+                        .take(
+                            &held,
+                            &f.denied,
+                            Limits::default(),
+                            Reason::Manual,
+                            Some(run),
+                        )
+                        .unwrap();
+                }
+            });
+        }
+        s.spawn(|| {
+            for _ in 0..2 {
+                let held = f.store.lock(LOCK_WAIT).unwrap();
+                f.store
+                    .prune(&held, keep_two, crate::time::now_ms())
+                    .unwrap();
+            }
+        });
+    });
+    f.store
+        .git
+        .output(&["fsck", "--connectivity-only", "--no-dangling"], None)
+        .unwrap();
+    for snapshot in f.store.list().unwrap() {
+        assert!(f.files(&snapshot).contains(&"a.txt".to_owned()));
+    }
+}
+
+/// An object no snapshot holds yet (a take that has not written its ref) is
+/// not dropped by a prune.
+#[test]
+fn a_prune_keeps_objects_younger_than_its_grace() {
+    let f = fixture();
+    for n in 0..2 {
+        f.write("a.txt", &format!("{n}\n"));
+        f.take(Reason::Manual);
+    }
+    let in_flight = f
+        .store
+        .git
+        .text(&["hash-object", "-w", "--stdin"], Some(b"a take's file\n"))
+        .unwrap();
+    let keep_one = Retention {
+        keep: 1,
+        max_age_ms: i64::MAX,
+    };
+    f.store
+        .prune(&f.held(), keep_one, crate::time::now_ms())
+        .unwrap();
+    f.store
+        .git
+        .output(&["cat-file", "-e", &in_flight], None)
+        .unwrap();
 }
 
 #[test]

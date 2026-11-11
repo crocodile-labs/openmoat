@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 use anyhow::{Result, bail};
 use serde::Serialize;
 
+use super::lock::Held;
 use super::paths::{self, Blocked, Content};
 use super::{Listed, Store};
 
@@ -171,9 +172,12 @@ impl Store {
         Ok(String::from_utf8_lossy(&self.git.output(&args, None)?).into_owned())
     }
 
-    /// Make the project match `plan`: deletes first, then writes, each path
-    /// only through real folders inside the project.
-    pub fn apply(&self, plan: &Plan) -> Applied {
+    /// Make the project match `plan`, under the store's lock (held since the
+    /// undo snapshot, so no prune drops the snapshot between plan and write):
+    /// deletes first, then writes, each path only through real folders inside
+    /// the project.
+    pub fn apply(&self, held: &Held, plan: &Plan) -> Result<Applied> {
+        self.check_held(held)?;
         let mut applied = Applied::default();
         let (deletes, writes): (Vec<&Change>, Vec<&Change>) = plan
             .changes
@@ -197,7 +201,7 @@ impl Store {
                 Err(why) => applied.skipped.push((change.path.clone(), why)),
             }
         }
-        applied
+        Ok(applied)
     }
 
     fn write(&self, change: &Change) -> Result<(), String> {

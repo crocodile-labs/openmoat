@@ -79,7 +79,12 @@ privilege, and stores unchanged files once.
    restore <undo id>` undoes it.
 6. **Retention.** Per project the newest 50 snapshots, none older than 14 days, and always the
    newest; pruned at every `openmoat run` start and by `openmoat snapshot --prune`, then
-   `git gc --prune=now` drops the files no snapshot holds.
+   `git gc --prune=1.hour.ago` drops the files no snapshot holds, once they are an hour old.
+   Taking, pruning and restoring hold the store's lock file (`openmoat.lock`, an OS file
+   lock, waited for up to 10 s), a restore from its undo snapshot until the files are
+   written, and each take stages into an index file of its own process, so two runs in one
+   project, or a run and a person's `snapshot` or `restore`, never lose each other's objects
+   or fight over one index.
 7. **What it is not.** It does not undo network sends, pushes, database writes, files outside
    the project, ignored, denied or large files, empty folders, permissions other than the
    executable bit, extended attributes, or changes made while a restore runs. Docs say so

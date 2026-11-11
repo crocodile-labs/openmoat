@@ -4,11 +4,13 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_core::{AtomicAction, CompiledPolicy, EvalContext, Policy, Verdict};
 
+use super::git::ShadowGit;
+use super::lock::Held;
 use super::paths::{in_state_folder, is_plain};
 use super::{LeftOut, META_VERSION, Meta, Omitted, REF_PREFIX, Reason, Store};
 
@@ -87,33 +89,47 @@ impl Denied {
 }
 
 impl Store {
-    /// Take a snapshot of the project now.
+    /// Take a snapshot of the project now, under the store's lock.
     pub fn take(
         &self,
+        held: &Held,
         denied: &Denied,
         limits: Limits,
         reason: Reason,
         session: Option<&str>,
     ) -> Result<Taken> {
+        self.check_held(held)?;
+        let shared = self.git.index().to_path_buf();
         if self.git.pin_attributes()? {
             // Its entries may hold blobs the project's attributes converted.
-            match fs::remove_file(self.git.index()) {
-                Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
-                    return Err(e).context("starting the snapshot index again");
-                }
-                _ => {}
-            }
+            remove_if_there(&shared).context("starting the snapshot index again")?;
         }
-        let (kept, mut omitted, bytes) = self.select(denied, limits)?;
+        // This process's own copy of the index, which keeps what git already
+        // hashed: no `index.lock` is shared with another process, and the
+        // shared index changes only by a rename once the tree is written.
+        let own = private_name(&shared);
+        if let Err(e) = fs::copy(&shared, &own)
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            return Err(e).context("copying the snapshot index");
+        }
+        let git = self.git.with_index(own.clone());
+        let tree = (|| {
+            let (kept, omitted, bytes) = self.select(denied, limits)?;
+            stage(&git, &kept)?;
+            let tree = git.text(&["write-tree"], None)?;
+            fs::rename(&own, &shared).context("keeping the snapshot index")?;
+            Ok::<_, anyhow::Error>((tree, kept.len(), omitted, bytes))
+        })();
+        let _ = remove_if_there(&own);
+        let (tree, files, mut omitted, bytes) = tree?;
         let left_out_total = omitted.len();
         omitted.truncate(MAX_LISTED);
-        self.stage(&kept)?;
-        let tree = self.git.text(&["write-tree"], None)?;
         let meta = Meta {
             version: META_VERSION,
             reason,
             session: session.map(str::to_owned),
-            files: kept.len(),
+            files,
             bytes,
             left_out: omitted,
             left_out_total,
@@ -210,8 +226,7 @@ impl Store {
     /// `.gitignore` files and its `.git/info/exclude` honoured, through an empty
     /// index of the listing's own so every file counts as new.
     fn listed_files(&self) -> Result<Vec<u8>> {
-        let index = self.dir.join("openmoat-list-index");
-        let _ = fs::remove_file(&index);
+        let index = private_name(&self.dir.join("openmoat-list-index"));
         let lister = self.git.with_index(index.clone());
         let exclude = self.project.join(".git").join("info").join("exclude");
         let exclude_setting = format!(
@@ -226,32 +241,50 @@ impl Store {
         let _ = fs::remove_file(&index);
         files
     }
+}
 
-    /// Make the store's index hold exactly `kept`, reusing what git already
-    /// hashed for files that did not change.
-    fn stage(&self, kept: &[String]) -> Result<()> {
-        let cached = self.git.output(&["ls-files", "-z", "--cached"], None)?;
-        let wanted: BTreeSet<&str> = kept.iter().map(String::as_str).collect();
-        let stale: Vec<u8> = cached
-            .split(|b| *b == 0)
-            .filter(|p| !p.is_empty())
-            .filter(|p| std::str::from_utf8(p).map_or(true, |p| !wanted.contains(p)))
-            .flat_map(|p| p.iter().copied().chain([0]))
-            .collect();
-        if !stale.is_empty() {
-            self.git.output(
-                &["update-index", "-z", "--force-remove", "--stdin"],
-                Some(&stale),
-            )?;
-        }
-        let list: Vec<u8> = kept.iter().flat_map(|p| p.bytes().chain([0])).collect();
-        if !list.is_empty() {
-            self.git.output(
-                &["update-index", "-z", "--add", "--remove", "--stdin"],
-                Some(&list),
-            )?;
-        }
-        Ok(())
+/// Make `git`'s index hold exactly `kept`, reusing what git already hashed
+/// for files that did not change.
+fn stage(git: &ShadowGit, kept: &[String]) -> Result<()> {
+    let cached = git.output(&["ls-files", "-z", "--cached"], None)?;
+    let wanted: BTreeSet<&str> = kept.iter().map(String::as_str).collect();
+    let stale: Vec<u8> = cached
+        .split(|b| *b == 0)
+        .filter(|p| !p.is_empty())
+        .filter(|p| std::str::from_utf8(p).map_or(true, |p| !wanted.contains(p)))
+        .flat_map(|p| p.iter().copied().chain([0]))
+        .collect();
+    if !stale.is_empty() {
+        git.output(
+            &["update-index", "-z", "--force-remove", "--stdin"],
+            Some(&stale),
+        )?;
+    }
+    let list: Vec<u8> = kept.iter().flat_map(|p| p.bytes().chain([0])).collect();
+    if !list.is_empty() {
+        git.output(
+            &["update-index", "-z", "--add", "--remove", "--stdin"],
+            Some(&list),
+        )?;
+    }
+    Ok(())
+}
+
+/// `path` with this process's id and the time added: a file no other
+/// process uses.
+fn private_name(path: &Path) -> PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let mut name = path.as_os_str().to_owned();
+    name.push(format!("-{}-{nanos}", std::process::id()));
+    PathBuf::from(name)
+}
+
+fn remove_if_there(path: &Path) -> std::io::Result<()> {
+    match fs::remove_file(path) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+        _ => Ok(()),
     }
 }
 

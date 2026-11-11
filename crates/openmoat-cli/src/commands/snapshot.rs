@@ -44,16 +44,18 @@ pub fn run(args: &SnapshotArgs) -> Result<Code> {
         bail!("`--format json` goes with `--list`");
     }
     let store = Store::open(&home, project)?;
+    let held = store.lock(snapshot::LOCK_WAIT)?;
     let mut out = Deferred::default();
     if args.prune {
-        let removed = store.prune(Retention::default(), crate::time::now_ms())?;
+        let removed = store.prune(&held, Retention::default(), crate::time::now_ms())?;
         writeln!(out, "removed {removed} snapshot(s) past the retention")?;
         out.finish()?;
         return Ok(Code::Ok);
     }
     let denied = snapshot::denied(&home, &ctx)?;
     let started = std::time::Instant::now();
-    let taken = store.take(&denied, Limits::default(), Reason::Manual, None)?;
+    let taken = store.take(&held, &denied, Limits::default(), Reason::Manual, None)?;
+    drop(held);
     let line = snapshot::said(&taken, Reason::Manual, started.elapsed().as_millis());
     snapshot::record(&home, "snapshot", "snapshot", "snapshot", line.clone());
     writeln!(out, "{}", clean(&line))?;

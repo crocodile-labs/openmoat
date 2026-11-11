@@ -45,8 +45,11 @@ pub fn run(args: &RestoreArgs) -> Result<Code> {
     };
     let only = only_paths(store.project(), &args.paths)?;
     let denied = snapshot::denied(&home, &ctx)?;
+    // Held until the files are written, so no prune drops the snapshot to
+    // restore or the undo snapshot in between.
+    let held = store.lock(snapshot::LOCK_WAIT)?;
     let undo = store
-        .take(&denied, Limits::default(), Reason::PreRestore, None)
+        .take(&held, &denied, Limits::default(), Reason::PreRestore, None)
         .context("taking the snapshot that lets this restore be undone")?
         .snapshot()
         .clone();
@@ -73,7 +76,8 @@ pub fn run(args: &RestoreArgs) -> Result<Code> {
         out.finish()?;
         return Ok(Code::Ok);
     }
-    let applied = store.apply(&plan);
+    let applied = store.apply(&held, &plan)?;
+    drop(held);
     writeln!(
         out,
         "restored from snapshot {}: {} written, {} deleted",

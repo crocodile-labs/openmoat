@@ -57,7 +57,8 @@ impl RunSnapshots {
             let project = ctx.project.as_deref().unwrap_or(&ctx.cwd);
             let store = Store::open(home, std::path::Path::new(project))?;
             let denied = denied(home, ctx)?;
-            store.prune(Retention::default(), crate::time::now_ms())?;
+            let held = store.lock(super::LOCK_WAIT)?;
+            store.prune(&held, Retention::default(), crate::time::now_ms())?;
             Ok((store, denied))
         })();
         match opened {
@@ -80,7 +81,18 @@ impl RunSnapshots {
             return;
         };
         let started = std::time::Instant::now();
-        match store.take(denied, Limits::default(), reason, Some(&self.session)) {
+        // Held for this snapshot only: a person's `openmoat restore` while
+        // the agent runs must not wait for the run to end.
+        let taken = store.lock(super::LOCK_WAIT).and_then(|held| {
+            store.take(
+                &held,
+                denied,
+                Limits::default(),
+                reason,
+                Some(&self.session),
+            )
+        });
+        match taken {
             Ok(taken) => {
                 let line = said(&taken, reason, started.elapsed().as_millis());
                 eprintln!("openmoat run: {line}");
