@@ -207,7 +207,10 @@ fn the_cached_fold_is_a_full_fold_in_every_directory() {
         usize::try_from(seed >> 33).unwrap() % n
     };
     let mut differed = false;
-    for step in 0..400 {
+    // Each step folds the whole session again as the reference, so the cost
+    // grows with the square of the steps: 200 keep it to seconds on the
+    // slowest CI runner while still crossing many cache rows and deadlines.
+    for step in 0..200 {
         let recorded = match next(5) {
             4 => None,
             d => Some(DIRS[d % DIRS.len()]),
@@ -236,8 +239,12 @@ fn the_cached_fold_is_a_full_fold_in_every_directory() {
                 assert_eq!(taint, reference(&store, cwd), "step {step} in {cwd}");
             }
         }
-        let folds: Vec<SessionTaint> = DIRS.iter().map(|d| reference(&store, d)).collect();
-        differed |= folds.iter().any(|f| f.taint != folds[0].taint);
+        // Whether the directory changed the answer at all: three more full
+        // folds, so asked every 25 steps, not at each.
+        if step % 25 == 24 {
+            let folds: Vec<SessionTaint> = DIRS.iter().map(|d| reference(&store, d)).collect();
+            differed |= folds.iter().any(|f| f.taint != folds[0].taint);
+        }
     }
     assert!(differed, "no step's fold depended on the directory");
 }

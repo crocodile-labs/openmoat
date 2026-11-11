@@ -108,15 +108,19 @@ impl Session {
     }
 }
 
-/// 50,000 calls in a project, then the agent moves to a folder of it: the
+/// 5,000 calls in a project, then the agent moves to a folder of it: the
 /// first call there is decided well within the guard's taint budget, folding
-/// only the call recorded since, where before it folded all 50,000 again and
-/// ran out of time on every call.
+/// only the call recorded since, where before it folded them all again and
+/// ran out of time on every call. What is asserted (one call folded) does not
+/// depend on how long the session is; recording each event into the audit
+/// log is what a debug build spends this test's time on, so 5,000 keep it to
+/// seconds on the slowest CI runner. The release measurement of 50,000 is in
+/// ADR-020's note.
 #[test]
 fn a_directory_change_late_in_a_long_session_is_decided_within_the_budget() {
-    const EVENTS: usize = 50_000;
-    // An agent repeats itself; 2,000 distinct calls among the 50,000.
-    const DISTINCT: usize = 2_000;
+    const EVENTS: usize = 5_000;
+    // An agent repeats itself; 200 distinct calls among them.
+    const DISTINCT: usize = 200;
     let session = Session::new();
     let here = session.project.clone();
     for i in 0..EVENTS {
