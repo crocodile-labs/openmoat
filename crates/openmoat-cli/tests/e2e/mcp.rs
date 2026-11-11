@@ -323,6 +323,44 @@ fn wrap_names_a_goose_extension_and_leaves_its_yaml_file() {
     assert_eq!(std::fs::read_to_string(&file).unwrap(), before);
 }
 
+/// A lock an older version wrote keeps an OpenCode `environment` value in
+/// clear, and a pinned file has drifted: `doctor --accept` re-pins, which
+/// writes the lock without the value, and succeeds; doctor names it no more.
+#[test]
+fn doctor_accept_over_drift_removes_a_clear_value_and_succeeds() {
+    let sb = Sandbox::bare(&[".config/opencode"]);
+    let file = sb.home.join(".config/opencode/opencode.json");
+    let config = json!({"mcp": {"db": {"type": "local", "command": ["db-server"],
+        "environment": {"API_KEY": "kept-secret-value"}}}});
+    std::fs::write(&file, config.to_string()).unwrap();
+    let out = sb.moat(&["init", "--yes", "--hosts", "opencode"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let lock_path = sb.home.join(".moat/policy.lock");
+    let mut lock: Value =
+        serde_json::from_str(&std::fs::read_to_string(&lock_path).unwrap()).unwrap();
+    for pin in lock["mcp_servers"].as_object_mut().unwrap().values_mut() {
+        pin["shown"]["environment"]["API_KEY"] = json!("kept-secret-value");
+    }
+    std::fs::write(&lock_path, lock.to_string()).unwrap();
+    let said = text(&sb.moat(&["doctor"]));
+    assert!(said.contains("in clear"), "{said}");
+
+    let policy = sb.home.join(".moat/policy.yaml");
+    let mut edited = std::fs::read_to_string(&policy).unwrap();
+    edited.push_str("\n# edited by hand\n");
+    std::fs::write(&policy, edited).unwrap();
+    let out = sb.moat_as_person(&["doctor", "--accept"]);
+    assert!(text(&out).contains("lock re-pinned"), "{}", text(&out));
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(
+        !std::fs::read_to_string(&lock_path)
+            .unwrap()
+            .contains("kept-secret-value")
+    );
+    let said = text(&sb.moat(&["doctor"]));
+    assert!(!said.contains("in clear"), "{said}");
+}
+
 /// The stand-in server's command line after `mcp proxy`: it answers
 /// `tools/list` with what `MOAT_TEST_LISTING` holds, and nothing else.
 #[cfg(unix)]
