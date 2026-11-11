@@ -118,19 +118,31 @@ impl Store {
             left_out: omitted,
             left_out_total,
         };
-        if let Some(newest) = self.list()?.pop()
+        // Unchanged files add no snapshot, except a run's start: a plain
+        // `openmoat restore` goes back to the newest one, so each run records
+        // its own, a commit of the same tree (no file is stored twice).
+        let newest = self.list()?.pop();
+        if let Some(newest) = &newest
             && newest.tree == tree
             && newest.meta.left_out == meta.left_out
+            && (reason != Reason::RunStart
+                || (newest.meta.reason == reason && newest.meta.session == meta.session))
         {
-            return Ok(Taken::Unchanged(newest));
+            return Ok(Taken::Unchanged(newest.clone()));
         }
         let message = serde_json::to_string(&meta)?;
         let commit = self
             .git
             .text(&["commit-tree", &tree], Some(message.as_bytes()))?;
+        // Refs sort by name, newest last: never the newest's millisecond again,
+        // or two snapshots of one millisecond would sort by their ids.
+        let after = newest
+            .as_ref()
+            .and_then(ref_ms)
+            .map_or(0, |ms| ms.saturating_add(1));
         let refname = format!(
             "{REF_PREFIX}{:015}-{}",
-            crate::time::now_ms(),
+            crate::time::now_ms().max(after),
             &commit[..commit.len().min(12)]
         );
         self.git.output(&["update-ref", &refname, &commit], None)?;
@@ -241,6 +253,12 @@ impl Store {
         }
         Ok(())
     }
+}
+
+/// The millisecond a snapshot's ref name starts with.
+fn ref_ms(snapshot: &super::Listed) -> Option<i64> {
+    let rest = snapshot.refname.strip_prefix(REF_PREFIX)?;
+    rest.split('-').next()?.parse().ok()
 }
 
 fn omit(path: &str, why: LeftOut) -> Omitted {

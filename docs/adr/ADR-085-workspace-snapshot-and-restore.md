@@ -49,7 +49,10 @@ privilege, and stores unchanged files once.
    `refs/openmoat/snapshots/<ms>-<id>`; its message is JSON: version, reason (`run-start`,
    `run-exit`, `manual`, `pre-restore`), the run's session, file and byte counts, and the
    paths left out with why (at most 10 000 listed, the total always). When the files and
-   left-out paths equal the newest snapshot's, none is added.
+   left-out paths equal the newest snapshot's, none is added, except a run's start: each
+   `openmoat run` records its own `run-start` snapshot, a new commit of the same tree (no file
+   is stored twice), since a plain `openmoat restore` goes back to the newest one and must
+   never reach back to an earlier run's.
 3. **When.** `openmoat run` takes one before the agent starts and one when it exits, in its
    own process outside the sandbox, after pruning (§5). A run started from an agent (one is
    among its parent processes) takes none, and `--no-snapshot` takes none; both say so, and

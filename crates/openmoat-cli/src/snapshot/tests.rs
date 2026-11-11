@@ -186,6 +186,46 @@ fn an_unchanged_project_adds_no_snapshot() {
     assert_eq!(f.store.list().unwrap().len(), 1);
 }
 
+/// Run 1 changes a file; run 2 starts on the files run 1 left, so its start
+/// snapshot has the tree of run 1's exit. A plain `openmoat restore` after
+/// run 2 must go back to run 2's start, not undo run 1's work too.
+#[test]
+fn every_run_records_its_start_even_when_nothing_changed() {
+    let f = fixture();
+    let take = |reason, session: &str| {
+        f.store
+            .take(&f.denied, Limits::default(), reason, Some(session))
+            .unwrap()
+    };
+    f.write("a.txt", "before run 1\n");
+    take(Reason::RunStart, "run-1");
+    f.write("a.txt", "run 1's work\n");
+    let exit = take(Reason::RunExit, "run-1").snapshot().clone();
+    let start = take(Reason::RunStart, "run-2");
+    assert!(matches!(start, Taken::New(_)), "{start:?}");
+    let start = start.snapshot().clone();
+    assert_eq!(start.tree, exit.tree, "the same files, stored once");
+    f.write("a.txt", "run 2's mistake\n");
+    take(Reason::RunExit, "run-2");
+    let newest_start = f
+        .store
+        .list()
+        .unwrap()
+        .into_iter()
+        .rev()
+        .find(|s| s.meta.reason == Reason::RunStart)
+        .unwrap();
+    assert_eq!(newest_start.meta.session.as_deref(), Some("run-2"));
+    f.restore(&newest_start);
+    assert_eq!(f.read("a.txt"), "run 1's work\n");
+    // Once a start is recorded, the same run's start on the same files adds nothing.
+    take(Reason::RunStart, "run-3");
+    assert!(matches!(
+        take(Reason::RunStart, "run-3"),
+        Taken::Unchanged(_)
+    ));
+}
+
 #[test]
 fn too_many_files_or_bytes_take_no_snapshot() {
     let f = fixture();
