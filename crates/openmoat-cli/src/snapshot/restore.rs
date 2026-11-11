@@ -2,7 +2,9 @@
 //!
 //! The plan compares the snapshot taken of the files as they are now (the
 //! undo snapshot) with the one to restore. A file the snapshot to restore
-//! left out (a secret, a large file) is never deleted or written; a file the
+//! left out (a secret, a large file) is never deleted or written, nor is one
+//! that was there and ignored when it was taken (the agent may have changed
+//! the ignore rules since: the snapshot does not cover it); a file the
 //! undo snapshot could not keep is named, since no snapshot holds what it
 //! held before the restore writes over it.
 
@@ -52,6 +54,10 @@ pub struct Plan {
     /// Paths the restore leaves as they are: those the snapshot left out, and
     /// every path not in it when its list of left-out paths was cut.
     pub kept: Vec<String>,
+    /// Paths the restore leaves as they are because they were there and
+    /// ignored when the snapshot was taken (the project ignores them no more):
+    /// the snapshot does not cover them, so it cannot say they should go.
+    pub not_covered: Vec<String>,
 }
 
 /// What a restore did.
@@ -97,10 +103,15 @@ impl Store {
         let all_listed = target.meta.lists_all_left_out();
         let mut changes = Vec::new();
         let mut kept = Vec::new();
+        let mut not_covered = Vec::new();
         for entry in parse_raw(&raw)? {
             if entry.status == 'D' {
                 if left_out.contains_key(entry.path.as_str()) || !all_listed {
                     kept.push(entry.path);
+                    continue;
+                }
+                if target.meta.may_have_ignored(&entry.path) {
+                    not_covered.push(entry.path);
                     continue;
                 }
                 changes.push(Change {
@@ -142,6 +153,7 @@ impl Store {
             undo,
             changes,
             kept,
+            not_covered,
         })
     }
 

@@ -369,7 +369,9 @@ exits, and `openmoat restore` puts them back ([USAGE.md](USAGE.md#put-the-projec
   `.moat`), anything inside `.git` (branches, history, the index and hooks are not
   restored: use git for those), nested git repositories, files over 5 MiB, sockets and
   pipes, and names that are not UTF-8. Each snapshot names what it left out
-  (`openmoat snapshot --list`), and a restore leaves those paths as they are.
+  (`openmoat snapshot --list`), and a restore leaves those paths as they are. An ignored
+  file that was there when the snapshot was taken is also left as it is, even when the
+  project no longer ignores it.
 - **Large projects.** Over 100 000 files or 1 GiB to keep, no snapshot is taken (the
   run says so and goes on); ignore the generated folders.
 - **Metadata.** Only contents, symbolic links and the executable bit come back: other

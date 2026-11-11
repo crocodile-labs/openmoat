@@ -10,6 +10,8 @@ use super::paths::{self, Blocked, in_state_folder, is_plain};
 use super::restore::{Applied, parse_raw_for_tests};
 use super::*;
 
+mod store;
+
 /// A project and a store side by side in a fresh temporary directory, with
 /// a policy that denies reading `**/app.secret` and `**/*.key` (names the
 /// default policy does not deny, so a test run under OpenMoat can write them).
@@ -336,6 +338,33 @@ fn a_restore_names_a_file_the_undo_snapshot_could_not_keep() {
     assert_eq!(f.read("notes.txt"), "mine\n");
 }
 
+/// `notes.local` was there and ignored when the snapshot was taken; the agent
+/// stops ignoring it, so the undo snapshot holds it. The snapshot to restore
+/// does not cover it, so the restore must leave it, not delete it.
+#[test]
+fn a_restore_keeps_a_file_that_was_ignored_when_the_snapshot_was_taken() {
+    let f = fixture();
+    f.write(".gitignore", "*.local\nbuild/\n");
+    f.write("notes.local", "mine\n");
+    f.write("build/out/x.o", "built\n");
+    f.write("a.txt", "a\n");
+    let before = f.take(Reason::RunStart);
+    assert_eq!(before.meta.ignored, ["build/", "notes.local"]);
+    f.write(".gitignore", "");
+    f.write("new.txt", "agent\n");
+    let (plan, applied) = f.restore(&before);
+    assert_eq!(
+        plan.not_covered,
+        ["build/out/x.o", "notes.local"],
+        "{plan:?}"
+    );
+    assert_eq!(applied.deleted, 1, "only new.txt goes: {applied:?}");
+    assert_eq!(f.read("notes.local"), "mine\n");
+    assert_eq!(f.read("build/out/x.o"), "built\n");
+    assert!(!f.root().join("new.txt").exists());
+    assert_eq!(f.read(".gitignore"), "*.local\nbuild/\n");
+}
+
 #[test]
 fn a_restore_limited_to_paths_changes_only_those() {
     let f = fixture();
@@ -407,146 +436,6 @@ fn a_name_with_a_line_break_is_kept_and_restored() {
     let (_, applied) = f.restore(&before);
     assert_eq!(applied.written, 1, "{applied:?}");
     assert_eq!(f.read("odd\nname.txt"), "odd\n");
-}
-
-#[test]
-fn retention_keeps_the_newest_and_drops_by_count_and_age() {
-    let listed = |ages: &[i64]| -> Vec<Listed> {
-        ages.iter()
-            .enumerate()
-            .map(|(i, ts)| Listed {
-                id: format!("{i}"),
-                commit: format!("{i}"),
-                tree: String::new(),
-                refname: format!("r{i}"),
-                ts_ms: *ts,
-                meta: Meta {
-                    version: META_VERSION,
-                    reason: Reason::Manual,
-                    session: None,
-                    files: 0,
-                    bytes: 0,
-                    left_out: Vec::new(),
-                    left_out_total: 0,
-                },
-            })
-            .collect()
-    };
-    let r = Retention {
-        keep: 2,
-        max_age_ms: 100,
-    };
-    let ids = |v: Vec<&Listed>| v.iter().map(|s| s.id.clone()).collect::<Vec<_>>();
-    assert_eq!(ids(r.expired(&listed(&[1000, 1000, 1000]), 1000)), ["0"]);
-    assert_eq!(ids(r.expired(&listed(&[0, 990]), 1000)), ["0"]);
-    // The newest stays however old it is.
-    assert_eq!(ids(r.expired(&listed(&[0]), 1000)), Vec::<String>::new());
-}
-
-#[test]
-fn pruning_removes_snapshots_from_the_store() {
-    let f = fixture();
-    for n in 0..3 {
-        f.write("a.txt", &format!("{n}\n"));
-        f.take(Reason::Manual);
-    }
-    let keep_one = Retention {
-        keep: 1,
-        max_age_ms: i64::MAX,
-    };
-    assert_eq!(
-        f.store
-            .prune(&f.held(), keep_one, crate::time::now_ms())
-            .unwrap(),
-        2
-    );
-    let left = f.store.list().unwrap();
-    assert_eq!(left.len(), 1);
-    assert_eq!(f.files(&left[0]), ["a.txt"]);
-}
-
-#[test]
-fn one_process_at_a_time_holds_the_store() {
-    let f = fixture();
-    let held = f.held();
-    let busy = f.store.lock(std::time::Duration::ZERO).unwrap_err();
-    assert!(format!("{busy:#}").contains("try again"), "{busy:#}");
-    drop(held);
-    f.held();
-}
-
-/// Two takes and a prune at once, as two `openmoat run` in one project do:
-/// every snapshot left is whole, and no take failed on a shared index.
-#[test]
-fn takes_and_a_prune_at_once_lose_no_object() {
-    let f = fixture();
-    f.write("a.txt", "a\n");
-    let keep_two = Retention {
-        keep: 2,
-        max_age_ms: i64::MAX,
-    };
-    std::thread::scope(|s| {
-        for run in ["run-a", "run-b"] {
-            let f = &f;
-            s.spawn(move || {
-                for n in 0..3 {
-                    let held = f.store.lock(LOCK_WAIT).unwrap();
-                    f.write(&format!("{run}.txt"), &format!("{n}\n"));
-                    f.store
-                        .take(
-                            &held,
-                            &f.denied,
-                            Limits::default(),
-                            Reason::Manual,
-                            Some(run),
-                        )
-                        .unwrap();
-                }
-            });
-        }
-        s.spawn(|| {
-            for _ in 0..2 {
-                let held = f.store.lock(LOCK_WAIT).unwrap();
-                f.store
-                    .prune(&held, keep_two, crate::time::now_ms())
-                    .unwrap();
-            }
-        });
-    });
-    f.store
-        .git
-        .output(&["fsck", "--connectivity-only", "--no-dangling"], None)
-        .unwrap();
-    for snapshot in f.store.list().unwrap() {
-        assert!(f.files(&snapshot).contains(&"a.txt".to_owned()));
-    }
-}
-
-/// An object no snapshot holds yet (a take that has not written its ref) is
-/// not dropped by a prune.
-#[test]
-fn a_prune_keeps_objects_younger_than_its_grace() {
-    let f = fixture();
-    for n in 0..2 {
-        f.write("a.txt", &format!("{n}\n"));
-        f.take(Reason::Manual);
-    }
-    let in_flight = f
-        .store
-        .git
-        .text(&["hash-object", "-w", "--stdin"], Some(b"a take's file\n"))
-        .unwrap();
-    let keep_one = Retention {
-        keep: 1,
-        max_age_ms: i64::MAX,
-    };
-    f.store
-        .prune(&f.held(), keep_one, crate::time::now_ms())
-        .unwrap();
-    f.store
-        .git
-        .output(&["cat-file", "-e", &in_flight], None)
-        .unwrap();
 }
 
 #[test]

@@ -125,6 +125,9 @@ impl Store {
         let (tree, files, mut omitted, bytes) = tree?;
         let left_out_total = omitted.len();
         omitted.truncate(MAX_LISTED);
+        let mut ignored = self.ignored_paths()?;
+        let ignored_total = ignored.len();
+        ignored.truncate(MAX_LISTED);
         let meta = Meta {
             version: META_VERSION,
             reason,
@@ -133,6 +136,8 @@ impl Store {
             bytes,
             left_out: omitted,
             left_out_total,
+            ignored,
+            ignored_total,
         };
         // Unchanged files add no snapshot, except a run's start: a plain
         // `openmoat restore` goes back to the newest one, so each run records
@@ -141,6 +146,7 @@ impl Store {
         if let Some(newest) = &newest
             && newest.tree == tree
             && newest.meta.left_out == meta.left_out
+            && newest.meta.ignored == meta.ignored
             && (reason != Reason::RunStart
                 || (newest.meta.reason == reason && newest.meta.session == meta.session))
         {
@@ -226,6 +232,25 @@ impl Store {
     /// `.gitignore` files and its `.git/info/exclude` honoured, through an empty
     /// index of the listing's own so every file counts as new.
     fn listed_files(&self) -> Result<Vec<u8>> {
+        self.list_others(&[])
+    }
+
+    /// The paths that exist and that the project's ignore rules leave out,
+    /// sorted; a folder ignored as a whole is one entry ending in `/`.
+    fn ignored_paths(&self) -> Result<Vec<String>> {
+        let listed = self.list_others(&["--ignored", "--directory"])?;
+        let mut paths: Vec<String> = listed
+            .split(|b| *b == 0)
+            .filter(|p| !p.is_empty())
+            .map(|p| String::from_utf8_lossy(p).into_owned())
+            .collect();
+        paths.sort();
+        Ok(paths)
+    }
+
+    /// `ls-files -z --others --exclude-standard` and `extra` through an empty
+    /// index of the listing's own.
+    fn list_others(&self, extra: &[&str]) -> Result<Vec<u8>> {
         let index = private_name(&self.dir.join("openmoat-list-index"));
         let lister = self.git.with_index(index.clone());
         let exclude = self.project.join(".git").join("info").join("exclude");
@@ -234,6 +259,7 @@ impl Store {
             crate::context::path_string(&exclude)
         );
         let mut args = vec!["ls-files", "-z", "--others", "--exclude-standard"];
+        args.extend_from_slice(extra);
         if exclude.is_file() {
             args.splice(0..0, ["-c", exclude_setting.as_str()]);
         }

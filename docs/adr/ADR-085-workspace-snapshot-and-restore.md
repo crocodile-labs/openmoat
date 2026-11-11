@@ -71,7 +71,12 @@ privilege, and stores unchanged files once.
    back and deleted, each named (`--patch` prints the differences, with no external diff or
    text conversion), then asks `[y/N]` at the controlling terminal. A path the snapshot left
    out is never deleted or written; when the snapshot's list of left-out paths was cut, no
-   path missing from it is deleted. A file the undo snapshot could not keep (now ignored,
+   path missing from it is deleted. Each snapshot also lists the paths that existed and that
+   the project's ignore rules left out (`ls-files --others --ignored --directory`: a folder
+   ignored as a whole is one entry); a restore never deletes one of them, or anything below
+   one, even when the agent has since stopped ignoring it, and names it as left as is, not
+   in the snapshot. When that list was cut at 10 000, no path missing from the snapshot is
+   deleted. A file the undo snapshot could not keep (now ignored,
    large or denied) is named as written over without a copy. Writes never pass through a
    symbolic link or a file where the snapshot has a folder: such a path is skipped and named.
    Each file is written beside its place under a fresh name and renamed over it, so a link

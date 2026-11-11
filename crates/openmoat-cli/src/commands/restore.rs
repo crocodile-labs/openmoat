@@ -178,6 +178,13 @@ fn show(out: &mut Deferred, plan: &Plan) -> Result<()> {
             clean(path)
         )?;
     }
+    for path in plan.not_covered.iter().take(MAX_SHOWN) {
+        writeln!(
+            out,
+            "  left as is   {} (not in the snapshot: ignored when it was taken)",
+            clean(path)
+        )?;
+    }
     for omitted in &t.meta.left_out {
         writeln!(
             out,

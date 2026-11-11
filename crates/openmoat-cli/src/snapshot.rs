@@ -126,12 +126,31 @@ pub struct Meta {
     /// How many paths were left out in all; more than `left_out` holds when
     /// the list was cut.
     pub left_out_total: usize,
+    /// The paths that existed and that the project's ignore rules left out,
+    /// a folder ignored as a whole as one entry ending in `/`; at most
+    /// [`capture::MAX_LISTED`]. A restore never deletes one of them: the
+    /// snapshot does not say what they held.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ignored: Vec<String>,
+    /// How many such paths there were in all.
+    #[serde(default)]
+    pub ignored_total: usize,
 }
 
 impl Meta {
     /// Whether `left_out` names every path the snapshot left out.
     pub fn lists_all_left_out(&self) -> bool {
         self.left_out.len() == self.left_out_total
+    }
+
+    /// Whether `path` was there and ignored when the snapshot was taken, or
+    /// may have been: the list of ignored paths was cut.
+    pub fn may_have_ignored(&self, path: &str) -> bool {
+        if self.ignored.len() != self.ignored_total {
+            return true;
+        }
+        let listed = |p: &str| self.ignored.binary_search_by(|i| i.as_str().cmp(p)).is_ok();
+        listed(path) || path.match_indices('/').any(|(at, _)| listed(&path[..=at]))
     }
 }
 
