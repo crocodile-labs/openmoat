@@ -368,9 +368,8 @@ fn fold(
             Entry::Occupied(known) => known.get().clone(),
             Entry::Vacant(slot) => {
                 let cwd = &slot.key().1;
-                let exposure = policy.exposure(action, cwd, &FsPathResolver);
-                let collection = policy.collection(action, cwd, &FsPathResolver, &is_dir);
-                slot.insert((exposure, collection)).clone()
+                let parts = policy.exposure_and_collection(action, cwd, &FsPathResolver, &is_dir);
+                slot.insert(parts).clone()
             }
         };
         if exposure.untrusted.is_some() {
