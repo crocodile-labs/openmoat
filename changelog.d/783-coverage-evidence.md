@@ -1,2 +1,0 @@
-### Changed
-- The OWASP agentic table in `docs/COVERAGE.md` now states its evidence: end-to-end tests marked for a risk count beside the fixtures, a new section lists each risk's test names and fixture ids, and a risk nothing tests reads `not tested` whatever is claimed for it; the conformance suite fails when a risk claimed as covered or partly covered has no evidence, and when the document differs from what it generates (ADR-079) ([#783](https://github.com/crocodile-labs/openmoat/pull/783)).

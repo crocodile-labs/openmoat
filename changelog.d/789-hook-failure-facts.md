@@ -1,0 +1,3 @@
+### Added
+- `openmoat doctor` names each agent that runs a tool call when OpenMoat's hook cannot start, crashes or times out ("fails open"), with the way out: start it with `openmoat run` and add `require.run: full-boundary` to the policy. `openmoat status --format json` carries each agent's `hook_failure` facts and their sources, and `docs/LIMITS.md` has a per-agent "If the hook fails" table generated from them (ADR-079) ([#789](https://github.com/crocodile-labs/openmoat/pull/789)).
+- The weekly latest-agent job makes OpenMoat's hook fail (exit 1, binary gone) under each real agent it starts, and fails when an agent runs a call its facts say it blocks (ADR-079) ([#789](https://github.com/crocodile-labs/openmoat/pull/789)).

@@ -1,2 +1,0 @@
-### Changed
-- The guard's p95 budget is 20 ms for its own decision on Linux CI runners and 45 ms on macOS ones, where the same binary measures 17 to 37 ms median; a row over it warns. The latency check now times the commit before on the same runner on every run, pushes to `main` included, instead of holding `main` to a fixed limit that failed macOS runs whose guard code had not changed, and both latency scripts report the median, p95 and p99 (ADR-080).
