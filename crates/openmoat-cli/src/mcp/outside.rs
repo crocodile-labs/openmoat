@@ -47,8 +47,8 @@ impl Outside {
     /// One line for a person.
     pub fn describe(&self) -> String {
         let mut text = format!(
-            "`{}` ({}, {}) ",
-            self.name,
+            "{} ({}, {}) ",
+            crate::render::Named(&self.name),
             self.host.display_name(),
             self.file.display()
         );

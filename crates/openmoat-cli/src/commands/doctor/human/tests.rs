@@ -101,6 +101,39 @@ fn squash(text: &str) -> String {
     out
 }
 
+/// Doctor's text output has one place it writes rows, and it cleans each:
+/// a server's name or file with an escape sequence or a line break, whether
+/// a row quotes it through `Named` or not, reaches the terminal as one line
+/// without them, in every section.
+#[test]
+fn every_row_reaches_the_terminal_cleaned_on_one_line() {
+    let name = "gh\u{1b}[2J\nforged row";
+    let mut report = report();
+    report.line(
+        Area::Mcp,
+        false,
+        format!("mcp tools        `{name}` lists 1 tool, hidden until accepted"),
+    );
+    let outside = crate::mcp::outside::Outside {
+        host: Host::ALL[0],
+        name: name.to_owned(),
+        file: std::path::PathBuf::from("/Users/you/a\nforged file"),
+        kind: crate::mcp::outside::Kind::Unsandboxed,
+    };
+    report.warn(&format!("mcp servers      {}", outside.describe()));
+    for verbose in [false, true] {
+        let printed = rendered(&report, verbose);
+        assert!(!printed.contains('\u{1b}'), "{printed:?}");
+        assert!(
+            !printed
+                .lines()
+                .any(|l| l.trim_start().starts_with("forged")),
+            "{printed}"
+        );
+        assert!(printed.contains("gh?[2J?forged row"), "{printed}");
+    }
+}
+
 #[test]
 fn what_needs_the_person_comes_first_with_its_fix() {
     let printed = rendered(&report(), false);
