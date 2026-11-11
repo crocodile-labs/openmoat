@@ -10,7 +10,7 @@
 //! never from what a collector holds.
 //!
 //! Two body formats are built from the same records: the generic webhook
-//! document ([`webhook_body`]) and OTLP/HTTP logs in JSON ([`otlp`]). Nothing
+//! document ([`webhook_body`]) and OTLP/HTTP logs in JSON ([`otlp_logs`]). Nothing
 //! here opens a connection; the CLI sends the bytes.
 
 mod otlp;
