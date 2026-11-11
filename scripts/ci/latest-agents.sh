@@ -707,18 +707,30 @@ claude_resumed() {
 # agy_run <output> <log file> [flag...]: one headless `agy -p` turn against the
 # fake Gemini API, agy's own log at <log file> (`--log-file`, in the CLI
 # reference, used only if `--help` lists it), and the files it opens recorded
-# by strace where the runner has it (<output>.strace).
+# by strace where the runner has it (<output>.strace). The time limit must end
+# agy, not only strace: `bounded` signals the process it starts, so in front of
+# strace it ends strace alone unless strace takes agy with it (`--kill-on-exit`,
+# strace 6.6 and later, listed by `strace --help`; Ubuntu 24.04 ships 6.8). A
+# strace without it starts agy under the limit itself, inside the trace (the
+# same perl as `bounded`: strace cannot start a shell function), with a longer
+# one on strace for a child agy leaves behind.
 agy_run() {
-    local output=$1 log=$2 trace=() logging=()
+    local output=$1 log=$2 run=(bounded 180) logging=() files
     shift 2
     if command -v strace >/dev/null; then
-        trace=(strace -f -qq -e trace=%file -o "$output.strace")
+        files=(-f -qq -e trace=%file -o "$output.strace")
+        if strace --help 2>&1 | grep -q -- '--kill-on-exit'; then
+            run=(bounded 180 strace --kill-on-exit "${files[@]}")
+        else
+            run=(bounded 200 strace "${files[@]}"
+                perl -e 'alarm shift; exec @ARGV or die "exec: $!\n"' 180)
+        fi
     fi
     if grep -q -- '--log-file' "$out/agy-help.txt" 2>/dev/null; then
         logging=(--log-file "$log")
     fi
     (cd "$project" && GEMINI_API_KEY=fake-key GOOGLE_GEMINI_BASE_URL="http://127.0.0.1:$fake_port" \
-        bounded 180 ${trace[@]+"${trace[@]}"} "$bin" -p "run it" ${logging[@]+"${logging[@]}"} "$@") \
+        "${run[@]}" "$bin" -p "run it" ${logging[@]+"${logging[@]}"} "$@") \
         </dev/null >"$output" 2>&1 || true
 }
 
@@ -743,7 +755,14 @@ agy_diagnose() {
     cat "$out/agy-files.txt"
     if [ -s "$out/agy-cli.log" ]; then
         echo "--    lines of agy's log that name hooks or plugins:"
-        grep -i -n -E 'hook|plugin' "$out/agy-cli.log" | cut -c1-300 | head -60 || echo "      (none)"
+        # Into a file first: `head` closing the pipe early would end grep
+        # with SIGPIPE, which `pipefail` turns into exit 141.
+        grep -i -n -E 'hook|plugin' "$out/agy-cli.log" | cut -c1-300 >"$out/agy-log-hooks.txt" || true
+        if [ -s "$out/agy-log-hooks.txt" ]; then
+            head -60 "$out/agy-log-hooks.txt"
+        else
+            echo "      (none)"
+        fi
     else
         echo "--    agy wrote no log at $out/agy-cli.log"
     fi
@@ -768,7 +787,8 @@ agy_diagnose() {
         # Diagnostic only: the audit log was read before it, so it cannot pass the job.
         echo "--    no hook ran: once more without --dangerously-skip-permissions"
         agy_run "$out/agent-2.txt" "$out/agy-cli-2.log"
-        sed "s/$marker/<the fake key>/g" "$out/agent-2.txt" | head -40
+        # `|| true`: `head` may close the pipe before sed is done (exit 141).
+        sed "s/$marker/<the fake key>/g" "$out/agent-2.txt" | head -40 || true
         echo "--    without the flag:"
         python3 -I "$lib/agy_probe.py" report "$out/agy-probe.log" "$out/captured"
     fi
