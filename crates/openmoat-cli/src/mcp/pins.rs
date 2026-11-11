@@ -282,7 +282,11 @@ fn shown(entry: &Value, form: McpCommandForm) -> Value {
     openmoat_audit::redact_value(shown)
 }
 
-/// One line per top-level key whose shown value differs.
+/// One line per top-level key whose shown value differs. A key or a
+/// variable's name comes from the agent's file and is written through
+/// [`crate::render::clean`], a line break included, so no key can add lines
+/// of its own to what a person reads before accepting; values are compact
+/// JSON, which escapes them.
 fn differences(old: &Value, new: &Value, form: McpCommandForm) -> Vec<String> {
     let empty = serde_json::Map::new();
     let (old_map, new_map) = (
@@ -300,7 +304,8 @@ fn differences(old: &Value, new: &Value, form: McpCommandForm) -> Vec<String> {
             lines.extend(hidden_differences(key, before, after));
         } else {
             lines.push(format!(
-                "{key}: {} → {}",
+                "{}: {} → {}",
+                crate::render::clean(key),
                 shown_or_none(before),
                 shown_or_none(after)
             ));
@@ -324,13 +329,14 @@ fn hidden_differences(key: &str, before: Option<&Value>, after: Option<&Value>) 
     let names: BTreeSet<&String> = before.keys().chain(after.keys()).collect();
     names
         .into_iter()
-        .filter_map(|name| match (before.get(name), after.get(name)) {
-            (None, Some(_)) => Some(format!("{key}.{name}: added (value not shown)")),
-            (Some(_), None) => Some(format!("{key}.{name}: removed")),
-            (Some(a), Some(b)) if a != b => {
-                Some(format!("{key}.{name}: changed (value not shown)"))
-            }
-            _ => None,
+        .filter_map(|name| {
+            let what = match (before.get(name), after.get(name)) {
+                (None, Some(_)) => "added (value not shown)",
+                (Some(_), None) => "removed",
+                (Some(a), Some(b)) if a != b => "changed (value not shown)",
+                _ => return None,
+            };
+            Some(format!("{key}.{}: {what}", crate::render::clean(name)))
         })
         .collect()
 }

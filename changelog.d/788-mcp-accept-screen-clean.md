@@ -1,2 +1,3 @@
 ### Security
 - What `openmoat mcp accept` and `openmoat doctor --accept` show before asking to accept an MCP server definition, and doctor's line for each changed definition, no longer pass a control or hidden character from the server's name, keys or arguments to the terminal ([#788](https://github.com/crocodile-labs/openmoat/pull/788)).
+- A key or a variable's name with line breaks in an MCP server definition can no longer add lines of its own to what `openmoat mcp accept` shows before it asks, so it cannot push the real change off the screen or show another server's ([#788](https://github.com/crocodile-labs/openmoat/pull/788)).

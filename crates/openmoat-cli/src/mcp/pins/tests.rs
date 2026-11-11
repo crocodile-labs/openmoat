@@ -277,6 +277,36 @@ fn what_a_person_is_asked_to_accept_holds_no_escape_sequence() {
     }
 }
 
+/// A key or a variable's name holding line breaks cannot add lines of its own
+/// before the question, push the real change off the screen or forge another
+/// server's: the screen has exactly the lines the real differences make.
+#[test]
+fn a_key_with_line_breaks_cannot_forge_lines_on_the_accept_screen() {
+    let pins = pinned(&[server("gh", json!({"command": "npx", "env": {"A": "1"}}))]);
+    let forged = "\n\n\n\nMCP server `db` in /h/.claude.json was removed\r";
+    let now = server(
+        "gh",
+        json!({"command": "evil", "env": {"A": "1", format!("N{forged}"): "x"},
+            format!("zz{forged}"): 1}),
+    );
+    let found = changes(&pins, &scan(vec![now]));
+    let said = found[0].describe();
+    assert!(!said.contains('\r'), "{said:?}");
+    let lines: Vec<&str> = said.lines().collect();
+    assert_eq!(
+        lines.len(),
+        4,
+        "the server, then command, the new variable and the new key: {said}"
+    );
+    assert!(lines[0].starts_with("MCP server `gh`"), "{said}");
+    assert!(lines[1].contains(r#"command: "npx" → "evil""#), "{said}");
+    assert!(lines[2].contains("env.N????MCP server"), "{said}");
+    assert!(
+        lines[3].trim_start().starts_with("zz????MCP server"),
+        "{said}"
+    );
+}
+
 #[test]
 fn tool_names_match_their_server_only() {
     assert!(tool_of("mcp__github__get_issue", "github"));
