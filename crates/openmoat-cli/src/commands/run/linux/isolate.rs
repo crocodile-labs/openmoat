@@ -18,8 +18,8 @@ use std::os::unix::fs::{DirBuilderExt as _, PermissionsExt as _};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, OnceLock};
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_core::{EvalContext, Policy};
@@ -60,6 +60,24 @@ fn unshare(disable_userns: bool) -> Vec<&'static str> {
     args
 }
 
+/// The system's bubblewrap and whether it takes [`DISABLE_USERNS`], or why it
+/// cannot make the Isolated tier here. Probed once per process: `openmoat run`
+/// asks first to choose its tier (ADR-080), then to build it.
+pub(super) fn probe() -> std::result::Result<(PathBuf, bool), String> {
+    static PROBED: OnceLock<std::result::Result<(PathBuf, bool), String>> = OnceLock::new();
+    PROBED
+        .get_or_init(|| {
+            let bwrap = system_bwrap().ok_or_else(|| {
+                "bubblewrap is not installed (`bwrap` in /usr/bin, /bin or /usr/local/bin; \
+                 `apt install bubblewrap`)"
+                    .to_owned()
+            })?;
+            let disable_userns = usable(&bwrap).map_err(|error| format!("{error:#}"))?;
+            Ok((bwrap, disable_userns))
+        })
+        .clone()
+}
+
 pub fn isolate(
     policy: &Policy,
     ctx: &EvalContext,
@@ -67,11 +85,13 @@ pub fn isolate(
     program: &Path,
     state: &Path,
 ) -> Result<Confined> {
-    let bwrap = system_bwrap().context(
-        "`openmoat run --isolate` needs bubblewrap (`bwrap` in /usr/bin, /bin or /usr/local/bin; \
-         `apt install bubblewrap`); refusing rather than starting the agent in a weaker tier",
-    )?;
-    let disable_userns = usable(&bwrap)?;
+    let (bwrap, disable_userns) = match probe() {
+        Ok(found) => found,
+        Err(why) => bail!(
+            "`openmoat run --isolate` needs bubblewrap, and {why}; refusing rather than \
+             starting the agent in a weaker tier"
+        ),
+    };
     let port = grants.proxy_port.context("no proxy port")?;
     // The run's CA files are in the temp directory, which starts empty here.
     let trust = grants.trust.clone();
@@ -164,10 +184,10 @@ fn usable(bwrap: &Path) -> Result<bool> {
     };
     if !out.status.success() {
         bail!(
-            "bubblewrap cannot create its namespaces here, so `openmoat run --isolate` refuses: {}\
-             (unprivileged user namespaces must be allowed; on Ubuntu 24.04 AppArmor restricts \
-             them: kernel.apparmor_restrict_unprivileged_userns)",
-            String::from_utf8_lossy(&out.stderr)
+            "bubblewrap cannot create its namespaces here: {} (unprivileged user namespaces \
+             must be allowed; on Ubuntu 24.04 AppArmor restricts them: \
+             kernel.apparmor_restrict_unprivileged_userns)",
+            String::from_utf8_lossy(&out.stderr).trim()
         );
     }
     Ok(false)

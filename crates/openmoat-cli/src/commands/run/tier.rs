@@ -1,15 +1,17 @@
-//! What plain `moat run` (the Lightweight tier) leaves open on Linux, as the
-//! committed evidence shows (`docs/EVIDENCE.md`, #174): Landlock only grants,
-//! so a deny rule for a path inside the project it grants cannot be enforced,
-//! and a command the agent starts can read and write `.env`, create `.envrc`,
-//! and write the project's `.moat` and `.git/hooks`. The hook still decides the
-//! agent's own tool calls. `moat run --isolate` (bubblewrap) closes these.
+//! What the Lightweight tier leaves open on Linux, as the committed evidence
+//! shows (`docs/EVIDENCE.md`, #174): Landlock only grants, so a deny rule for a
+//! path inside the project it grants cannot be enforced, and a command the
+//! agent starts can read and write `.env`, create `.envrc`, and write the
+//! project's `.moat` and `.git/hooks`. The hook still decides the agent's own
+//! tool calls. The Isolated tier (bubblewrap) closes these; it is the default
+//! where bubblewrap works (ADR-080), so this applies to `--no-isolate` and to a
+//! system without it (`isolation.rs` says which).
 //!
 //! The platform says whether this applies through `bubblewrap`: `None` where
 //! `moat run` is not Landlock (macOS's Seatbelt denies inside the project),
 //! otherwise whether the system's bubblewrap is installed.
 
-/// What commands can still do inside the project under plain `moat run` on Linux.
+/// What commands can still do inside the project in the Lightweight tier on Linux.
 const OPEN: &str = "commands the agent starts can still read and write the project's `.env`, \
                     create `.envrc` and write `.moat` and `.git/hooks`, since Landlock cannot \
                     deny a path inside the project it grants";
@@ -24,22 +26,13 @@ fn fix(bubblewrap: bool) -> &'static str {
 }
 
 /// The two lines `moat run` prints on standard error when it starts the
-/// Lightweight tier on Linux; `None` under `--isolate` and off Linux.
+/// Lightweight tier on Linux; `None` in the Isolated tier (`isolated`) and off
+/// Linux. `openmoat doctor` says which tier applies (`isolation.rs`).
 #[must_use]
-pub fn notice(bubblewrap: Option<bool>, isolate: bool) -> Option<String> {
-    let found = bubblewrap.filter(|_| !isolate)?;
+pub fn notice(bubblewrap: Option<bool>, isolated: bool) -> Option<String> {
+    let found = bubblewrap.filter(|_| !isolated)?;
     Some(format!(
         "moat run: {OPEN}; the hook still checks the agent's own tool calls.\nmoat run: {}",
-        fix(found)
-    ))
-}
-
-/// `moat doctor`'s row for the same; `None` off Linux.
-#[must_use]
-pub fn doctor_warning(bubblewrap: Option<bool>) -> Option<String> {
-    let found = bubblewrap?;
-    Some(format!(
-        "openmoat run     without --isolate, {OPEN}; {}",
         fix(found)
     ))
 }
@@ -91,14 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn doctor_and_the_protection_line_name_isolate_on_linux() {
-        assert!(doctor_warning(None).is_none());
-        let row = doctor_warning(Some(false)).unwrap();
-        assert!(
-            row.starts_with("openmoat run     without --isolate"),
-            "{row}"
-        );
-        assert!(row.contains("apt install bubblewrap"), "{row}");
+    fn the_protection_line_names_isolate_on_linux() {
         assert_eq!(command(None), "`openmoat run`");
         assert_eq!(command(Some(true)), "`openmoat run --isolate`");
     }

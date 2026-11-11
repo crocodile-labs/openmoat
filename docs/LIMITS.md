@@ -48,9 +48,8 @@ Each agent's gaps and the reasons are in
   `PowerShell` and `Monitor`; its file tools, `WebFetch` and MCP servers run outside it.
   Cursor runs some commands outside its sandbox.
 - **`require.run: full-boundary` is about `openmoat run`.** It refuses a run without an OS
-  sandbox or, on Linux, without a network of the agent's own. An agent started without
-  `openmoat run` is not refused, and on Linux the setting does not imply `--isolate`, so
-  paths inside the project stay open to commands under plain `openmoat run`
+  sandbox or, on Linux, without the Isolated tier (ADR-080). An agent started without
+  `openmoat run` is not refused
   ([POLICY.md §9.3](POLICY.md#93-requiring-openmoat-runs-full-boundary-requirerun)).
 - **`openmoat run` keeps an inherited variable from the agent only under
   `require.run: full-boundary`.** Otherwise every variable reaches it except brokered
@@ -78,10 +77,16 @@ Each agent's gaps and the reasons are in
   there; other agents' logins stay denied. An API-key login can go through the broker
   instead ([BROKER_LOGINS.md](BROKER_LOGINS.md)); an OAuth login cannot
   ([ADR-054](adr/ADR-054-agent-credentials-in-sandboxes.md)).
-- **On Linux, plain `openmoat run` does not protect files inside the project:**
+- **On Linux, the Lightweight tier does not protect files inside the project:**
   commands the agent starts can read and write `.env`, create `.envrc`, and write `.moat`
-  and `.git/hooks`. `openmoat run` says so when it starts and `openmoat doctor` warns about
-  it; `openmoat run --isolate` (bubblewrap) closes it. An agent's hook settings in the
+  and `.git/hooks`. `openmoat run` starts the Isolated tier (bubblewrap), which closes it,
+  by default where bubblewrap works (ADR-080); the Lightweight tier runs with
+  `--no-isolate` or where bubblewrap is missing or blocked, and then `openmoat run` says so
+  when it starts, records it in the audit log and `openmoat doctor` warns. The Isolated
+  tier shows the agent only the project, the read roots and `--write` paths, so an agent
+  whose runtime lives elsewhere in the home (a `node` under `~/.nvm`) can fail to start in
+  it until that directory is in `sandbox.read_roots`; this was not tried with every agent.
+  An agent's hook settings in the
   project (`.gemini/settings.json`, `.claude/settings.local.json`, …) are protected where
   the agent gets a network namespace, missing ones by a read-only `{}` placeholder for the
   session; without a namespace a command can create one that turns the next session's

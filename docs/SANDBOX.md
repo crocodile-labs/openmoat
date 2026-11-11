@@ -3,7 +3,7 @@
 [README](../README.md) · [Docs index](README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/)
 
 > [!NOTE]
-> **Read this when** you want the operating system to enforce the policy: the agents' own sandboxes (Standard tier), `openmoat run` (Lightweight) and `openmoat run --isolate` (Isolated).
+> **Read this when** you want the operating system to enforce the policy: the agents' own sandboxes (Standard tier), `openmoat run` (Lightweight; on Linux the Isolated tier by default where bubblewrap works) and `openmoat run --isolate` (Isolated).
 
 OpenMoat decides each tool call in the agent's hook. The sandboxes below make the operating system enforce the same policy on everything those calls start.
 
@@ -296,6 +296,27 @@ What no key in `sandbox.json` changes, and `openmoat sandbox show` lists as wide
 Cursor documents its sandbox for macOS and Linux only, so on native Windows `openmoat init`
 leaves `sandbox.json` alone and `openmoat status` reports Cursor as `hook only`.
 
+## Which tier `openmoat run` starts
+
+On Linux `openmoat run` starts the Isolated tier (below) by default where bubblewrap
+works, and the Lightweight tier otherwise (ADR-080). macOS has the Lightweight tier only.
+
+| Linux, `openmoat run` … | bubblewrap works | bubblewrap missing or blocked |
+|---|---|---|
+| (no flag) | Isolated tier | Lightweight tier; says why on every start and records it in the audit log (`run-isolation-unavailable`) |
+| `--isolate` | Isolated tier | refused (exit 64) |
+| `--no-isolate` | Lightweight tier, recorded in the audit log (`run-no-isolate`) | the same |
+| any of these under `require.run: full-boundary` | Isolated tier; `--no-isolate` refused | refused (exit 64) |
+
+```bash
+openmoat doctor          # "openmoat run     starts the Isolated tier (bubblewrap works here)"
+openmoat run -- claude   # the Isolated tier here, or the Lightweight one with a warning
+openmoat run --no-isolate --write ~/.claude --write ~/.claude.json -- claude
+```
+
+The rows are in the audit log under the run's own session (`openmoat show`, host
+`moat-run`, tool `isolation`). On macOS `--no-isolate` changes nothing and writes nothing.
+
 ## `openmoat run` (Lightweight tier)
 
 Without a container or VM runtime, `openmoat run` puts a whole agent in a sandbox generated
@@ -546,8 +567,9 @@ every pull request, with the Linux gaps marked.
 
 ## `openmoat run --isolate` (Isolated tier, Linux)
 
-On Linux, `--isolate` runs the agent in its own view of the machine, built with
-[bubblewrap](https://github.com/containers/bubblewrap) (ADR-018):
+On Linux the Isolated tier runs the agent in its own view of the machine, built with
+[bubblewrap](https://github.com/containers/bubblewrap) (ADR-018). It is the default where
+bubblewrap works; `--isolate` asks for it and refuses where it cannot start:
 
 ```bash
 openmoat run --isolate --write ~/.claude --write ~/.claude.json -- claude
@@ -580,7 +602,8 @@ It needs `bwrap` in `/usr/bin`, `/bin` or `/usr/local/bin` (`apt install bubblew
 unprivileged user namespaces; on Ubuntu 24.04 AppArmor restricts them unless
 `kernel.apparmor_restrict_unprivileged_userns` is 0 or an AppArmor profile allows
 `bwrap`. Where bubblewrap is missing or cannot create its namespaces, `openmoat run
---isolate` refuses (exit 64) and never falls back to the Lightweight tier.
+--isolate` refuses (exit 64) and never falls back to the Lightweight tier; a plain
+`openmoat run` says why and starts the Lightweight tier, on record (above).
 
 macOS: tracked in [ADR-023](adr/ADR-023-isolated-tier-macos.md), first stub ships
 here. On macOS `openmoat run --isolate` refuses with exit 64 and names what is missing:

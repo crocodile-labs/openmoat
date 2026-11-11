@@ -8,7 +8,7 @@ use std::process::Output;
 use serde_json::Value;
 
 use super::confined::ran;
-use super::{installed_with_secret, run_sh, stock_linux};
+use super::{LIGHTWEIGHT, installed_with_secret, run_sh_flags, stock_linux};
 use crate::common::{OK, Sandbox, USAGE, json as parse, output, stderr, text};
 
 pub(super) const STRICT: &str = "require:\n  run: full-boundary\n";
@@ -64,7 +64,8 @@ fn boundary(sb: &Sandbox) -> Value {
 fn it_starts_with_the_full_boundary_and_refuses_without_one() {
     let (sb, project) = installed_with_secret();
     require(&sb, STRICT);
-    let out = run_sh(&sb, &project, "echo started");
+    // The default tier: on Linux the Isolated one, which the requirement asks for.
+    let out = run_with(&sb, &project, &[]);
     if !ran(&out) {
         return;
     }
@@ -93,6 +94,27 @@ fn no_flag_lowers_it() {
     assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
     assert!(stderr(&out).contains("full boundary"), "{}", text(&out));
     assert!(!text(&out).contains("started\n"), "{}", text(&out));
+}
+
+/// On Linux the full boundary is the Isolated tier (ADR-080), so the flag
+/// that starts the Lightweight one is refused, before anything starts and
+/// whether or not bubblewrap works. macOS has no Isolated tier yet, so there
+/// the flag changes nothing and the run starts.
+#[test]
+fn no_isolate_does_not_lower_it() {
+    let (sb, project) = installed_with_secret();
+    require(&sb, STRICT);
+    let out = run_with(&sb, &project, &[LIGHTWEIGHT]);
+    if cfg!(target_os = "linux") {
+        assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
+        assert!(stderr(&out).contains("your policy"), "{}", text(&out));
+        assert!(stderr(&out).contains("--no-isolate"), "{}", text(&out));
+        assert!(!text(&out).contains("started\n"), "{}", text(&out));
+        assert_eq!(super::default_tier::tier_rows(&sb), [] as [String; 0]);
+    } else if ran(&out) {
+        assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+        assert!(text(&out).contains("started\n"), "{}", text(&out));
+    }
 }
 
 /// A repository can ask for it without being trusted, since it only tightens.
@@ -161,9 +183,10 @@ fn a_name_in_the_policy_is_passed_on() {
     let (sb, project) = installed_with_secret();
     require(&sb, STRICT);
     allow_env(&sb, "MY_POLICY_VAR");
-    let out = super::run_sh_with(
+    let out = run_sh_flags(
         &sb,
         &project,
+        &[],
         "echo \"var=[$MY_POLICY_VAR]\"",
         &[("MY_POLICY_VAR", "from-policy")],
     );

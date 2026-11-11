@@ -7,7 +7,7 @@ differential suite; do not edit. Regenerate with
 The hook allows project scripts (`npm test`, `make test`) and cannot see what they
 do ([THREAT_MODEL.md](THREAT_MODEL.md) §5). Each row is such a script: the payload is
 the project's test script, started as `npm test` in a throwaway home with fake secrets,
-under `openmoat run` (Lightweight tier), under `openmoat run --isolate` (Isolated tier, Linux)
+under `openmoat run` (Lightweight tier; `--no-isolate` on Linux), under `openmoat run --isolate` (Isolated tier, Linux, the default there where bubblewrap works)
 and under each agent's own sandbox as `openmoat init`
 configures it (Standard tier, [SANDBOX.md](SANDBOX.md)): Claude Code 2.1.290 runs
 `claude -p --bare` against a local fake Anthropic API that asks for that one Bash call,
@@ -18,7 +18,7 @@ pull request, together with its side effects (no secret printed, no file written
 nothing reached the listener), and fails when it changes. Network targets are loopback
 listeners the test owns.
 
-| Case | Threat | Payload | `openmoat run`, macOS (Seatbelt) | `openmoat run`, Linux (Landlock + seccomp) | `openmoat run --isolate`, Linux (bubblewrap) | Claude Code sandbox, macOS | Claude Code sandbox, Linux | Codex `moat` profile, macOS | Codex `moat` profile, Linux |
+| Case | Threat | Payload | `openmoat run`, macOS (Seatbelt) | `openmoat run --no-isolate`, Linux (Landlock + seccomp) | `openmoat run --isolate`, Linux (bubblewrap; the default where it works) | Claude Code sandbox, macOS | Claude Code sandbox, Linux | Codex `moat` profile, macOS | Codex `moat` profile, Linux |
 |---|---|---|---|---|---|---|---|---|---|
 | `script-benign-work` | control | `cat package.json > /dev/null && echo ok > out.txt && ln -sf src s && cat s/main.rs && /bin/bash -c true && curl --version > /dev/null` | ran | ran | ran | ran | ran | ran | ran |
 | `script-reads-ssh-key` | T1 | `cat "$HOME/.ssh/id_rsa"` | EPERM | EACCES | ENOENT | EPERM | ENOENT | EPERM | EACCES |
@@ -51,19 +51,19 @@ itself, not the sandbox (the CI runner's kernel has `dev.tty.legacy_tiocsti` at 
 
 ## Known gaps
 
-- `script-reads-project-env` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .env stays readable (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
-- `script-writes-project-env` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .env stays writable (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
-- `script-plants-envrc` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .envrc can be created (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
-- `script-writes-project-policy` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .moat can be written (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
-- `script-plants-git-hook` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .git/hooks stays writable (THREAT_MODEL §5); the hook still holds the agent's own writes there for review
+- `script-reads-project-env` under `openmoat run --no-isolate`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .env stays readable (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
+- `script-writes-project-env` under `openmoat run --no-isolate`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .env stays writable (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
+- `script-plants-envrc` under `openmoat run --no-isolate`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .envrc can be created (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
+- `script-writes-project-policy` under `openmoat run --no-isolate`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .moat can be written (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
+- `script-plants-git-hook` under `openmoat run --no-isolate`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .git/hooks stays writable (THREAT_MODEL §5); the hook still holds the agent's own writes there for review
 
 ## Layers
 
 | Layer | Status |
 |---|---|
 | `openmoat run`, macOS (Seatbelt) | verified by the `macos-15` and `macos-15-intel` CI jobs |
-| `openmoat run`, Linux (Landlock + seccomp) | verified by the `stock linux` CI job (no bubblewrap, unprivileged user namespaces restricted, as on a stock Ubuntu) and, with a network namespace, by the `ubuntu-latest` CI job (Linux 6.7 or later) |
-| `openmoat run --isolate`, Linux (bubblewrap) | verified by the `ubuntu-latest` CI job (bubblewrap installed) |
+| `openmoat run --no-isolate`, Linux (Landlock + seccomp) | verified by the `stock linux` CI job (no bubblewrap, unprivileged user namespaces restricted, as on a stock Ubuntu, where a plain `openmoat run` starts this tier too) and, with a network namespace, by the `ubuntu-latest` CI job (Linux 6.7 or later) |
+| `openmoat run --isolate`, Linux (bubblewrap; the default where it works) | verified by the `ubuntu-latest` CI job (bubblewrap installed) |
 | `openmoat run --isolate`, macOS | not run: refused until the Isolated tier has a virtual machine there (#175) |
 | Claude Code sandbox and Codex profile, macOS | verified by the `standard tier (macos-15)` CI job |
 | Claude Code sandbox and Codex profile, Linux | verified by the `standard tier (ubuntu-latest)` CI job (bubblewrap and socat installed) |

@@ -1,5 +1,6 @@
-//! `moat run [--isolate] [--write PATH]… -- <agent> [args]`: the Lightweight
-//! tier, and with `--isolate` the Isolated tier on Linux (ADR-018).
+//! `moat run [--isolate|--no-isolate] [--write PATH]… -- <agent> [args]`: the
+//! Lightweight tier, and the Isolated tier on Linux (ADR-018), which is the
+//! default there where bubblewrap works (ADR-080, `isolation.rs`).
 //!
 //! The agent and every command it starts share one sandbox generated from the
 //! policy for the project in the current directory. Their only network is a
@@ -14,11 +15,13 @@
 // a grant would show the state directory `state`, whose `command()` takes
 // the agent's arguments and environment, `report()` lists the losses and
 // allowances, `warning()` says where the network is restricted by port only,
-// and `status()` runs the agent in its sandbox; `inside(args)` is what
+// and `status()` runs the agent in its sandbox; `isolation()` is whether the
+// Isolated tier can start here (`isolation::Offered`); `inside(args)` is what
 // bubblewrap starts in its sandbox; `port_only_network()` is `moat doctor`'s
 // warning for the same; `terminals()` lists the terminal devices this
 // process's standard streams are on, the only ones the sandbox opens.
 mod env;
+mod isolation;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
@@ -66,6 +69,7 @@ use crate::sandbox::kerberos;
 use crate::sandbox::own_login::{self, Owner};
 use crate::sandbox::shared_temp;
 use crate::taint::run::RUN_SESSION_ENV;
+use isolation::{Asked, Offered, Tier};
 use temp::RunTemp;
 
 /// What a proxy-aware program reads to find its proxy.
@@ -93,6 +97,8 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let owner = Owner::of(&name.to_string_lossy(), &path_string(&program));
     // Before anything starts: the level the policy requires of this program.
     let strict = required::check(&home, &ctx, owner, &name.to_string_lossy())?;
+    // The tier (ADR-080): on Linux the Isolated one where bubblewrap works.
+    let tier = isolation::choose(Asked::of(args), &platform::isolation(), strict.as_deref())?;
     // A bare repository a command plants (no `.git` name) is used only when named.
     let git = git_env::add(&|var| std::env::var(var).ok())?;
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
@@ -104,9 +110,9 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     // `KRB5CCNAME` puts it, denied in this sandbox too.
     let ccname = std::env::var("KRB5CCNAME").ok();
     kerberos::for_run(&mut policy, ccname.as_deref());
-    // A temp directory of the run's own instead of the shared one; under
-    // `--isolate` the shared one is an empty `tmpfs` already.
-    let run_temp = (!args.isolate).then(RunTemp::create).transpose()?;
+    // A temp directory of the run's own instead of the shared one; in the
+    // Isolated tier the shared one is an empty `tmpfs` already.
+    let run_temp = (!tier.isolated()).then(RunTemp::create).transpose()?;
     // TLS termination (ADR-043), checked before anything starts: a CA that is
     // missing, not pinned or not covering a host stops the run here. The
     // agent's clients trust it through files in the run's temp directory.
@@ -154,8 +160,13 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     if run_temp.is_some() {
         shared_temp::for_run(&mut sandboxed, cfg!(target_os = "macos"));
     }
-    let mut agent = if args.isolate {
-        platform::isolate(&sandboxed, &ctx, grants, &program, state)?
+    let mut agent = if tier.isolated() {
+        platform::isolate(&sandboxed, &ctx, grants, &program, state).map_err(|error| {
+            match isolation::failed_default(&tier, strict.is_some()) {
+                Some(hint) => error.context(hint),
+                None => error,
+            }
+        })?
     } else {
         platform::confine(&sandboxed, &ctx, grants, &program, state)?
     };
@@ -177,6 +188,8 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let listener_addr = listener.local_addr()?;
     let url = credential.proxy_url(listener_addr);
     let run_session = credential.session().to_owned();
+    // A run weaker than the default is on record before the agent starts.
+    isolation::record(&home, &run_session, &ctx.cwd, &tier)?;
     // The hooks the agent starts run in its sandbox, without OpenMoat's home:
     // this process decides their calls on the proxy's port (ADR-028).
     // Only the calls of the agent this run starts, in its own sessions (ADR-070).
@@ -185,7 +198,13 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         .with_guard(guard)
         .with_tls(terminating.map(|t| t.tls))
         .with_requests(request_poc::requests()?);
-    notice(&program, port, exit.session(), &agent, args)?;
+    notice(
+        &program,
+        port,
+        exit.session(),
+        &agent,
+        (&tier, args.verbose),
+    )?;
     let notices = ca_notice
         .into_iter()
         .chain(release_age.notices)
@@ -398,9 +417,22 @@ pub fn withheld_line(names: &[OsString], strict: bool) -> String {
 }
 
 /// What this system lacks for the run's full boundary (ADR-077): no sandbox at
-/// all, or on Linux no network of the agent's own; `None` when it has both.
+/// all, or on Linux the Isolated tier (ADR-080) or a network of the agent's
+/// own; `None` when it has all of it.
 pub fn full_boundary_gap() -> Option<String> {
-    platform::unavailable().or_else(platform::no_network_namespace)
+    platform::unavailable()
+        .or_else(|| match platform::isolation() {
+            Offered::Unavailable(why) => Some(format!("the Isolated tier cannot start: {why}")),
+            Offered::Not | Offered::Available => None,
+        })
+        .or_else(platform::no_network_namespace)
+}
+
+/// `openmoat doctor`'s row for the tier a plain `openmoat run` starts here,
+/// given which policy requires the full boundary (`strict`): whether it is a
+/// warning, and its text; `None` off Linux.
+pub fn tier_row(strict: Option<&str>) -> Option<(bool, String)> {
+    isolation::doctor_row(&platform::isolation(), strict)
 }
 
 /// Refuse to start an agent whose network is restricted by port only
@@ -428,11 +460,11 @@ fn notice(
     port: u16,
     session: &str,
     agent: &platform::Confined,
-    args: &RunArgs,
+    (tier, verbose): (&Tier, bool),
 ) -> Result<()> {
     let report: &Report = agent.report();
     let mut err = std::io::stderr().lock();
-    let sees = if args.isolate {
+    let sees = if tier.isolated() {
         "; it sees only the project, the read roots and --write paths"
     } else {
         ""
@@ -452,10 +484,13 @@ fn notice(
     if let Some(warning) = agent.warning() {
         writeln!(err, "{warning}")?;
     }
-    if let Some(open) = tier::notice(platform::bubblewrap(), args.isolate) {
+    if let Some(fallback) = isolation::notice(tier) {
+        writeln!(err, "{fallback}")?;
+    }
+    if let Some(open) = self::tier::notice(platform::bubblewrap(), tier.isolated()) {
         writeln!(err, "{open}")?;
     }
-    if args.verbose {
+    if verbose {
         writeln!(
             err,
             "  proxy: 127.0.0.1:{port}\n  \

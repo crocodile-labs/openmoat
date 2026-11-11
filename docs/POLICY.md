@@ -1697,15 +1697,17 @@ require:
 | On this system | Without the setting | With it |
 |---|---|---|
 | No OS sandbox: macOS before 13, a missing backend, Windows | refused | refused, naming the policy that asks |
-| Linux with no network namespace (bubblewrap missing or blocked) | starts, network restricted by port only, warns | refused; install bubblewrap |
+| Linux where the Isolated tier cannot start (bubblewrap missing or blocked) | starts the Lightweight tier, network restricted by port only, warns and records it | refused; install bubblewrap |
+| Linux, `openmoat run --no-isolate` | starts the Lightweight tier, records it | refused |
 
-No `--netns` value lowers it. Your policy, a repository policy (§10) and a pack (§11) can
-each turn it on; none can turn it off. It applies to every program `openmoat run` starts.
-`openmoat status` and `openmoat doctor` say whether it holds here, and an unmet
-requirement is a problem (exit 64).
+On Linux the full boundary is the Isolated tier, which `openmoat run` starts by default
+where bubblewrap works (ADR-080). No `--netns` value and no `--no-isolate` lowers it. Your
+policy, a repository policy (§10) and a pack (§11) can each turn it on; none can turn it
+off. It applies to every program `openmoat run` starts. `openmoat status` and `openmoat
+doctor` say whether it holds here, and an unmet requirement is a problem (exit 64).
 
 It is about `openmoat run`, so an agent started without it is not refused: use
-`require.protection` for that (§9.2). On Linux it does not imply `--isolate`.
+`require.protection` for that (§9.2).
 
 **Environment.** Under the setting only an allowlist of inherited variables reaches the
 program, so a cloud credential in your shell does not reach the agent:

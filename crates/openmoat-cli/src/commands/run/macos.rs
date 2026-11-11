@@ -104,6 +104,12 @@ pub fn no_network_namespace() -> Option<String> {
     None
 }
 
+/// No Isolated tier to start by default until ADR-023's lands: Seatbelt
+/// denies paths inside the project already, and `--isolate` refuses here.
+pub fn isolation() -> super::isolation::Offered {
+    super::isolation::Offered::Not
+}
+
 /// None: Seatbelt denies paths inside the project, so plain `moat run` has
 /// no Linux-only gap to name (`tier.rs`).
 pub fn bubblewrap() -> Option<bool> {

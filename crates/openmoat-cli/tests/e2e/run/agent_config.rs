@@ -134,7 +134,7 @@ fn a_linked_agent_folder_keeps_its_hook_settings_out_of_reach() {
         sb.command()
             .current_dir(&project)
             .env("TMPDIR", &tmp)
-            .arg("run")
+            .args(["run", super::LIGHTWEIGHT])
             .arg("--write")
             .arg(sb.home.join(".claude"))
             .args(["--", "/bin/sh", "-c"])
@@ -192,9 +192,11 @@ fn missing_hook_settings_cannot_be_created() {
         std::fs::create_dir_all(&tmp).unwrap();
         let mut command = sb.command();
         command.current_dir(&project).env("TMPDIR", &tmp).arg("run");
-        if isolate {
-            command.arg("--isolate");
-        }
+        command.arg(if isolate {
+            "--isolate"
+        } else {
+            super::LIGHTWEIGHT
+        });
         let out = output(command.args(["--", "/bin/sh", "-c", SCRIPT]), None);
         if !ran(&out) || (isolate && !isolated(&out)) {
             continue;

@@ -206,7 +206,7 @@ fn run_poc(sb: &Sandbox) -> std::process::Output {
     cmd.current_dir(sb.project())
         .env("TMPDIR", &tmp)
         .env(POC.0, POC.1)
-        .args(["run", "--", "/bin/sh", "-c", "echo ran"]);
+        .args(["run", "--no-isolate", "--", "/bin/sh", "-c", "echo ran"]);
     output(&mut cmd, None)
 }
 

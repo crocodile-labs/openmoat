@@ -20,6 +20,9 @@ mod agent_config;
 /// The running agent keeps its login; other agents' stay denied (ADR-054).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod agent_logins;
+/// The tier a plain `openmoat run` starts: on Linux the Isolated one (ADR-080).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod default_tier;
 /// `--isolate` never runs a `bwrap` found through `PATH`.
 #[cfg(target_os = "linux")]
 mod isolate_path;
@@ -70,8 +73,14 @@ pub(crate) fn check_netns(port_only: bool, shown: &str) {
     );
 }
 
-/// `moat run -- /bin/sh -c <script>` in the project, with the temp directory
-/// outside the home so that writing the home is not a temp-directory write.
+/// The flag that starts the Lightweight tier, which most run tests are about:
+/// on Linux the Isolated tier is the default where bubblewrap works (ADR-080),
+/// and elsewhere the flag changes nothing.
+pub(crate) const LIGHTWEIGHT: &str = "--no-isolate";
+
+/// `moat run --no-isolate -- /bin/sh -c <script>` in the project, with the
+/// temp directory outside the home so that writing the home is not a
+/// temp-directory write.
 fn run_sh(sb: &Sandbox, project: &Path, script: &str) -> Output {
     run_sh_with(sb, project, script, &[])
 }
@@ -83,6 +92,17 @@ pub(crate) fn run_sh_with(
     script: &str,
     env: &[(&str, &str)],
 ) -> Output {
+    run_sh_flags(sb, project, &[LIGHTWEIGHT], script, env)
+}
+
+/// `moat run <flags> -- /bin/sh -c <script>`, as [`run_sh_with`].
+pub(crate) fn run_sh_flags(
+    sb: &Sandbox,
+    project: &Path,
+    flags: &[&str],
+    script: &str,
+    env: &[(&str, &str)],
+) -> Output {
     let tmp = sb.home.with_file_name("tmp");
     std::fs::create_dir_all(&tmp).unwrap();
     output(
@@ -90,7 +110,9 @@ pub(crate) fn run_sh_with(
             .current_dir(project)
             .env("TMPDIR", &tmp)
             .envs(env.iter().copied())
-            .args(["run", "--", "/bin/sh", "-c", script]),
+            .arg("run")
+            .args(flags)
+            .args(["--", "/bin/sh", "-c", script]),
         None,
     )
 }
@@ -151,12 +173,12 @@ fn isolate_is_refused_on_macos() {
     assert!(!text(&out).contains("ran\n"), "{}", text(&out));
 }
 
-/// Plain `moat run` on Linux says, before the agent starts, what Landlock
+/// The Lightweight tier on Linux says, before the agent starts, what Landlock
 /// leaves open inside the project and that `--isolate` closes it; macOS's
 /// Seatbelt denies those paths, so it says nothing of the kind.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
-fn plain_run_names_what_it_leaves_open_inside_the_project_on_linux() {
+fn the_lightweight_tier_names_what_it_leaves_open_inside_the_project_on_linux() {
     let (sb, project) = installed_with_secret();
     let out = run_sh(&sb, &project, "echo ran");
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));

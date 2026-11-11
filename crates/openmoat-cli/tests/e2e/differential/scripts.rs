@@ -116,10 +116,13 @@ pub struct Script {
 /// The executing layers: id (as `gap.layer` names it) and the column heading.
 const LAYERS: [(&str, &str); 7] = [
     ("seatbelt", "`openmoat run`, macOS (Seatbelt)"),
-    ("landlock", "`openmoat run`, Linux (Landlock + seccomp)"),
+    (
+        "landlock",
+        "`openmoat run --no-isolate`, Linux (Landlock + seccomp)",
+    ),
     (
         "isolate-linux",
-        "`openmoat run --isolate`, Linux (bubblewrap)",
+        "`openmoat run --isolate`, Linux (bubblewrap; the default where it works)",
     ),
     ("claude-macos", "Claude Code sandbox, macOS"),
     ("claude-linux", "Claude Code sandbox, Linux"),
@@ -186,7 +189,7 @@ fn evidence_table_is_current() {
          The hook allows project scripts (`npm test`, `make test`) and cannot see what they\n\
          do ([THREAT_MODEL.md](THREAT_MODEL.md) §5). Each row is such a script: the payload is\n\
          the project's test script, started as `npm test` in a throwaway home with fake secrets,\n\
-         under `openmoat run` (Lightweight tier), under `openmoat run --isolate` (Isolated tier, Linux)\n\
+         under `openmoat run` (Lightweight tier; `--no-isolate` on Linux), under `openmoat run --isolate` (Isolated tier, Linux, the default there where bubblewrap works)\n\
          and under each agent's own sandbox as `openmoat init`\n\
          configures it (Standard tier, [SANDBOX.md](SANDBOX.md)): Claude Code 2.1.290 runs\n\
          `claude -p --bare` against a local fake Anthropic API that asks for that one Bash call,\n\
@@ -247,8 +250,8 @@ fn evidence_table_is_current() {
     doc.push_str(
         "\n## Layers\n\n| Layer | Status |\n|---|---|\n\
          | `openmoat run`, macOS (Seatbelt) | verified by the `macos-15` and `macos-15-intel` CI jobs |\n\
-         | `openmoat run`, Linux (Landlock + seccomp) | verified by the `stock linux` CI job (no bubblewrap, unprivileged user namespaces restricted, as on a stock Ubuntu) and, with a network namespace, by the `ubuntu-latest` CI job (Linux 6.7 or later) |\n\
-         | `openmoat run --isolate`, Linux (bubblewrap) | verified by the `ubuntu-latest` CI job (bubblewrap installed) |\n\
+         | `openmoat run --no-isolate`, Linux (Landlock + seccomp) | verified by the `stock linux` CI job (no bubblewrap, unprivileged user namespaces restricted, as on a stock Ubuntu, where a plain `openmoat run` starts this tier too) and, with a network namespace, by the `ubuntu-latest` CI job (Linux 6.7 or later) |\n\
+         | `openmoat run --isolate`, Linux (bubblewrap; the default where it works) | verified by the `ubuntu-latest` CI job (bubblewrap installed) |\n\
          | `openmoat run --isolate`, macOS | not run: refused until the Isolated tier has a virtual machine there (#175) |\n\
          | Claude Code sandbox and Codex profile, macOS | verified by the `standard tier (macos-15)` CI job |\n\
          | Claude Code sandbox and Codex profile, Linux | verified by the `standard tier (ubuntu-latest)` CI job (bubblewrap and socat installed) |\n\
@@ -450,6 +453,8 @@ pub mod executing {
         }
     }
 
+    /// The Lightweight tier: `--no-isolate`, since Linux starts the Isolated
+    /// tier by default where bubblewrap works (ADR-080); macOS has only this one.
     #[test]
     fn hostile_scripts_meet_the_os_layer() {
         let layer = if OS == "macos" {
@@ -457,7 +462,7 @@ pub mod executing {
         } else {
             "landlock"
         };
-        under_moat_run(layer, &[]);
+        under_moat_run(layer, &["--no-isolate"]);
     }
 
     /// The Isolated tier, where bubblewrap can run (CI's Linux job installs it).

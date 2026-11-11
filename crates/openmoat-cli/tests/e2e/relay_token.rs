@@ -102,7 +102,7 @@ fn run_agent_with(
             .current_dir(project)
             .env("TMPDIR", &tmp)
             .envs(env.iter().copied())
-            .args(["run", "--"])
+            .args(["run", "--no-isolate", "--"])
             .arg(format!("./{agent}")),
         None,
     )
