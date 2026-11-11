@@ -231,6 +231,11 @@ fn rows_keep_their_json_text() {
         default_place(Status::Warning, None, "openmoat run"),
         Place::OpenMoat
     );
+    // The tier a plain `openmoat run` starts is shown without `--verbose`.
+    assert_eq!(
+        default_place(Status::Ok, Some(Area::Sandbox), "openmoat run"),
+        Place::OpenMoat
+    );
     assert_eq!(label("mcp servers"), "MCP servers");
     assert_eq!(label("pi"), "pi");
     assert_eq!(label("audit log"), "Audit log");

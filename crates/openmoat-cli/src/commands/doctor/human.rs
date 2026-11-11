@@ -33,11 +33,12 @@ pub(super) struct Placed {
 
 /// Where a check goes when its caller does not say: a problem or a warning
 /// needs the person, except the notes on `openmoat run`, which leave the
-/// hooks as they are; OpenMoat's own fine checks are shown, the rest only
-/// with `--verbose` (each agent's line says what they add up to).
+/// hooks as they are; OpenMoat's own fine checks are shown, and so is the
+/// tier a plain `openmoat run` starts (ADR-080), the rest only with
+/// `--verbose` (each agent's line says what they add up to).
 pub(super) fn default_place(status: Status, area: Option<Area>, name: &str) -> Place {
     match status {
-        Status::Warning if name == "openmoat run" => Place::OpenMoat,
+        Status::Warning | Status::Ok | Status::Note if name == "openmoat run" => Place::OpenMoat,
         Status::Problem | Status::Warning => Place::Attention,
         Status::Ok | Status::Note => match area {
             Some(Area::Policy | Area::Lock | Area::Audit | Area::Mcp | Area::Service) => {
