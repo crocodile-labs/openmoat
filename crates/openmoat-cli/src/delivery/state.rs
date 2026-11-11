@@ -24,8 +24,10 @@ const MAX_RETRY_AFTER: Duration = Duration::from_hours(1);
 #[serde(deny_unknown_fields)]
 pub struct State {
     /// The newest event the sink accepted, or the one before where it
-    /// started; `None` before its first run.
-    #[serde(default)]
+    /// started; `None` before its first run. `0` is before the first event,
+    /// which [`EventId`]'s own reading refuses (no event has that id), so
+    /// the file writes and reads it through [`cursor`].
+    #[serde(default, with = "cursor")]
     pub cursor: Option<EventId>,
     /// Failed tries since the last accepted request.
     #[serde(default)]
@@ -113,6 +115,36 @@ impl State {
     }
 }
 
+/// A sink's cursor in its state file: lowercase hex as every event id, and
+/// `0`, the place before the first event where a sink that starts with the
+/// whole log, or with an empty one, stands until it accepts an event.
+mod cursor {
+    use openmoat_audit::EventId;
+    use serde::{Deserialize as _, Deserializer, Serializer, de::Error as _};
+
+    #[expect(
+        clippy::ref_option,
+        reason = "serde's `with` passes the field by reference"
+    )]
+    pub fn serialize<S: Serializer>(cursor: &Option<EventId>, out: S) -> Result<S::Ok, S::Error> {
+        match cursor {
+            Some(id) => out.serialize_some(&id.to_string()),
+            None => out.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(input: D) -> Result<Option<EventId>, D::Error> {
+        let Some(text) = Option::<String>::deserialize(input)? else {
+            return Ok(None);
+        };
+        i64::from_str_radix(&text, 16)
+            .ok()
+            .filter(|id| *id >= 0)
+            .map(|id| Some(EventId(id)))
+            .ok_or_else(|| D::Error::custom(format!("invalid cursor `{text}`; expected hex")))
+    }
+}
+
 /// `FIRST_WAIT` doubled per failure after the first, at most `MAX_WAIT`, plus
 /// up to a fifth more by `jitter`; a longer `Retry-After` wins, up to an hour.
 pub fn backoff(failures: u32, retry_after_s: Option<u64>, jitter: f64) -> Duration {
@@ -165,5 +197,39 @@ mod tests {
         assert_eq!(state.paused, None);
         // The failure stays for `status`.
         assert_eq!(state.last_error.as_deref(), Some("HTTP 401"));
+    }
+
+    /// Every state a run saves reads back as it was: before the first run,
+    /// at the start with no event sent (cursor `0`), after a failure there,
+    /// and after a success with a gap.
+    #[test]
+    fn every_saved_state_reads_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hook.json");
+        let fresh = State::default();
+        let mut start = State {
+            cursor: Some(EventId(0)),
+            ..State::default()
+        };
+        let empty = start.clone();
+        start.failed("HTTP 503".to_owned(), Some(30), 1_000, 0.5);
+        let failed = start.clone();
+        let mut done = failed.clone();
+        done.gaps.push(Gap {
+            first: EventId(1),
+            last: EventId(0x1f),
+            count: 31,
+            reason: openmoat_audit::delivery::GapReason::BacklogFull,
+        });
+        done.accepted(Some(EventId(0x2a)), 11, 2_000);
+        for state in [fresh, empty, failed, done] {
+            state.save(&path).unwrap();
+            let text = std::fs::read_to_string(&path).unwrap();
+            assert_eq!(State::load(&path).unwrap(), state, "{text}");
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains(r#""cursor": "2a""#), "{text}");
+        std::fs::write(&path, r#"{"cursor": "-1"}"#).unwrap();
+        assert!(State::load(&path).is_err());
     }
 }
