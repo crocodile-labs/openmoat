@@ -100,10 +100,10 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
                     Area::Mcp,
                     false,
                     format!(
-                        "mcp tools        `{}` lists {}, hidden until `openmoat mcp accept {}`",
-                        pins.server,
+                        "mcp tools        {} lists {}, hidden until `openmoat mcp accept {}`",
+                        crate::render::Named(&pins.server),
                         pins.held_summary(),
-                        pins.server
+                        crate::render::clean(&pins.server)
                     ),
                 );
             }
