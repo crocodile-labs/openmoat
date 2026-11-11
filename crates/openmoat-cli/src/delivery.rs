@@ -56,6 +56,14 @@ const KEPT_ENV: &[&str] = &[
     "XDG_RUNTIME_DIR",
 ];
 
+/// [`kick`] for the state directory this process locates; nothing when there
+/// is none.
+pub fn kick_located() {
+    if let Ok(home) = Home::locate() {
+        kick(&home);
+    }
+}
+
 /// After the guard answered: start a background run when delivery is
 /// configured, a sink may be due and no run holds the lock. Never fails and
 /// never waits; what it skips the next call or `flush` sends.

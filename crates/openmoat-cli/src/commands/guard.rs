@@ -294,9 +294,7 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
     };
     // Only once the host has its answer (ADR-081): live audit delivery runs
     // detached and changes nothing above.
-    if let Ok(home) = Home::locate() {
-        crate::delivery::kick(&home);
-    }
+    crate::delivery::kick_located();
     code
 }
 
