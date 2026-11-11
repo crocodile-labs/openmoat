@@ -72,6 +72,13 @@ pub enum Content<'a> {
     /// A symbolic link; Windows needs a privilege for one, so there a
     /// restore names it as skipped.
     Link {
+        #[cfg_attr(
+            not(unix),
+            expect(
+                dead_code,
+                reason = "only Unix writes a link; elsewhere the restore names it as skipped"
+            )
+        )]
         target: &'a str,
     },
 }

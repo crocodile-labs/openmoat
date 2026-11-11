@@ -28,6 +28,7 @@ extend-ignore-re = [
 
 [default.extend-identifiers]
 TransactionBehavior = "TransactionBehavior" # rusqlite
+WRONLY = "WRONLY" # POSIX `O_WRONLY`, as rustix names it (`OFlags::WRONLY`)
 AppArmor = "AppArmor"
 FinalizationRegistry = "FinalizationRegistry" # JavaScript's built-in, spelt as the language spells it
 OrganizationName = "OrganizationName" # rcgen's `DnType::OrganizationName`
