@@ -50,8 +50,7 @@ jobs:
       - name: bubblewrap for the isolated tier
         # Ubuntu 24.04's AppArmor blocks the unprivileged user namespaces bwrap needs.
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q bubblewrap
+          bash scripts/ci/apt-install.sh bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --locked --workspace --all-features
@@ -76,8 +75,7 @@ jobs:
       - name: bubblewrap for the isolated tier
         # Ubuntu 24.04's AppArmor blocks the unprivileged user namespaces bwrap needs.
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q bubblewrap
+          bash scripts/ci/apt-install.sh bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: tests under coverage
         run: cargo llvm-cov --locked --workspace --all-features --lcov --output-path lcov.info
@@ -95,3 +93,44 @@ jobs:
           name: coverage
           path: coverage
           retention-days: 30
+
+  # One long agent session (scripts/ci/guard-long-session.py, ADR-080): 3,000
+  # hook decisions and their audit writes, as separate hook processes and
+  # relayed through one long-lived `openmoat run`; latency drift and memory
+  # growth per window of 500 calls, in the job summary. Fails only on a clear
+  # trend. `--require-run` on Linux; on macOS the run part reports instead of
+  # failing when `openmoat run` cannot start.
+  long-session:
+    name: long session (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: rust toolchain
+        # The channel, components and targets come from rust-toolchain.toml.
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: bubblewrap for the isolated tier
+        if: runner.os == 'Linux'
+        # Ubuntu 24.04's AppArmor blocks the unprivileged user namespaces bwrap needs.
+        run: |
+          bash scripts/ci/apt-install.sh bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: build
+        run: |
+          cargo build --locked --release -p openmoat
+          mkdir -p "$RUNNER_TEMP/head"
+          cp target/release/openmoat "$RUNNER_TEMP/head/"
+      - name: drift and memory over one long session
+        env:
+          RUNNER_OS_NAME: ${{ runner.os }}
+        run: |
+          require=()
+          if [ "$RUNNER_OS_NAME" = Linux ]; then require=(--require-run); fi
+          python3 scripts/ci/guard-long-session.py "${require[@]}" "$RUNNER_TEMP/head/openmoat" 3000

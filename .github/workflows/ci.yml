@@ -91,8 +91,7 @@ jobs:
         # `moat run --isolate` (#174). Ubuntu 24.04's AppArmor blocks the
         # unprivileged user namespaces bwrap needs.
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q bubblewrap
+          bash scripts/ci/apt-install.sh bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: quality gate
         if: env.RUN_LEG == 'true'
@@ -141,8 +140,7 @@ jobs:
         # Both sandboxes use bubblewrap; Claude Code's proxy relay is socat. Ubuntu
         # 24.04's AppArmor blocks the unprivileged user namespaces bwrap needs.
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q bubblewrap socat
+          bash scripts/ci/apt-install.sh bubblewrap socat
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: pinned claude and codex
         if: env.RUN_LEG == 'true'
@@ -253,12 +251,13 @@ jobs:
       - run: scripts/ci/sdk-js.sh
 
   # `openmoat guard` per process (scripts/ci/guard-latency.py) and late in a
-  # 5,000-call session (scripts/ci/guard-session-latency.py). On a pull request
-  # the binary of the commit the change lands on
-  # (`HEAD^1`) is built too and timed in turn with it on this runner, and the
-  # change fails only when the guard's own p95 is clearly worse than that
-  # (scripts/ci/latency_ab.py): shared runners are too noisy for a fixed limit.
-  # On main and on schedule the one binary is held to 3x the 15 ms budget.
+  # 5,000-call session (scripts/ci/guard-session-latency.py). On every event
+  # the binary of the commit before (`HEAD^1`: the commit a pull request lands
+  # on, or main's previous commit) is built too and timed in turn with it on
+  # this runner, and the change fails only when the guard's own p95 is clearly
+  # worse than that (scripts/ci/latency_ab.py): a shared runner is too noisy
+  # for a fixed limit (ADR-080). A row over the p95 budget (20 ms Linux,
+  # 45 ms macOS) warns.
   latency:
     name: guard latency (${{ matrix.os }})
     needs: changes
@@ -287,28 +286,26 @@ jobs:
         run: rustup toolchain install --no-self-update
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         if: env.RUN_LEG == 'true'
-      - name: build this commit and the one it lands on
+      - name: build this commit and the one before
         id: build
         if: env.RUN_LEG == 'true'
-        env:
-          EVENT: ${{ github.event_name }}
         # The base is built from a worktree into the same target directory, so
         # the dependencies are compiled once and only the workspace crates
         # twice. A base that does not build (a toolchain change, say) leaves the
-        # one-binary limit in force, with a warning.
+        # one-binary limit in force, with a warning. Every event times the
+        # commit before beside this one: a fixed limit on main failed macOS
+        # runs whose guard code had not changed (ADR-080).
         run: |
           cargo build --locked --release -p openmoat
           mkdir -p "$RUNNER_TEMP/head" "$RUNNER_TEMP/base"
           cp target/release/openmoat "$RUNNER_TEMP/head/"
-          if [ "$EVENT" = pull_request ]; then
-            if git worktree add --detach "$RUNNER_TEMP/base-src" HEAD^1 &&
-              cargo build --locked --release -p openmoat \
-                --manifest-path "$RUNNER_TEMP/base-src/Cargo.toml" --target-dir target; then
-              cp target/release/openmoat "$RUNNER_TEMP/base/"
-              echo "base=$RUNNER_TEMP/base/openmoat" >> "$GITHUB_OUTPUT"
-            else
-              echo "::warning::the commit this lands on did not build; latency is held to the fixed limit"
-            fi
+          if git worktree add --detach "$RUNNER_TEMP/base-src" HEAD^1 &&
+            cargo build --locked --release -p openmoat \
+              --manifest-path "$RUNNER_TEMP/base-src/Cargo.toml" --target-dir target; then
+            cp target/release/openmoat "$RUNNER_TEMP/base/"
+            echo "base=$RUNNER_TEMP/base/openmoat" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::the commit before did not build; latency is held to the fixed limit"
           fi
       - name: guard latency per call
         if: env.RUN_LEG == 'true'

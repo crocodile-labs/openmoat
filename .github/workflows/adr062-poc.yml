@@ -53,8 +53,7 @@ jobs:
         if: runner.os == 'Linux'
         # Ubuntu 24.04's AppArmor blocks the unprivileged user namespaces bwrap needs.
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q bubblewrap python3-requests
+          bash scripts/ci/apt-install.sh bubblewrap python3-requests
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: build
         run: cargo build --locked --release -p openmoat
