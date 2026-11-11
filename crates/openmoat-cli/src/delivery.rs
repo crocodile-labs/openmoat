@@ -178,7 +178,7 @@ fn runs(
     let started = std::time::Instant::now();
     let mut all: Option<Vec<SinkRun>> = None;
     loop {
-        let file = home::private_append_options()
+        let file = home::private_lock_options()
             .open(dir.join(LOCK_FILE))
             .with_context(|| format!("opening {}", dir.join(LOCK_FILE).display()))?;
         match file.try_lock() {

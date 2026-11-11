@@ -36,7 +36,7 @@ impl Store {
     /// holds it.
     pub fn lock(&self, wait: Duration) -> Result<Held> {
         let path = self.dir.join(LOCK_FILE);
-        let file = crate::home::private_append_options()
+        let file = crate::home::private_lock_options()
             .open(&path)
             .with_context(|| format!("opening {}", path.display()))?;
         let started = Instant::now();

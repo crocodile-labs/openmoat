@@ -480,6 +480,18 @@ pub fn private_append_options() -> fs::OpenOptions {
     options
 }
 
+/// Open options for a lock file (`File::try_lock`): created owner-only, never
+/// truncated, opened for reading and writing. Not append-only: Windows locks
+/// a range only on a handle with read or write access, and an append-only
+/// handle has neither ("Access is denied").
+pub fn private_lock_options() -> fs::OpenOptions {
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options
+}
+
 /// Set Unix permission bits. Unix only: elsewhere the profile directory's ACL
 /// already limits access to the user.
 #[cfg(unix)]
