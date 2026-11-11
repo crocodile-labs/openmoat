@@ -337,6 +337,10 @@ deny:
       # names of files an agent deleted
       - "~/.moat/snapshots/**"
       - "**/.moat/snapshots/**"
+      # audit delivery (ADR-081): the webhook's HMAC key and the collector's
+      # token, which `delivery.yaml` may read from here only
+      - "~/.moat/delivery/**"
+      - "**/.moat/delivery/**"
       - "**/.moat/audit.db*"
       - "**/.moat/policy.lock"
       - "**/.moat/proxy.key"

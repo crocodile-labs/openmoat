@@ -29,8 +29,8 @@ cannot keep up is told exactly what it missed. The design is
 
 ## Set it up
 
-1. Put the key or token the sink needs in a file inside the state directory, readable
-   by you only (the agent cannot read or change files there):
+1. Put the key or token the sink needs in a file inside `~/.moat/delivery/`, readable
+   by you only (the agent can neither read nor change files there):
 
    ```bash
    mkdir -p ~/.moat/delivery
@@ -80,7 +80,8 @@ sinks:
 - `otlp:` takes `https://`, or `http://` to `localhost`, `127.0.0.1` or `[::1]` only (a
   collector on this machine). `webhook:` takes `https://` only.
 - A value (`secret:`, a header's `value:`) is `{ file: <path> }` inside the state
-  directory or `{ keychain: { service: …, account: … } }`. `{ env: … }` is refused: the
+  directory's `delivery/` (the agent can read some other files of the state directory,
+  never this one) or `{ keychain: { service: …, account: … } }`. `{ env: … }` is refused: the
   background run starts from the agent's hook, in the agent host's environment.
 - `ca_file:` must be inside the state directory too.
 - Addresses that are link-local, cloud metadata or not unicast are refused whatever the
@@ -201,7 +202,7 @@ the Collector's documentation describes; OpenMoat then needs no vendor key at al
 
 **Splunk, Datadog, Elastic directly.** Each documents an OTLP/HTTP logs intake with its
 own URL and authentication header. Put the URL in `otlp:` and the header under
-`headers:`, with the token in a file inside `~/.moat`. OpenMoat sends JSON-encoded OTLP;
+`headers:`, with the token in a file inside `~/.moat/delivery/`. OpenMoat sends JSON-encoded OTLP;
 an intake that accepts protobuf only will refuse it (OpenMoat pauses the sink and
 `status` shows the answer).
 

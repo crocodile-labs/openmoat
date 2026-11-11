@@ -874,6 +874,25 @@
   context: { cwd: /p, project: /p, moved_dirs: { "~/.moat": /srv/moat } }
   action: { fs_read: "/srv/moat/proxy.key" }
   expect: { verdict: deny, rules: [kernel-self] }
+# audit delivery's keys (ADR-081): with the webhook key an agent signs forged events,
+# with the collector's token it sends them
+- id: T9-cat-delivery-webhook-key
+  threat: T9
+  action: { shell: "cat ~/.moat/delivery/webhook.key" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-copy-delivery-webhook-key-out
+  threat: T9
+  action: { shell: "cp ~/.moat/delivery/webhook.key ./k" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-read-moved-delivery-webhook-key
+  threat: T9
+  context: { cwd: /p, project: /p, moved_dirs: { "~/.moat": /srv/moat } }
+  action: { fs_read: "/srv/moat/delivery/webhook.key" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-read-delivery-collector-token
+  threat: T9
+  action: { fs_read: "~/.moat/delivery/collector.token" }
+  expect: { verdict: deny, rules: [kernel-self] }
 - id: T9-read-mcp-pins
   threat: T9
   action: { fs_read: "~/.moat/mcp/tools.json" }

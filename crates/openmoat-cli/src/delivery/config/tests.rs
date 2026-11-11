@@ -60,6 +60,14 @@ fn what_could_send_the_log_elsewhere_or_leak_a_key_is_refused() {
             good.replace(&inside(&home, "delivery/hook.key"), &outside),
         ),
         (
+            "key in the state dir, outside delivery/, which the agent can read",
+            good.replace("delivery/hook.key", "hook.key"),
+        ),
+        (
+            "token in the state dir, outside delivery/",
+            good.replace("delivery/token", "policy.d/token"),
+        ),
+        (
             "a .. out of the state dir",
             good.replace("delivery/hook.key", "../elsewhere.key"),
         ),

@@ -4,9 +4,11 @@
 //! agent, and is honoured only while the policy lock pins these exact bytes:
 //! a file the lock does not know, or one that changed since a person accepted
 //! it (`openmoat doctor --accept`), sends nothing. Whatever a sink reads (its
-//! HMAC key, a header's token, a CA) comes from a file inside the state
-//! directory or from the keychain, never from the environment, which the
-//! guard that starts a delivery inherits from the agent's host.
+//! HMAC key, a header's token) comes from a file inside the state directory's
+//! `delivery/`, which `kernel-self` also keeps the agent from reading, or from
+//! the keychain, never from the environment, which the guard that starts a
+//! delivery inherits from the agent's host. A CA may be anywhere in the state
+//! directory: it is not secret.
 
 use std::path::{Component, PathBuf};
 
@@ -272,19 +274,25 @@ fn check_sink(sink: SinkFile, home: &Home) -> Result<Sink> {
 }
 
 /// `source` with a file's path made absolute. A file source must lie inside
-/// the state directory, which the agent can neither read nor write; the
-/// environment is refused (module docs).
+/// the state directory's `delivery/`, which `kernel-self` keeps the agent from
+/// reading as well as writing (most of the state directory stays readable);
+/// the environment is refused (module docs).
 fn check_source(source: SecretSource, home: &Home) -> Result<SecretSource> {
     match source {
-        SecretSource::File(path) => Ok(SecretSource::File(
-            inside_state_dir(&path, home)?
-                .to_string_lossy()
-                .into_owned(),
-        )),
+        SecretSource::File(path) => {
+            let resolved = inside_state_dir(&path, home)?;
+            let dir = home.delivery_dir();
+            ensure!(
+                resolved.starts_with(&dir) && resolved != dir,
+                "`{path}` must be inside {}, which the agent cannot read",
+                dir.display()
+            );
+            Ok(SecretSource::File(resolved.to_string_lossy().into_owned()))
+        }
         SecretSource::Env(_) => bail!(
             "`env:` is refused here: delivery runs in the environment of the agent's hook; use a \
              file inside {} or the keychain",
-            home.root().display()
+            home.delivery_dir().display()
         ),
         keychain @ SecretSource::Keychain { .. } => Ok(keychain),
     }
