@@ -88,10 +88,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          120 s, and when Cline runs no hooks (`--yolo`); Cline has no setting that blocks a \
          failed hook",
     // Cline reads only a `cancel` on stdout, which OpenMoat's script prints
-    // whenever `guard` fails; it kills a hook after 120 s and runs the call,
-    // and runs it when the script itself cannot start (no `sh`).
+    // whenever `guard` fails; it kills a hook after 120 s and runs the call.
+    // It also runs the call when the script itself cannot start (no `sh`,
+    // native Windows), and the facts have no platform-dependent outcome, so
+    // a failing hook counts as running the call: `doctor` must not promise a
+    // block that Windows does not give.
     hook_failure: crate::HookFailure {
-        fails: crate::FailureOutcome::Blocks,
+        fails: crate::FailureOutcome::Runs,
         times_out: crate::FailureOutcome::Runs,
         timeout_s: Some(120),
         turned_off_by: "`--yolo`, or `--config`, `--hooks-dir` or a moved `CLINE_DIR` OpenMoat \
