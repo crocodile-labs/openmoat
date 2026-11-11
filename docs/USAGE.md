@@ -382,6 +382,37 @@ openmoat report --since 7d       # totals, hosts, top rules, reviews per active 
 openmoat show 1                  # one event in full
 ```
 
+### Put the project's files back
+
+`openmoat run` takes a snapshot of the project's files before the agent starts and another
+after it exits, into OpenMoat's own store (`~/.moat/snapshots/`), which the agent can
+neither read nor change. Your project's `.git` is not touched. After a session that broke
+files, stop the agent and run, in the project, in your own terminal:
+
+```bash
+openmoat snapshot --list          # this project's snapshots and what each left out
+openmoat restore                  # back to the newest one taken before an agent started
+openmoat restore 1a2b3c4d5e6f     # or a snapshot by its id
+openmoat restore --patch -- src   # only src/, and print each file's differences
+```
+
+```text
+snapshot 1a2b3c4d5e6f of 2026-11-10 09:12:04 (before the agent started), 214 files
+  changed back src/main.rs
+  added back   src/lib.rs
+  deleted      scratch.txt
+  not restored .env (a deny rule names it)
+Restore these 3 file(s)? [y/N] y
+restored from snapshot 1a2b3c4d5e6f: 2 written, 1 deleted
+undo with `openmoat restore 9f8e7d6c5b4a`, the snapshot of the files before this restore
+```
+
+A restore first takes a snapshot of the files as they are, so it can be undone, and asks
+before it writes. It refuses to run from an agent or without a terminal. `openmoat snapshot`
+takes one by hand; `openmoat run --no-snapshot` takes none. What a snapshot does not cover
+(ignored, secret and large files, anything outside the project) is in
+[LIMITS.md](LIMITS.md#snapshots-and-restore).
+
 ### Watch the agents live
 
 Run `openmoat watch` (since 0.17.0) in a second terminal pane:
@@ -1050,6 +1081,9 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat bench [--host …] [--hook <command>] [--verbose] [--format json]` | send the bundled MoatBench scenarios to OpenMoat in a throwaway home, or to any hook command with `--hook` and `--host`, and print the scorecard; the scenarios' commands never run ([MOATBENCH.md](MOATBENCH.md#reproduce-it-openmoat-bench)) |
 | `openmoat bench --report [--host …] [--scratch-dir DIR] [--format json\|markdown]` | the proof report: each security promise per layer (policy decision, host model from OpenMoat's golden payloads, real host, OS sandbox, network boundary) as PASS, FAIL or NOT TESTED HERE with the reason; the OS rows run the attacks under `openmoat run` in the throwaway home; exits 1 when an exercised layer fails ([MOATBENCH.md](MOATBENCH.md#proof-report-openmoat-bench---report)) |
 | `openmoat run [--isolate\|--no-isolate] [--write PATH]… [--netns auto\|require] [--env NAME]… [--verbose] -- <agent> [args]` | run an agent in a sandbox generated from the policy; `--env NAME` passes one inherited variable on for this run under `require.run: full-boundary` ([POLICY.md §9.3](POLICY.md#93-requiring-openmoat-runs-full-boundary-requirerun)) (macOS, Linux); on Linux the Isolated tier (bubblewrap: only the project, the read roots and temp) is the default where bubblewrap works, and elsewhere it says why and starts the Lightweight tier, which does not protect `.env`, `.git` or `.moat` inside the project; `--isolate` refuses instead of falling back, `--no-isolate` starts the Lightweight tier and records it in the audit log ([SANDBOX.md](SANDBOX.md#which-tier-openmoat-run-starts)); `--netns=require` refuses to start on Linux where the agent cannot get a network namespace of its own, instead of restricting its network by port only ([SANDBOX.md](SANDBOX.md)) |
+| `openmoat run … --no-snapshot` | take no snapshot of the project before the agent starts and after it exits (recorded in the audit log) |
+| `openmoat snapshot` · `--list [--format json]` · `--prune` | take a snapshot of the project's files · list them with what each left out · remove those past the retention (50 per project, 14 days); refused when an agent started it ([Put the project's files back](#put-the-projects-files-back)) |
+| `openmoat restore [<id>] [--patch] [-- <path>…]` | put the project's files back as a snapshot holds them, by default the newest one `openmoat run` took before its agent started: takes an undo snapshot, shows each change and asks first; person-only ([ADR-085](adr/ADR-085-workspace-snapshot-and-restore.md)) |
 | `openmoat proxy [--listen 127.0.0.1:<port>]` | run the egress proxy on its own; it serves only requests with a session credential (Claude Code's sessions get one from their `SessionStart` hook) unless `sandbox.proxy_serve_without_credential` is set; an allowed host is reached on ports 443 and 80 unless a `net` or `fetch` rule names `host:port`, and a plain-HTTP secret goes to port 80 unless it sets `port` ([POLICY.md](POLICY.md#52-openmoat-proxy)) |
 | `openmoat proxy install` · `uninstall` · `status [--format json]` | run `openmoat proxy` as a user service (macOS launchd user agent, Linux systemd user unit) so it stays up; `status` reports not installed / stopped / running / drift-blocked / crashlooping. `install` and `uninstall` are person-only: run them in a terminal of your own. Not supported on Windows yet (#272) |
 | `openmoat guard --host <id> --home <dir>` | the hook entry point; agents call it, you do not. `--home` is the state directory `openmoat init` wrote into the hook; a `MOAT_HOME` that names another one makes it deny. OpenMoat's plugins also run it with `--heartbeat` as they load ([above](#did-the-agent-load-openmoats-plugin)) |

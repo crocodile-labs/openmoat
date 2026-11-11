@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Read this when** you want to know what OpenMoat does not stop, before you rely on it.
 
-**On this page:** [Approvals and prompts](#approvals-and-prompts) · [Sandboxes and allowed code](#sandboxes-and-allowed-code) · [What the hook does not see](#what-the-hook-does-not-see) · [When an agent skips or changes the check](#when-an-agent-skips-or-changes-the-check) · [Limits of single checks](#limits-of-single-checks)
+**On this page:** [Approvals and prompts](#approvals-and-prompts) · [Sandboxes and allowed code](#sandboxes-and-allowed-code) · [What the hook does not see](#what-the-hook-does-not-see) · [When an agent skips or changes the check](#when-an-agent-skips-or-changes-the-check) · [Limits of single checks](#limits-of-single-checks) · [Snapshots and restore](#snapshots-and-restore)
 
 OpenMoat checks the tool calls an agent's hook reports. It does not confine every call.
 If its own check errors or hangs, OpenMoat blocks the call; the agents that still run a
@@ -344,3 +344,35 @@ docs`); do not edit the table.
   loopback, so a program running as you could read the log file directly anyway; it adds
   nothing for that program, and nothing for another user, a web page or another machine
   without the token ([ADR-066](adr/ADR-066-openmoat-serve.md)).
+
+## Snapshots and restore
+
+`openmoat run` takes a snapshot of the project's files before the agent starts and after it
+exits, and `openmoat restore` puts them back ([USAGE.md](USAGE.md#put-the-projects-files-back),
+[ADR-085](adr/ADR-085-workspace-snapshot-and-restore.md)). A snapshot does not cover:
+
+- **Anything outside the project's files.** Network sends, `git push`, database writes,
+  package registries, files outside the project and changes to your home directory are
+  not undone.
+- **Files a snapshot leaves out.** What the project's `.gitignore` files and
+  `.git/info/exclude` ignore (`node_modules/`, build output; your global git excludes
+  file is not read), every path a deny rule names (`.env`, keys, an agent's settings,
+  `.moat`), anything inside `.git` (branches, history, the index and hooks are not
+  restored: use git for those), nested git repositories, files over 5 MiB, sockets and
+  pipes, and names that are not UTF-8. Each snapshot names what it left out
+  (`openmoat snapshot --list`), and a restore leaves those paths as they are.
+- **Large projects.** Over 100 000 files or 1 GiB to keep, no snapshot is taken (the
+  run says so and goes on); ignore the generated folders.
+- **Metadata.** Only contents, symbolic links and the executable bit come back: other
+  permissions, owners, times, extended attributes and empty folders do not. Symbolic
+  links are not restored on Windows.
+- **Runs without one.** A run with `--no-snapshot`, a run started from an agent, an agent
+  started without `openmoat run`, and changes made between two snapshots inside one session
+  (only the start and the end are kept). A failed snapshot is said and recorded; the run
+  goes on.
+- **A restore while the agent runs.** Stop the agent first: a file it writes during the
+  restore can be overwritten or left half-restored. A path whose folder is a link or a file
+  now is skipped and named, never written through.
+- **Lost files after the retention.** Per project the newest 50 snapshots are kept, none
+  older than 14 days (the newest always). The store holds old contents of the project's
+  files on this machine until then; `openmoat uninstall --purge` deletes it.
