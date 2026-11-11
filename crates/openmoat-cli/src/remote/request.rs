@@ -44,6 +44,11 @@ pub struct Request {
     /// read all of the call, so it can only be denied remotely
     /// ([`Self::deny_only`]). Signed with the rest.
     pub cut: bool,
+    /// Whether redaction changed any of [`Self::shown`] (a command, path,
+    /// URL or argument): what is hidden may be the part that runs
+    /// (`API_TOKEN="$(curl … | sh)"` shows as `API_TOKEN=[redacted]`), so it
+    /// can only be denied remotely. Signed with the rest.
+    pub redacted: bool,
     pub created_ms: i64,
     pub expires_ms: i64,
     /// HMAC of every other field under the approval key, hex.
@@ -62,10 +67,19 @@ impl Request {
     /// Approve. The prompt offers no approve then, and the guard uses no
     /// approval for it.
     pub fn deny_only(&self) -> Option<&'static str> {
-        self.cut.then_some(
-            "This call is too long to show in full, so it cannot be approved here; approve it \
-             where the agent runs. Deny blocks it until the request expires.",
-        )
+        if self.redacted {
+            Some(
+                "Parts of this call are hidden because they look like secrets; approve it at \
+                 the terminal. Deny blocks it until the request expires.",
+            )
+        } else if self.cut {
+            Some(
+                "This call is too long to show in full, so it cannot be approved here; approve \
+                 it where the agent runs. Deny blocks it until the request expires.",
+            )
+        } else {
+            None
+        }
     }
 
     /// Whether the request can no longer be answered at `now_ms`.
@@ -143,12 +157,15 @@ pub struct Shown {
     pub text: String,
     /// The text was longer than [`SHOWN_MAX`] and is cut.
     pub cut: bool,
+    /// Redaction changed the text: part of the call is hidden.
+    pub redacted: bool,
 }
 
 /// What the approver is shown of `action`: the command or the files, and the
 /// size of what a write carries but never its text; passed through the
 /// audit log's redaction and `known`'s values, control and invisible
-/// characters shown as `?`, cut to [`SHOWN_MAX`] characters.
+/// characters shown as `?`, cut to [`SHOWN_MAX`] characters. Whether any
+/// redaction or cut happened is kept with it.
 pub fn shown(request: &HookRequest, action: &Action, known: &KnownSecrets) -> Shown {
     let text = match action {
         Action::Shell { .. }
@@ -158,7 +175,9 @@ pub fn shown(request: &HookRequest, action: &Action, known: &KnownSecrets) -> Sh
         | Action::ReadFiles { .. } => crate::approvals::describe(action),
         other => serde_json::to_string(other).unwrap_or_else(|_| request.tool.clone()),
     };
-    let mut text = known.redact(&openmoat_audit::redact(&text));
+    let hidden = known.redact(&openmoat_audit::redact(&text));
+    let redacted = hidden != text;
+    let mut text = hidden;
     if let Some(content) = &request.content {
         let _ = write!(text, " ({} bytes of content, not shown)", content.len());
     }
@@ -167,6 +186,7 @@ pub fn shown(request: &HookRequest, action: &Action, known: &KnownSecrets) -> Sh
     }
     let text = crate::render::clean(&text);
     Shown {
+        redacted,
         cut: text.chars().count() > SHOWN_MAX,
         text: crate::render::truncate(&text, SHOWN_MAX),
     }

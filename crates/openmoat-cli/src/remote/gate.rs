@@ -111,6 +111,7 @@ fn decide(
         rules: decision.rules.clone(),
         shown: shown.text,
         cut: shown.cut,
+        redacted: shown.redacted,
         created_ms: now_ms,
         expires_ms: now_ms.saturating_add(expiry_ms),
         mac: String::new(),
