@@ -111,16 +111,20 @@ impl ToolShell {
         builder
             .create(&self.dir)
             .with_context(|| format!("creating {}", self.dir.display()))?;
-        // A copy, not a link to where it is installed: the copy keeps the
-        // installed file's mode, and nothing the agent's commands may write
-        // holds the directory ([`prepare`]).
-        std::fs::copy(installed, &self.moat).with_context(|| {
-            format!(
-                "copying {} into {}",
-                installed.display(),
-                self.dir.display()
-            )
-        })?;
+        // A hard link where the two are on one file system (no bytes copied,
+        // and a path inside this directory all the same), else a copy; never
+        // a symbolic link to where it is installed, which the agent's sandbox
+        // may hide. Either keeps the installed file's mode, and nothing the
+        // agent's commands may write holds the directory ([`prepare`]).
+        if std::fs::hard_link(installed, &self.moat).is_err() {
+            std::fs::copy(installed, &self.moat).with_context(|| {
+                format!(
+                    "copying {} into {}",
+                    installed.display(),
+                    self.dir.display()
+                )
+            })?;
+        }
         for name in NAMES {
             platform::link_tool_shell(&self.moat, &self.dir.join(name))
                 .with_context(|| format!("linking the tool shell {name}"))?;
