@@ -74,6 +74,8 @@ fake_log=""
 finish() {
     local rc=$?
     [ -z "$fake_pid" ] || kill "$fake_pid" 2>/dev/null || true
+    # The one directory outside the throwaway root (Claude Code's tool shell).
+    case "${tool_shell_tmp:-}" in /tmp/moat-ci-tool-shell.*) rm -rf "$tool_shell_tmp" ;; esac
     # The fake API's log is in the artefact too; the job log shows it at once.
     [ "$rc" -eq 0 ] || show_fake
     # Also on a failed run: what arrived before it is what a reader needs.
@@ -804,8 +806,14 @@ claude-code)
     # its wrapper (ADR-075): the Bash tool must start through it and hooks must
     # not, which no fixture can show. `CLAUDE_CODE_SHELL` is documented to be
     # ignored silently when Claude Code does not accept the value.
-    tool_shell="$root/tool-shell"
-    mkdir -p "$tool_shell"
+    # It lives where `openmoat run`'s wrapper does, in the system temp directory:
+    # Claude Code's sandbox (`blockReadsOutsideWorkingDirectories`, which init
+    # sets) hides every directory under /home outside the working ones, the
+    # runner's temp directory included, so a shell there could not start and
+    # every Bash call failed (`bwrap: execvp …/tool-shell/bash: No such file or
+    # directory`, and Claude Code's shell snapshot was never written).
+    tool_shell=$(mktemp -d /tmp/moat-ci-tool-shell.XXXXXX)
+    tool_shell_tmp=$tool_shell
     # Claude Code's own sandbox holds its Bash tool to the project, so the record
     # is kept there, where the shell can write it.
     tool_shell_log="$project/.moat-tool-shell.log"
@@ -824,6 +832,8 @@ claude-code)
         tool_shell_failure="the named shell started, but not for the Bash tool's command (ADR-075)"
     elif grep -q 'guard --host' "$tool_shell_log"; then
         tool_shell_failure="a hook started through the tool shell, so it would lose the relay token (ADR-075)"
+    elif grep -l 'execvp' "$out/captured"/*PostToolUseFailure* 2>/dev/null; then
+        tool_shell_failure="Claude Code's sandbox could not start the named shell (execvp), so its Bash calls failed"
     fi
     check session-start "$host" "$out/audit-before.json" "$out/audit-after.json"
     check injected "$host" "$out/audit-before.json" "$out/audit-after.json" "$injected_host"

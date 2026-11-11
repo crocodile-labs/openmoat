@@ -122,8 +122,14 @@ from its hooks. Where it does not, nothing changes and OpenMoat says so.
 ### The wrapper
 
 `openmoat run` makes a directory of its own (`openmoat-tools-<random>`) in the system's
-temp directory, holding links named `bash` and `zsh` to the `openmoat` binary, and
-points the host's tool shell at one of them (`commands/run/tool_shell.rs`). Started
+temp directory, holding a copy of the `openmoat` binary and links named `bash` and `zsh`
+to that copy, and points the host's tool shell at one of them
+(`commands/run/tool_shell.rs`). A copy, not a link to where OpenMoat is installed: the
+host's own sandbox may hide that place. Claude Code's, with the
+`blockReadsOutsideWorkingDirectories` that `openmoat init` sets, hides every directory
+under `/home` or `/Users` outside the working ones, `~/.cargo/bin` included, and the
+weekly real-agent job showed every Bash call failing there (`bwrap: execvp …: No such
+file or directory`) while the wrapper was such a link. Started
 under one of those names with `MOAT_TOOL_SHELL_DIR` set, the binary:
 
 1. drops `MOAT_GUARD_SOCKET`, `MOAT_GUARD_TOKEN` and its own variables, and puts back

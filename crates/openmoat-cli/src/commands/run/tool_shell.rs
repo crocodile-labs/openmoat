@@ -1,10 +1,15 @@
 //! The wrapper `openmoat run` puts in front of an agent's tool shell, so tool
 //! commands do not receive the relay token (ADR-075).
 //!
-//! The run makes a directory of its own holding links named `bash` and `zsh`
-//! to this binary, and points the variable the agent reads its tool shell from
-//! at one of them. Started under one of those names with [`DIR_ENV`] set, this
-//! binary drops the relay variables and starts the real shell. The agent's
+//! The run makes a directory of its own holding a copy of this binary and
+//! links named `bash` and `zsh` to that copy, and points the variable the agent
+//! reads its tool shell from at one of them. Everything the wrapper needs to
+//! start is in that directory: an agent's own sandbox can hide the place the
+//! binary is installed (Claude Code's `blockReadsOutsideWorkingDirectories`
+//! hides `~/.cargo/bin` and every other directory under `/home` or `/Users`),
+//! and a link to it would then start nothing, so every tool command failed.
+//! Started under one of those names with [`DIR_ENV`] set, this binary drops
+//! the relay variables and starts the real shell. The agent's
 //! hooks do not go through it: the hosts that use it start hooks by another
 //! way ([`openmoat_hosts::ToolToken::Wrapper`]).
 //!
@@ -40,10 +45,15 @@ const SHELL: &str = "SHELL";
 /// How the wrapper's directory's name starts.
 const DIR_PREFIX: &str = "openmoat-tools-";
 
+/// The name of the binary's copy in the wrapper's directory, which no host
+/// asks for as a shell.
+const COPY: &str = "openmoat";
+
 /// The wrapper directory of one run; removed when dropped.
 #[derive(Debug)]
 pub struct ToolShell {
     dir: PathBuf,
+    /// The copy of the binary in [`Self::dir`] that the links name.
     moat: PathBuf,
     vars: &'static [&'static str],
     on_path: bool,
@@ -75,21 +85,22 @@ pub fn prepare(host: Option<Host>, write_roots: &[String]) -> Result<Option<Tool
     if write_roots.iter().any(|root| dir.starts_with(root)) {
         return Ok(None);
     }
-    let moat = std::env::current_exe()
+    let installed = std::env::current_exe()
         .and_then(std::fs::canonicalize)
         .context("locating the openmoat binary")?;
     let tools = ToolShell {
+        moat: dir.join(COPY),
         dir,
-        moat,
         vars,
         on_path,
     };
-    tools.create()?;
+    // On an error `tools` is dropped, which removes what was made of it.
+    tools.create(&installed)?;
     Ok(Some(tools))
 }
 
 impl ToolShell {
-    fn create(&self) -> Result<()> {
+    fn create(&self, installed: &Path) -> Result<()> {
         let builder = std::fs::DirBuilder::new();
         #[cfg(unix)]
         let builder = {
@@ -100,6 +111,16 @@ impl ToolShell {
         builder
             .create(&self.dir)
             .with_context(|| format!("creating {}", self.dir.display()))?;
+        // A copy, not a link to where it is installed: the copy keeps the
+        // installed file's mode, and nothing the agent's commands may write
+        // holds the directory ([`prepare`]).
+        std::fs::copy(installed, &self.moat).with_context(|| {
+            format!(
+                "copying {} into {}",
+                installed.display(),
+                self.dir.display()
+            )
+        })?;
         for name in NAMES {
             platform::link_tool_shell(&self.moat, &self.dir.join(name))
                 .with_context(|| format!("linking the tool shell {name}"))?;
@@ -261,6 +282,34 @@ mod tests {
         let tools = prepare(host, &[crate::context::path_string(&root)]).unwrap();
         assert!(tools.is_none());
         assert!(off_notice(host, tools.as_ref()).is_some());
+    }
+
+    /// An agent's sandbox may show the wrapper's directory and nothing of
+    /// where OpenMoat is installed (Claude Code's on Linux hides `/home`
+    /// outside the working directories): each link must resolve inside it,
+    /// to a full copy of the binary.
+    #[test]
+    fn the_wrapper_needs_nothing_outside_its_directory() {
+        let host = Host::EVERY
+            .into_iter()
+            .find(|host| matches!(host.spec().tool_token, ToolToken::Wrapper { .. }));
+        let tools = prepare(host, &[]).unwrap().unwrap();
+        let dir = std::fs::canonicalize(&tools.dir).unwrap();
+        let installed = std::fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
+        for name in NAMES {
+            let target = std::fs::canonicalize(tools.dir.join(name)).unwrap();
+            assert!(target.starts_with(&dir), "{name} -> {}", target.display());
+            assert_ne!(target, installed);
+        }
+        let copy = std::fs::metadata(&tools.moat).unwrap();
+        assert!(copy.is_file());
+        assert_eq!(copy.len(), std::fs::metadata(&installed).unwrap().len());
+        assert!(std::os::unix::fs::PermissionsExt::mode(&copy.permissions()) & 0o100 != 0);
+        let grant = tools.grant();
+        assert!(Path::new(&grant.moat).starts_with(&grant.dir));
+        let made = tools.dir.clone();
+        drop(tools);
+        assert!(!made.exists(), "the copy outlives the run");
     }
 
     #[test]
