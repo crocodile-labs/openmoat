@@ -192,7 +192,8 @@ with the host in `injectHosts`, and turns on `network.tlsTerminate` so Claude Co
 built-in proxy substitutes the real value inside HTTPS for sandboxed `Bash`,
 `PowerShell` and `Monitor` commands. One policy therefore drives both Claude Code's
 broker and `openmoat proxy`. A secret whose host is not in `net` allow is skipped with a
-loss, as is a `keychain` source (Claude Code's broker reads env and file sources only);
+loss, as is a `keychain` or `command` source (Claude Code's broker reads env and file
+sources only; a `command` source is run and renewed by `openmoat proxy` alone, ADR-087);
 both still work through `openmoat proxy`. On macOS, Claude Code denies a `file` source
 instead of masking it, so the tool that reads the file does not authenticate inside
 the sandbox; `openmoat sandbox show` lists this and the HTTPS allowance. A

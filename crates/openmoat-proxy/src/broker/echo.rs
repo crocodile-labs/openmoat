@@ -14,50 +14,53 @@
 
 use zeroize::Zeroizing;
 
-use super::{Broker, contains};
+use super::Broker;
 
 impl Broker {
-    /// The id of the first brokered secret whose value occurs in `bytes`.
+    /// The id of the first brokered secret whose value, current or replaced
+    /// (ADR-087), occurs in `bytes`.
     pub(crate) fn value_in(&self, bytes: &[u8]) -> Option<&str> {
         self.held
             .iter()
-            .find(|h| contains(bytes, h.value.as_bytes()))
+            .find(|h| h.value_in(bytes))
             .map(|h| h.secret.id.as_str())
+    }
+
+    /// One byte less than the longest value: what a stream keeps back.
+    fn keep(&self) -> usize {
+        self.held
+            .iter()
+            .map(super::Held::longest_value)
+            .max()
+            .unwrap_or(0)
+            .saturating_sub(1)
     }
 }
 
 /// Holds back the end of a stream until it is known not to start a value.
 pub(crate) struct Holdback<'a> {
     broker: &'a Broker,
-    keep: usize,
     /// Searched but not released yet. It may hold part of a value: zeroed.
     pending: Zeroizing<Vec<u8>>,
 }
 
 impl<'a> Holdback<'a> {
     pub(crate) fn new(broker: &'a Broker) -> Self {
-        let keep = broker
-            .held
-            .iter()
-            .map(|h| h.value.len())
-            .max()
-            .unwrap_or(0)
-            .saturating_sub(1);
         Self {
             broker,
-            keep,
             pending: Zeroizing::new(Vec::new()),
         }
     }
 
     /// Take the next `data`; the bytes now safe to release, or the id of the
-    /// secret whose value the stream holds.
+    /// secret whose value the stream holds. How much is kept back is asked
+    /// each time: a value renewed meanwhile may be longer.
     pub(crate) fn push(&mut self, data: &[u8]) -> Result<Zeroizing<Vec<u8>>, &'a str> {
         self.pending.extend_from_slice(data);
         if let Some(id) = self.broker.value_in(&self.pending) {
             return Err(id);
         }
-        let release = self.pending.len().saturating_sub(self.keep);
+        let release = self.pending.len().saturating_sub(self.broker.keep());
         let rest = Zeroizing::new(self.pending[release..].to_vec());
         self.pending.truncate(release);
         Ok(std::mem::replace(&mut self.pending, rest))

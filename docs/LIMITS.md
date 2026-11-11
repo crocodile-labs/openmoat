@@ -125,6 +125,13 @@ Each agent's gaps and the reasons are in
   a file or link that changes between the check and the command running, and hard
   links that already exist, are not seen. Inside `openmoat run` the OS sandbox still
   holds ([THREAT_MODEL](THREAT_MODEL.md), ADR-009).
+- **A `command` secret source trusts what the program reads** (preview, POLICY.md §2.2).
+  The proxy checks that the agent cannot change the program file and pins its digest,
+  but not the files the program loads or reads (a script's own libraries, its
+  configuration): cover them with deny `fs.write` rules too. A hook-only agent's writes
+  through a program the hook cannot see are not stopped by those rules; only an OS
+  sandbox stops them. A program that leaves a child running past its time limit keeps
+  that child, and one waiting thread of the proxy, until the child ends.
 
 ## What the hook does not see
 

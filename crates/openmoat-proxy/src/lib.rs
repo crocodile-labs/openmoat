@@ -56,7 +56,10 @@ mod tunnel;
 mod upstream;
 
 pub use audit::{Connection, RecordError, Recorder};
-pub use broker::{Broker, BrokerError, Carried, Leak, RULE_SECRET, RULE_SECRET_ROUTE};
+pub use broker::{
+    Broker, BrokerError, Carried, Leak, RULE_SECRET, RULE_SECRET_EXPIRED, RULE_SECRET_ROUTE,
+    Rotation,
+};
 pub use decide::{
     DEFAULT_PORTS, Forbidden, RULE_ADDRESS, RULE_AUDIT, RULE_PORT, RULE_REQUEST, RULE_SNI,
     RULE_UPSTREAM, address_policy, denied as address_denied, forbidden, host as decide_host,

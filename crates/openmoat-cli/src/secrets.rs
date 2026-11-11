@@ -5,33 +5,70 @@
 //! proxy's [`Broker`]. Errors name the secret and where it was looked for,
 //! never what was read.
 
+mod command;
 mod keychain;
+mod program;
+mod refresh;
+#[cfg(all(test, unix))]
+mod stand;
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use openmoat_audit::KnownSecrets;
-use openmoat_core::{Secret, SecretSource};
+use openmoat_core::{Policy, Secret, SecretSource};
 use openmoat_proxy::Broker;
 use zeroize::Zeroizing;
 
-/// A broker holding the value of every secret in `secrets`, and the same values
-/// for the audit log to mask. `home` is the user's home directory in slash
-/// form, for `~/` file sources. Any secret that cannot be read stops the proxy
-/// from starting.
-pub fn broker(secrets: &[Secret], home: &str) -> Result<(Broker, KnownSecrets)> {
-    let mut held = Vec::with_capacity(secrets.len());
-    for secret in secrets {
-        let value = read(&secret.source, home)
-            .with_context(|| format!("reading secret `{}`", secret.id))?;
+pub use refresh::{Masks, Refresher};
+
+/// A broker holding the value of every secret of `policy`, and what renews
+/// those from `command` sources (ADR-087), which also holds every value for
+/// the audit log to mask. `home` is the user's home directory in slash form,
+/// for `~/` sources. Any secret that cannot be read stops the proxy from
+/// starting.
+pub fn broker(policy: &Policy, home: &str) -> Result<(Broker, Refresher)> {
+    let mut held = Vec::with_capacity(policy.secrets.len());
+    let mut fixed = Vec::new();
+    let mut started = Vec::new();
+    for secret in &policy.secrets {
+        let reading = || format!("reading secret `{}`", secret.id);
+        let value = match &secret.source {
+            SecretSource::Command(source) => {
+                let program = command::Program::prepare(&secret.id, source, policy, home)
+                    .with_context(reading)?;
+                let answer = program.fetch().with_context(reading)?;
+                let until = std::time::Instant::now() + answer.lifetime;
+                started.push((program, until, answer.value.clone()));
+                answer.value
+            }
+            other => {
+                let value = read(other, home).with_context(reading)?;
+                fixed.push(value.clone());
+                value
+            }
+        };
         held.push((secret.clone(), value));
     }
-    let known = KnownSecrets::new(held.iter().map(|(_, value)| value.as_str()))?;
-    Ok((Broker::new(held)?, known))
+    let broker = Broker::new(held)?;
+    let mut programs = Vec::with_capacity(started.len());
+    for (program, until, value) in started {
+        let rotation = broker
+            .rotation(program.id())
+            .context("a brokered secret went missing")?;
+        // Counted from when the program answered, not from now.
+        rotation.renew(
+            value.clone(),
+            until.saturating_duration_since(std::time::Instant::now()),
+        )?;
+        programs.push((program, rotation, value));
+    }
+    Ok((broker, Refresher::new(programs, fixed)))
 }
 
 /// The values of `secrets` that `moat guard` masks in the audit log: those with
 /// a file or environment source that this process can read. A keychain read
-/// would start a program on every tool call; a secret that cannot be read is
-/// skipped, since the proxy, which needs it, refuses to start without it.
+/// would start a program on every tool call, and a `command` source runs in
+/// `openmoat proxy` only; a secret that cannot be read is skipped, since the
+/// proxy, which needs it, refuses to start without it.
 pub fn known(secrets: &[Secret], home: &str) -> Result<KnownSecrets> {
     let values = known_values(secrets, home);
     Ok(KnownSecrets::new(values.iter().map(|v| v.as_str()))?)
@@ -42,13 +79,14 @@ pub fn known(secrets: &[Secret], home: &str) -> Result<KnownSecrets> {
 pub fn known_values(secrets: &[Secret], home: &str) -> Vec<Zeroizing<String>> {
     secrets
         .iter()
-        .filter(|s| !matches!(s.source, SecretSource::Keychain { .. }))
+        .filter(|s| !matches!(s.source, SecretSource::Keychain { .. }) && !s.source.proxy_only())
         .filter_map(|s| read(&s.source, home).ok())
         .collect()
 }
 
 /// The value at `source`, without its trailing newline; also the keys and
-/// tokens audit delivery sends with (ADR-081).
+/// tokens audit delivery sends with (ADR-081). A `command` source is refused:
+/// only `openmoat proxy` runs it ([`broker`]).
 pub fn read(source: &SecretSource, home: &str) -> Result<Zeroizing<String>> {
     let mut value = match source {
         SecretSource::File(path) => {
@@ -65,6 +103,10 @@ pub fn read(source: &SecretSource, home: &str) -> Result<Zeroizing<String>> {
                 .with_context(|| format!("environment variable {name} is not set or not UTF-8"))?,
         ),
         SecretSource::Keychain { service, account } => keychain::read(service, account)?,
+        SecretSource::Command(source) => bail!(
+            "`command` source {} is run by `openmoat proxy` only",
+            source.program()
+        ),
     };
     let end = value.trim_end_matches(['\r', '\n']).len();
     value.truncate(end);
@@ -72,57 +114,4 @@ pub fn read(source: &SecretSource, home: &str) -> Result<Zeroizing<String>> {
 }
 
 #[cfg(test)]
-mod tests {
-    use openmoat_core::Policy;
-
-    use super::*;
-
-    /// Generated for the test; no real secret is used.
-    const VALUE: &str = "fake-file-secret-5d0c1b";
-
-    fn policy(source: &str) -> Policy {
-        Policy::parse(&format!(
-            "version: 1\nsecrets:\n  - id: t\n    host: a.test\n    header: X-Key\n    \
-             source: {source}\n"
-        ))
-        .unwrap()
-    }
-
-    #[test]
-    fn a_home_file_is_read_without_its_trailing_newline() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join(".config")).unwrap();
-        std::fs::write(dir.path().join(".config/t"), format!("{VALUE}\r\n")).unwrap();
-        let home = dir.path().to_str().unwrap().replace('\\', "/");
-        let p = policy("{ file: ~/.config/t }");
-        // Kept, the `\r\n` would have been refused as control characters.
-        let (b, known) = broker(&p.secrets, &home).unwrap();
-        assert!(b.leak("b.test", VALUE.as_bytes()).is_some());
-        assert_eq!(known.redact(&format!("x{VALUE}x")), "x[redacted]x");
-        // The guard reads it too, and skips what it cannot read.
-        let known = super::known(&p.secrets, &home).unwrap();
-        assert_eq!(known.redact(VALUE), "[redacted]");
-        let missing = super::known(&policy("{ file: ~/nope }").secrets, &home).unwrap();
-        assert_eq!(missing.redact(VALUE), VALUE);
-    }
-
-    #[test]
-    fn a_missing_or_unusable_source_names_the_secret_not_a_value() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().to_str().unwrap().replace('\\', "/");
-        let missing = broker(&policy("{ file: ~/nope }").secrets, &home).unwrap_err();
-        assert!(
-            format!("{missing:#}").contains("reading secret `t`"),
-            "{missing:#}"
-        );
-        std::fs::write(dir.path().join("bad"), "a\0b").unwrap();
-        let bad = broker(&policy("{ file: ~/bad }").secrets, &home).unwrap_err();
-        assert!(format!("{bad:#}").contains("control character"), "{bad:#}");
-        assert!(!format!("{bad:#}").contains("a\0b"));
-        let env = broker(&policy("{ env: MOAT_TEST_UNSET_9F3A }").secrets, &home).unwrap_err();
-        assert!(
-            format!("{env:#}").contains("MOAT_TEST_UNSET_9F3A is not set"),
-            "{env:#}"
-        );
-    }
-}
+mod tests;

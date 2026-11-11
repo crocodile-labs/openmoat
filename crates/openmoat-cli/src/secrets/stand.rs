@@ -1,0 +1,83 @@
+//! Stand-in programs for the tests of `command` sources: shell scripts in a
+//! folder the test policy keeps from the agent with a deny `fs.write` rule.
+
+use std::os::unix::fs::PermissionsExt as _;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use openmoat_core::{Policy, SecretCommand};
+
+use super::command::Program;
+
+/// A folder beside the test binary: the system's temp folder is `/tmp` on
+/// Linux, where no command source may be.
+pub fn scratch() -> tempfile::TempDir {
+    let exe = std::env::current_exe().unwrap();
+    tempfile::Builder::new()
+        .prefix("cmd-source-")
+        .tempdir_in(exe.parent().unwrap())
+        .unwrap()
+}
+
+pub struct Stand {
+    _dir: tempfile::TempDir,
+    /// The folder, resolved; also the home the programs get.
+    pub root: String,
+    /// A policy that denies writes to the folder.
+    pub policy: Policy,
+}
+
+impl Stand {
+    pub fn new() -> Self {
+        let dir = scratch();
+        let root = std::fs::canonicalize(dir.path())
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let policy = Policy::parse(&format!(
+            "version: 1\ndeny:\n  - id: credential-programs\n    fs.write: ['{root}/**']\n"
+        ))
+        .unwrap();
+        Self {
+            _dir: dir,
+            root,
+            policy,
+        }
+    }
+
+    /// An executable `name` running `body`.
+    pub fn script(&self, name: &str, body: &str) -> PathBuf {
+        let path = Path::new(&self.root).join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    /// The source running `run` for 15 minutes.
+    pub fn source(run: &[&str]) -> SecretCommand {
+        SecretCommand {
+            run: run.iter().map(|w| (*w).to_owned()).collect(),
+            lifetime: "15m".into(),
+            refresh_before: None,
+        }
+    }
+
+    /// `path --print` made ready under `policy`, with a two-second time limit.
+    pub fn program(&self, path: &Path, policy: &Policy) -> anyhow::Result<Program> {
+        let path = path.to_string_lossy();
+        Program::prepare("t", &Self::source(&[&path, "--print"]), policy, &self.root)
+            .map(|p| p.with_time_limit(Duration::from_secs(2)))
+    }
+
+    /// `/bin/sh -c body --print`: a program only an administrator can change,
+    /// so no policy rule is needed. A script the test wrote is not run: a
+    /// file just written can still be open in a process another test started
+    /// meanwhile, and starting it then stalls.
+    pub fn shell(&self, body: &str) -> Program {
+        let source = Self::source(&["/bin/sh", "-c", body, "sh", "--print"]);
+        let open = Policy::parse("version: 1\n").unwrap();
+        Program::prepare("t", &source, &open, &self.root)
+            .unwrap()
+            .with_time_limit(Duration::from_secs(2))
+    }
+}

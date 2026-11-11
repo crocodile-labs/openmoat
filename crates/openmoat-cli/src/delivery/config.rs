@@ -295,6 +295,11 @@ fn check_source(source: SecretSource, home: &Home) -> Result<SecretSource> {
             home.delivery_dir().display()
         ),
         keychain @ SecretSource::Keychain { .. } => Ok(keychain),
+        SecretSource::Command(_) => bail!(
+            "`command:` is refused here: only `openmoat proxy` runs a program for a value; use a \
+             file inside {} or the keychain",
+            home.delivery_dir().display()
+        ),
     }
 }
 

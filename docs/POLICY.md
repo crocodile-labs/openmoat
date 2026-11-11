@@ -192,7 +192,8 @@ sandbox can broker it too, below).
 
 - **`source`.** `file` is absolute or under `~/`; the value is its contents without the
   trailing newline. `env` is a variable of the `openmoat proxy` process. `keychain` is an item
-  in the operating system's keychain.
+  in the operating system's keychain. `command` (preview) is a program `openmoat proxy`
+  runs for a short-lived value and runs again before the value expires (§2.2).
 - **`header`** must be an HTTP header name. Headers that frame the request or the
   connection (`Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Proxy-*`, …)
   are refused. Two secrets cannot set the same header for the same host.
@@ -295,12 +296,82 @@ as a Claude Code `mask` entry for that one host, and turns on Claude Code's
 `network.tlsTerminate`, which masking needs. Sandboxed commands then see Claude Code's
 own placeholder in that variable or file, and Claude Code's proxy sends the value to the
 host. The value is read by Claude Code from the same source, not by `openmoat proxy`. A
-secret Claude Code cannot mask (a `keychain` source, a host outside `net` allow, or a
-`plain_http: true` secret, which goes to one port only, `port` or 80, while Claude
+secret Claude Code cannot mask (a `keychain` or `command` source, a host outside `net`
+allow, or a `plain_http: true` secret, which goes to one port only, `port` or 80, while Claude
 Code's broker would inject it on every port of the host) is left to `openmoat proxy`
 as above, and OpenMoat never sets Claude Code's `allowPlaintextInject`; on
 macOS a `file` source is denied rather than masked. `openmoat sandbox show` and
 `openmoat doctor` list what Claude Code does with each secret ([SANDBOX.md](SANDBOX.md#host-sandboxes-standard-tier)).
+
+### 2.2 Short-lived values from a program (`source: command`, preview)
+
+A token that lives for minutes is worth little once its time is up. A `command` source
+names a program you chose that prints such a token; `openmoat proxy` runs it, uses the
+value for at most `lifetime`, and runs it again `refresh_before` the end
+([ADR-087](adr/ADR-087-short-lived-brokered-credentials.md)). This example is for
+Google Cloud's CLI, whose `gcloud auth print-access-token` prints an access token; it is
+an example only, so check your tool's own command and the header its API expects:
+
+```yaml
+secrets:
+  - id: gcloud
+    host: storage.googleapis.com
+    header: Authorization
+    tls: terminate
+    source:
+      command:
+        run: ["/opt/homebrew/bin/gcloud", "auth", "print-access-token"]
+        lifetime: 30m          # 1m to 12h: the longest one value is used
+        refresh_before: 5m     # optional; a fifth of lifetime when unset (at least 10s)
+deny:
+  - id: credential-programs     # the agent must not be able to change the program
+    # the link in `run`, and where it leads (`realpath /opt/homebrew/bin/gcloud`)
+    fs.write: ["/opt/homebrew/bin/gcloud", "/opt/homebrew/Caskroom/**"]
+```
+
+The agent sends `Authorization: Bearer moat-secret:gcloud:placeholder`; the proxy puts the
+token in place of the placeholder.
+
+- **`run`** is the program and its arguments, run without a shell. The program is an
+  absolute path or starts with `~/`; a bare name, a path with `.` or `..`, and a path
+  under `/tmp`, `/var/tmp` or `/dev/shm` do not load.
+- **Who can change the program.** It runs as you, outside every sandbox, so the agent must
+  not be able to change it. `openmoat proxy` runs it only when both the path in `run` and
+  the file it resolves to are covered by a deny `fs.write` rule, or are files only an
+  administrator can change (on macOS and Linux: they and every folder above them belong to
+  root and no group or other user may write them, as `/usr/bin/…` does). Otherwise it
+  refuses to start and says which rule to add; `openmoat policy lint` warns the same. The
+  default policy only asks before writes to `/opt/homebrew/bin` and `~/.local/bin`
+  (`persistence`), which is not enough: add the deny rule, and cover the folder the tool
+  is installed in, since a script loads its own files too. Files the program reads (its
+  configuration, such as `~/.aws/config`, `~/.config/gcloud`) must be kept from the agent
+  as well; the default `secrets-paths` rule denies writes to those two.
+- **Pinned.** The proxy takes the program's SHA-256 at start and checks it before every
+  run: a program changed since is not run, and the value is not renewed. After you
+  update the tool, restart `openmoat proxy` (or `openmoat run`).
+- **How it runs.** No input, no terminal (its own process group), a time limit of 30
+  seconds, at most 64 KiB of output, its error output dropped, and a bare environment:
+  `HOME`, `PATH` (the program's folder, then `/usr/bin:/bin:/usr/sbin:/sbin`), `USER`,
+  `LOGNAME`, `LANG`, `LC_ALL`, `TMPDIR` and `TZ` (on Windows `SystemRoot`, the profile
+  folders and `TEMP`). Pass anything else, such as a profile name, as an argument.
+- **What it prints.** The value alone (one line), or JSON:
+  `{"value": "…", "expires_in": 3599}` or `{"value": "…", "expires_at": 1767225600}`
+  (Unix seconds). The value is used until the earlier of `lifetime` and that expiry; an
+  answer that expires in less than 10 seconds is refused. An empty value, a control
+  character, other JSON keys, more than one line or non-UTF-8 output are refused.
+- **When it fails.** At start, `openmoat proxy` does not start (exit 64), as for any
+  source. Later, the proxy says so on its standard error (the secret's id and the
+  reason, never the output) and runs it again every 15 seconds. Until the old value
+  expires, it is still used; after that, a request that would get it is refused before
+  anything is sent, with rule `proxy-secret-expired` in the audit log. A stale value is
+  never sent.
+- **Where it runs.** Only in `openmoat proxy` (and the proxy of `openmoat run`).
+  `openmoat guard` never runs it and does not mask its value; audit delivery refuses a
+  `command` source; Claude Code's broker is never given it (`openmoat sandbox show`
+  lists it as handled by `openmoat proxy`). A repository policy or a pack cannot add any
+  secret.
+- **Masking.** Every value it gave (the last five) is masked in the proxy's audit rows,
+  and the leak and echo checks look for the value it replaced too.
 
 ## 3. Pattern syntax
 

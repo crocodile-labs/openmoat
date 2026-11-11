@@ -381,11 +381,12 @@ impl Exit {
             policy
         };
         CompiledPolicy::compile(&policy, &ctx)?;
-        let (broker, known) = secrets::broker(&policy.secrets, &ctx.home)?;
+        let (broker, refresher) = secrets::broker(&policy, &ctx.home)?;
         let audit_path = home.audit_path();
         let store = Store::open_existing(&audit_path)
             .with_context(|| format!("opening {}", audit_path.display()))?
-            .with_secrets(known);
+            .with_secrets(refresher.known()?);
+        let masks = refresher.masks();
         let session = credential.as_ref().map_or_else(
             || format!("proxy-{}", crate::time::now_ms()),
             |c| c.session().to_owned(),
@@ -406,6 +407,8 @@ impl Exit {
             }
             None => None,
         };
+        // `command` sources are renewed from here on (ADR-087).
+        refresher.spawn();
         Ok(Self {
             policy,
             ctx,
@@ -413,6 +416,7 @@ impl Exit {
             recorder: AuditLog {
                 store: Mutex::new(store),
                 session,
+                masks,
             },
             run,
             issued,
@@ -517,6 +521,8 @@ impl Exit {
 struct AuditLog {
     store: Mutex<Store>,
     session: String,
+    /// Masks for renewed values, taken up before the next row (ADR-087).
+    masks: secrets::Masks,
 }
 
 impl Recorder for AuditLog {
@@ -548,10 +554,18 @@ impl Recorder for AuditLog {
             decision: c.decision,
             latency_us: c.latency_us,
         };
-        let store = self
+        let mut store = self
             .store
             .lock()
             .map_err(|_| RecordError("audit writer poisoned by an earlier panic".to_owned()))?;
+        let renewed = self
+            .masks
+            .lock()
+            .map_err(|_| RecordError("secret masks poisoned by an earlier panic".to_owned()))?
+            .take();
+        if let Some(known) = renewed {
+            store.set_secrets(known);
+        }
         store
             .record(&event)
             .map(drop)

@@ -234,3 +234,114 @@ fn permit_names_the_rule_or_why_without_the_path() {
         );
     }
 }
+
+const CLOUD: &str = "  - id: cloud\n    host: storage.example.com\n    header: Authorization\n";
+
+fn command(source: &str) -> Result<Policy, PolicyError> {
+    parse(&format!("{CLOUD}    source:\n      command: {source}\n"))
+}
+
+#[test]
+fn a_command_source_parses_with_its_lifetime() {
+    let p = command(
+        "{ run: [/usr/local/bin/cloud, auth, print-access-token], lifetime: 15m, \
+         refresh_before: 2m }",
+    )
+    .unwrap();
+    let Source::Command(c) = &p.secrets[0].source else {
+        panic!("not a command source");
+    };
+    assert_eq!(c.program(), "/usr/local/bin/cloud");
+    assert_eq!((c.lifetime_secs(), c.refresh_before_secs()), (900, 120));
+    assert!(p.secrets[0].source.proxy_only());
+    assert_eq!(
+        p.secrets[0].source.describe(),
+        "command /usr/local/bin/cloud"
+    );
+    // Arguments may name accounts: Debug shows the program only.
+    assert!(!format!("{c:?}").contains("print-access-token"));
+    let home = command("{ run: ['~/sdk/bin/cloud'], lifetime: 1h }").unwrap();
+    let Source::Command(c) = &home.secrets[0].source else {
+        panic!("not a command source");
+    };
+    // A fifth of the lifetime when unset.
+    assert_eq!(c.refresh_before_secs(), 720);
+}
+
+#[test]
+fn a_command_source_the_agent_could_change_or_search_for_is_refused() {
+    for (source, why) in [
+        ("{ run: [cloud, token], lifetime: 15m }", "absolute path"),
+        ("{ run: [./bin/cloud], lifetime: 15m }", "absolute path"),
+        (
+            "{ run: ['${project}/bin/cloud'], lifetime: 15m }",
+            "absolute path",
+        ),
+        ("{ run: [/tmp/cloud], lifetime: 15m }", "under /tmp/"),
+        (
+            "{ run: [/private/tmp/x/cloud], lifetime: 15m }",
+            "under /private/tmp/",
+        ),
+        (
+            "{ run: [/var/tmp/cloud], lifetime: 15m }",
+            "under /var/tmp/",
+        ),
+        (
+            "{ run: [/dev/shm/cloud], lifetime: 15m }",
+            "under /dev/shm/",
+        ),
+        ("{ run: [/usr/bin/../../tmp/cloud], lifetime: 15m }", "`..`"),
+        ("{ run: [], lifetime: 15m }", "needs a program"),
+        (
+            "{ run: [\"/usr/bin/cloud\", \"a\\nb\"], lifetime: 15m }",
+            "control character",
+        ),
+    ] {
+        let problem = command(source).unwrap_err().to_string();
+        assert!(problem.contains(why), "{source}: {problem}");
+        assert!(problem.contains("secrets.cloud"), "{problem}");
+    }
+}
+
+#[test]
+fn a_command_lifetime_is_bounded_and_refreshes_before_it_ends() {
+    for (times, why) in [
+        ("lifetime: 30s", "from 1m to 12h"),
+        ("lifetime: 13h", "from 1m to 12h"),
+        ("lifetime: 15", "not a duration"),
+        ("lifetime: 1d", "not a duration"),
+        ("lifetime: -5m", "not a duration"),
+        (
+            "lifetime: 15m, refresh_before: 15m",
+            "shorter than the lifetime",
+        ),
+        ("lifetime: 15m, refresh_before: 5s", "at least 10s"),
+        ("lifetime: 15m, refresh_before: soon", "not a duration"),
+    ] {
+        let problem = command(&format!("{{ run: [/usr/bin/cloud], {times} }}"))
+            .unwrap_err()
+            .to_string();
+        assert!(problem.contains(why), "{times}: {problem}");
+    }
+    assert!(command("{ run: [/usr/bin/cloud], lifetime: 15m, after: 1m }").is_err());
+    assert!(command("{ run: [/usr/bin/cloud], lifetime: 12h }").is_ok());
+    assert_eq!(super::command::duration_secs("90s"), Some(90));
+    assert_eq!(super::command::duration_secs("2h"), Some(7200));
+    assert_eq!(super::command::duration_secs("m"), None);
+}
+
+#[test]
+fn a_command_program_needs_a_deny_write_rule_or_the_lint_says_so() {
+    use crate::lint::{exposed_source, write_denied};
+    let bare = command("{ run: [/opt/tools/bin/cloud], lifetime: 15m }").unwrap();
+    let warned = exposed_source(&bare, &bare.secrets[0]).unwrap();
+    assert!(warned.contains("no deny fs.write rule covers"), "{warned}");
+    let covered = parse(&format!(
+        "{CLOUD}    source:\n      command: {{ run: ['~/sdk/bin/cloud'], lifetime: 15m }}\n\
+         deny:\n  - id: credential-programs\n    fs.write: ['~/sdk/**']\n"
+    ))
+    .unwrap();
+    assert_eq!(exposed_source(&covered, &covered.secrets[0]), None);
+    assert!(write_denied(&covered, "~/sdk/bin/cloud"));
+    assert!(!write_denied(&covered, "~/other/cloud"));
+}

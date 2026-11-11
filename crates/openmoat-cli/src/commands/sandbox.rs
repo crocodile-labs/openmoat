@@ -270,11 +270,7 @@ fn write_secrets(
         return Ok(());
     };
     for SecretMask { secret, text, .. } in masks {
-        let source = match &secret.source {
-            openmoat_core::SecretSource::Env(name) => format!("env {name}"),
-            openmoat_core::SecretSource::File(path) => format!("file {path}"),
-            openmoat_core::SecretSource::Keychain { service, .. } => format!("keychain {service}"),
-        };
+        let source = secret.source.describe();
         let state = if install::masks_unavailable() {
             format!(
                 "{}'s sandbox is not available here, so it masks nothing",

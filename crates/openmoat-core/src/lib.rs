@@ -77,8 +77,8 @@ pub use programs::{MapResolver, NoResolver, ProgramResolver};
 pub use realpath::{MapPathResolver, PathResolver};
 pub use repo::{REPO_RULE_PREFIX, RepoPolicy};
 pub use secret::{
-    METHOD_OVERRIDE_HEADERS, PathRefusal, Permit, RequestPath, Route as SecretRoute,
-    SECRET_RULE_PREFIX, Secret, Source as SecretSource, Tls as SecretTls,
+    CommandSource as SecretCommand, METHOD_OVERRIDE_HEADERS, PathRefusal, Permit, RequestPath,
+    Route as SecretRoute, SECRET_RULE_PREFIX, Secret, Source as SecretSource, Tls as SecretTls,
 };
 pub use shell::cwd::leaves_unknown_directory;
 pub use shell::installs::near_miss_atoms as package_near_misses;

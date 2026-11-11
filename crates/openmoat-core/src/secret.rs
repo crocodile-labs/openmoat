@@ -12,6 +12,10 @@ use crate::host::{MAX_DNS_LABEL_LEN, MAX_DNS_NAME_LEN};
 use crate::policy::PolicyError;
 pub use crate::route::{MAX_ROUTES, METHOD_OVERRIDE_HEADERS, PathRefusal, RequestPath, Route};
 
+mod command;
+
+pub use command::CommandSource;
+
 /// What a brokered secret's id is prefixed with where it stands for a rule id
 /// (`secrets.<id>`): lint warnings, policy errors and sandbox losses.
 pub const SECRET_RULE_PREFIX: &str = "secrets.";
@@ -107,6 +111,31 @@ pub enum Source {
         /// Account name of the item.
         account: String,
     },
+    /// A program the person chose, run by `openmoat proxy` only, whose answer
+    /// is used for at most a lifetime and refreshed before it ends (ADR-087).
+    Command(CommandSource),
+}
+
+impl Source {
+    /// Whether only `openmoat proxy` reads this source: a program it runs,
+    /// which `openmoat guard`, audit delivery and Claude Code's broker never
+    /// start.
+    #[must_use]
+    pub fn proxy_only(&self) -> bool {
+        matches!(self, Self::Command(_))
+    }
+
+    /// Where the value comes from, without anything that may be private:
+    /// `env NAME`, `file PATH`, `keychain SERVICE`, `command PROGRAM`.
+    #[must_use]
+    pub fn describe(&self) -> String {
+        match self {
+            Self::Env(name) => format!("env {name}"),
+            Self::File(path) => format!("file {path}"),
+            Self::Keychain { service, .. } => format!("keychain {service}"),
+            Self::Command(command) => format!("command {}", command.program()),
+        }
+    }
 }
 
 impl std::fmt::Debug for Secret {
@@ -269,6 +298,7 @@ fn check_one(secret: &Secret) -> Result<(), String> {
         {
             Err("source keychain needs a service and an account without control characters".into())
         }
+        Source::Command(command) => command::check(command),
         _ => Ok(()),
     }
 }
