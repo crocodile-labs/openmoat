@@ -58,9 +58,13 @@ CREATE_NEW_PROCESS_GROUP` on Windows), and a cleared environment that keeps only
 plus `MOAT_HOME` set to the guard's own state directory. `SSL_CERT_FILE` and the
 proxy variables are not passed: they would choose the roots the run trusts or route
 it elsewhere. It is not started when a run holds `delivery/run.lock` (one run at a
-time, `File::try_lock`) or when `delivery/hold` says no sink is due before a time (all
-waiting after failures or paused, or for five minutes after a run found the file not
-honoured) and neither the configuration nor the lock is newer than that file.
+time, `File::try_lock`) or when `delivery/hold` says no sink is due before a time and
+neither the configuration nor the lock is newer than that file. Every run writes the
+hold on every way out: after a run, the earliest time a sink is due (all waiting after
+failures or paused) and never less than a second away, so a burst of calls starts one
+run; after a run that failed as a whole (the audit log or the policy unreadable), a
+minute, doubling to 15 minutes while it keeps failing; five minutes after a run found
+the file not honoured.
 
 Without a configuration the guard's added cost is one `stat`. With one, one or two
 small file reads and, now and then, a process start, all after the answer is out.
