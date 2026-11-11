@@ -490,20 +490,9 @@ pub struct RunArgs {
     #[arg(long)]
     pub verbose: bool,
 
-    /// The Isolated tier (Linux, bubblewrap), or nothing: the agent sees only the project
-    /// without its denied paths, the policy's read roots and `--write` paths, and reaches
-    /// only OpenMoat's proxy. Refused where bubblewrap cannot run. Without this flag or
-    /// `--no-isolate`, Linux starts this tier where bubblewrap works and otherwise says
-    /// why and starts the Lightweight tier.
-    #[arg(long)]
-    pub isolate: bool,
-
-    /// The Lightweight tier on Linux instead of the default Isolated tier: commands can
-    /// read and write `.env`, `.git` and `.moat` inside the project. Recorded in the
-    /// audit log; refused when a policy has `require.run: full-boundary`. Changes
-    /// nothing on macOS, which has no Isolated tier yet.
-    #[arg(long, conflicts_with = "isolate")]
-    pub no_isolate: bool,
+    // `--isolate` or `--no-isolate`.
+    #[command(flatten)]
+    pub tier: TierArgs,
 
     /// Where the agent cannot get a network of its own (Linux, bubblewrap): `auto`
     /// restricts its connections by port only and says so; `require` refuses to start.
@@ -524,6 +513,25 @@ pub struct RunArgs {
     /// The agent and its arguments, after `--`.
     #[arg(required = true, last = true, value_name = "AGENT")]
     pub command: Vec<std::ffi::OsString>,
+}
+
+/// Which tier `openmoat run` starts, when the person names one.
+#[derive(Debug, Args)]
+pub struct TierArgs {
+    /// The Isolated tier (Linux, bubblewrap), or nothing: the agent sees only the project
+    /// without its denied paths, the policy's read roots and `--write` paths, and reaches
+    /// only OpenMoat's proxy. Refused where bubblewrap cannot run. Without this flag or
+    /// `--no-isolate`, Linux starts this tier where bubblewrap works and otherwise says
+    /// why and starts the Lightweight tier.
+    #[arg(long)]
+    pub isolate: bool,
+
+    /// The Lightweight tier on Linux instead of the default Isolated tier: commands can
+    /// read and write `.env`, `.git` and `.moat` inside the project. Recorded in the
+    /// audit log; refused when a policy has `require.run: full-boundary`. Changes
+    /// nothing on macOS, which has no Isolated tier yet.
+    #[arg(long, conflicts_with = "isolate")]
+    pub no_isolate: bool,
 }
 
 /// `--env`: the one form the policy's `sandbox.env_allow` takes too.

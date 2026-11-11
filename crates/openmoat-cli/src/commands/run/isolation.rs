@@ -57,7 +57,7 @@ pub enum Asked {
 
 impl Asked {
     pub fn of(args: &RunArgs) -> Self {
-        match (args.isolate, args.no_isolate) {
+        match (args.tier.isolate, args.tier.no_isolate) {
             (true, _) => Self::Isolate,
             (false, true) => Self::NoIsolate,
             (false, false) => Self::Default,
