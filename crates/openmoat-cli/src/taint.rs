@@ -46,6 +46,12 @@ pub struct SessionTaint {
     /// proposed), for the `@staging-egress` atom of a later send.
     #[serde(default)]
     pub staging: Staging,
+    /// Whether a call recorded without a working directory was folded in. Such
+    /// a call is taken to have run in the directory of the call being decided,
+    /// so a fold that holds one is that directory's own; a fold that holds none
+    /// is the same in every directory (#570).
+    #[serde(default)]
+    pub cwdless: bool,
 }
 
 /// Whether `path` is a folder now: how a read the session made counts toward
@@ -61,11 +67,13 @@ pub fn is_dir(path: &str) -> bool {
 ///
 /// A session's fold is cached in the audit database with the event it reached
 /// (#570), so a call late in a long session classifies only the events since.
-/// The cache applies only under the same OpenMoat version, policy, context and
-/// directory it was computed with, and a session keeps a row for each, so
-/// calls from two directories each read on from their own; without a row, or
-/// when it cannot be read, the session is folded from its first event, as it
-/// always was.
+/// The cache applies only under the same OpenMoat version, host, policy and
+/// context it was computed with ([`digest`]). The directory of the call being
+/// decided matters only for the calls recorded without one, so a fold that
+/// holds none of those is kept in one row every directory reads on from, and a
+/// fold that holds one in a row of its directory's own ([`Rows`]). Without a
+/// row, or when it cannot be read, the session is folded from its first event,
+/// as it always was.
 ///
 /// The read is on a read-only handle; the new cache row, when there is one, is
 /// returned for the caller to write on the handle it records the call with.
@@ -86,13 +94,8 @@ pub fn of_session(
     cwd: &str,
     progress: &mut Progress<'_>,
 ) -> Result<(SessionTaint, Option<CacheWrite>)> {
-    let digest = digest(host, policy, cwd)?;
-    let (mut out, start) = store
-        .session_cache(session, host.id(), &digest)
-        .ok()
-        .flatten()
-        .and_then(|cached| Some((serde_json::from_str(&cached.state).ok()?, cached.upto)))
-        .unwrap_or((SessionTaint::default(), EventId(0)));
+    let rows = Rows::of(host, policy, cwd)?;
+    let (mut out, start) = rows.read(store, session, host);
     let mut upto = start;
     let mut pass = Pass {
         deadline: Some(progress.deadline),
@@ -104,7 +107,7 @@ pub fn of_session(
             session: session.to_owned(),
             host,
             cached: Cached {
-                digest: digest.clone(),
+                digest: rows.of_fold(out).to_owned(),
                 upto,
                 state: serde_json::to_string(out)?,
             },
@@ -166,7 +169,7 @@ pub fn behind(folded: usize) -> String {
 /// `PostToolUse`), until `deadline`, keeping what was read in the cache, so
 /// the next call's fold starts close to its own event and does not run out
 /// of time where the cache is far behind (after an upgrade or a policy
-/// change, or in a directory the session had no row for). Best effort: no
+/// change). Best effort: no
 /// decision rests on it, and a fold it leaves unfinished is read on by the
 /// next call as before.
 pub fn catch_up(
@@ -221,23 +224,98 @@ impl CacheWrite {
     }
 }
 
-/// What the fold of a session depends on besides its events: this build's
-/// classifier, the host, the effective policy and its context, and the
-/// directory a call recorded without one is taken to have run in.
-fn digest(host: Host, policy: &CompiledPolicy<'_>, cwd: &str) -> Result<String> {
+/// The two cache rows a call may read on from: the session's fold in every
+/// directory, and its fold in the call's own directory.
+///
+/// A fold differs between directories only through the calls recorded
+/// without a working directory, which are taken to have run in the directory
+/// of the call being decided ([`fold`]); every other call is classified in its
+/// own recorded directory. So a fold that took in no such call
+/// ([`SessionTaint::cwdless`] false) is what a fold in any directory would be,
+/// and is kept under [`Rows::shared`]; one that took in such a call is kept
+/// under [`Rows::here`], and only this directory reads it. A directory change
+/// then reads on from the shared row instead of folding the session from its
+/// first event again.
+struct Rows {
+    shared: String,
+    here: String,
+}
+
+impl Rows {
+    fn of(host: Host, policy: &CompiledPolicy<'_>, cwd: &str) -> Result<Self> {
+        let shared = digest(host, policy)?;
+        let here = sha256_hex(&parts(&[&shared, cwd]));
+        Ok(Self { shared, here })
+    }
+
+    /// The fold to read on from: the further on of the shared row (when it
+    /// holds no call without a directory, as it never does when this build
+    /// wrote it) and this directory's row; an empty fold from the session's
+    /// first event without either.
+    fn read(&self, store: &Store, session: &str, host: Host) -> (SessionTaint, EventId) {
+        let row = |digest: &str| {
+            let cached = store.session_cache(session, host.id(), digest).ok()??;
+            let state: SessionTaint = serde_json::from_str(&cached.state).ok()?;
+            Some((state, cached.upto))
+        };
+        let shared = row(&self.shared).filter(|(state, _)| !state.cwdless);
+        let here = row(&self.here);
+        match (shared, here) {
+            (Some(shared), Some(here)) => {
+                if here.1.0 >= shared.1.0 {
+                    here
+                } else {
+                    shared
+                }
+            }
+            (Some(row), None) | (None, Some(row)) => row,
+            (None, None) => (SessionTaint::default(), EventId(0)),
+        }
+    }
+
+    /// The row `fold` belongs in.
+    fn of_fold(&self, fold: &SessionTaint) -> &str {
+        if fold.cwdless {
+            &self.here
+        } else {
+            &self.shared
+        }
+    }
+}
+
+/// What the fold of a session depends on besides its events and, for the
+/// calls recorded without a working directory, the directory of the call
+/// being decided ([`Rows`]): this build's classifier, the host, the effective
+/// policy and its context. The context's own directory is left out: the fold
+/// classifies each call in its recorded directory, never in the context's
+/// (`CompiledPolicy::exposure` and `collection` take the directory they are
+/// given), so it changes nothing in the fold.
+fn digest(host: Host, policy: &CompiledPolicy<'_>) -> Result<String> {
+    let context = openmoat_core::EvalContext {
+        cwd: String::new(),
+        ..policy.context().clone()
+    };
+    Ok(sha256_hex(&parts(&[
+        FOLD_FORMAT,
+        crate::VERSION,
+        host.id(),
+        &serde_json::to_string(policy.policy())?,
+        &format!("{context:?}"),
+    ])))
+}
+
+/// The layout of a cached fold, part of every digest: a build that keys rows
+/// another way never reads a row written this way.
+const FOLD_FORMAT: &str = "fold-2";
+
+/// `parts`, each length-prefixed, so no two different lists hash alike.
+fn parts(parts: &[&str]) -> Vec<u8> {
     let mut bytes = Vec::new();
-    for part in [
-        crate::VERSION.to_owned(),
-        host.id().to_owned(),
-        serde_json::to_string(policy.policy())?,
-        format!("{:?}", policy.context()),
-        cwd.to_owned(),
-    ] {
-        // length-prefixed, so no two different lists of parts hash alike
+    for part in parts {
         bytes.extend_from_slice(&part.len().to_le_bytes());
         bytes.extend_from_slice(part.as_bytes());
     }
-    Ok(sha256_hex(&bytes))
+    bytes
 }
 
 /// One fold's state across the pages of events it reads.
@@ -278,6 +356,9 @@ fn fold(
         let Some(action) = &event.action else {
             continue;
         };
+        // A call recorded without a directory makes the fold this directory's
+        // own (`Rows`).
+        out.cwdless |= event.cwd.is_none();
         let cwd = event
             .cwd
             .as_deref()
@@ -287,9 +368,8 @@ fn fold(
             Entry::Occupied(known) => known.get().clone(),
             Entry::Vacant(slot) => {
                 let cwd = &slot.key().1;
-                let exposure = policy.exposure(action, cwd, &FsPathResolver);
-                let collection = policy.collection(action, cwd, &FsPathResolver, &is_dir);
-                slot.insert((exposure, collection)).clone()
+                let parts = policy.exposure_and_collection(action, cwd, &FsPathResolver, &is_dir);
+                slot.insert(parts).clone()
             }
         };
         if exposure.untrusted.is_some() {

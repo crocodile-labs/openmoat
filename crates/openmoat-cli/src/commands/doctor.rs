@@ -103,6 +103,9 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     let open = warnings::tiocsti_open(&home, &binary)?;
     let tiocsti = warnings::tiocsti(open, warnings::legacy_tiocsti().as_deref());
     let hangs = warnings::hangs(&home, crate::time::now_ms());
+    let undecided = Store::open_read_only(&home.audit_path())
+        .ok()
+        .and_then(|store| warnings::kernel_errors(&store, crate::time::now_ms()));
     let linux = cfg!(target_os = "linux");
     let state = policy
         .as_ref()
@@ -113,11 +116,20 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     let alias = warnings::alias_hooks(&home, &binary);
     let expiring = warnings::grant_expiry(&home, crate::time::now_ms());
     let keys = warnings::key_modes(&home);
-    for warning in [tiocsti, hangs, state, macos, network, lightweight, expiring]
-        .into_iter()
-        .flatten()
-        .chain(alias)
-        .chain(keys)
+    for warning in [
+        tiocsti,
+        hangs,
+        undecided,
+        state,
+        macos,
+        network,
+        lightweight,
+        expiring,
+    ]
+    .into_iter()
+    .flatten()
+    .chain(alias)
+    .chain(keys)
     {
         report.warn(&warning);
     }

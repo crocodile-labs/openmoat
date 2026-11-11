@@ -44,7 +44,7 @@ const SESSION_GRANT_RULE: &str = "approved-session";
 /// How far into [`GUARD_BUDGET_S`] the session's taint may be folded, leaving
 /// time to record: a session too long to fold in time is denied with a
 /// recorded reason, its progress kept, rather than by the budget's deny.
-pub(super) const TAINT_BUDGET: Duration = Duration::from_secs(GUARD_BUDGET_S * 2 / 3);
+pub(crate) const TAINT_BUDGET: Duration = Duration::from_secs(GUARD_BUDGET_S * 2 / 3);
 
 /// The least time a call that got here late on a loaded machine still gets to
 /// read on a few events from its session's cache row.

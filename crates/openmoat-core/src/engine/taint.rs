@@ -137,10 +137,38 @@ impl CompiledPolicy<'_> {
             ..self.ctx.clone()
         };
         let (atoms, _) = checked_atoms(action, &ctx, self.opens_as(), paths);
+        self.exposure_of(&atoms)
+    }
+
+    /// [`Self::exposure`] and [`Self::collection`] of one call that ran in
+    /// `cwd`, with its atoms worked out once: what a session's fold takes from
+    /// each of its calls, for half the classifying and path resolving of the
+    /// two apart.
+    #[must_use]
+    pub fn exposure_and_collection(
+        &self,
+        action: &Action,
+        cwd: &str,
+        paths: &dyn PathResolver,
+        is_dir: &dyn Fn(&str) -> bool,
+    ) -> (Taint, super::staging::Staging) {
+        let ctx = EvalContext {
+            cwd: cwd.to_owned(),
+            ..self.ctx.clone()
+        };
+        let (atoms, _) = checked_atoms(action, &ctx, self.opens_as(), paths);
+        (
+            self.exposure_of(&atoms),
+            self.collected(&atoms, &ctx, paths, is_dir),
+        )
+    }
+
+    /// What the checked atoms of one call exposed its session to.
+    fn exposure_of(&self, atoms: &[AtomicAction]) -> Taint {
         let mut taint = Taint::default();
         for atom in atoms {
             match atom {
-                AtomicAction::FsRead { .. } if self.names_secret(&atom) => {
+                AtomicAction::FsRead { .. } if self.names_secret(atom) => {
                     taint.absorb(Taint {
                         secrets: vec![Secret {
                             source: atom.describe(),
@@ -149,7 +177,7 @@ impl CompiledPolicy<'_> {
                         untrusted: None,
                     });
                 }
-                _ if self.taints(&atom).is_some() => {
+                _ if self.taints(atom).is_some() => {
                     taint.untrusted.get_or_insert_with(|| atom.describe());
                 }
                 _ => {}

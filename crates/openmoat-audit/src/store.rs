@@ -34,6 +34,7 @@ pub use injected_inputs::{MAX_PER_SESSION as MAX_INJECTED_PER_SESSION, NewInject
 pub use mcp_flow::{MAX_AGE_MS as MCP_FLOW_MAX_AGE_MS, MAX_SESSION_ROWS as MCP_FLOW_SESSION_ROWS};
 pub use mcp_tickets::{MAX_AGE_MS as MCP_TICKET_MAX_AGE_MS, NewTicket, Ticket};
 pub use provenance::{Exposure, FileProvenance, NewProvenance, ProvenanceKind};
+pub use rules::RuleSeen;
 pub use session_cache::Cached;
 pub use session_writes::{RecordedWrite, SessionWrite, Written};
 

@@ -157,7 +157,7 @@ impl CompiledPolicy<'_> {
     /// path through a symlink both as written and as its target (`/var/…` and
     /// `/private/var/…` on macOS, a short and a long name on Windows), which is
     /// one file read, not two.
-    fn collected(
+    pub(super) fn collected(
         &self,
         atoms: &[AtomicAction],
         ctx: &EvalContext,

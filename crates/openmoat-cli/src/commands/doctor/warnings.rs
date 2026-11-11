@@ -168,6 +168,52 @@ pub(super) fn hangs(home: &Home, now_ms: i64) -> Option<String> {
     ))
 }
 
+/// How far back the row on calls the guard could not decide looks.
+const KERNEL_ERROR_WINDOW_MS: i64 = 24 * 3_600_000;
+
+/// The longest part of the newest such call's reason the row quotes.
+const REASON_CHARS: usize = 200;
+
+/// Calls the guard denied in the last day because it could not decide them
+/// (`kernel-error`: the audit log could not be read, the session's earlier
+/// calls could not be read in time, a state file is broken): recorded in the
+/// audit log, but a person sees each only as one more refused call in the
+/// agent. A guard that fails every call must not leave doctor saying all is
+/// well, so this row says how many, when the latest was, on which agent and
+/// why, and what to do next. A session id is not printed: it can be a
+/// credential-like handle, and `openmoat why <id>` shows the call in full.
+pub(super) fn kernel_errors(store: &openmoat_audit::Store, now_ms: i64) -> Option<String> {
+    let seen = store
+        .rule_since(
+            crate::commands::guard::KERNEL_ERROR_RULE,
+            now_ms - KERNEL_ERROR_WINDOW_MS,
+        )
+        .ok()??;
+    let newest = &seen.newest;
+    let reason = newest.reasons.first().map_or_else(String::new, |reason| {
+        let mut shown: String = reason.chars().take(REASON_CHARS).collect();
+        if shown.len() < reason.len() {
+            shown.push('…');
+        }
+        format!(": {shown}")
+    });
+    let sessions = if seen.sessions > 1 {
+        format!(" in {} sessions", seen.sessions)
+    } else {
+        String::new()
+    };
+    Some(format!(
+        "guard            {} call(s){sessions} denied in the last 24 hours because OpenMoat could \
+         not decide them (kernel-error); the latest at {}, from {}{reason}. \
+         `openmoat why {}` shows it in full; if calls keep being denied this way, \
+         `openmoat doctor --bundle moat-bundle.json` writes a file for a bug report",
+        seen.count,
+        time::timestamp(newest.ts_ms),
+        newest.host,
+        newest.id,
+    ))
+}
+
 /// The private keys of the state directory that others may read or replace:
 /// `openmoat proxy`, `openmoat run` and the guard refuse to use them
 /// (`key_file`), and this row says which and how to fix it.
@@ -240,6 +286,68 @@ mod tests {
         assert!(row.contains("hooks still apply the policy"), "{row}");
         assert_eq!(old_macos(Some("13.0")), None);
         assert_eq!(old_macos(None), None, "not macOS, or unreadable");
+    }
+
+    fn record(store: &openmoat_audit::Store, session: &str, rules: &[&str], reason: &str) {
+        let mut decision = openmoat_core::Decision::new(openmoat_core::Verdict::Deny);
+        decision.rules = rules.iter().map(|r| (*r).to_owned()).collect();
+        decision.reasons.push(reason.to_owned());
+        store
+            .record(&openmoat_audit::NewEvent {
+                host: "some-agent",
+                session_id: session,
+                call_id: None,
+                cwd: Some("/p"),
+                tool: "Bash",
+                action: None,
+                decision: &decision,
+                latency_us: 0,
+            })
+            .unwrap();
+    }
+
+    /// A guard that fails its calls is a row that needs the person: how many,
+    /// the latest, its session and reason, and what to run next; other denies
+    /// are not counted, and a day later the row is gone.
+    #[test]
+    fn calls_the_guard_could_not_decide_are_a_row() {
+        let store = openmoat_audit::Store::open_in_memory().unwrap();
+        let now = time::now_ms();
+        assert_eq!(kernel_errors(&store, now), None);
+        record(&store, "s0", &["deny-ssh"], "a key");
+        record(&store, "s0", &["kernel-errors-of-a-pack"], "not this rule");
+        assert_eq!(kernel_errors(&store, now), None);
+        let behind = crate::taint::behind(2_048);
+        record(&store, "s1", &["kernel-error"], "the lock is broken");
+        record(&store, "s2", &["kernel-error"], &behind);
+        let row = kernel_errors(&store, now).unwrap();
+        assert!(
+            row.starts_with("guard            2 call(s) in 2 sessions denied"),
+            "{row}"
+        );
+        assert!(row.contains("(kernel-error)"), "{row}");
+        assert!(row.contains("from some-agent: "), "{row}");
+        assert!(!row.contains("s2"), "no session id is printed: {row}");
+        assert!(row.contains(": OpenMoat was still reading"), "{row}");
+        assert!(row.contains('…'), "the reason is cut short: {row}");
+        assert!(row.contains("`openmoat why 4`"), "{row}");
+        assert!(row.contains("openmoat doctor --bundle"), "{row}");
+        assert_eq!(
+            kernel_errors(&store, now + KERNEL_ERROR_WINDOW_MS + 60_000),
+            None
+        );
+    }
+
+    /// The row keeps doctor's closing line from saying all is well.
+    #[test]
+    fn calls_the_guard_could_not_decide_are_not_all_good() {
+        let store = openmoat_audit::Store::open_in_memory().unwrap();
+        record(&store, "s1", &["kernel-error"], "the lock is broken");
+        let row = kernel_errors(&store, time::now_ms()).unwrap();
+        let mut report = super::super::rows::Report::new(crate::render::Deferred::quiet());
+        report.warn(&row);
+        let footer = super::super::human::footer_line(&report.human, 0, true);
+        assert_eq!(footer, "1 thing needs you");
     }
 
     #[test]

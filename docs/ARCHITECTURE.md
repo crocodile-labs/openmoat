@@ -177,7 +177,12 @@ appends `<ms> <host> <phase> <elapsed ms>` to `~/.moat/guard-hangs.log`, the
 phase being the step the guard was in (`stdin`, `relay` for a hook inside `openmoat run`
 waiting for the run to decide, `lock`, `context`, `compile`, `taint`, `cache`,
 `record`, `answer`); `openmoat doctor` reports the hangs of the last
-week and the phase most of them were in.
+week and the phase most of them were in. A call the guard denied because it could
+not decide it in time or at all (`kernel-error`, recorded in the audit log, such as a
+session whose earlier calls could not be read before the taint deadline) is a doctor
+row too: how many in the last day, in how many sessions, and the latest one's time,
+host, session, reason and event id (`openmoat why <id>`), so doctor never says "All
+good" while the guard refuses every call.
 
 ## 3. Classification
 
@@ -864,13 +869,19 @@ inserted, or events were reordered) or unhashed, and exits 64.
 **Session cache** (`store/session_cache.rs`). Session taint is the fold of a session's
 earlier events (POLICY.md §4.1). `guard` keeps that fold in a `session_folds` table,
 one row per session, host and digest of what the fold depends on: this build's
-version, the effective policy and context, and the working directory. Each row holds
-the newest event it covers. A call reads the row of its own digest, folds only the
-events recorded since, and writes it back, so a late call in a long session stays
-fast (#570). Calls of one session from different working directories fold under
-different digests and keep a row each (up to 16 per session and host, the least
-recently written going first), so they read on from their own row instead of
-replacing each other's and folding the whole session again. The write goes on the
+version, the host, the effective policy and its context without its working
+directory. Each row holds the newest event it covers. A call reads its row, folds
+only the events recorded since, and writes it back, so a late call in a long session
+stays fast (#570). The fold classifies each call in the directory it was recorded
+with, so the working directory of the call being decided matters only for calls
+recorded without one, which are taken to have run there. A fold that took in none
+of those is the same in every directory and stays in the shared row; one that took
+in such a call moves to a row of that directory's own (the digest with the directory
+added), which only calls from there read (`taint::Rows`). A directory change thus
+reads on from the shared row; before, every directory had its own row, so the first
+call in a new directory folded the whole session again and, in a long session, ran
+out of time on every call. A session keeps up to 16 rows per host, the least
+recently written going first. The write goes on the
 connection the call then records with, just before the record's transaction, and
 does not wait for the database's lock: while another call holds it, the write is
 skipped and the older row stays, so the next call folds a few more events. A row
@@ -884,9 +895,10 @@ that tainted it. Its message says the call was stopped, not judged, and that run
 it again reads on. The next call reads on from the saved row, so a session too long to
 fold in one call catches up over a few calls instead of timing out on every one.
 Where the cache is far behind (after an upgrade or a policy change, which change the
-digest, or in a directory the session had no row for), Claude Code's `PostToolUse`
+digest, or in a directory the session had no row for once a call without a directory
+was folded), Claude Code's `PostToolUse`
 hook catches it up after the call ran (`taint::catch_up`, with the same budget, for
-the digest of that call's directory), so the next `PreToolUse` folds only the events
+the row of that call's directory), so the next `PreToolUse` folds only the events
 since and is decided within its own budget; hosts without that hook catch up over
 calls as before. The
 cache is outside the hash chain and never a source of truth: it can only hold what
