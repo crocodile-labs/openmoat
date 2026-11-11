@@ -52,7 +52,10 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
     }
     if found.pinned {
         for change in &found.changes {
-            let accept = format!("`openmoat mcp accept {}` shows it and asks", change.name);
+            let accept = format!(
+                "`openmoat mcp accept {}` shows it and asks",
+                crate::render::clean(&change.name)
+            );
             let what = match &change.kind {
                 Kind::Added => "is new",
                 Kind::Changed(_) => "changed; its tool calls are refused",
@@ -62,8 +65,8 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
                 Area::Mcp,
                 false,
                 format!(
-                    "mcp servers      `{}` in {} {what}: {accept}",
-                    change.name,
+                    "mcp servers      {} in {} {what}: {accept}",
+                    crate::render::Named(&change.name),
                     change.file.display()
                 ),
             );
@@ -97,10 +100,10 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
                     Area::Mcp,
                     false,
                     format!(
-                        "mcp tools        `{}` lists {}, hidden until `openmoat mcp accept {}`",
-                        pins.server,
+                        "mcp tools        {} lists {}, hidden until `openmoat mcp accept {}`",
+                        crate::render::Named(&pins.server),
                         pins.held_summary(),
-                        pins.server
+                        crate::render::clean(&pins.server)
                     ),
                 );
             }
@@ -136,6 +139,14 @@ pub(super) fn accept(report: &mut Report, home: &Home, binary: &Path) -> Result<
             "✔ mcp servers      {scrubbed} value(s) an older OpenMoat kept in clear removed from \
              the lock; every definition stays pinned as it was"
         )?;
+    }
+    // Decided from the lock as it is now: a re-pin before this saved it
+    // without the values already, so nothing was left here to remove.
+    let still = Lock::load(&home.lock_path())?
+        .mcp_servers
+        .as_ref()
+        .map_or(0, mcp::pins::clear_values);
+    if still == 0 {
         report
             .problems
             .retain(|(area, line)| !(*area == Area::Mcp && line.starts_with(CLEAR_VALUES)));
@@ -157,3 +168,6 @@ pub(super) fn accept(report: &mut Report, home: &Home, binary: &Path) -> Result<
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

@@ -44,8 +44,8 @@ impl ServerStatus {
             "unprotected"
         };
         format!(
-            "`{}` ({}, {}): {state}: {}",
-            self.name,
+            "{} ({}, {}): {state}: {}",
+            crate::render::Named(&self.name),
             self.agent,
             self.file.display(),
             self.why
