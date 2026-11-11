@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::Parser as _;
+use openmoat_hosts::McpCommandForm;
 use serde_json::Value;
 
 use super::servers::{self, Scan};
@@ -49,10 +50,10 @@ impl Launch {
         }
     }
 
-    /// The launch a wrapped definition `entry` asks for, read by the same
-    /// grammar the proxy is started with; `None` when it is not wrapped.
-    pub fn of_entry(entry: &Value) -> Option<Self> {
-        let args = wrap::proxy_args(entry)?;
+    /// The launch a wrapped definition `entry` in `form` asks for, read by the
+    /// same grammar the proxy is started with; `None` when it is not wrapped.
+    pub fn of_entry(entry: &Value, form: McpCommandForm) -> Option<Self> {
+        let args = wrap::proxy_args(entry, form)?;
         let cli = Cli::try_parse_from(std::iter::once("openmoat".to_owned()).chain(args)).ok()?;
         match cli.command? {
             Command::Mcp {
@@ -157,8 +158,8 @@ pub fn decide(
     let candidates: Vec<&servers::Server> = scan
         .servers
         .iter()
-        .filter(|s| Launch::of_entry(&s.entry).as_ref() == Some(launch))
-        .filter(|s| env_names(&s.entry).all(&has_env))
+        .filter(|s| Launch::of_entry(&s.entry, s.form).as_ref() == Some(launch))
+        .filter(|s| env_names(s).all(&has_env))
         .collect();
     if candidates.is_empty() {
         return Startup::Refuse(format!(
@@ -180,7 +181,7 @@ pub fn decide(
     if pending.is_empty() {
         let mut env: Vec<String> = candidates
             .iter()
-            .flat_map(|server| env_names(&server.entry))
+            .flat_map(|server| env_names(server))
             .filter(|name| openmoat_core::env_name_problem(name).is_none())
             .map(str::to_owned)
             .collect();
@@ -195,10 +196,12 @@ pub fn decide(
     ))
 }
 
-/// The names of the environment variables `entry` sets.
-fn env_names(entry: &Value) -> impl Iterator<Item = &str> {
-    entry
-        .get("env")
+/// The names of the environment variables `server` sets, under the key its
+/// host reads them from.
+fn env_names(server: &servers::Server) -> impl Iterator<Item = &str> {
+    server
+        .entry
+        .get(server.form.env_key())
         .and_then(Value::as_object)
         .into_iter()
         .flat_map(|env| env.keys().map(String::as_str))

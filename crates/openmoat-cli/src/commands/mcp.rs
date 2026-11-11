@@ -19,7 +19,7 @@ use crate::integrity::{self, Lock};
 use crate::mcp::tools::{self, ToolPins};
 use crate::mcp::wrap::{self, Done};
 use crate::mcp::{self, Change};
-use crate::render::{Deferred, clean};
+use crate::render::{Deferred, Named, clean};
 
 mod gate;
 mod proxy;
@@ -109,10 +109,10 @@ pub(super) fn review_and_accept(
         if takes_name {
             writeln!(
                 out,
-                "! `{}` is the name of Claude in Chrome, which Claude Code provides itself; this \
+                "! {} is the name of Claude in Chrome, which Claude Code provides itself; this \
                  server is another program, so all its results mark the session untrusted, its \
                  tab lists too",
-                crate::render::clean(&change.name)
+                Named(&change.name)
             )?;
         }
     }
@@ -169,23 +169,35 @@ pub fn wrap(args: &McpWrapArgs) -> Result<Code> {
 pub(super) struct Applied {
     done: usize,
     by_hand: usize,
+    /// Named and left as they are: a definition OpenMoat cannot put behind
+    /// the proxy, or one with a change nobody accepted.
+    left: usize,
 }
 
 impl Applied {
-    /// Every server handled, those left to set by hand included.
+    /// Every server handled, those left to set by hand or left as they are
+    /// (each named, with why) included.
     pub(super) fn total(self) -> usize {
-        self.done + self.by_hand
+        self.done + self.by_hand + self.left
     }
 
-    /// Asked for by name and left to set by hand: what was asked was not done.
-    /// A sweep of every server goes on past such a file and succeeds.
+    /// Asked for by name and not done (left to set by hand, or left as it
+    /// is): what was asked was not done. A sweep of every server goes on past
+    /// such a server and succeeds.
     fn code(self, names: &[String]) -> Code {
-        if self.by_hand > 0 && !names.is_empty() {
+        if self.by_hand + self.left > 0 && !names.is_empty() {
             Code::Usage
         } else {
             Code::Ok
         }
     }
+}
+
+/// What [`wrap_plan`] found to write.
+pub(super) struct WrapPlan {
+    pub(super) edits: Vec<(crate::mcp::servers::Source, Done)>,
+    /// The servers named and left as they are.
+    pub(super) left: usize,
 }
 
 /// Wrap the stdio servers named in `names` (all when empty) in the user
@@ -204,20 +216,25 @@ pub(super) fn wrap_servers(
     dry_run: bool,
     out: &mut Deferred,
 ) -> Result<Applied> {
-    let mut edits = wrap_plan(home, binary, hosts, names, sandbox, out)?;
+    let WrapPlan { mut edits, left } = wrap_plan(home, binary, hosts, names, sandbox, out)?;
     let by_hand = drop_what_cannot_be_rewritten(&mut edits, out)?;
     let done = apply_wrap(home, hosts, &edits, sandbox, dry_run, out)?;
-    Ok(Applied { done, by_hand })
+    Ok(Applied {
+        done,
+        by_hand,
+        left,
+    })
 }
 
-/// Take out the servers in files OpenMoat does not rewrite, saying what to
-/// set by hand; how many.
+/// Take out the servers in files OpenMoat deliberately does not rewrite,
+/// saying what to set by hand; how many. A file that cannot be read or
+/// parsed, or no longer holds a server, fails the command.
 pub(super) fn drop_what_cannot_be_rewritten(
     edits: &mut Vec<(crate::mcp::servers::Source, Done)>,
     out: &mut Deferred,
 ) -> Result<usize> {
     let before = edits.len();
-    for preview in wrap::preview(edits) {
+    for preview in wrap::preview(edits)? {
         if let Err(why) = preview.change {
             writeln!(out, "! mcp servers      {why}")?;
             edits.retain(|(source, _)| source.path != preview.path);
@@ -227,7 +244,8 @@ pub(super) fn drop_what_cannot_be_rewritten(
 }
 
 /// What wrapping the stdio servers in `names` (all when empty) of `hosts`
-/// would write; a definition with a change nobody accepted is named and left.
+/// would write; a definition with a change nobody accepted, or one OpenMoat
+/// cannot put behind the proxy, is named and left.
 pub(super) fn wrap_plan(
     home: &Home,
     binary: &Path,
@@ -235,42 +253,45 @@ pub(super) fn wrap_plan(
     names: &[String],
     sandbox: Option<bool>,
     out: &mut Deferred,
-) -> Result<Vec<(crate::mcp::servers::Source, Done)>> {
+) -> Result<WrapPlan> {
     let pending = pending_ids(home, hosts)?;
     let new_sandbox = sandbox.unwrap_or(super::run::unavailable().is_none());
     let mut edits = Vec::new();
+    let mut left = 0;
     for (source, server) in wrap::user_servers(home, hosts)? {
         if !names.is_empty() && !names.contains(&server.name) {
             continue;
         }
-        let form = source.reader.command_form();
+        let form = server.form;
         let entry = wrap::wrapped_as(&server.entry, binary, &server.name, new_sandbox, form)
-            .or_else(|| sandbox.and_then(|on| wrap::with_sandbox(&server.entry, on)));
+            .or_else(|| sandbox.and_then(|on| wrap::with_sandbox(&server.entry, form, on)));
         // The proxy takes only the hook decisions of the agent whose file
         // starts it; a definition wrapped before `--host` existed gets it now.
         let host = server.host;
         let entry = match entry {
-            Some(entry) => Some(wrap::with_host(&entry, host).unwrap_or(entry)),
-            None => wrap::with_host(&server.entry, host),
+            Some(entry) => Some(wrap::with_host(&entry, form, host).unwrap_or(entry)),
+            None => wrap::with_host(&server.entry, form, host),
         };
         let Some(entry) = entry else {
             if let Some(why) = wrap::not_wrappable(&server.entry, form) {
                 writeln!(
                     out,
-                    "! `{}` ({}) is left as it is: {why}",
-                    clean(&server.name),
+                    "! {} ({}) is left as it is: {why}",
+                    Named(&server.name),
                     server.file.display()
                 )?;
+                left += 1;
             }
             continue;
         };
         if pending.contains(&server.id) {
             skipped(out, &server.name)?;
+            left += 1;
             continue;
         }
         edits.push((source, Done { server, entry }));
     }
-    Ok(edits)
+    Ok(WrapPlan { edits, left })
 }
 
 /// Write `edits` from [`wrap_plan`] and say what they mean; how many.
@@ -302,8 +323,8 @@ fn sandbox_note(
     let names = |on: bool| -> Vec<String> {
         edits
             .iter()
-            .filter(|(_, d)| wrap::sandboxed(&d.entry) == Some(on))
-            .map(|(_, d)| format!("`{}`", d.server.name))
+            .filter(|(_, d)| wrap::sandboxed(&d.entry, d.server.form) == Some(on))
+            .map(|(_, d)| Named(&d.server.name).to_string())
             .collect()
     };
     let (unconfined, confined) = (names(false), names(true));
@@ -319,7 +340,8 @@ fn sandbox_note(
     if let (Some(why), false) = (unavailable, confined.is_empty()) {
         writeln!(
             out,
-            "! {} cannot start in `openmoat run`'s sandbox here ({why}); run              `openmoat mcp wrap --no-sandbox` to start them unconfined",
+            "! {} cannot start in `openmoat run`'s sandbox here ({why}); run \
+             `openmoat mcp wrap --no-sandbox` to start them unconfined",
             confined.join(", ")
         )?;
     }
@@ -347,7 +369,7 @@ fn first_sight_note(
     if new.is_empty() {
         return Ok(());
     }
-    let names: Vec<String> = new.iter().map(|n| format!("`{n}`")).collect();
+    let names: Vec<String> = new.iter().map(|n| Named(n).to_string()).collect();
     writeln!(
         out,
         "· the tools of {} wait for `openmoat mcp accept <server>` after the server's first start",
@@ -380,6 +402,7 @@ pub(super) fn unwrap_servers(
     let recorded = Recorded::load(home)?;
     let pending = pending_ids(home, hosts)?;
     let mut edits = Vec::new();
+    let mut left = 0;
     for (source, server) in wrap::user_servers(home, hosts)? {
         let chosen = if names.is_empty() {
             recorded
@@ -389,25 +412,32 @@ pub(super) fn unwrap_servers(
         } else {
             names.contains(&server.name)
         };
-        let Some(entry) = wrap::unwrapped(&server.entry).filter(|_| chosen) else {
+        let Some(entry) = wrap::unwrapped(&server.entry, server.form).filter(|_| chosen) else {
             continue;
         };
         if pending.contains(&server.id) {
             skipped(out, &server.name)?;
+            left += 1;
             continue;
         }
         edits.push((source, Done { server, entry }));
     }
     let by_hand = drop_what_cannot_be_rewritten(&mut edits, out)?;
     let done = finish_edits(home, hosts, &edits, false, false, out)?;
-    Ok(Applied { done, by_hand })
+    Ok(Applied {
+        done,
+        by_hand,
+        left,
+    })
 }
 
 fn skipped(out: &mut Deferred, name: &str) -> Result<()> {
     writeln!(
         out,
-        "! skipped `{name}`: its definition changed since it was accepted; \
-         run `openmoat mcp accept {name}` first"
+        "! skipped {}: its definition changed since it was accepted; \
+         run `openmoat mcp accept {}` first",
+        Named(name),
+        clean(name)
     )?;
     Ok(())
 }
@@ -450,8 +480,8 @@ fn finish_edits(
     for (_, done) in edits {
         writeln!(
             out,
-            "{verb} `{}` in {}",
-            done.server.name,
+            "{verb} {} in {}",
+            Named(&done.server.name),
             done.server.file.display()
         )?;
     }

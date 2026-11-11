@@ -144,6 +144,20 @@ pub enum McpCommandForm {
     CmdArgs,
 }
 
+impl McpCommandForm {
+    /// The key of the map of environment variables a definition in this form
+    /// gives its server: OpenCode's `environment`, goose's `envs`, `env`
+    /// everywhere else.
+    #[must_use]
+    pub const fn env_key(self) -> &'static str {
+        match self {
+            Self::CommandArgs => "env",
+            Self::CommandList => "environment",
+            Self::CmdArgs => "envs",
+        }
+    }
+}
+
 /// How a host names an MCP server's tools in the hook payload, so a tool call
 /// can be traced to the server definition it came from. Every host's names
 /// also match `mcp__<server>__…` (the CLI checks that first): matching too

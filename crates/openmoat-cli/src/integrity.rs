@@ -458,7 +458,13 @@ impl Lock {
             "{:?} is pinned whole and by its Codex profile",
             self.pinned_twice()
         );
-        let text = serde_json::to_string_pretty(self)? + "\n";
+        // No save writes a server's variable or header value in clear, even
+        // one an older version left in the copy it shows (`mcp/pins.rs`).
+        let mut lock = self.clone();
+        if let Some(pins) = lock.mcp_servers.as_mut() {
+            crate::mcp::pins::scrub(pins);
+        }
+        let text = serde_json::to_string_pretty(&lock)? + "\n";
         write_private(path, text.as_bytes())
     }
 

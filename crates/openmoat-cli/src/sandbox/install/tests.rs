@@ -34,6 +34,19 @@ fn a_part_digest_is_of_the_owned_part_and_ignores_the_rest() {
     assert_ne!(part_digest(&path).unwrap(), first);
 }
 
+/// A file is digested by the backend of the host whose settings file it is;
+/// another host's file, or any other file, is not taken for Codex's.
+#[test]
+fn a_part_digest_belongs_to_the_file_s_own_host() {
+    let dir = tempfile::tempdir().unwrap();
+    for name in ["settings.json", "sandbox.json", "other.toml"] {
+        let path = dir.path().join(name);
+        fs::write(&path, "").unwrap();
+        let refused = part_digest(&path).unwrap_err();
+        assert!(format!("{refused:#}").contains(name), "{refused:#}");
+    }
+}
+
 #[test]
 fn claude_code_and_cursor_on_native_windows_go_without_a_sandbox() {
     assert!(unavailable_on(Host::ClaudeCode, true).is_some_and(|n| n.contains("WSL2")));

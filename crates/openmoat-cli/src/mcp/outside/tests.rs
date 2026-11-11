@@ -71,3 +71,34 @@ fn each_kind_says_what_to_do() {
     .describe();
     assert!(by.contains("without asking (`x` in f)"), "{by}");
 }
+
+/// goose's inline Python cannot be wrapped: the warning does not tell the
+/// person to run a command that would leave it as it is.
+#[test]
+fn inline_python_is_not_told_to_wrap() {
+    let python = serde_json::json!({"type": "inline_python", "code": "print(1)"});
+    let kind = unwrapped_kind(&python, McpCommandForm::CmdArgs, true);
+    assert!(matches!(kind, Kind::CannotWrap { .. }), "{kind:?}");
+    let said = Outside {
+        host: "goose".parse().unwrap(),
+        name: "snake".to_owned(),
+        file: PathBuf::from("/h/config.yaml"),
+        kind,
+    }
+    .describe();
+    assert!(!said.contains("openmoat mcp wrap snake"), "{said}");
+    assert!(
+        said.contains("inline Python") && said.contains("remove it"),
+        "{said}"
+    );
+    let stdio = serde_json::json!({"type": "stdio", "cmd": "npx"});
+    assert_eq!(
+        unwrapped_kind(&stdio, McpCommandForm::CmdArgs, true),
+        Kind::Unwrapped { user: true }
+    );
+    assert_eq!(
+        unwrapped_kind(&python, McpCommandForm::CmdArgs, false),
+        Kind::Unwrapped { user: false },
+        "a project's server keeps its own advice"
+    );
+}

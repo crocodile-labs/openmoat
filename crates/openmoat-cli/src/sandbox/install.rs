@@ -180,16 +180,23 @@ fn carrying(
 }
 
 /// SHA-256 of the part of the settings file at `path` OpenMoat owns, as the
-/// lock pins it. The backend that pins by part is the only one whose files
-/// are ever handed here.
+/// lock pins it: the digest of the backend of the host whose sandbox settings
+/// file has `path`'s name. A file no backend pins by part is an error, which
+/// the lock check reports as drift.
 pub fn part_digest(path: &Path) -> Result<String> {
     let digest = hosts()
+        .filter(|host| {
+            host.spec()
+                .sandbox
+                .as_ref()
+                .is_some_and(|s| path.file_name() == Some(std::ffi::OsStr::new(s.file)))
+        })
         .filter_map(backend)
         .find_map(|b| match b.pin() {
             Pin::Part { digest, .. } => Some(digest),
             Pin::WithHooks | Pin::Whole(_) => None,
         })
-        .context("no sandbox backend pins a file by part")?;
+        .with_context(|| format!("no sandbox backend pins {} by part", path.display()))?;
     digest(path)
 }
 

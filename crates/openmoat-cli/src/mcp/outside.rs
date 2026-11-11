@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use openmoat_hosts::{AutoStart, Host, McpAutoStart, McpSyntax};
+use openmoat_hosts::{AutoStart, Host, McpAutoStart, McpCommandForm, McpSyntax};
 use serde_json::{Map, Value};
 
 use super::servers::{self, Source};
@@ -25,6 +25,9 @@ pub enum Kind {
     /// Not run through `moat mcp proxy`; `user` when its file is the
     /// person's own, which `moat mcp wrap` can change.
     Unwrapped { user: bool },
+    /// In the person's own file, but `moat mcp wrap` cannot put it behind the
+    /// proxy, for the reason given (goose's inline Python).
+    CannotWrap { why: &'static str },
     /// Run through the proxy without its sandbox.
     Unsandboxed,
     /// A project's server the host starts without asking, as `by` says.
@@ -60,6 +63,11 @@ impl Outside {
                 text,
                 "is a project's server that starts outside OpenMoat with your permissions, \
                  unchecked (`openmoat mcp wrap` changes only your own files)"
+            ),
+            Kind::CannotWrap { why } => write!(
+                text,
+                "starts outside OpenMoat with your permissions, unchecked; {}",
+                wrap::cannot_wrap_advice(why)
             ),
             Kind::Unsandboxed => write!(
                 text,
@@ -102,10 +110,10 @@ pub fn report(home: &Home, binary: &Path, cwd: Option<&Path>) -> Result<Vec<Outs
                     kind,
                 });
             };
-            match wrap::sandboxed(&server.entry) {
+            match wrap::sandboxed(&server.entry, server.form) {
                 Some(false) => push(Kind::Unsandboxed),
                 None if wrap::starts_process(&server.entry) => {
-                    push(Kind::Unwrapped { user: in_user });
+                    push(unwrapped_kind(&server.entry, server.form, in_user));
                 }
                 // Sandboxed, or a remote server, which runs no command here.
                 _ => {}
@@ -116,6 +124,16 @@ pub fn report(home: &Home, binary: &Path, cwd: Option<&Path>) -> Result<Vec<Outs
         }
     }
     Ok(out)
+}
+
+/// What an unwrapped local server `entry` in `form` is: one `moat mcp wrap`
+/// can change when it is in the person's own file (`user`), unless it cannot
+/// put that kind of server behind the proxy at all.
+fn unwrapped_kind(entry: &Value, form: McpCommandForm, user: bool) -> Kind {
+    match wrap::not_wrappable(entry, form) {
+        Some(why) if user => Kind::CannotWrap { why },
+        _ => Kind::Unwrapped { user },
+    }
 }
 
 /// What a host's settings say about starting a project's servers.
