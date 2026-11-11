@@ -68,6 +68,7 @@ use crate::sandbox::git_env;
 use crate::sandbox::kerberos;
 use crate::sandbox::own_login::{self, Owner};
 use crate::sandbox::shared_temp;
+use crate::snapshot::RunSnapshots;
 use crate::taint::run::RUN_SESSION_ENV;
 use isolation::{Asked, Offered, Tier};
 use temp::RunTemp;
@@ -190,6 +191,8 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let run_session = credential.session().to_owned();
     // A run weaker than the default is on record before the agent starts.
     isolation::record(&home, &run_session, &ctx.cwd, &tier)?;
+    // Outside the sandbox, before the agent starts (ADR-085).
+    let snapshots = RunSnapshots::start(&home, &ctx, args.no_snapshot, &run_session);
     // The hooks the agent starts run in its sandbox, without OpenMoat's home:
     // this process decides their calls on the proxy's port (ADR-028).
     // Only the calls of the agent this run starts, in its own sessions (ADR-070).
@@ -275,6 +278,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let status = agent
         .status()
         .with_context(|| format!("starting {}", program.display()))?;
+    snapshots.finish();
     Ok(if status.success() {
         Code::Ok
     } else {

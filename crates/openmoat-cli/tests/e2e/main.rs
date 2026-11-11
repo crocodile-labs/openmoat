@@ -86,6 +86,8 @@ mod sandbox_sync;
 mod secret;
 mod serve;
 mod session_code;
+#[cfg(unix)]
+mod snapshot;
 mod staging;
 mod taint;
 mod taint_answered;

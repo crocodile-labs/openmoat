@@ -39,6 +39,7 @@ mod sandbox;
 mod secrets;
 mod session_code;
 mod signing;
+mod snapshot;
 mod taint;
 mod terminal;
 mod time;

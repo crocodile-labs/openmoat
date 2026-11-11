@@ -10,6 +10,7 @@ mod mcp;
 mod policy;
 mod provenance;
 mod serve;
+mod snapshot;
 
 mod timeline;
 
@@ -21,6 +22,7 @@ pub use policy::{
 };
 pub use provenance::{DiffProvenanceArgs, ProvenanceArgs, ProvenanceLevel};
 pub use serve::ServeArgs;
+pub use snapshot::{RestoreArgs, SnapshotArgs};
 
 pub use timeline::{Only, WatchArgs, WhyArgs};
 
@@ -116,6 +118,14 @@ pub enum Command {
     /// Lightweight tier (`--no-isolate`, or no bubblewrap), files inside the project
     /// (`.env`, `.git`, `.moat`) are not protected.
     Run(RunArgs),
+    /// Take a snapshot of the project's files into OpenMoat's own store, list the
+    /// snapshots (`--list`) or remove old ones (`--prune`). `openmoat run` takes one
+    /// before the agent starts and one after it exits. Refused when an agent started it.
+    Snapshot(SnapshotArgs),
+    /// Put the project's files back as a snapshot holds them: shows what changes and
+    /// asks first, and takes a snapshot of the files as they are so the restore can be
+    /// undone. Refused unless run by a person at an interactive terminal.
+    Restore(RestoreArgs),
     /// What `openmoat run` starts inside bubblewrap on Linux (not for people).
     #[command(hide = true)]
     Isolated(IsolatedArgs),
@@ -502,6 +512,11 @@ pub struct RunArgs {
     /// Repeatable.
     #[arg(long = "env", value_name = "NAME", value_parser = parse_env_name)]
     pub envs: Vec<String>,
+
+    /// Take no snapshot of the project before the agent starts and after it exits
+    /// (recorded in the audit log).
+    #[arg(long)]
+    pub no_snapshot: bool,
 
     /// The agent and its arguments, after `--`.
     #[arg(required = true, last = true, value_name = "AGENT")]

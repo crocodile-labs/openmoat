@@ -17,12 +17,14 @@ mod provenance;
 mod proxy;
 mod replay;
 mod report;
+mod restore;
 mod run;
 mod sandbox;
 mod secret;
 mod serve;
 mod service;
 mod show;
+mod snapshot;
 mod status;
 mod team;
 mod trust;
@@ -86,6 +88,8 @@ pub fn run(cli: Cli) -> Result<Code> {
             AuditCommand::Anchor(args) => audit::anchor(&args),
         },
         Command::Run(args) => run::run(&args),
+        Command::Snapshot(args) => snapshot::run(&args),
+        Command::Restore(args) => restore::run(&args),
         Command::Isolated(args) => run::inside(&args),
         Command::Policy { command } => match command {
             PolicyCommand::Lint(args) => policy::lint(&args),
