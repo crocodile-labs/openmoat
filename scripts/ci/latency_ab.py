@@ -1,25 +1,34 @@
 """What guard-latency.py and guard-session-latency.py share: the throwaway
 install each binary is timed in, and the rule that passes or fails a run.
 
+The budget (ADR-080): the guard's own decision (`latency_us`, from its start
+to before the audit write) has a p95 of at most BUDGET_MS, 20 ms on Linux.
+On macOS CI runners the same binary measures 17 to 37 ms median, so there
+the budget is 45 ms (MACOS_BUDGET_MS); above the budget a row warns.
+
 Two modes, chosen by `--base`:
 
-- One binary (pushes to `main`, the weekly run): the guard's own p95
-  (`latency_us`, from its start to before the audit write) fails above
-  FAIL_MS, three times the 15 ms budget in docs/ARCHITECTURE.md (testing
-  layers). The end to end p95 only warns: on a shared runner it is mostly
-  process start.
-
-- Against a base binary (`--base <binary>`, pull requests and the merge
-  queue): the change's binary ("head") and the binary of the commit it lands
-  on ("base") are timed on the same runner, one call each in turn, the first
-  of the pair alternating (A B, B A, A B, ...), so a busy or slow runner, or
-  one that slows down during the run, slows both alike. A fixed limit failed
-  docs-only pull requests at 51 to 123 ms on loaded macOS runners while the
-  same binary measured 25 to 31 ms on `main`; the comparison keeps the noise
-  out and still catches a regression. Head fails when its own p95 is clearly
+- Against a base binary (`--base <binary>`; CI passes it on every event,
+  pull requests, pushes to `main` and the weekly run): the change's binary
+  ("head") and the binary of the commit before it ("base") are timed on the
+  same runner, one call each in turn, the first of the pair alternating
+  (A B, B A, A B, ...), so a busy or slow runner, or one that slows down
+  during the run, slows both alike. Head fails when its own p95 is clearly
   worse than base's: above base x RATIO and above base + MARGIN_MS. Above
   CEILING_MS it fails whatever base measured, the backstop for a guard so
   slow that nothing about the runner explains it.
+
+- One binary (a person timing a build by hand, or CI when the base did not
+  build): the guard's own p95 fails above FAIL_MS. This is the mode pushes to
+  `main` used until ADR-080, and the cause of its intermittent macOS
+  failures: the same guard code (8fc05242, 483d740e and f7d9ce06 change
+  nothing on its path) measured an own p95 of about 27 ms on one macos-15
+  runner and 53 to 62 ms on others, while ubuntu-latest stayed at 17 to
+  22 ms. A fixed limit on one shared runner measures the runner; timing the
+  commit before on the same runner, in turn, cancels it.
+
+The end to end p95 only warns in either mode: on a shared runner it is
+mostly process start.
 
 A call that writes no audit row (`PostToolUse`) has no own time: it fails
 above CEILING_MS end to end in either mode and otherwise only warns
@@ -34,11 +43,14 @@ import sys
 import tempfile
 import time
 
-BUDGET_MS = 15.0
-FAIL_MS = 3 * BUDGET_MS
+LINUX_BUDGET_MS = 20.0
+MACOS_BUDGET_MS = 45.0
+BUDGET_MS = MACOS_BUDGET_MS if sys.platform == "darwin" else LINUX_BUDGET_MS
+# Fixed numbers, not multiples of the budget: they did not move when it did.
+FAIL_MS = 45.0
 RATIO = 1.25
 MARGIN_MS = 5.0
-CEILING_MS = 10 * BUDGET_MS
+CEILING_MS = 150.0
 
 
 def percentile(samples, p):
@@ -130,29 +142,37 @@ def judge(what, head, base=None):
     """(errors, warnings) for one measured row. `head` and `base` are
     (end to end p95, own p95) in ms; `base` is None in the one-binary mode."""
     wall, own = head
+    over_budget = over(what, own)
     if base is None:
         if own > FAIL_MS:
             return [f"guard's own p95 {what} is {own:.1f} ms, over {FAIL_MS:.0f} ms "
-                     f"(3x the budget; end to end {wall:.1f} ms)"], []
+                     f"(one binary, no base to compare with; end to end {wall:.1f} ms)"], []
         if wall > FAIL_MS:
             return [], [f"guard end to end p95 {what} is {wall:.1f} ms, over {FAIL_MS:.0f} ms, "
-                        f"but its own p95 is {own:.1f} ms: a slow runner, not a slower guard"]
-        if wall > BUDGET_MS:
-            return [], [f"guard p95 {what} is {wall:.1f} ms, over the {BUDGET_MS:.0f} ms budget"]
-        return [], []
+                        f"but its own p95 is {own:.1f} ms: a slow runner, not a slower guard",
+                        *over_budget]
+        return [], over_budget
     base_wall, base_own = base
-    errors, warnings = [], []
+    errors, warnings = [], list(over_budget)
     if own > CEILING_MS:
         errors.append(f"guard's own p95 {what} is {own:.1f} ms, over the {CEILING_MS:.0f} ms "
-                      f"ceiling (10x the budget; base {base_own:.1f} ms)")
+                      f"ceiling (base {base_own:.1f} ms)")
     elif regressed(own, base_own):
         errors.append(f"guard's own p95 {what} is {own:.1f} ms against {base_own:.1f} ms for "
-                      f"the commit this lands on, measured in turn on this runner: over "
+                      f"the commit before, measured in turn on this runner: over "
                       f"{RATIO}x and {MARGIN_MS:.0f} ms slower")
     if regressed(wall, base_wall):
         warnings.append(f"guard end to end p95 {what} is {wall:.1f} ms against {base_wall:.1f} "
-                        f"ms for the commit this lands on (process start or binary size?)")
+                        f"ms for the commit before (process start or binary size?)")
     return errors, warnings
+
+
+def over(what, own):
+    """The warning for an own p95 over this runner's budget, if it is."""
+    if own > BUDGET_MS:
+        return [f"guard's own p95 {what} is {own:.1f} ms, over the {BUDGET_MS:.0f} ms budget "
+                f"(ADR-080)"]
+    return []
 
 
 def judge_end_to_end(what, wall, base_wall=None):
@@ -166,7 +186,7 @@ def judge_end_to_end(what, wall, base_wall=None):
                 f"budget of an after-call hook"], []
     if base_wall is not None and regressed(wall, base_wall):
         return [], [f"guard end to end p95 {what} is {wall:.1f} ms against {base_wall:.1f} ms "
-                    f"for the commit this lands on (no audit row, so no own time to compare)"]
+                    f"for the commit before (no audit row, so no own time to compare)"]
     if base_wall is None and wall > FAIL_MS:
         return [], [f"guard end to end p95 {what} is {wall:.1f} ms, over {FAIL_MS:.0f} ms "
                     f"(no audit row, so no own time to tell a slow runner apart)"]
