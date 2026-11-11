@@ -2156,6 +2156,78 @@
   action: { shell: "git diff --output=~/.zshrc" }
   expect: { verdict: deny, rules: [shell-rc] }
 
+# T9 workspace snapshots (ADR-085): only a person restores, takes, lists or prunes them,
+# and the store is neither readable nor writable to the agent
+- id: T9-agent-runs-restore
+  threat: T9
+  action: { shell: "openmoat restore" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-restore-of-a-snapshot-by-path
+  threat: T9
+  action: { shell: "/usr/local/bin/openmoat restore 1a2b3c4d -- src" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-restore-by-old-name
+  threat: T9
+  action: { shell: "moat restore --patch" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-restore-under-pty-wrapper
+  threat: T9
+  action: { shell: "script -q /dev/null openmoat restore" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-restore-in-quoted-pty-wrapper
+  threat: T9
+  action: { shell: "script -qc 'openmoat restore' /dev/null" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-floods-snapshots
+  threat: T9
+  action: { shell: "for i in $(seq 60); do openmoat snapshot; done" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-prunes-snapshots
+  threat: T9
+  action: { shell: "openmoat snapshot --prune" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-lists-snapshots
+  threat: T9
+  action: { shell: "openmoat snapshot --list --format json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-delete-snapshot-store
+  threat: T9
+  action: { shell: "rm -rf ~/.moat/snapshots" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-write-into-snapshot-store
+  threat: T9
+  action: { fs_write: "~/.moat/snapshots/0123456789abcdef0123456789abcdef/refs/openmoat/snapshots/x" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-redirect-into-snapshot-store
+  threat: T9
+  action: { shell: "echo 0000 > ~/.moat/snapshots/0123456789abcdef0123456789abcdef/packed-refs" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-move-snapshot-store-away
+  threat: T9
+  action: { shell: "mv ~/.moat/snapshots /tmp/s" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-read-snapshot-store
+  threat: T9
+  action: { fs_read: "~/.moat/snapshots/0123456789abcdef0123456789abcdef/objects/pack/pack-1.pack" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-copy-snapshot-store-out
+  threat: T9
+  action: { shell: "cp -r ~/.moat/snapshots ./old" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-git-deletes-snapshot-ref-in-store
+  threat: T9
+  action: { shell: "git --git-dir ~/.moat/snapshots/0123456789abcdef0123456789abcdef update-ref -d refs/openmoat/snapshots/1" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-git-dir-env-prunes-store
+  threat: T9
+  action: { shell: "GIT_DIR=~/.moat/snapshots/0123456789abcdef0123456789abcdef git gc --prune=now" }
+  expect: { verdict: deny, rules: [env-poison] }
+- id: T9-read-moved-snapshot-store
+  threat: T9
+  context: { cwd: /p, project: /p, moved_dirs: { "~/.moat": /srv/moat } }
+  action: { fs_read: "/srv/moat/snapshots/0123456789abcdef0123456789abcdef/HEAD" }
+  expect: { verdict: deny, rules: [kernel-self] }
+
 # T9 the state and host directories themselves: moving one away removes the policy or the hooks
 - id: T9-move-state-dir-away
   threat: T9
