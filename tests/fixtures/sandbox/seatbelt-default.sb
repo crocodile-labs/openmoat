@@ -220,10 +220,12 @@
   (regex "^(.*/)?\\.[mM][oO][aA][tT]/[sS][nN][aA][pP][sS][hH][oO][tT][sS](/.*)?$")
   (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[mM][oO][aA][tT]/[dD][eE][lL][iI][vV][eE][rR][yY](/.*)?$")
   (regex "^(.*/)?\\.[mM][oO][aA][tT]/[dD][eE][lL][iI][vV][eE][rR][yY](/.*)?$")
+  (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[mM][oO][aA][tT]/[rR][eE][mM][oO][tT][eE](/.*)?$")
   (regex "^(.*/)?\\.[mM][oO][aA][tT]/[aA][uU][dD][iI][tT]\\.[dD][bB][^/]*$")
   (regex "^(.*/)?\\.[mM][oO][aA][tT]/[pP][oO][lL][iI][cC][yY]\\.[lL][oO][cC][kK]$")
   (regex "^(.*/)?\\.[mM][oO][aA][tT]/[pP][rR][oO][xX][yY]\\.[kK][eE][yY]$")
-  (regex "^(.*/)?\\.[mM][oO][aA][tT]/[pP][rR][oO][xX][yY]-[cC][aA](/.*)?$"))
+  (regex "^(.*/)?\\.[mM][oO][aA][tT]/[pP][rR][oO][xX][yY]-[cC][aA](/.*)?$")
+  (regex "^(.*/)?\\.[mM][oO][aA][tT]/[rR][eE][mM][oO][tT][eE](/.*)?$"))
 ; deny secrets-paths (fs.write)
 (deny file-write* file-link
   (require-all
