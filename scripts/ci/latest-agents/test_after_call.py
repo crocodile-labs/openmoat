@@ -85,6 +85,17 @@ class FakeApis(unittest.TestCase):
         self.assertEqual(statuses, [200])
         self.assertEqual(json.loads(handler.wfile.getvalue()), {"models": []})
 
+    def test_gemini_logs_what_each_function_response_says(self):
+        fake = load("fake_gemini")
+        fake.CALL, fake.THEN = ("run_command", {"c": 1}), None
+        said = {"functionResponse": {"name": "run_command", "response": {"output": "x" * 999}}}
+        request = {"contents": [{"parts": [said]}]}
+        _, log = self.quietly(fake.reply, request)
+        self.assertIn("results=1\n", log)
+        line = log.splitlines()[1]
+        self.assertTrue(line.startswith('  result 1: run_command: {"output": "xxx'), line)
+        self.assertLess(len(line), fake.RESPONSE_CHARS + 40)
+
     def test_gemini_without_then_ends_after_one_response_as_before(self):
         fake = load("fake_gemini")
         fake.CALL, fake.THEN = ("run_command", {"c": 1}), None
@@ -271,6 +282,75 @@ class Commands(unittest.TestCase):
     def test_bad_usage_is_64(self):
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(after_call.main(["record", "only-one"]), 64)
+
+
+class AgyProbe(unittest.TestCase):
+    """agy_probe.py, which tells why Antigravity CLI ran no hook."""
+
+    def setUp(self):
+        self.probe = load("agy_probe")
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.hooks = self.root / "config" / "hooks.json"
+        self.log = self.root / "probe.log"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def quietly(self, *argv, stdin="", code=0):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            old = sys.stdin
+            sys.stdin = io.StringIO(stdin)
+            try:
+                got = self.probe.main(list(argv))
+            finally:
+                sys.stdin = old
+        self.assertEqual(got, code)
+        return out.getvalue()
+
+    def test_install_keeps_other_entries_and_uses_the_documented_forms(self):
+        self.hooks.parent.mkdir(parents=True)
+        self.hooks.write_text('{"openmoat": {"enabled": true}}', encoding="utf-8")
+        self.quietly("install", str(self.hooks), str(self.log))
+        doc = json.loads(self.hooks.read_text(encoding="utf-8"))
+        self.assertEqual(doc["openmoat"], {"enabled": True})
+        entry = doc["moat-ci-probe"]
+        self.assertTrue(entry["enabled"])
+        self.assertIn("command", entry["SessionStart"][0])
+        self.assertEqual(entry["PreToolUse"][0]["matcher"], "run_command")
+        self.assertEqual(entry["PostToolUse"][0]["matcher"], "")
+
+    def test_record_keeps_field_names_and_answers_each_event(self):
+        payload = json.dumps({"toolCall": {"name": "run_command", "args": {"CommandLine": "s3cret"}},
+                              "stepIdx": 1})
+        got = self.quietly("record", "PreToolUse", str(self.log), stdin=payload)
+        self.assertEqual(json.loads(got), {"decision": "allow"})
+        self.assertEqual(json.loads(self.quietly("record", "SessionStart", str(self.log),
+                                                 stdin="not json")), {})
+        text = self.log.read_text(encoding="utf-8")
+        self.assertIn("PreToolUse tool=run_command fields=stepIdx,toolCall\n", text)
+        self.assertIn("SessionStart tool=- fields=<not json>\n", text)
+        self.assertNotIn("s3cret", text)
+
+    def test_report_tells_the_causes_apart(self):
+        captured = self.root / "captured"
+        captured.mkdir()
+        cases = (([], "no hook ran at all"),
+                 (["SessionStart", "PreInvocation"], "fires no tool event"),
+                 (["SessionStart", "PreToolUse"], "the matcher first"),
+                 (["PostToolUse"], "does not send PreToolUse"))
+        for events, want in cases:
+            self.log.write_text("".join(f"{e} tool=- fields=\n" for e in events), encoding="utf-8")
+            got = self.quietly("report", str(self.log), str(captured))
+            self.assertIn(want, got)
+            self.assertTrue(got.startswith("::notice title=agy hook probe::"), got)
+        (captured / "antigravity-cli-1-2.json").write_text("{}", encoding="utf-8")
+        self.assertIn("OpenMoat's PreToolUse entry ran",
+                      self.quietly("report", str(self.log), str(captured)))
+
+    def test_bad_usage_is_64(self):
+        self.quietly("record", "only-one", code=64)
 
 
 if __name__ == "__main__":

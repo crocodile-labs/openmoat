@@ -82,7 +82,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          stated, and no setting to block on failure is documented, so OpenMoat assumes the call \
          runs (the guard itself answers a deny and exits 2 on every error it can catch)",
     gaps: "hook only: no OS sandbox from OpenMoat (`enableTerminalSandbox` is the person's to \
-         set, or `openmoat run`); nothing here was checked against a running `agy`; what the \
+         set, or `openmoat run`); not yet proven on a real agy: agy 1.5.5 started none of the \
+         hooks in `~/.gemini/config/hooks.json` in OpenMoat's weekly check, for a reason not \
+         yet known; what the \
          hook sees is taken from the documentation: whether MCP and subagent calls fire hooks, \
          and the name a hook receives for an MCP tool, are not documented, so `invoke_subagent`, \
          `define_subagent` and `schedule` need review; a hook file or plugin of a project \
@@ -98,10 +100,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          plugins under `~/.gemini/config/plugins` are written only by a person (`kernel-self`) \
          but are not reported; the shell that runs hooks and `run_command` on Windows is not \
          documented",
+    // Until a real run shows the hook deciding a call, this says so first: the
+    // weekly check's agy 1.5.5 started no hook (2026-11-10).
     limit: Some(
-        "Antigravity CLI does not document what happens when OpenMoat's hook fails, and \
-         `--dangerously-skip-permissions` approves requests unseen: treat a failing hook as \
-         letting the call run, and a review under that flag as approved",
+        "not yet proven on a real agy: in OpenMoat's weekly check, agy 1.5.5 ran its calls \
+         without starting OpenMoat's hook, so treat its calls as unchecked until a run shows \
+         otherwise; Antigravity CLI also does not document what happens when the hook fails, \
+         and `--dangerously-skip-permissions` approves requests unseen",
     ),
     install: Some(InstallSpec {
         // No variable moves its directory; `~` is the home directory.

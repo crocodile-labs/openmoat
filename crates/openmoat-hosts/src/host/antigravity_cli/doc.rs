@@ -5,7 +5,9 @@
 use crate::contract::{HostDocs, ToolRow};
 
 pub(super) const DOCS: HostDocs = HostDocs {
-    hooked_by: "`PreToolUse` hook in `~/.gemini/config/hooks.json`",
+    // Until a real run shows the hook deciding a call (`HOST.md`, "The first real run").
+    hooked_by: "`PreToolUse` hook in `~/.gemini/config/hooks.json`; **not yet proven on a \
+         real agy**: agy 1.5.5 started no hook in OpenMoat's weekly check",
     protection: "hook only",
     tools: TOOLS,
 };
