@@ -175,7 +175,7 @@ sets up each:
 | Hermes Agent | `pre_tool_call` shell hook in `config.yaml`, allowlisted in `shell-hooks-allowlist.json` | hook only | `hermes` |
 | Cline CLI | OpenMoat's `PreToolUse` and `PostToolUse` hook scripts in `~/.cline/hooks` | hook only | `cline` |
 | goose | `PreToolUse` hook in OpenMoat's plugin, `~/.agents/plugins/openmoat/hooks/hooks.json`, with `on_failure: block` | hook only | `goose` |
-| Antigravity CLI | `PreToolUse` hook in `~/.gemini/config/hooks.json` | hook only | `antigravity-cli` |
+| Antigravity CLI | `PreToolUse` hook in `~/.gemini/config/hooks.json`; **preview**: the hook is new; use `openmoat run` for an OS boundary until it leaves preview | hook only | `antigravity-cli` |
 | Continue CLI | `cn` runs the Claude Code hook, but the released `cn` runs no hooks yet | not checked yet; use `openmoat run` | none |
 <!-- /generated -->
 

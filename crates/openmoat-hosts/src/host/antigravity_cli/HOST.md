@@ -9,7 +9,11 @@ Every fact here comes from the official documentation
 [settings](https://antigravity.google/docs/settings?tab=cli),
 [install](https://antigravity.google/docs/install?tab=cli),
 [CLI reference](https://antigravity.google/docs/cli/reference)), read 2026-11-09; those
-pages state no version. **Nothing here was checked against a running `agy`.**
+pages state no version. **A preview host.** In the weekly `latest agents` job of
+2026-11-10 (run 42922045984), with agy 1.5.5 (the version the installer's manifest named
+that day), the fake API received tool results for both `run_command` calls of the turn,
+and neither OpenMoat's `PreToolUse` entry nor the job's own `PostToolUse` capture, both
+in `~/.gemini/config/hooks.json`, started; see "The first real run" below.
 Implementation: [`antigravity_cli.rs`](../antigravity_cli.rs) and [`doc.rs`](doc.rs); if
 they disagree, the code wins.
 
@@ -89,11 +93,41 @@ Every error `openmoat guard` can catch answers a `deny` and exits 2 first. The t
 written at 600 s so the guard's own 30 s budget always answers before the host's documented
 30 s default would.
 
+## The first real run
+
+The weekly job installs `agy` with Google's installer
+(<https://antigravity.google/cli/install.sh>), which takes the version from its manifest
+and has no channel to choose; on 2026-11-10 that was 1.5.5. The
+[changelog](https://antigravity.google/docs/changelog) lists CLI releases up to 1.5.3
+(2026-11-07); its 2.x entries (2.31.0 on 2026-11-09) are the Antigravity app's, not the
+CLI's. So the CLI was not older than the documentation.
+
+In one `agy -p "run it" --dangerously-skip-permissions` turn against a fake Gemini API
+(`modelProvider: gemini`, `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL`), the API saw three
+requests holding 0, 1 and 2 function responses: the fake API received tool results for
+both `run_command` calls. No hook started, and OpenMoat's audit log stayed empty. What this rules out:
+
+- the home directory: the API key is used only with `modelProvider: gemini` in
+  `~/.gemini/antigravity-cli/settings.json` (the install page), so `agy` read that file
+  under `$HOME`;
+- one bad entry: OpenMoat's (timeout 600 s) and the capture's (30 s, the documented
+  default) both failed. Both use the matcher `*`, which the hooks page documents as
+  matching every tool.
+
+What is left: hooks are not run under `-p`, under `--dangerously-skip-permissions`, or
+in a `GEMINI_API_KEY` session (1.4.7 fixed "skills, rules, custom agents, plugins, plugin
+MCP servers, and hooks not loading" for Application Default Credentials sign-ins, so
+what `agy` loads has depended on the sign-in before); or `*` is compiled as a regular
+expression after all. None of these is documented. The job now records what tells them
+apart (`scripts/ci/latest-agents/agy_probe.py`, agy's `--log-file`, `agy -p /hooks`, the
+files `agy` opens, what each tool result said, and a second run without the flag), and
+`openmoat status`, `doctor` and the README show Antigravity CLI as a preview host until
+a run shows the hook deciding a call.
+
 ## Known gaps
 
-- **Unverified against a real agent.** Fixtures are documented shapes, not captures; the
-  weekly `latest agents` job installs `agy` and captures real payloads once it can run a
-  model turn, and only then is any of this proven.
+- **Preview host.** Fixtures are documented shapes, not captures, and in the one real
+  run no hook started (above).
 - MCP and subagent calls: whether hooks fire for them is not documented; the eager MCP
   tool name and the review of a subagent start are the safe reading of that silence.
 - Injected input (ADR-057, ADR-063): the documented `PostToolUse` payload has `toolCall`,

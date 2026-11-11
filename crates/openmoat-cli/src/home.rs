@@ -145,6 +145,16 @@ impl Home {
         self.root.join("trust.json")
     }
 
+    /// Where the audit log is delivered live, when it is (ADR-081).
+    pub fn delivery_config_path(&self) -> PathBuf {
+        self.root.join("delivery.yaml")
+    }
+
+    /// Each delivery sink's progress, and the lock one delivery run holds.
+    pub fn delivery_dir(&self) -> PathBuf {
+        self.root.join("delivery")
+    }
+
     /// The OpenSSH allowed-signers file of the keys `moat policy trust-key`
     /// trusted to sign policy (`signing.rs`); pinned by the lock.
     pub fn signers_path(&self) -> PathBuf {
@@ -442,7 +452,7 @@ pub fn user_home() -> Result<PathBuf> {
 const PRIVATE_DIR: u32 = 0o700;
 
 /// `create_dir_all` whose new directories are owner-only (Unix).
-fn create_private_dir(path: &Path) -> Result<()> {
+pub fn create_private_dir(path: &Path) -> Result<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true);
     #[cfg(unix)]
@@ -465,6 +475,18 @@ fn private_file_options() -> fs::OpenOptions {
 pub fn private_append_options() -> fs::OpenOptions {
     let mut options = fs::OpenOptions::new();
     options.append(true).create(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options
+}
+
+/// Open options for a lock file (`File::try_lock`): created owner-only, never
+/// truncated, opened for reading and writing. Not append-only: Windows locks
+/// a range only on a handle with read or write access, and an append-only
+/// handle has neither ("Access is denied").
+pub fn private_lock_options() -> fs::OpenOptions {
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
     options

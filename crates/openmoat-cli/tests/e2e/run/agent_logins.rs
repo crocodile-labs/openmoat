@@ -30,7 +30,7 @@ fn run_as(sb: &Sandbox, project: &Path, program: &Path) -> Output {
         sb.command()
             .current_dir(project)
             .env("TMPDIR", &tmp)
-            .arg("run")
+            .args(["run", super::LIGHTWEIGHT])
             .arg("--write")
             .arg(&claude)
             .arg("--write")

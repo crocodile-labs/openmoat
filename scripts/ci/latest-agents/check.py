@@ -38,6 +38,15 @@ read JSON, and the agent records they come from (agents.json beside this file).
     check.py openclaw-inspect <report.json>  OpenClaw's own validator and plugin inspector agree
     check.py opencode-settled <report.json>  OpenCode 2's plugin inventory is applied (exit 0/1, silent)
     check.py opencode-active <report.json>   OpenCode 2 reports OpenMoat's plugin active
+    check.py hook-failure-fact <host> <status.json> fails|times_out|timeout_s
+                                             one hook-failure fact of the host (ADR-079)
+    check.py hook-failure <agent> <mode> <fact> <marker> <ran file> <calls log> <agent output>
+                          <api log> <out.json>
+                                             what the agent did with the probe while the hook
+                                             failed, against the fact; fails only when a call
+                                             ran where the fact says the agent blocks
+    check.py hook-failure-skip <agent> <mode> <fact> <why> <out.json>
+                                             records a case not run, and why
 
 Every failure prints why and exits 1; usage errors exit 64.
 """
@@ -555,7 +564,92 @@ def cmd_opencode_active(report):
     return 0
 
 
+FACT_KEYS = ("fails", "times_out", "timeout_s")
+
+
+def cmd_hook_failure_fact(host, status_path, key):
+    """One hook-failure fact of <host> as `openmoat status --format json` gives it
+    (ADR-079): `blocks`, `runs` or `not-documented`, or the time limit in seconds;
+    `none` for a limit the host does not document."""
+    if key not in FACT_KEYS:
+        print(f"check.py: hook-failure-fact takes one of {FACT_KEYS}", file=sys.stderr)
+        return 64
+    status = load_json(status_path, "openmoat status")
+    mine = [a for a in status.get("agents", []) if a.get("host") == host]
+    facts = mine[0].get("hook_failure") if mine else None
+    if not isinstance(facts, dict) or key not in facts:
+        fail(f"openmoat status has no hook_failure.{key} for {host}: {json.dumps(mine)[:800]}")
+    value = facts[key]
+    print("none" if value is None else value)
+    return 0
+
+
+def record_outcome(path, entry):
+    """Append one outcome to the job's hook-failure.json (one JSON object a line)."""
+    with open(path, "a", encoding="utf-8") as out:
+        out.write(json.dumps(entry, sort_keys=True) + "\n")
+
+
+def annotate(level, title, message):
+    """A workflow annotation, which GitHub reads from standard output."""
+    clean = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    print(f"::{level} title={title}::{clean}", flush=True)
+
+
+def cmd_hook_failure_skip(agent, mode, fact, why, out):
+    record_outcome(out, {"agent": agent, "mode": mode, "fact": fact, "observed": "not run",
+                         "why": why})
+    print(f"skip  hook fails ({mode}): {why}")
+    return 0
+
+
+def text_of(path):
+    try:
+        return Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def observed(marker, ran_file, calls_log, agent_out, api_log):
+    """What the agent did with the probe while the hook failed: `ran` when the
+    probe's marker reached its output, the fake API or the copy in the project;
+    `blocked` when the hook ran (its stand-in logged the call) or the agent
+    reported a result of the call to the model, and the marker is nowhere;
+    `no evidence` otherwise (the agent may never have made the call)."""
+    seen = [text_of(p) for p in (ran_file, agent_out, api_log)]
+    if any(marker in text for text in seen):
+        return "ran"
+    hook_ran = bool(text_of(calls_log).strip())
+    api = text_of(api_log)
+    reported = bool(re.search(r"results=[1-9]", api)) or "tool result:" in seen[1]
+    return "blocked" if hook_ran or reported else "no evidence"
+
+
+def cmd_hook_failure(agent, mode, fact, marker, ran_file, calls_log, agent_out, api_log, out):
+    """The probe's outcome against the host fact. A call that ran where the
+    fact says the agent blocks fails: OpenMoat would be telling people a
+    failed hook stops the call when it does not. A call blocked where the fact
+    says it runs (or the fact is not documented), and no evidence, are reported
+    for a person to read; the fact stays as it is until the vendor says so."""
+    seen = observed(marker, ran_file, calls_log, agent_out, api_log)
+    entry = {"agent": agent, "mode": mode, "fact": fact, "observed": seen,
+             "hook_called": bool(text_of(calls_log).strip())}
+    record_outcome(out, entry)
+    words = f"{agent}, hook {mode}: the fact says the agent {fact}; observed: {seen}"
+    if fact == "blocks" and seen == "ran":
+        annotate("error", f"{agent}: a failed hook let the call run", words)
+        fail(words)
+    if seen == "no evidence":
+        annotate("warning", f"{agent}: hook {mode} proved nothing", words)
+    elif (fact == "blocks") != (seen == "blocked"):
+        annotate("notice", f"{agent}: hook {mode} differs from the fact", words)
+    print(f"ok    {words}")
+    return 0
+
+
 COMMANDS = {
+    "hook-failure-fact": (cmd_hook_failure_fact, 3), "hook-failure-skip": (cmd_hook_failure_skip, 5),
+    "hook-failure": (cmd_hook_failure, 9),
     "opencode-active": (cmd_opencode_active, 1), "opencode-settled": (cmd_opencode_settled, 1),
     "openclaw-valid": (cmd_openclaw_valid, 2), "openclaw-inspect": (cmd_openclaw_inspect, 1),
     "records": (cmd_records, 0), "matrix": (cmd_matrix, 0), "get": (cmd_get, 2),

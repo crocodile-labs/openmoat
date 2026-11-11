@@ -17,7 +17,8 @@ carries the step, so the server keeps no state.
 With no --port the OS picks a free loopback port; the bound port is printed as the
 first line of standard output once the socket listens. Every request is logged to
 standard error, one line each, with its time and the function responses it holds
-(`at=<epoch seconds> results=<n>`, read by after_call.py).
+(`at=<epoch seconds> results=<n>`, read by after_call.py), then one indented line per
+function response with the start of what it says (`  result <n>: <name>: <json>`).
 """
 
 import argparse
@@ -28,6 +29,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 CALL = None
 THEN = None
+# How much of each function response the log keeps.
+RESPONSE_CHARS = 400
 
 
 def offered(request):
@@ -50,10 +53,25 @@ def answered(request):
     )
 
 
+def responses(request):
+    """What each function response of the conversation says, cut to a line: whether
+    the agent ran the call, refused it itself, or had it blocked by a hook."""
+    said = []
+    for content in request.get("contents") or []:
+        for part in (content or {}).get("parts") or []:
+            if isinstance(part, dict) and isinstance(part.get("functionResponse"), dict):
+                response = part["functionResponse"]
+                text = json.dumps(response.get("response"), sort_keys=True)
+                said.append(f"{response.get('name')}: {text[:RESPONSE_CHARS]}")
+    return said
+
+
 def reply(request):
     """The candidate for this turn."""
     results = answered(request)
     print(f"model request at={time.time():.3f} results={results}", file=sys.stderr, flush=True)
+    for number, text in enumerate(responses(request), 1):
+        print(f"  result {number}: {text}", file=sys.stderr, flush=True)
     planned = CALL if results == 0 else THEN if results == 1 else None
     if planned is not None and planned[0] in offered(request):
         part = {"functionCall": {"name": planned[0], "args": planned[1]}}

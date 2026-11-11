@@ -87,6 +87,23 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          script cannot start (no `sh`, as on native Windows), when Cline kills it after \
          120 s, and when Cline runs no hooks (`--yolo`); Cline has no setting that blocks a \
          failed hook",
+    // Cline reads only a `cancel` on stdout, which OpenMoat's script prints
+    // whenever `guard` fails; it kills a hook after 120 s and runs the call.
+    // It also runs the call when the script itself cannot start (no `sh`,
+    // native Windows), and the facts have no platform-dependent outcome, so
+    // a failing hook counts as running the call: `doctor` must not promise a
+    // block that Windows does not give.
+    hook_failure: crate::HookFailure {
+        fails: crate::FailureOutcome::Runs,
+        times_out: crate::FailureOutcome::Runs,
+        timeout_s: Some(120),
+        turned_off_by: "`--yolo`, or `--config`, `--hooks-dir` or a moved `CLINE_DIR` OpenMoat \
+                        did not install into",
+        sources: &[
+            "https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/hook-file-hooks.ts",
+            "https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/subprocess-runner.ts",
+        ],
+    },
     gaps: "the Cline VS Code extension is not covered (it reads hooks only from \
          `~/Documents/Cline/Hooks` and a workspace's `.clinerules/hooks`); no OS sandbox \
          from OpenMoat; `--yolo` runs no hooks, and `--config`, `--hooks-dir` or a moved \

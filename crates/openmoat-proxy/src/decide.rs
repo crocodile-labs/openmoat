@@ -115,18 +115,22 @@ pub fn host(policy: &CompiledPolicy<'_>, host: &str) -> Decision {
     decision
 }
 
-/// The refusal of a cloud metadata service's name, whatever the policy says.
-fn metadata(host: &str) -> Option<Decision> {
+/// Whether `host` is a cloud metadata service's name, or a name under one.
+pub(crate) fn metadata_name(host: &str) -> bool {
     METADATA_NAMES
         .iter()
         .any(|m| host == *m || host.strip_suffix(m).is_some_and(|p| p.ends_with('.')))
-        .then(|| {
-            Decision::single(
-                Verdict::Deny,
-                RULE_ADDRESS,
-                format!("{host} is a cloud metadata service"),
-            )
-        })
+}
+
+/// The refusal of a cloud metadata service's name, whatever the policy says.
+fn metadata(host: &str) -> Option<Decision> {
+    metadata_name(host).then(|| {
+        Decision::single(
+            Verdict::Deny,
+            RULE_ADDRESS,
+            format!("{host} is a cloud metadata service"),
+        )
+    })
 }
 
 /// The refusal for a request to `host:port` from a session with `taint`, if

@@ -8,6 +8,38 @@ run() {
     "$@"
 }
 
+# A cargo test command. In CI every target runs, and on a failure the failing
+# tests and their first panic lines become annotations, shown on the run
+# without reading its log (Actions keeps the first ten errors of a step).
+tests() {
+    if [ -z "${GITHUB_ACTIONS:-}" ]; then
+        run "$@"
+        return
+    fi
+    echo "▶ $*"
+    local log="${RUNNER_TEMP:-/tmp}/cargo-test.log"
+    if ! "$@" 2>&1 | tee "$log"; then
+        # Each panic with the line after it, which holds the message.
+        { grep -E "^test .* FAILED$" "$log"; grep -A1 "panicked at" "$log" | grep -v '^--$'; } |
+            head -10 | sed -e 's/%/%25/g' -e 's/^/::error title=cargo test::/'
+        exit 1
+    fi
+}
+
+# E2E_PART splits the end-to-end tests over two CI jobs where one would pass
+# its time limit (Windows): part 2 runs only the modules named here, part 1
+# runs everything else, so each test runs exactly once and a new module lands
+# in part 1. Unset (every other runner, and locally) runs all of it in one.
+E2E_PART=${E2E_PART:-}
+E2E_SPLIT=(hosts:: cursor:: opencode:: hermes:: gemini_cli:: codex:: antigravity_cli::
+    cline:: copilot_cli:: goose:: openclaw:: pi:: continue_cli:: proxy:: proxy_session::
+    proxy_ca:: mcp:: mcp_gateway:: mcp_init_wrap:: mcp_startup:: mcp_status:: moatbench::
+    differential::)
+if [ "$E2E_PART" = 2 ]; then
+    tests cargo test --locked -p openmoat --all-features --no-fail-fast --test e2e -- "${E2E_SPLIT[@]}"
+    exit 0
+fi
+
 run cargo fmt --all --check
 # fuzz/ is its own workspace (nightly, outside `--all`); rustfmt checks its
 # targets on the pinned stable toolchain. CI's fuzz job runs clippy there.
@@ -19,20 +51,15 @@ run cargo clippy --locked --workspace --all-targets --all-features -- -D warning
 run cargo clippy --locked --workspace --lib --bins --all-features -- -D warnings \
     -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic -D clippy::unreachable
 run cargo doc --locked --workspace --no-deps --document-private-items
-if [ -n "${GITHUB_ACTIONS:-}" ]; then
-    # Every test target runs; on a failure, the failing tests and their first panic lines become
-    # annotations, shown on the run without reading its log. Actions keeps the
-    # first ten errors of a step.
-    echo "▶ cargo test --locked --workspace --all-features --no-fail-fast"
-    log="${RUNNER_TEMP:-/tmp}/cargo-test.log"
-    if ! cargo test --locked --workspace --all-features --no-fail-fast 2>&1 | tee "$log"; then
-        # Each panic with the line after it, which holds the message.
-        { grep -E "^test .* FAILED$" "$log"; grep -A1 "panicked at" "$log" | grep -v '^--$'; } |
-            head -10 | sed -e 's/%/%25/g' -e 's/^/::error title=cargo test::/'
-        exit 1
-    fi
+if [ "$E2E_PART" = 1 ]; then
+    # Everything but the end-to-end modules part 2 runs (see E2E_SPLIT).
+    tests cargo test --locked --workspace --all-features --no-fail-fast --exclude openmoat
+    tests cargo test --locked -p openmoat --all-features --no-fail-fast --bins
+    skips=()
+    for module in "${E2E_SPLIT[@]}"; do skips+=(--skip "$module"); done
+    tests cargo test --locked -p openmoat --all-features --no-fail-fast --test e2e -- "${skips[@]}"
 else
-    run cargo test --locked --workspace --all-features
+    tests cargo test --locked --workspace --all-features --no-fail-fast
 fi
 run cargo run -q --locked -p openmoat -- policy lint crates/openmoat-core/policies/default-v1.yaml
 if rustup target list --installed 2>/dev/null | grep -q wasm32-unknown-unknown; then
@@ -52,6 +79,7 @@ if command -v python3 >/dev/null; then
     # checked against; this fails when that file no longer says so.
     run python3 -I scripts/ci/latest-agents/check.py records
     run python3 -I scripts/ci/latest-agents/test_after_call.py
+    run python3 -I scripts/ci/latest-agents/test_check.py
 else
     echo "▷ python3 not installed; Markdown link check skipped (CI runs it)"
 fi

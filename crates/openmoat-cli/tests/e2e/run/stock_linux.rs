@@ -33,10 +33,10 @@ fn run_with(sb: &Sandbox, project: &Path, flags: &[&str]) -> Output {
     )
 }
 
-/// The command runs, sandboxed, and `openmoat run` says before it starts
-/// that the network is restricted by port only.
+/// The command runs, sandboxed, and `openmoat run --no-isolate` says before
+/// it starts that the network is restricted by port only.
 #[test]
-fn a_plain_run_starts_and_says_the_network_is_restricted_by_port_only() {
+fn the_lightweight_tier_starts_and_says_the_network_is_restricted_by_port_only() {
     if !stock() {
         return;
     }
@@ -57,6 +57,40 @@ fn a_plain_run_starts_and_says_the_network_is_restricted_by_port_only() {
     let doctor = sb.moat(&["doctor"]);
     assert!(
         text(&doctor).contains("network restricted by port only"),
+        "{}",
+        text(&doctor)
+    );
+}
+
+/// Without bubblewrap the default (the Isolated tier, ADR-080) cannot start:
+/// `openmoat run` says why, writes that it started the Lightweight tier to
+/// the audit log, and starts it, as it did before the default changed.
+/// `doctor` says the same before any run.
+#[test]
+fn the_default_warns_records_and_starts_the_lightweight_tier() {
+    if !stock() {
+        return;
+    }
+    let (sb, project) = installed_with_secret();
+    let out = run_with(&sb, &project, &[]);
+    assert!(ran(&out), "{}", text(&out));
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let shown = stderr(&out);
+    for expected in [
+        "the Isolated tier, `openmoat run`'s default on Linux, cannot start here",
+        "bubblewrap is not installed",
+        "restricted by port only",
+        "closes this",
+    ] {
+        assert!(shown.contains(expected), "{expected}: {}", text(&out));
+    }
+    assert_eq!(
+        super::default_tier::tier_rows(&sb),
+        ["run-isolation-unavailable"]
+    );
+    let doctor = sb.moat(&["doctor"]);
+    assert!(
+        text(&doctor).contains("cannot start the Isolated tier here"),
         "{}",
         text(&doctor)
     );

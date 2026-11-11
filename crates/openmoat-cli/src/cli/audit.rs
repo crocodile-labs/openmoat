@@ -27,6 +27,57 @@ pub enum AuditCommand {
     /// file. Nothing is sent anywhere; push the ref yourself. Refused unless run from an
     /// interactive terminal.
     Anchor(AnchorArgs),
+    /// Live delivery of the audit log to a SIEM or log collector (OTLP/HTTP logs
+    /// or a signed HTTPS webhook), configured in `delivery.yaml` in the state
+    /// directory: status, a test request, or a delivery now.
+    Deliver {
+        #[command(subcommand)]
+        command: DeliverCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DeliverCommand {
+    /// Each sink: where it sends, how far behind it is, its last success and
+    /// failure, and events skipped because it fell too far behind.
+    Status(DeliverStatusArgs),
+    /// Send one test record (not an agent's call) to each sink, or to `--sink`,
+    /// and show what it answered. The log and each sink's place in it are not
+    /// touched.
+    Test(DeliverTestArgs),
+    /// Deliver now: every sink, including one waiting after a failure or paused
+    /// after an answer that trying again would not change.
+    Flush(DeliverFlushArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct DeliverStatusArgs {
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = Format::Text)]
+    pub format: Format,
+}
+
+#[derive(Debug, Args)]
+pub struct DeliverTestArgs {
+    /// Only this sink.
+    #[arg(long)]
+    pub sink: Option<String>,
+
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = Format::Text)]
+    pub format: Format,
+}
+
+#[derive(Debug, Args)]
+pub struct DeliverFlushArgs {
+    /// The run the guard starts after answering: only sinks that are due, no
+    /// output.
+    #[arg(long, hide = true)]
+    pub background: bool,
+
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = Format::Text)]
+    pub format: Format,
 }
 
 #[derive(Debug, Args)]

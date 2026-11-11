@@ -6,8 +6,9 @@
 //! port only, so where bubblewrap can make one the agent also gets a network
 //! namespace of its own (`linux/netns.rs`), and `moat` inside it applies the
 //! rules and filter; elsewhere `moat run` says the network is restricted by port
-//! only. With `--isolate` (`linux/isolate.rs`) the agent starts in bubblewrap's
-//! own view of the machine, and `moat` inside it applies the same rules and filter.
+//! only. In the Isolated tier (`linux/isolate.rs`), the default where
+//! bubblewrap works (ADR-080), the agent starts in bubblewrap's own view of the
+//! machine, and `moat` inside it applies the same rules and filter.
 
 use std::path::Path;
 use std::process::{Command, ExitStatus};
@@ -23,6 +24,7 @@ use seccompiler::{
     SeccompRule,
 };
 
+use super::isolation::Offered;
 use crate::sandbox::landlock::Rules;
 use crate::sandbox::seccomp::SOCKET_ARGS;
 use crate::sandbox::{
@@ -223,8 +225,17 @@ pub fn no_network_namespace() -> Option<String> {
     netns::missing()
 }
 
+/// Whether bubblewrap can make the Isolated tier here, which `openmoat run`
+/// then starts by default (ADR-080).
+pub fn isolation() -> Offered {
+    match isolate::probe() {
+        Ok(_) => Offered::Available,
+        Err(why) => Offered::Unavailable(why),
+    }
+}
+
 /// Whether the system's bubblewrap, which `moat run --isolate` needs, is
-/// installed; always `Some` here, where plain `moat run`'s Landlock rules
+/// installed; always `Some` here, where the Lightweight tier's Landlock rules
 /// cannot deny a path inside the project (`tier.rs`).
 #[expect(
     clippy::unnecessary_wraps,

@@ -1,5 +1,6 @@
 //! The OWASP Top 10 for Agentic Applications (2026) in `docs/COVERAGE.md`: all
-//! ten risks, what OpenMoat claims for each, and which fixture classes test it.
+//! ten risks, what OpenMoat claims for each, and which fixture classes and
+//! marked end-to-end tests ([`super::evidence`]) test it.
 //!
 //! Identifiers and names as OWASP prints them in
 //! <https://genai.owasp.org/2026/10/08/genai-and-agentic-ai-exploit-roundup-q3-2026/>.
@@ -7,6 +8,7 @@
 use std::fmt::Write as _;
 
 use super::THREATS;
+use super::evidence::Tests;
 
 /// What OpenMoat claims for a risk. Never a claim that the risk is solved:
 /// a [`Status::Covered`] reason has to say what it leaves out.
@@ -152,7 +154,7 @@ pub(super) fn asi_of(t: &str) -> &'static [&'static str] {
 }
 
 /// The threat classes that are a case of `risk`.
-fn classes_of(risk: &str) -> Vec<&'static str> {
+pub(super) fn classes_of(risk: &str) -> Vec<&'static str> {
     THREATS
         .iter()
         .map(|(t, _)| *t)
@@ -160,23 +162,69 @@ fn classes_of(risk: &str) -> Vec<&'static str> {
         .collect()
 }
 
+/// Every risk's id and name, in OWASP's order.
+pub(super) fn risks() -> Vec<(&'static str, &'static str)> {
+    ASI.iter().map(|r| (r.id, r.name)).collect()
+}
+
+/// Whether anything tests `risk`: a threat class with fixtures maps to it, or
+/// an end-to-end test is marked for it.
+fn tested(risk: &Risk, tests: &Tests) -> bool {
+    !classes_of(risk.id).is_empty() || tests.get(risk.id).is_some_and(|t| !t.is_empty())
+}
+
+/// The status a risk's row shows: what it claims, or `not tested` when
+/// nothing tests it (ADR-079): a row never claims more than its evidence.
+fn shown_status(risk: &Risk, tests: &Tests) -> &'static str {
+    if tested(risk, tests) {
+        risk.status.label()
+    } else {
+        "not tested"
+    }
+}
+
+/// A risk that claims to be covered, in full or in part, and that nothing
+/// tests: each one a problem the suite fails on.
+pub(super) fn untested_claims(tests: &Tests) -> Vec<String> {
+    ASI.iter()
+        .filter(|r| r.status != Status::OutOfScope && !tested(r, tests))
+        .map(|r| {
+            format!(
+                "{} is marked {} but no fixture class maps to it and no end-to-end test is \
+                 marked `// coverage: {}`",
+                r.id,
+                r.status.label(),
+                r.id
+            )
+        })
+        .collect()
+}
+
 /// The start of a risk's table row: enough to tell it is in the document.
-fn row_start(risk: &Risk) -> String {
-    format!("| {} | {} | {} |", risk.id, risk.name, risk.status.label())
+fn row_start(risk: &Risk, tests: &Tests) -> String {
+    format!(
+        "| {} | {} | {} |",
+        risk.id,
+        risk.name,
+        shown_status(risk, tests)
+    )
 }
 
 /// The `docs/COVERAGE.md` section of all ten risks. `count` gives a threat
-/// class's fixtures in one file. A risk no class maps to shows a dash: a zero
-/// would read as a measurement.
-pub(super) fn section(count: impl Fn(&str, &str) -> usize) -> String {
+/// class's fixtures in one file; `tests` the end-to-end tests marked for each
+/// risk. A risk no class maps to shows a dash: a zero would read as a
+/// measurement.
+pub(super) fn section(count: impl Fn(&str, &str) -> usize, tests: &Tests) -> String {
     let mut out = String::from(
         "\n## By OWASP agentic risk\n\n\
-         All ten risks of the list. `covered` means fixtures test it, not that the risk is \
-         solved: each reason names what is left out. A fixture counts under every risk its \
+         All ten risks of the list. `covered` means fixtures or end-to-end tests test it, not \
+         that the risk is solved: each reason names what is left out. A risk nothing tests \
+         reads `not tested`, whatever is claimed for it. A fixture counts under every risk its \
          class maps to; a dash means no class maps to the risk, so there is nothing to \
-         count.\n\n\
-         | Risk | Name | Status | Reason | Classes | Attacks | Reviews |\n\
-         |---|---|---|---|---|---|---|\n",
+         count. The tests and fixture ids behind each row are listed under \"Evidence by \
+         OWASP agentic risk\".\n\n\
+         | Risk | Name | Status | Reason | Classes | Attacks | Reviews | End-to-end tests |\n\
+         |---|---|---|---|---|---|---|---|\n",
     );
     for risk in &ASI {
         let classes = classes_of(risk.id);
@@ -190,10 +238,11 @@ pub(super) fn section(count: impl Fn(&str, &str) -> usize) -> String {
                 total("review.yaml").to_string(),
             )
         };
+        let e2e = tests.get(risk.id).map_or(0, Vec::len);
         let _ = writeln!(
             out,
-            "{} {} | {names} | {attacks} | {reviews} |",
-            row_start(risk),
+            "{} {} | {names} | {attacks} | {reviews} | {e2e} |",
+            row_start(risk, tests),
             risk.reason
         );
     }
@@ -233,7 +282,8 @@ fn every_threat_class_maps_to_an_owasp_agentic_risk() {
 /// does not cover.
 #[test]
 fn every_owasp_agentic_risk_has_a_row() {
-    let generated = section(|_, _| 0);
+    let tests = Tests::new();
+    let generated = section(|_, _| 0, &tests);
     for (n, risk) in (1..).zip(&ASI) {
         assert_eq!(risk.id, format!("ASI{n:02}"));
         assert!(!risk.name.is_empty(), "{}: no name", risk.id);
@@ -251,9 +301,37 @@ fn every_owasp_agentic_risk_has_a_row() {
             );
         }
         assert!(
-            generated.lines().any(|l| l.starts_with(&row_start(risk))),
+            generated
+                .lines()
+                .any(|l| l.starts_with(&row_start(risk, &tests))),
             "the generated section has no row for {}",
             risk.id
         );
     }
+}
+
+/// A risk nothing tests reads `not tested` in the table, and one that claims
+/// coverage is reported until a fixture class or a marked test backs it; a
+/// marked test is enough to show the claim.
+#[test]
+fn a_risk_without_evidence_claims_nothing() {
+    let none = Tests::new();
+    let generated = section(|_, _| 0, &none);
+    assert!(
+        generated.contains("| ASI07 | Insecure Inter-Agent Communication | not tested |"),
+        "{generated}"
+    );
+    let claims = untested_claims(&none);
+    assert!(claims.iter().any(|c| c.starts_with("ASI01 ")), "{claims:?}");
+    assert!(
+        !claims.iter().any(|c| c.starts_with("ASI02 ")),
+        "{claims:?}"
+    );
+    let marked = Tests::from([("ASI01".to_owned(), vec!["taint::t".to_owned()])]);
+    assert!(
+        !untested_claims(&marked)
+            .iter()
+            .any(|c| c.starts_with("ASI01 "))
+    );
+    assert!(section(|_, _| 0, &marked).contains("| ASI01 | Agent Goal Hijack | partial |"));
 }

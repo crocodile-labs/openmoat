@@ -5,7 +5,10 @@
 use crate::contract::{HostDocs, ToolRow};
 
 pub(super) const DOCS: HostDocs = HostDocs {
-    hooked_by: "`PreToolUse` hook in `~/.gemini/config/hooks.json`",
+    // A preview host until a real run shows the hook deciding a call (`HOST.md`,
+    // "The first real run").
+    hooked_by: "`PreToolUse` hook in `~/.gemini/config/hooks.json`; **preview**: the hook \
+         is new; use `openmoat run` for an OS boundary until it leaves preview",
     protection: "hook only",
     tools: TOOLS,
 };

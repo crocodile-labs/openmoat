@@ -27,6 +27,16 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
          other than 2, or times out (default 600 s)",
+    // `cn` runs no hooks; its hook runner, were it called, lets a failure go.
+    hook_failure: crate::HookFailure {
+        fails: crate::FailureOutcome::Runs,
+        times_out: crate::FailureOutcome::Runs,
+        timeout_s: Some(600),
+        turned_off_by: "always: the released Continue CLI fires no hook",
+        sources: &[
+            "https://github.com/continuedev/continue/blob/main/extensions/cli/src/hooks/hookRunner.ts",
+        ],
+    },
     gaps: "the released Continue CLI does not run hooks, so OpenMoat cannot check its tool \
          calls; run it under `openmoat run`",
     // `cn` reads its own configuration and fires no hook.

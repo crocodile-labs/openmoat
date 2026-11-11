@@ -8,6 +8,7 @@ The append-only local audit log: one SQLite database in WAL mode with a busy tim
 - A schema change bumps `SCHEMA_VERSION` in `store/schema.rs`, adds a migration step, keeps `Event` deserialisation backward compatible, and adds a test that opens a database written by the previous version.
 - Typed `thiserror` errors; no printing (`print_stdout`/`print_stderr` are denied in `lib.rs`); every public item has a doc comment.
 - Test-only tampering helpers stay behind the `test-support` feature.
+- Live delivery's bodies (`delivery.rs`, ADR-081) mask every text again with `KnownSecrets` before it is encoded; a cell that does not decode fails the batch rather than going out unmasked. This crate builds the bytes and opens no connection.
 
 ## Test
 - `cargo test -p openmoat-audit --all-features`: unit tests and `tests/token_shapes.rs`.

@@ -145,7 +145,8 @@ person who runs Claude Code on Bedrock adds those names.
 - **It is about `openmoat run`.** An agent started without it is not refused: no OpenMoat
   code runs at that point. `require.protection: hook-and-os-sandbox` is what denies such
   an agent's calls (ADR-064), and the two can be used together.
-- **On Linux the full boundary does not mean `--isolate`.** Plain `openmoat run` leaves
+- **On Linux the full boundary does not mean `--isolate`.** (Amended by ADR-080: it does
+  now, since the Isolated tier is the default where bubblewrap works.) Plain `openmoat run` leaves
   paths inside the project open to commands (Landlock grants whole trees, `tier.rs`), and
   the setting does not change that; `openmoat run` still says so when it starts. Requiring
   `--isolate` would refuse every system without a working bubblewrap and every run that

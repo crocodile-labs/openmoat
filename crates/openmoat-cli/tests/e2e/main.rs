@@ -28,6 +28,7 @@ mod continue_cli;
 mod copilot_cli;
 mod cursor;
 mod cursor_sandbox;
+mod deliver;
 mod differential;
 mod edit;
 mod escapes;
@@ -86,6 +87,8 @@ mod sandbox_sync;
 mod secret;
 mod serve;
 mod session_code;
+#[cfg(unix)]
+mod snapshot;
 mod staging;
 mod taint;
 mod taint_answered;

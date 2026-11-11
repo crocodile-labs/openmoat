@@ -76,6 +76,19 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          does not answer within 45 s; runs the call unchecked when pi does not load the \
          extension (`--no-extensions`, or an `extensions` entry in pi's or a trusted \
          project's settings that turns it off)",
+    // "`tool_call` errors block the tool (fail-safe)" (Error Handling);
+    // OpenMoat's extension throws when `openmoat` is missing, crashes or
+    // gives no answer within 45 s (pi documents no handler time limit).
+    hook_failure: crate::HookFailure {
+        fails: crate::FailureOutcome::Blocks,
+        times_out: crate::FailureOutcome::Blocks,
+        timeout_s: Some(45),
+        turned_off_by: "`pi --no-extensions`, or an `extensions` entry in pi's or a trusted \
+                        project's settings that turns the extension off",
+        sources: &[
+            "https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md",
+        ],
+    },
     gaps: "no OS sandbox from OpenMoat; pi has no approval step of its own, so a call \
          OpenMoat defers runs; an input change by an extension pi loads after OpenMoat's \
          (a package's) and an extension that replaces a built-in tool are not checked; \

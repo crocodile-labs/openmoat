@@ -59,6 +59,11 @@ pub fn no_network_namespace() -> Option<String> {
     None
 }
 
+/// No Isolated tier: `moat run` refuses here.
+pub fn isolation() -> super::isolation::Offered {
+    super::isolation::Offered::Not
+}
+
 /// None: `moat run` refuses here, so it has no Linux-only gap to name.
 pub fn bubblewrap() -> Option<bool> {
     None

@@ -180,6 +180,9 @@ fn state_files(home: &Home) -> Vec<PathBuf> {
         home.overlay_path(),
         home.trust_path(),
         home.hosts_path(),
+        // Where the audit log is sent (ADR-081): a changed file could send it
+        // to another place, so it is pinned as the policy is.
+        home.delivery_config_path(),
     ]
 }
 
@@ -518,6 +521,12 @@ impl Lock {
 
     pub fn pins(&self, path: &Path) -> bool {
         self.entries.contains_key(&key(path))
+    }
+
+    /// The digest the lock records for `path`, a file pinned by its bytes
+    /// alone (a state file); `None` when it is not pinned.
+    pub fn pinned_digest(&self, path: &Path) -> Option<&str> {
+        self.entries.get(&key(path)).map(String::as_str)
     }
 }
 

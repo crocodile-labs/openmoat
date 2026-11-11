@@ -78,14 +78,31 @@ fn make_executable(path: &Path) {
 
 /// `openmoat run -- ./<agent>` in `project`.
 fn run_agent(sb: &Sandbox, project: &Path, agent: &str, env: &[(&str, &str)]) -> Output {
+    run_agent_with(
+        sb,
+        Path::new(env!("CARGO_BIN_EXE_openmoat")),
+        project,
+        agent,
+        env,
+    )
+}
+
+/// [`run_agent`] with the `openmoat` binary at `program`.
+fn run_agent_with(
+    sb: &Sandbox,
+    program: &Path,
+    project: &Path,
+    agent: &str,
+    env: &[(&str, &str)],
+) -> Output {
     let tmp = sb.home.with_file_name("tmp");
     std::fs::create_dir_all(&tmp).unwrap();
     output(
-        sb.command()
+        sb.command_at(program)
             .current_dir(project)
             .env("TMPDIR", &tmp)
             .envs(env.iter().copied())
-            .args(["run", "--"])
+            .args(["run", "--no-isolate", "--"])
             .arg(format!("./{agent}")),
         None,
     )
@@ -163,6 +180,39 @@ fn a_script_a_tool_command_runs_cannot_read_its_parent() {
     }
     let token = token_of(&project, &out);
     assert!(!stdout(&out).contains(&token), "{}", text(&out));
+}
+
+/// An agent's own sandbox can hide where OpenMoat is installed: Claude Code's,
+/// with `blockReadsOutsideWorkingDirectories`, hides every directory under
+/// `/home` or `/Users` outside the working ones, `~/.cargo/bin` included, and
+/// its Bash tool failed on every call under `openmoat run` while the wrapper was
+/// a link to the installed binary. The wrapper must start from its own
+/// directory alone: here the run's binary is a copy the agent deletes before
+/// its tool command starts.
+#[test]
+fn the_tool_shell_starts_with_the_installed_binary_out_of_sight() {
+    let (sb, project) = installed_with_secret();
+    let installed = project.join("installed-openmoat");
+    std::fs::copy(env!("CARGO_BIN_EXE_openmoat"), &installed).unwrap();
+    for (host, var) in wrapped() {
+        let script = format!(
+            "rm -f installed-openmoat\n{}",
+            tool(var, "echo tool-shell-started")
+        );
+        let agent = fake_agent(&project, host, &script);
+        let out = run_agent_with(&sb, &installed, &project, &agent, &[]);
+        if !ran(&out) {
+            return;
+        }
+        assert!(!installed.exists(), "{}: {}", host.id(), text(&out));
+        assert!(
+            stdout(&out).contains("tool-shell-started"),
+            "{}: {}",
+            host.id(),
+            text(&out)
+        );
+        std::fs::copy(env!("CARGO_BIN_EXE_openmoat"), &installed).unwrap();
+    }
 }
 
 /// The binary copied into the project, which the sandbox can read.

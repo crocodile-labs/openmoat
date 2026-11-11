@@ -26,7 +26,7 @@ and the point is that it never gets there.
 Latency: `runs` curl GETs of the same URL directly, through `openmoat run`
 with the setting off (an opaque tunnel), and with it on (terminated), in
 three rotating batches; the added cost is terminated minus tunnel, median and
-p95, against the 15 ms guard budget (latency_ab.BUDGET_MS). Latency over the
+p95, against the guard budget (latency_ab.BUDGET_MS, ADR-080). Latency over the
 budget is a warning (shared runners and the network are noisy); a denied
 request that was not refused, or a refusal with no audit row, fails the run.
 """

@@ -114,6 +114,19 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          when `openmoat` is missing, crashes or does not answer within 45 s; runs the call \
          unchecked when OpenCode does not load the plugin (OpenCode 1's `--pure` or \
          `OPENCODE_PURE`, OpenCode 2's `-openmoat` in `plugins`, or an error loading it)",
+    // The plugin docs do not say what a throwing hook does; OpenCode's source
+    // (1.19.4 `plugin/index.ts` `trigger`, 2.2.0 `core/src/plugin/hooks.ts`)
+    // blocks the call, and OpenMoat's plugin throws when `openmoat` is
+    // missing, crashes or gives no answer within 45 s (OpenCode waits without
+    // a limit). Unverified against a running OpenCode.
+    hook_failure: crate::HookFailure {
+        fails: crate::FailureOutcome::Blocks,
+        times_out: crate::FailureOutcome::Blocks,
+        timeout_s: Some(45),
+        turned_off_by: "OpenCode 1's `--pure` or `OPENCODE_PURE`, OpenCode 2's `-openmoat` in \
+                        `plugins` (a project's included), or an error loading the plugin",
+        sources: &["https://opencode.ai/docs/build/plugins/server"],
+    },
     gaps: "no OS sandbox from OpenMoat; OpenCode 1 plugins cannot prompt, so a review is a \
          deny that says how to approve it; OpenCode before 1.3.4 is not supported; other \
          plugins and custom tools run in OpenCode's process with the agent's rights, and \

@@ -218,7 +218,8 @@ mod launch {
     #[test]
     fn each_hook_only_agent_holds_under_openmoat_run() {
         for host in hook_only() {
-            launch_holds(host, &[]);
+            // The Lightweight tier; the Isolated one, Linux's default, below.
+            launch_holds(host, &["--no-isolate"]);
         }
     }
 

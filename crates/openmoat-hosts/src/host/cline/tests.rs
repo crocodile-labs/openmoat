@@ -350,3 +350,14 @@ fn the_script_is_a_posix_shell_file_naming_the_binary_once() {
     assert!(text.contains("\"$MOAT\" guard --host cline --home \"$MOAT_STATE\""));
     assert!(text.contains("\nMOAT_STATE='/h/.moat'\n"));
 }
+
+/// Cline runs the call when OpenMoat's script cannot start (no `sh`, as on
+/// native Windows), so its facts may not say a failing hook blocks the call,
+/// and the prose says why.
+#[test]
+fn a_failing_hook_is_not_claimed_to_block_where_the_script_cannot_start() {
+    let spec = Host::Cline.spec();
+    assert!(spec.hook_failure.fails.runs(), "{:?}", spec.hook_failure);
+    assert!(spec.on_hook_failure.contains("cannot start"));
+    assert!(spec.on_hook_failure.contains("Windows"));
+}

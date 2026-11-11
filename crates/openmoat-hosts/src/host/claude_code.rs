@@ -80,6 +80,17 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          (`openmoat init` sets `onFailure: \"block\"`); on Windows without Git for Windows \
          or Git Bash, before 2.1.310 a hook's block, its exit 2 included, can still let \
          the call through",
+    // "Block the action when a hook fails" and "Non-blocking error" in the
+    // hooks reference: a failure or a timeout lets the call go ahead unless
+    // the entry sets `onFailure: "block"` (v2.1.295 or later).
+    hook_failure: crate::HookFailure {
+        fails: crate::FailureOutcome::BlocksFrom((2, 1, 295)),
+        times_out: crate::FailureOutcome::BlocksFrom((2, 1, 295)),
+        timeout_s: Some(600),
+        turned_off_by: "`disableAllHooks: true` in a settings file (a project's included), \
+                        `--settings '{\"disableAllHooks\": true}'`, or deleting the entry",
+        sources: &["https://code.claude.com/docs/en/hooks"],
+    },
     gaps: "file tools, WebFetch and MCP servers run outside the OS sandbox; before Claude \
          Code 2.1.295 calls run unchecked if the hook binary is missing or crashes",
     install: Some(InstallSpec {

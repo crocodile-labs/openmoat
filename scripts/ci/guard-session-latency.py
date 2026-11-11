@@ -13,11 +13,11 @@ other, so the log is the real, hash-chained one.
 
 The session cache (#570) folds only the calls since the last one, so a long
 session should cost what a short one does. The rows held to the rule in
-latency_ab.py are the last size and the two rows after it: with one binary,
-the guard's own p95 fails above three times the 15 ms budget; with `--base`,
-the binary of the commit the change lands on grows its own session call for
-call beside this one, and the change fails only when its own p95 is clearly
-worse. A regression back to folding the whole session fails either way, while
+latency_ab.py are the last size and the two rows after it: with `--base`,
+which CI always passes, the binary of the commit before grows its own session
+call for call beside this one, and the change fails only when its own p95 is
+clearly worse; with one binary, the guard's own p95 fails above 45 ms. Every
+row reports the median, p95 and p99 against the budget of ADR-080. A regression back to folding the whole session fails either way, while
 a loaded runner's slow process starts do not.
 
 Each size times BATCHES batches of `runs` calls and reports the median of the
@@ -89,13 +89,17 @@ def main():
             flat_wall = [ms for batch in wall[g.name] for ms in batch]
             flat_own = [ms for batch in own[g.name] for ms in batch]
             p95, own_p95 = latency_ab.batched_p95(wall[g.name]), latency_ab.batched_p95(own[g.name])
+            p99 = latency_ab.percentile(flat_wall, 99)
+            own_p99 = latency_ab.percentile(flat_own, 99)
             stats[g.name] = (p95, own_p95)
-            rows.append(f"| {label} | {g.name} | {statistics.median(flat_wall):.1f} / {p95:.1f} | "
-                        f"{statistics.median(flat_own):.1f} / {own_p95:.1f} |")
+            rows.append(f"| {label} | {g.name} | {statistics.median(flat_wall):.1f} / {p95:.1f} / "
+                        f"{p99:.1f} | {statistics.median(flat_own):.1f} / {own_p95:.1f} / "
+                        f"{own_p99:.1f} |")
             # a comma ends a workflow command property, so the title has none
             print(f"::notice title=guard latency {title} ({g.name})::"
-                  f"end to end median {statistics.median(flat_wall):.1f} ms, p95 {p95:.1f} ms; "
-                  f"latency_us median {statistics.median(flat_own):.1f} ms, p95 {own_p95:.1f} ms")
+                  f"end to end median {statistics.median(flat_wall):.1f} ms, p95 {p95:.1f} ms, "
+                  f"p99 {p99:.1f} ms; latency_us median {statistics.median(flat_own):.1f} ms, "
+                  f"p95 {own_p95:.1f} ms, p99 {own_p99:.1f} ms")
         return stats
 
     rows, measured, earlier = [], [], 0
@@ -131,7 +135,7 @@ def main():
 
     table = "\n".join([
         f"`openmoat guard` late in one session, {BATCHES} batches of {runs} runs per size, "
-        "ms (median of all runs / median of the batches' p95)",
+        "ms (median of all runs / median of the batches' p95 / p99 of all runs)",
         "",
         "| earlier calls | binary | end to end | latency_us |",
         "|---|---|---|---|",

@@ -233,7 +233,10 @@ fn attempt(exe: &OsString, scratch: &Scratch, probe: Probe, name: &str) -> Resul
 /// directory beside the home: the sandbox grants the temp directory, which
 /// must not hold the home it protects.
 fn in_sandbox(exe: &OsString, scratch: &Scratch, command: &str) -> Reply {
-    let args = ["run", "--", "/bin/sh", "-c", command].map(OsString::from);
+    // The Lightweight tier on Linux too, where the Isolated one is the default
+    // (ADR-080): what holds here holds there, whose Landlock rules and seccomp
+    // filter are the same, under bubblewrap's narrower view.
+    let args = ["run", "--no-isolate", "--", "/bin/sh", "-c", command].map(OsString::from);
     let mut cmd = scratch.command(exe, &args);
     cmd.env("TMPDIR", &scratch.tmp);
     hook::send(&mut cmd, "")

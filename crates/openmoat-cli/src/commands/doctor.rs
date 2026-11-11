@@ -112,24 +112,14 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         .and_then(|policy| warnings::state_in_grant(&home, policy, linux));
     let macos = warnings::old_macos(crate::os_version::macos().as_deref());
     let network = super::run::port_only_network();
-    let lightweight = super::run::tier::doctor_warning(super::run::bubblewrap());
     let alias = warnings::alias_hooks(&home, &binary);
     let expiring = warnings::grant_expiry(&home, crate::time::now_ms());
     let keys = warnings::key_modes(&home);
-    for warning in [
-        tiocsti,
-        hangs,
-        undecided,
-        state,
-        macos,
-        network,
-        lightweight,
-        expiring,
-    ]
-    .into_iter()
-    .flatten()
-    .chain(alias)
-    .chain(keys)
+    for warning in [tiocsti, hangs, undecided, state, macos, network, expiring]
+        .into_iter()
+        .flatten()
+        .chain(alias)
+        .chain(keys)
     {
         report.warn(&warning);
     }
@@ -154,6 +144,13 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     if let Some(boundary) = &boundary {
         let text = format!("run boundary     {}", boundary.describe());
         report.line(Area::Sandbox, boundary.met, text);
+    }
+    // Which tier a plain `openmoat run` starts here (ADR-080); Linux only.
+    let strict = boundary.as_ref().map(|b| b.by.as_str());
+    match super::run::tier_row(strict) {
+        Some((true, text)) => report.warn(&text),
+        Some((false, text)) => report.line(Area::Sandbox, true, text),
+        None => {}
     }
     if let Some(policy) = &policy {
         let hosts = crate::mcp::set_up_hosts(&home, &binary);
@@ -204,6 +201,15 @@ fn protections(report: &mut Report, home: &Home, binary: &Path) -> Result<()> {
                 report.warn_at(&text, Place::Details);
             }
             report.note(&format!("{:<16} known gaps: {}", agent.name, agent.gaps));
+        }
+        // The text output shows it under the agent's row
+        // (`report::fails_open_rows`); `--format json` has it as a note.
+        if let Some(line) = agent
+            .hook_failure
+            .as_ref()
+            .and_then(protection::Failure::line)
+        {
+            report.note(&format!("{:<16} {line}", agent.name));
         }
         // Below the level the policy requires, every call is denied (ADR-064):
         // a problem, shown under the agent's row (`report::agent_table`).

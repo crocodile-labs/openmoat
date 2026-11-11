@@ -81,6 +81,17 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          `disabledPlugins` of a `settings.json`, set `enabled: false` under `plugins` in \
          `config.yaml`, replaced by a project plugin named `openmoat`, or a `hooks.json` goose \
          cannot read",
+    // `on_failure: block`, which `openmoat init` sets: a hook that cannot
+    // start, times out or exits non-zero without a block blocks the call.
+    hook_failure: crate::HookFailure {
+        fails: crate::FailureOutcome::Blocks,
+        times_out: crate::FailureOutcome::Blocks,
+        timeout_s: Some(60),
+        turned_off_by: "`disabledPlugins` in a `settings.json`, `enabled: false` under \
+                        `plugins` in `config.yaml`, a project plugin named `openmoat`, or a \
+                        `hooks.json` goose cannot read",
+        sources: &["https://github.com/aaif-goose/goose/blob/v1.57.0/crates/goose/src/hooks/mod.rs"],
+    },
     gaps: "no OS sandbox from OpenMoat; Code Mode's `execute_javascript` calls other tools \
          without the hook, so it needs review (a deny in goose); goose loads plugins once, from the \
          directory it starts in: a project's `.agents/plugins/` can add hooks or a plugin named \

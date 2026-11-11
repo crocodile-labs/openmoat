@@ -29,6 +29,7 @@ fn agents() -> Vec<Protection> {
                 limit: None,
                 required: None,
                 os_sandbox: None,
+                hook_failure: None,
             }
         })
         .collect()
@@ -228,6 +229,11 @@ fn rows_keep_their_json_text() {
     );
     assert_eq!(
         default_place(Status::Warning, None, "openmoat run"),
+        Place::OpenMoat
+    );
+    // The tier a plain `openmoat run` starts is shown without `--verbose`.
+    assert_eq!(
+        default_place(Status::Ok, Some(Area::Sandbox), "openmoat run"),
         Place::OpenMoat
     );
     assert_eq!(label("mcp servers"), "MCP servers");

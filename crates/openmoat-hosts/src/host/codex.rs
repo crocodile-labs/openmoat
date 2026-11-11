@@ -51,6 +51,20 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
          other than 2 (or 2 with nothing on stderr), or times out (default 600 s)",
+    // The hooks page does not say what a failed local hook does; the hook
+    // runner's source does: only exit 2 with stderr, or a decision, blocks.
+    hook_failure: crate::HookFailure {
+        fails: crate::FailureOutcome::Runs,
+        times_out: crate::FailureOutcome::Runs,
+        timeout_s: Some(600),
+        turned_off_by: "`[features] hooks = false` in `config.toml` (or `requirements.toml`), \
+                        turning the hook off in `/hooks`, or a hook Codex has not been told to \
+                        trust",
+        sources: &[
+            "https://learn.chatgpt.com/docs/hooks",
+            "https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/hooks/src/engine/command_runner.rs#L417",
+        ],
+    },
     gaps: "web search, hosted tools, code mode's `exec`/`wait` and `request_permissions` are \
          not hooked; what `write_stdin` types into a running command is not hooked, so a \
          command that starts a shell, REPL, editor or login without its own commands needs \

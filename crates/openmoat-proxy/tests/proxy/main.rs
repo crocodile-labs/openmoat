@@ -300,6 +300,7 @@ fn tunnel_with(h: &Harness, host: &str, hello: &[u8]) -> (TcpStream, String) {
 mod broker;
 mod http;
 mod limits;
+mod post;
 mod private;
 mod sessions;
 mod terminate;

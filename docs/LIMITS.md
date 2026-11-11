@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Read this when** you want to know what OpenMoat does not stop, before you rely on it.
 
-**On this page:** [Approvals and prompts](#approvals-and-prompts) · [Sandboxes and allowed code](#sandboxes-and-allowed-code) · [What the hook does not see](#what-the-hook-does-not-see) · [When an agent skips or changes the check](#when-an-agent-skips-or-changes-the-check) · [Limits of single checks](#limits-of-single-checks)
+**On this page:** [Approvals and prompts](#approvals-and-prompts) · [Sandboxes and allowed code](#sandboxes-and-allowed-code) · [What the hook does not see](#what-the-hook-does-not-see) · [When an agent skips or changes the check](#when-an-agent-skips-or-changes-the-check) · [Limits of single checks](#limits-of-single-checks) · [Snapshots and restore](#snapshots-and-restore)
 
 OpenMoat checks the tool calls an agent's hook reports. It does not confine every call.
 If its own check errors or hangs, OpenMoat blocks the call; the agents that still run a
@@ -48,9 +48,8 @@ Each agent's gaps and the reasons are in
   `PowerShell` and `Monitor`; its file tools, `WebFetch` and MCP servers run outside it.
   Cursor runs some commands outside its sandbox.
 - **`require.run: full-boundary` is about `openmoat run`.** It refuses a run without an OS
-  sandbox or, on Linux, without a network of the agent's own. An agent started without
-  `openmoat run` is not refused, and on Linux the setting does not imply `--isolate`, so
-  paths inside the project stay open to commands under plain `openmoat run`
+  sandbox or, on Linux, without the Isolated tier (ADR-080). An agent started without
+  `openmoat run` is not refused
   ([POLICY.md §9.3](POLICY.md#93-requiring-openmoat-runs-full-boundary-requirerun)).
 - **`openmoat run` keeps an inherited variable from the agent only under
   `require.run: full-boundary`.** Otherwise every variable reaches it except brokered
@@ -78,10 +77,16 @@ Each agent's gaps and the reasons are in
   there; other agents' logins stay denied. An API-key login can go through the broker
   instead ([BROKER_LOGINS.md](BROKER_LOGINS.md)); an OAuth login cannot
   ([ADR-054](adr/ADR-054-agent-credentials-in-sandboxes.md)).
-- **On Linux, plain `openmoat run` does not protect files inside the project:**
+- **On Linux, the Lightweight tier does not protect files inside the project:**
   commands the agent starts can read and write `.env`, create `.envrc`, and write `.moat`
-  and `.git/hooks`. `openmoat run` says so when it starts and `openmoat doctor` warns about
-  it; `openmoat run --isolate` (bubblewrap) closes it. An agent's hook settings in the
+  and `.git/hooks`. `openmoat run` starts the Isolated tier (bubblewrap), which closes it,
+  by default where bubblewrap works (ADR-080); the Lightweight tier runs with
+  `--no-isolate` or where bubblewrap is missing or blocked, and then `openmoat run` says so
+  when it starts, records it in the audit log and `openmoat doctor` warns. The Isolated
+  tier shows the agent only the project, the read roots and `--write` paths, so an agent
+  whose runtime lives elsewhere in the home (a `node` under `~/.nvm`) can fail to start in
+  it until that directory is in `sandbox.read_roots`; this was not tried with every agent.
+  An agent's hook settings in the
   project (`.gemini/settings.json`, `.claude/settings.local.json`, …) are protected where
   the agent gets a network namespace, missing ones by a read-only `{}` placeholder for the
   session; without a namespace a command can create one that turns the next session's
@@ -191,8 +196,43 @@ Each agent's gaps and the reasons are in
   crashes, times out or prints bad JSON, and has no documented setting that blocks then, so
   OpenMoat assumes the call runs there; `--dangerously-skip-permissions` approves its
   requests unseen, which OpenMoat cannot see, and a `review` under a saved
-  `toolPermission: always-proceed` is a deny. It is checked from its documentation only,
-  not against a running `agy`.
+  `toolPermission: always-proceed` is a deny. Antigravity CLI is a preview host: its
+  support is built from the documentation, and in the weekly check of 2026-11-10 a
+  headless agy 1.5.5 turn started no hook from `~/.gemini/config/hooks.json` while the
+  fake API received tool results for both of its calls (the host's `HOST.md`, "The first
+  real run").
+
+### If the hook fails
+
+What each agent does with a tool call when OpenMoat's hook fails in a way the hook
+cannot catch itself (its binary is gone, it is killed, the host's time limit runs out),
+or is turned off. The time limit is the one `openmoat init` installs, or OpenMoat's
+plugin's own. "Fails open" means the call runs unchecked in that case; `openmoat doctor`
+names such an agent under its row with what to do: start it with `openmoat run`, whose OS
+sandbox holds the boundary when the hook does not (`docs/SANDBOX.md`), and add
+`require.run: full-boundary` to the policy so `openmoat run` refuses to start without it.
+The weekly latest-agent job runs the real agents with the hook made to fail and fails
+when an agent runs a call this table says it blocks (ADR-079). Generated from each host's
+`HostSpec::hook_failure` (`OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test
+docs`); do not edit the table.
+
+<!-- generated:hosts-hook-failure -->
+| Agent | Hook cannot start, crashes or exits non-zero | Hook times out | Time limit | Turned off (every call runs unchecked) | Fails open | Source |
+|---|---|---|---|---|---|---|
+| Claude Code | blocks the call from 2.1.295 (`openmoat init` asks for it); runs it before | blocks the call from 2.1.295 (`openmoat init` asks for it); runs it before | 600 s | `disableAllHooks: true` in a settings file (a project's included), `--settings '{"disableAllHooks": true}'`, or deleting the entry | before that version: cannot start, crashes or exits non-zero; times out | [1](https://code.claude.com/docs/en/hooks) |
+| Codex | runs the call | runs the call | 600 s | `[features] hooks = false` in `config.toml` (or `requirements.toml`), turning the hook off in `/hooks`, or a hook Codex has not been told to trust | yes: cannot start, crashes or exits non-zero; times out | [1](https://learn.chatgpt.com/docs/hooks) [2](https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/hooks/src/engine/command_runner.rs#L417) |
+| Cursor | blocks the call | blocks the call | 600 s | deleting the entry from `hooks.json`, or an entry without `failClosed: true` (`openmoat status` calls that not protected) | no | [1](https://cursor.com/docs/agent/hooks) |
+| OpenClaw | blocks the call | blocks the call | 45 s | a Gateway that does not load the plugin (disabled in `openclaw.json`, or a load error, which leaves the Gateway running) | no | [1](https://docs.openclaw.ai/plugins/hooks/reference) |
+| GitHub Copilot CLI | blocks the call | runs the call | 600 s | `disableAllHooks: true` in a hook file or in a repository's `settings.json`, or deleting the hook file | yes: times out | [1](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference) |
+| pi | blocks the call | blocks the call | 45 s | `pi --no-extensions`, or an `extensions` entry in pi's or a trusted project's settings that turns the extension off | no | [1](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md) |
+| Gemini CLI | runs the call | runs the call | 600 s | `hooks` turned off in the user's or a project's `settings.json`, or a folder Gemini CLI does not trust (which runs no settings hooks) | yes: cannot start, crashes or exits non-zero; times out | [1](https://geminicli.com/docs/hooks/reference/) |
+| OpenCode | blocks the call | blocks the call | 45 s | OpenCode 1's `--pure` or `OPENCODE_PURE`, OpenCode 2's `-openmoat` in `plugins` (a project's included), or an error loading the plugin | no | [1](https://opencode.ai/docs/build/plugins/server) |
+| Hermes Agent | blocks the call | blocks the call | 30 s | the hook missing from `config.yaml` or from `shell-hooks-allowlist.json` (gateway, cron and ACP sessions), another profile, or `HERMES_SAFE_MODE=1` | no | [1](https://github.com/NousResearch/hermes-agent/blob/v0.22.5/agent/shell_hooks.py) |
+| Cline CLI | runs the call | runs the call | 120 s | `--yolo`, or `--config`, `--hooks-dir` or a moved `CLINE_DIR` OpenMoat did not install into | yes: cannot start, crashes or exits non-zero; times out | [1](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/hook-file-hooks.ts) [2](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/subprocess-runner.ts) |
+| goose | blocks the call | blocks the call | 60 s | `disabledPlugins` in a `settings.json`, `enabled: false` under `plugins` in `config.yaml`, a project plugin named `openmoat`, or a `hooks.json` goose cannot read | no | [1](https://github.com/aaif-goose/goose/blob/v1.57.0/crates/goose/src/hooks/mod.rs) |
+| Antigravity CLI | not documented; assumed to run the call | not documented; assumed to run the call | 600 s | `enabled: false` on the entry (a project's `.agents/hooks.json` included), or deleting it | yes: cannot start, crashes or exits non-zero; times out | [1](https://antigravity.google/docs/hooks?tab=cli) |
+| Continue CLI | runs the call | runs the call | 600 s | always: the released Continue CLI fires no hook | yes: cannot start, crashes or exits non-zero; times out | [1](https://github.com/continuedev/continue/blob/main/extensions/cli/src/hooks/hookRunner.ts) |
+<!-- /generated -->
 - **Agent settings can turn hooks off.** Codex runs a new or changed hook only once you
   trust it in its `/hooks` view, and settings such as `disableAllHooks` (Claude Code,
   Copilot CLI) or `[features] hooks = false` (Codex) turn hooks off. `openmoat status`
@@ -304,3 +344,50 @@ Each agent's gaps and the reasons are in
   loopback, so a program running as you could read the log file directly anyway; it adds
   nothing for that program, and nothing for another user, a web page or another machine
   without the token ([ADR-066](adr/ADR-066-openmoat-serve.md)).
+- **Live audit delivery sends what the log says, masked, and only when calls are made.**
+  A sink receives the commands, paths and hosts of every call, with known secrets and
+  credential shapes masked; a secret of a shape OpenMoat does not know goes as it was
+  recorded. Delivery runs after hook calls and when a person runs `openmoat audit deliver
+  flush`, so a machine where no agent runs sends nothing new. A sink that falls more than
+  `max_backlog` events behind is told which events it missed, not sent them; they stay in
+  the local log. The OTLP bodies follow the specification's JSON encoding and are tested
+  against a local test server only, not against a vendor's intake
+  ([DELIVERY.md](DELIVERY.md#limits), [ADR-081](adr/ADR-081-live-audit-delivery.md)).
+
+## Snapshots and restore
+
+`openmoat run` takes a snapshot of the project's files before the agent starts and after it
+exits, and `openmoat restore` puts them back ([USAGE.md](USAGE.md#put-the-projects-files-back),
+[ADR-085](adr/ADR-085-workspace-snapshot-and-restore.md)). A snapshot does not cover:
+
+- **Anything outside the project's files.** Network sends, `git push`, database writes,
+  package registries, files outside the project and changes to your home directory are
+  not undone.
+- **Files a snapshot leaves out.** What the project's `.gitignore` files and
+  `.git/info/exclude` ignore (`node_modules/`, build output; your global git excludes
+  file is not read), every path a deny rule names (`.env`, keys, an agent's settings,
+  `.moat`), anything inside `.git` (branches, history, the index and hooks are not
+  restored: use git for those), nested git repositories, files over 5 MiB, sockets and
+  pipes, and names that are not UTF-8. Each snapshot names what it left out
+  (`openmoat snapshot --list`), and a restore leaves those paths as they are. An ignored
+  file that was there when the snapshot was taken is also left as it is, even when the
+  project no longer ignores it.
+- **Large projects.** Over 100 000 files or 1 GiB to keep, no snapshot is taken (the
+  run says so and goes on); ignore the generated folders.
+- **Metadata.** Only contents, symbolic links and the executable bit come back: other
+  permissions, owners, times, extended attributes and empty folders do not. Symbolic
+  links are not restored on Windows.
+- **Runs without one.** A run with `--no-snapshot`, a run started from an agent, an agent
+  started without `openmoat run`, and changes made between two snapshots inside one session
+  (only the start and the end are kept). A failed snapshot is said and recorded; the run
+  goes on.
+- **A restore while the agent runs.** Stop the agent first: a file it writes during the
+  restore can be overwritten or left half-restored. A path whose folder is a link or a file
+  now is skipped and named, never written through. On macOS and Linux this holds even
+  when the agent swaps a folder for a link while the restore writes: each write and delete
+  is made in the folder that was checked, held open. On Windows each folder is checked
+  again right before the change, which leaves a moment in which a junction swapped in is
+  not seen.
+- **Lost files after the retention.** Per project the newest 50 snapshots are kept, none
+  older than 14 days (the newest always). The store holds old contents of the project's
+  files on this machine until then; `openmoat uninstall --purge` deletes it.

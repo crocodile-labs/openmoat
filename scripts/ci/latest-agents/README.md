@@ -35,7 +35,7 @@ the agent's output.
 | Hermes Agent (`hermes`) | its own installer, latest tag | `hermes hooks list` (allowlisted), `hermes hooks doctor`, `hermes hooks test pre_tool_call`: OpenMoat's hook run through the code a session uses, and the block it returns | a model turn dispatching to the hook |
 | Cline CLI (`cline`) | npm (`cline`), scripts off | `cline config hooks --json` lists `hooks/PreToolUse`; `cline --json` with its `openai-compatible` provider (`cline auth -b`) at `fake_openai.py`: one `run_commands` call | the VS Code extension, which reads hooks elsewhere |
 | goose (`goose`) | the release archive for the runner (`goose-<arch>-<os>.tar.gz`), latest tag; its sha256 printed | a `goose run` turn against the fake API (its OpenAI provider), whose `shell` call `cat ~/.ssh/id_rsa` the plugin's hook denies (first run unproven: the provider variables are read from goose's source, not a capture) | the desktop app |
-| Antigravity CLI (`antigravity-cli`) | the installer script (URL from third-party guides; its sha256 is printed) | `agy -p` against `fake_gemini.py` (`modelProvider: gemini`, `GOOGLE_GEMINI_BASE_URL`): one `run_command` call, `cat ~/.ssh/id_rsa`, denied by the hook. First run unproven: the installer's URL and the Gemini wire format come from documentation and guides, not a capture | interactive prompts, `force_ask` under `-p`, hook failure behaviour |
+| Antigravity CLI (`antigravity-cli`) | the installer script (URL from third-party guides; its sha256 is printed), which installs the version its manifest names, with no channel to choose | `agy -p --dangerously-skip-permissions` against `fake_gemini.py` (`modelProvider: gemini`, `GOOGLE_GEMINI_BASE_URL`): one `run_command` call, `cat ~/.ssh/id_rsa`, denied by the hook. **Failing since the first run (agy 1.5.5, 2026-11-10):** the fake API received tool results for both calls and no hook in `~/.gemini/config/hooks.json` started. The run now leaves what tells the causes apart: the `agy_probe.py` entry (events with no matcher and the documented example matchers; its verdict is a job annotation), agy's own log (`agy-cli.log`, `--log-file`), `agy -p /hooks` (`agy-hooks.txt`), the configuration files it opened (`agy-opened.txt`, where the runner has strace), the files it wrote, what each tool result said (`fake-api.log`), and, when no hook ran, a second run without the flag, which never passes the job | interactive prompts, `force_ask` under `-p`; hook failure behaviour only as the hook-failure step observes it (below) |
 | Cursor (`cursor`) | the package Cursor's install script names (no checksum is published; its sha256 is logged) | none: every `cursor-agent` run needs a Cursor account | that `cursor-agent` loads `hooks.json` at all |
 | Continue CLI (`continue`) | `npm pack`, read only | not set up: the released `cn` runs no hooks | the job fails once `cn` calls its `PreToolUse` hook, so that `continue_cli.rs` can get an install |
 
@@ -123,6 +123,43 @@ agents, whose event a plugin or script of OpenMoat's would have to send.
 `python3 -I scripts/ci/latest-agents/test_after_call.py` (in the quality gate) tests the
 redaction, the notice and each `NOT CAPTURED` reason; only a run of this job can show what
 an agent sends.
+
+## When the hook fails
+
+Each agent's host spec says what it does with a call when OpenMoat's hook fails
+(`HookFailure`, ADR-079; the table in `docs/LIMITS.md` "If the hook fails"), and `openmoat
+status --format json` carries it as `hook_failure`. The last step proves it against the real
+agent, for each agent step 4 starts with a model call. `init` writes the hook naming a copy
+of `OPENMOAT_BIN` in the throwaway root; the step puts a stand-in there, starts the agent once
+per case with one call, `cat ~/hook-failure-probe.txt | tee hook-failure-ran.txt`, and puts
+the binary back:
+
+| Case | The stand-in | Compared with |
+|---|---|---|
+| `crash` | exits 1 with nothing printed | `hook_failure.fails` |
+| `missing` | none: the hook names a file that is gone | `hook_failure.fails` |
+
+A hook that hangs is not tried: waiting out each agent's time limit (30 s to 600 s) would
+make the job outlast its own time limit, so `hook_failure.times_out` rests on the vendors'
+documentation and source alone.
+
+The call ran when the probe file's marker is in what the agent printed, in the fake API's
+log, or in the copy in the project. It was blocked when the marker is nowhere and the
+stand-in logged the hook's start or the agent sent the model a result of the call. Every
+outcome is a line of `hook-failure.json` in the artefact.
+
+- **Fails the job** when the call ran where the fact says the agent blocks: OpenMoat
+  would be telling people a failed hook stops a call it does not (`::error`).
+- **Reported, not failed** (`::notice`): a call blocked where the fact says it runs or the
+  vendor does not document it. The fact changes only once the vendor's documentation or
+  source says so, with the source in the spec.
+- **Reported as proving nothing** (`::warning`): neither evidence, for example an agent
+  that never made the call.
+- **Not run:** Cursor (an account), Hermes Agent and OpenCode 2 (no model call is driven
+  through them here).
+
+`python3 -I scripts/ci/latest-agents/test_check.py` (in the quality gate) tests how an
+outcome is read and compared; only a run of this job shows what an agent does.
 
 ## When it fails
 

@@ -1760,6 +1760,14 @@
   threat: T9
   action: { shell: "openmoat proxy ca --help" }
   expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-restore-help
+  threat: T9
+  action: { shell: "openmoat restore --help" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+# a project's own `snapshots` folder is not OpenMoat's store
+- id: benign-read-project-snapshots-folder
+  action: { fs_read: "/p/tests/snapshots/output.snap" }
+  expect: { verdict: allow }
 # reading whether plugins loaded stays the person's and the agent's to do
 - id: benign-openmoat-status-plugins
   action: { shell: "openmoat status --format json" }

@@ -167,4 +167,43 @@ impl Store {
         )?;
         rows.map(|row| ExportedEvent::from_row(row?)).collect()
     }
+
+    /// At most `limit` chained events after `after`, oldest first, in export
+    /// form: the next batch of a live delivery (ADR-081).
+    pub fn export_after(
+        &self,
+        after: EventId,
+        limit: usize,
+    ) -> Result<Vec<ExportedEvent>, StoreError> {
+        if !self.chained() {
+            return Ok(Vec::new());
+        }
+        let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+        let mut stmt = self.conn.prepare(&format!(
+            "{ROWS} WHERE hash IS NOT NULL AND prev_hash IS NOT NULL AND id > ?1
+             ORDER BY id LIMIT ?2"
+        ))?;
+        let rows = stmt.query_map(params![after.0, limit], read_row)?;
+        rows.map(|row| ExportedEvent::from_row(row?)).collect()
+    }
+
+    /// How many events have an id after `after` and at most `upto`.
+    pub fn count_between(&self, after: EventId, upto: EventId) -> Result<u64, StoreError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM events WHERE id > ?1 AND id <= ?2",
+            params![after.0, upto.0],
+            |r| r.get(0),
+        )?;
+        Ok(u64::try_from(count).unwrap_or(0))
+    }
+
+    /// The newest event recorded before `ts_ms`, if any.
+    pub fn last_before(&self, ts_ms: i64) -> Result<Option<EventId>, StoreError> {
+        let id: Option<i64> = self.conn.query_row(
+            "SELECT MAX(id) FROM events WHERE ts_ms < ?1",
+            params![ts_ms],
+            |r| r.get(0),
+        )?;
+        Ok(id.map(EventId))
+    }
 }

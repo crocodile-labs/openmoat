@@ -12,14 +12,14 @@ are over all the runs; the p95 is the median of the batches' p95, as in
 guard-session-latency.py: a few slow process starts on a busy runner push up
 one batch, rarely two of three, while a real regression slows every batch.
 
-The 15 ms p95 budget is in docs/ARCHITECTURE.md (testing layers). The check
-exists to catch a regression of the kind fixed in #95 (a policy load that
-grew to most of the budget), which shows in the guard's own time, not to
-measure the laptop number or the runner's process start. How a run passes is
-in latency_ab.py: with one binary, the guard's own p95 fails above three times
-the budget; with `--base`, the binary of the commit the change lands on is
-timed in turn on the same runner, and the change fails only when its own p95
-is clearly worse than that.
+The p95 budget (20 ms on Linux, 45 ms on macOS runners, ADR-080) is in
+docs/ARCHITECTURE.md (testing layers). The check exists to catch a regression
+of the kind fixed in #95 (a policy load that grew to most of the budget),
+which shows in the guard's own time, not to measure the laptop number or the
+runner's process start. How a run passes is in latency_ab.py: with `--base`,
+which CI always passes, the binary of the commit before is timed in turn on
+the same runner, and the change fails only when its own p95 is clearly worse
+than that; with one binary, the guard's own p95 fails above 45 ms.
 
 A `PostToolUse` call writes no audit row (the call's record is its
 `PreToolUse` row), so it has no `latency_us`: its end to end p95 is held to

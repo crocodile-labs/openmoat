@@ -307,7 +307,9 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 }
 
 /// Standard base64 (RFC 4648 §4), padding optional; `None` on any other byte.
-fn base64(input: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
+/// The bytes are wiped when dropped: what it decodes is usually a credential.
+#[must_use]
+pub fn base64(input: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
     let data = input
         .strip_suffix(b"==")
         .or_else(|| input.strip_suffix(b"="))

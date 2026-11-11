@@ -10,10 +10,14 @@ mod mcp;
 mod policy;
 mod provenance;
 mod serve;
+mod snapshot;
 
 mod timeline;
 
-pub use audit::{AnchorArgs, AuditCommand, EvidenceArgs, ExportArgs, TeamReportArgs, VerifyArgs};
+pub use audit::{
+    AnchorArgs, AuditCommand, DeliverCommand, DeliverFlushArgs, DeliverStatusArgs, DeliverTestArgs,
+    EvidenceArgs, ExportArgs, TeamReportArgs, VerifyArgs,
+};
 pub use mcp::{McpAcceptArgs, McpCommand, McpProxyArgs, McpUnwrapArgs, McpWrapArgs};
 pub use policy::{
     ActionKind, CheckArgs, CheckDiffArgs, CompileArgs, DiffFormat, InstallArgs, LintArgs,
@@ -21,6 +25,7 @@ pub use policy::{
 };
 pub use provenance::{DiffProvenanceArgs, ProvenanceArgs, ProvenanceLevel};
 pub use serve::ServeArgs;
+pub use snapshot::{RestoreArgs, SnapshotArgs};
 
 pub use timeline::{Only, WatchArgs, WhyArgs};
 
@@ -111,10 +116,19 @@ pub enum Command {
         command: AuditCommand,
     },
     /// Run an agent and everything it starts in one sandbox made from the policy, with
-    /// network only through OpenMoat's proxy (macOS, Linux; `--isolate` for a stricter
-    /// one on Linux). Turn the agent's own sandbox off. On Linux without `--isolate`,
-    /// files inside the project (`.env`, `.git`, `.moat`) are not protected.
+    /// network only through OpenMoat's proxy (macOS, Linux; on Linux the Isolated tier
+    /// where bubblewrap works). Turn the agent's own sandbox off. On Linux in the
+    /// Lightweight tier (`--no-isolate`, or no bubblewrap), files inside the project
+    /// (`.env`, `.git`, `.moat`) are not protected.
     Run(RunArgs),
+    /// Take a snapshot of the project's files into OpenMoat's own store, list the
+    /// snapshots (`--list`) or remove old ones (`--prune`). `openmoat run` takes one
+    /// before the agent starts and one after it exits. Refused when an agent started it.
+    Snapshot(SnapshotArgs),
+    /// Put the project's files back as a snapshot holds them: shows what changes and
+    /// asks first, and takes a snapshot of the files as they are so the restore can be
+    /// undone. Refused unless run by a person at an interactive terminal.
+    Restore(RestoreArgs),
     /// What `openmoat run` starts inside bubblewrap on Linux (not for people).
     #[command(hide = true)]
     Isolated(IsolatedArgs),
@@ -476,11 +490,9 @@ pub struct RunArgs {
     #[arg(long)]
     pub verbose: bool,
 
-    /// Stricter sandbox (Linux, bubblewrap): the agent sees only the project without its
-    /// denied paths, the policy's read roots and `--write` paths, and reaches only
-    /// OpenMoat's proxy. Refused where bubblewrap cannot run.
-    #[arg(long)]
-    pub isolate: bool,
+    // `--isolate` or `--no-isolate`.
+    #[command(flatten)]
+    pub tier: TierArgs,
 
     /// Where the agent cannot get a network of its own (Linux, bubblewrap): `auto`
     /// restricts its connections by port only and says so; `require` refuses to start.
@@ -493,9 +505,33 @@ pub struct RunArgs {
     #[arg(long = "env", value_name = "NAME", value_parser = parse_env_name)]
     pub envs: Vec<String>,
 
+    /// Take no snapshot of the project before the agent starts and after it exits
+    /// (recorded in the audit log).
+    #[arg(long)]
+    pub no_snapshot: bool,
+
     /// The agent and its arguments, after `--`.
     #[arg(required = true, last = true, value_name = "AGENT")]
     pub command: Vec<std::ffi::OsString>,
+}
+
+/// Which tier `openmoat run` starts, when the person names one.
+#[derive(Debug, Args)]
+pub struct TierArgs {
+    /// The Isolated tier (Linux, bubblewrap), or nothing: the agent sees only the project
+    /// without its denied paths, the policy's read roots and `--write` paths, and reaches
+    /// only OpenMoat's proxy. Refused where bubblewrap cannot run. Without this flag or
+    /// `--no-isolate`, Linux starts this tier where bubblewrap works and otherwise says
+    /// why and starts the Lightweight tier.
+    #[arg(long)]
+    pub isolate: bool,
+
+    /// The Lightweight tier on Linux instead of the default Isolated tier: commands can
+    /// read and write `.env`, `.git` and `.moat` inside the project. Recorded in the
+    /// audit log; refused when a policy has `require.run: full-boundary`. Changes
+    /// nothing on macOS, which has no Isolated tier yet.
+    #[arg(long, conflicts_with = "isolate")]
+    pub no_isolate: bool,
 }
 
 /// `--env`: the one form the policy's `sandbox.env_allow` takes too.
