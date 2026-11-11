@@ -23,6 +23,8 @@ const SECRET: &str = "OPENMOAT-MCP-BOUNDARY-FAKE-SECRET";
 const NOTES: &str = "OPENMOAT-MCP-BOUNDARY-NOTES";
 /// What `openmoat run` prints once the server is in its sandbox.
 const IN_SANDBOX: &str = "in a sandbox made from the policy";
+/// What `openmoat run` adds to that line when it started the Isolated tier.
+const ISOLATED: &str = "it sees only the project";
 /// The tools that go for the secret.
 const READS: [&str; 3] = ["relative", "absolute", "through_link"];
 /// Every tool in the order the sessions call them; the id is the position.
@@ -174,12 +176,20 @@ fn the_sandbox_holds_a_server_that_tries_to_leave_its_folder() {
     assert!(!shown.contains(SECRET), "the secret came back: {shown}");
     assert_eq!(std::fs::read_to_string(&boundary.canary).unwrap(), SECRET);
     assert!(!boundary.escaped.exists(), "written outside: {shown}");
-    // Each attempt reached the file system and was refused there.
+    // Each attempt reached the file system and was refused there. The
+    // Lightweight tier (macOS, Linux without bubblewrap) denies a path that is there; the Isolated tier,
+    // `openmoat run`'s default on Linux (ADR-080), does not mount the home at
+    // all, so the same paths are not there, and Landlock denies the rest.
+    let refusals: &[&str] = if stderr(&out).contains(ISOLATED) {
+        &["refused: PermissionError", "refused: FileNotFoundError"]
+    } else {
+        &["refused: PermissionError"]
+    };
     for tool in READS.iter().chain(&["write_outside"]) {
-        assert_eq!(
-            answer_of(&host, tool),
-            "refused: PermissionError",
-            "{tool}: {shown}"
+        let answer = answer_of(&host, tool);
+        assert!(
+            refusals.contains(&answer.as_str()),
+            "{tool} answered {answer}: {shown}"
         );
     }
 }
