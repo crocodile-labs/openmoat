@@ -258,7 +258,9 @@ pub(super) fn wrap_plan(
     let new_sandbox = sandbox.unwrap_or(super::run::unavailable().is_none());
     let mut edits = Vec::new();
     let mut left = 0;
-    for (source, server) in wrap::user_servers(home, hosts)? {
+    let servers = wrap::user_servers(home, hosts)?;
+    left += unknown_names(&servers, names, "wrap", out)?;
+    for (source, server) in servers {
         if !names.is_empty() && !names.contains(&server.name) {
             continue;
         }
@@ -273,7 +275,13 @@ pub(super) fn wrap_plan(
             None => wrap::with_host(&server.entry, form, host),
         };
         let Some(entry) = entry else {
-            if let Some(why) = wrap::not_wrappable(&server.entry, form) {
+            let why = wrap::not_wrappable(&server.entry, form).or_else(|| {
+                // Asked for by name, not wrapped already, and nothing to
+                // wrap: a remote server, or one naming no program.
+                (!names.is_empty() && wrap::sandboxed(&server.entry, form).is_none())
+                    .then_some("it runs no local command, so there is nothing to wrap")
+            });
+            if let Some(why) = why {
                 writeln!(
                     out,
                     "! {} ({}) is left as it is: {why}",
@@ -292,6 +300,29 @@ pub(super) fn wrap_plan(
         edits.push((source, Done { server, entry }));
     }
     Ok(WrapPlan { edits, left })
+}
+
+/// Name each of `names` that is no server of `servers` (a typo, or a server
+/// of a project's file, which `moat mcp {verb}` does not change); how many.
+fn unknown_names(
+    servers: &[(crate::mcp::servers::Source, crate::mcp::servers::Server)],
+    names: &[String],
+    verb: &str,
+    out: &mut Deferred,
+) -> Result<usize> {
+    let mut unknown = 0;
+    for name in names {
+        if servers.iter().any(|(_, s)| &s.name == name) {
+            continue;
+        }
+        writeln!(
+            out,
+            "! {} is no MCP server in the agents' own files, so there is nothing to {verb}",
+            Named(name)
+        )?;
+        unknown += 1;
+    }
+    Ok(unknown)
 }
 
 /// Write `edits` from [`wrap_plan`] and say what they mean; how many.
@@ -403,7 +434,9 @@ pub(super) fn unwrap_servers(
     let pending = pending_ids(home, hosts)?;
     let mut edits = Vec::new();
     let mut left = 0;
-    for (source, server) in wrap::user_servers(home, hosts)? {
+    let servers = wrap::user_servers(home, hosts)?;
+    left += unknown_names(&servers, names, "unwrap", out)?;
+    for (source, server) in servers {
         let chosen = if names.is_empty() {
             recorded
                 .mcp_wrapped

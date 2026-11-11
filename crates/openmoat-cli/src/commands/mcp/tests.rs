@@ -219,6 +219,50 @@ fn every_line_naming_a_server_is_printed_without_its_escape_sequences() {
     }
 }
 
+/// A name asked for that is no server (a typo), or a remote server, is named
+/// and is not a success; a named server already wrapped is.
+#[test]
+fn a_named_server_not_done_is_not_a_success_and_one_already_wrapped_is() {
+    let text = r#"{"mcpServers": {"gh": {"command": "npx"},
+        "web": {"type": "http", "url": "https://example.invalid"}}}"#;
+    let (_dir, home, _file) = host_with_file(Host::ClaudeCode, ".claude.json", text);
+    let binary = Path::new("/x/openmoat");
+    let hosts = [Host::ClaudeCode];
+    let names = |n: &[&str]| n.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+    let wrap = |asked: &[String]| {
+        let mut out = Deferred::capturing();
+        let applied =
+            wrap_servers(&home, binary, &hosts, asked, Some(false), false, &mut out).unwrap();
+        (applied.code(asked), out.captured())
+    };
+
+    let typo = names(&["g\u{1b}[2Jh"]);
+    let (code, said) = wrap(&typo);
+    assert_eq!(code, Code::Usage, "{said}");
+    assert!(said.contains("`g?[2Jh` is no MCP server"), "{said:?}");
+    let (code, said) = wrap(&names(&["web"]));
+    assert_eq!(code, Code::Usage, "{said}");
+    assert!(
+        said.contains("`web`") && said.contains("nothing to wrap"),
+        "{said}"
+    );
+
+    let gh = names(&["gh"]);
+    assert_eq!(wrap(&gh).0, Code::Ok, "wrapped now");
+    let (code, said) = wrap(&gh);
+    assert_eq!(code, Code::Ok, "already wrapped: {said}");
+    assert!(!said.contains("left as it is"), "{said}");
+
+    let mut out = Deferred::capturing();
+    let applied = unwrap_servers(&home, &hosts, &typo, &mut out).unwrap();
+    assert_eq!(applied.code(&typo), Code::Usage);
+    assert!(
+        out.captured().contains("nothing to unwrap"),
+        "{}",
+        out.captured()
+    );
+}
+
 /// A server asked for by name that OpenMoat cannot put behind the proxy is
 /// named, counted and not a success; a sweep goes on past it.
 #[test]

@@ -1,0 +1,2 @@
+### Fixed
+- `openmoat mcp wrap <server>` and `unwrap <server>` exit 64 with a line naming the server when the name matches no server in the agents' own files (a typo), and `wrap` does so for a named remote server, which has nothing to wrap, instead of printing "no stdio MCP server to wrap" and succeeding; a named server already wrapped still succeeds ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
