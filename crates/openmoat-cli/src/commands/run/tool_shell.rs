@@ -57,6 +57,9 @@ pub struct ToolShell {
     moat: PathBuf,
     vars: &'static [&'static str],
     on_path: bool,
+    /// Whether this run made [`Self::dir`]: only then does dropping remove
+    /// it. A directory that already existed is someone else's.
+    made: bool,
 }
 
 /// What to tell the person when `host` has a wrapper and this run has none:
@@ -88,19 +91,24 @@ pub fn prepare(host: Option<Host>, write_roots: &[String]) -> Result<Option<Tool
     let installed = std::env::current_exe()
         .and_then(std::fs::canonicalize)
         .context("locating the openmoat binary")?;
-    let tools = ToolShell {
-        moat: dir.join(COPY),
-        dir,
-        vars,
-        on_path,
-    };
-    // On an error `tools` is dropped, which removes what was made of it.
+    let mut tools = ToolShell::new(dir, vars, on_path);
+    // On an error `tools` is dropped, which removes what this run made of it.
     tools.create(&installed)?;
     Ok(Some(tools))
 }
 
 impl ToolShell {
-    fn create(&self, installed: &Path) -> Result<()> {
+    fn new(dir: PathBuf, vars: &'static [&'static str], on_path: bool) -> Self {
+        Self {
+            moat: dir.join(COPY),
+            dir,
+            vars,
+            on_path,
+            made: false,
+        }
+    }
+
+    fn create(&mut self, installed: &Path) -> Result<()> {
         let builder = std::fs::DirBuilder::new();
         #[cfg(unix)]
         let builder = {
@@ -111,20 +119,22 @@ impl ToolShell {
         builder
             .create(&self.dir)
             .with_context(|| format!("creating {}", self.dir.display()))?;
-        // A hard link where the two are on one file system (no bytes copied,
-        // and a path inside this directory all the same), else a copy; never
-        // a symbolic link to where it is installed, which the agent's sandbox
-        // may hide. Either keeps the installed file's mode, and nothing the
-        // agent's commands may write holds the directory ([`prepare`]).
-        if std::fs::hard_link(installed, &self.moat).is_err() {
-            std::fs::copy(installed, &self.moat).with_context(|| {
-                format!(
-                    "copying {} into {}",
-                    installed.display(),
-                    self.dir.display()
-                )
-            })?;
-        }
+        self.made = true;
+        // A copy, never a link. A symbolic link names where the binary is
+        // installed, which the agent's sandbox may hide. A hard link is the
+        // installed file itself: where that sits under a write root (a
+        // project's `target/debug`, a writable `~/.local/bin`), a tool command
+        // could rewrite it in place, and the next tool shell would run that
+        // code holding the relay token. The copy keeps the installed file's
+        // mode, and nothing the agent's commands may write holds the
+        // directory ([`prepare`]).
+        std::fs::copy(installed, &self.moat).with_context(|| {
+            format!(
+                "copying {} into {}",
+                installed.display(),
+                self.dir.display()
+            )
+        })?;
         for name in NAMES {
             platform::link_tool_shell(&self.moat, &self.dir.join(name))
                 .with_context(|| format!("linking the tool shell {name}"))?;
@@ -172,7 +182,9 @@ impl ToolShell {
 
 impl Drop for ToolShell {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
+        if self.made {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
     }
 }
 
@@ -251,6 +263,8 @@ fn without_dir(path: &OsStr, dir: &Path) -> OsString {
 // `openmoat run` and its wrapper exist only on macOS and Linux.
 #[cfg(all(test, unix))]
 mod tests {
+    use std::os::unix::fs::MetadataExt as _;
+
     use super::*;
 
     #[test]
@@ -307,6 +321,13 @@ mod tests {
         }
         let copy = std::fs::metadata(&tools.moat).unwrap();
         assert!(copy.is_file());
+        // Not a hard link to the installed binary: one under a write root
+        // could be rewritten in place by a tool command.
+        let original = std::fs::metadata(&installed).unwrap();
+        assert!(
+            (copy.dev(), copy.ino()) != (original.dev(), original.ino()),
+            "the wrapper's binary is the installed file"
+        );
         assert_eq!(copy.len(), std::fs::metadata(&installed).unwrap().len());
         assert!(std::os::unix::fs::PermissionsExt::mode(&copy.permissions()) & 0o100 != 0);
         let grant = tools.grant();
@@ -314,6 +335,24 @@ mod tests {
         let made = tools.dir.clone();
         drop(tools);
         assert!(!made.exists(), "the copy outlives the run");
+    }
+
+    /// A directory already at the wrapper's path is not this run's: `create`
+    /// fails on it, and dropping the wrapper leaves it and what it holds.
+    #[test]
+    fn a_failed_create_keeps_a_directory_it_did_not_make() {
+        let system = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+        let dir = system.join(format!("{DIR_PREFIX}{}", random_hex(8).unwrap().as_str()));
+        std::fs::create_dir(&dir).unwrap();
+        let kept = dir.join("theirs");
+        std::fs::write(&kept, b"x").unwrap();
+        let installed = std::fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
+        let mut tools = ToolShell::new(dir.clone(), &[], false);
+        assert!(tools.create(&installed).is_err());
+        drop(tools);
+        let survived = kept.is_file();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(survived, "the wrapper removed a directory it did not make");
     }
 
     #[test]
