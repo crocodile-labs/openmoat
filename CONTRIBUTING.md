@@ -85,31 +85,51 @@ is pushed to `main` directly.
 | `needs: fixture` | core or policy changed without `tests/conformance/` | add a fixture |
 
 Checks that must pass before merge (enforced by the `main` ruleset; names as shown on the
-PR): `macos-15`, `macos-15-intel`, `ubuntu-latest`, `windows-latest` (the quality gate),
-`standard tier (macos-15)`, `standard tier (ubuntu-latest)`, `guard latency (macos-15)`,
-`guard latency (ubuntu-latest)`, `openmoat-core builds for wasm32 (no I/O)`, `cargo-deny`,
-`crates package and build from their tarballs`, `unused dependencies (cargo-machete)`,
-`semver of the library crates`, `shell scripts and markdown links`, `spelling (typos)`,
-`workflows (actionlint, zizmor)`, `conventional` (title), `labels · size · risk · body`
-(pr-standards) and `review threads answered`. `fuzz (smoke)`, the JavaScript jobs, the
-shell lexer against bash and CodeQL run on every PR but are not required: a fuzz finding
-should not block an unrelated change, so read them before merging.
+PR): `ci-ok`, `conventional` (title), `labels · size · risk · body` (pr-standards) and
+`review threads answered`. `ci-ok` is the last job of `.github/workflows/ci.yml`: it waits
+for every other job there and fails when any failed or was cancelled, or was skipped
+without the `changes` job ordering it (`scripts/ci/ci_ok.py`), so a new or renamed CI job
+needs no ruleset change. Every job of `ci.yml` counts, `fuzz (smoke)`, the JavaScript jobs
+and the shell lexer against bash included. Until the ruleset has moved to `ci-ok`, it also
+names the jobs one by one: `macos-15`, `macos-15-intel`, `ubuntu-latest`,
+`windows-latest`, `windows-latest e2e (2 of 2)`, the `standard tier` and `guard latency`
+legs, and the lint jobs. CodeQL and `adr-062 poc` are not required.
 
-What a pull request runs (`.github/workflows/ci.yml`, the `changes` job):
+What a pull request runs (`.github/workflows/ci.yml`, the `changes` job,
+`scripts/ci/changes.py`):
 
+- Every PR runs the quality gate on `ubuntu-latest`, `macos-15` and `windows-latest`
+  (the Windows end-to-end tests in two parts), the standard tier, guard latency, a
+  one-minute fuzz smoke per target and every lint job.
+- The slow legs, `macos-15-intel` and ADR-062 step 0 (`adr062-poc.yml`), run on a PR
+  only when it changes platform sandbox code (the Seatbelt, bubblewrap, Landlock and
+  seccomp backends, `openmoat run` on macOS and Linux, the default policy, the
+  toolchain, `.github/`, the CI decision scripts) or is labelled `ci:full`. Ten minutes
+  of fuzzing per target runs on a PR only with `ci:full`. The label is read when the
+  `changes` job runs: label the PR, then re-run its jobs. A leg held back still reports
+  success under its name, with every step skipped.
 - A PR that changes documentation only skips the Rust, JavaScript, fuzz and latency jobs;
   links, spelling, changelog fragments and release version strings are still checked.
-  `scripts/ci/changes.py` decides: a document that any test, build or script names (the
-  generated tables in `README.md`, `docs/USAGE.md`, `docs/COVERAGE.md`,
-  `docs/EVIDENCE.md`, …) counts as code, so changing it runs everything. A skipped job
-  still reports success under its name, so the required checks are met.
+  A document that any test, build or script names (the generated tables in `README.md`,
+  `docs/USAGE.md`, `docs/COVERAGE.md`, `docs/EVIDENCE.md`, …) counts as code, so
+  changing it runs everything.
+- When the `changes` job cannot tell (an error, an empty diff, labels it cannot read),
+  everything runs.
+- Every push to `main`, the weekly schedule and a run by hand run every leg, with long
+  fuzz. A release tag publishes only when the `ci` run of the push to `main` at that
+  commit completed green (`scripts/ci/main_ci_green.py`, the first step of
+  `release.yml`).
+- Rust build caches are saved by runs on `main` only, one per job; a PR restores them
+  and never writes one.
 - `guard latency` builds the commit the PR lands on as well and times both on the same
   runner, in turn; it fails when the PR makes the guard's own p95 clearly slower (more
   than 1.25 times and 5 ms over), or above 150 ms whatever the base measured
   (`scripts/ci/latency_ab.py`).
 - A new push cancels the PR's previous run. Runs on `main` are never cancelled.
 
-A PR must be up to date with `main` before it merges. The PR body must have non-empty **Testing** and
+Until the ruleset drops it, a PR must be up to date with `main` before it merges; after,
+two PRs that pass alone can still break `main` together, which `main`'s own run shows
+and the release gate keeps out of a release. The PR body must have non-empty **Testing** and
 **Security impact** sections. CODEOWNERS requests the maintainer's review on `risk:
 high` paths; with one maintainer it is not enforced by the ruleset (two-maintainer
 review is a v1.0 item). Squash-merge; the PR title becomes the commit subject and the

@@ -58,6 +58,7 @@ label security           b60205 "Security-relevant; maintainer review required"
 label "good first issue"   7057ff "Adapters, docs, examples; never the trusted core"
 label breaking           b60205 "Breaking change to policy schema, CLI or exit codes"
 label "help wanted"        008672 "Open for contributors"
+label "ci:full"            000000 "Run CI's slow legs on this PR (macos-15-intel, long fuzz, ADR-062 step 0); re-run after labelling"
 
 # roadmap: the order of work (pinned roadmap issue)
 label "priority: P0"       b60205 "This week: blocks everything after it"
