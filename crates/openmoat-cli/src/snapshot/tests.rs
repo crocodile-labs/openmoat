@@ -143,6 +143,36 @@ fn a_snapshot_keeps_files_and_leaves_out_secrets_ignored_and_large_files() {
     assert!(!all.contains("fake key"), "{all}");
 }
 
+/// A `.gitattributes` (the project's, or one an agent planted) that converts
+/// line endings, expands `$Id$` or re-encodes changes no byte of a snapshot:
+/// what comes back is what was there.
+#[test]
+fn a_restore_gives_back_the_bytes_whatever_the_gitattributes_say() {
+    let f = fixture();
+    f.write(
+        ".gitattributes",
+        "* text=auto eol=crlf\n*.id ident\n*.u16 text working-tree-encoding=UTF-16\n",
+    );
+    let files: [(&str, Vec<u8>); 4] = [
+        ("crlf.txt", b"one\r\ntwo\r\n".to_vec()),
+        ("lf.txt", b"one\ntwo\n".to_vec()),
+        ("version.id", b"$Id: 0123456789abcdef $\n".to_vec()),
+        ("wide.u16", b"\xff\xfeh\0i\0\n\0".to_vec()),
+    ];
+    for (name, bytes) in &files {
+        fs::write(f.root().join(name), bytes).unwrap();
+    }
+    let before = f.take(Reason::Manual);
+    for (name, _) in &files {
+        fs::write(f.root().join(name), b"changed\n").unwrap();
+    }
+    let (_, applied) = f.restore(&before);
+    assert_eq!(applied.skipped, [], "{applied:?}");
+    for (name, bytes) in &files {
+        assert_eq!(&fs::read(f.root().join(name)).unwrap(), bytes, "{name}");
+    }
+}
+
 #[test]
 fn an_unchanged_project_adds_no_snapshot() {
     let f = fixture();

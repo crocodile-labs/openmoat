@@ -95,6 +95,15 @@ impl Store {
         reason: Reason,
         session: Option<&str>,
     ) -> Result<Taken> {
+        if self.git.pin_attributes()? {
+            // Its entries may hold blobs the project's attributes converted.
+            match fs::remove_file(self.git.index()) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                    return Err(e).context("starting the snapshot index again");
+                }
+                _ => {}
+            }
+        }
         let (kept, mut omitted, bytes) = self.select(denied, limits)?;
         let left_out_total = omitted.len();
         omitted.truncate(MAX_LISTED);

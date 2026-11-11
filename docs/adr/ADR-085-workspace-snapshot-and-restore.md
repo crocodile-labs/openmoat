@@ -31,8 +31,11 @@ privilege, and stores unchanged files once.
    `cat-file`, `gc`), none of which runs a hook; the store is created with `--template=` so it
    holds no sample hooks. The project's `.git` (config, hooks, index, `HEAD`, branches) is never
    read or written, so a `core.fsmonitor` or filter driver it names never runs, and a
-   `.gitattributes` filter names a driver no configuration defines. Works whether or not the
-   project is a git repository.
+   `.gitattributes` filter names a driver no configuration defines. The store's own
+   `info/attributes`, which outranks every `.gitattributes`, sets `-text !eol -crlf -ident
+   -filter !working-tree-encoding` for every path, so no attribute (one an agent planted
+   included) changes the bytes stored: a restore writes back each file's bytes as they were,
+   on any git version. Works whether or not the project is a git repository.
 2. **What is captured.** The files `git ls-files --others --exclude-standard` lists against an
    empty index: the project's `.gitignore` files and its `.git/info/exclude` honoured (the
    person's global excludes file is not, since no global configuration is read). Left out,

@@ -6,8 +6,13 @@
 //! the system and global configuration files are `/dev/null`. The project's own
 //! `.git` (its config, hooks, index, `HEAD`) is never read or written, so a
 //! `core.fsmonitor`, a filter driver or a hook it names never runs. A
-//! `.gitattributes` in the project can name a filter, but no configuration
-//! defines one, so git stores the bytes as they are. Only plumbing commands
+//! `.gitattributes` in the project (one an agent planted included) could still
+//! change the bytes git stores: `text`/`eol` convert line endings, `ident`
+//! rewrites `$Id$`, `working-tree-encoding` re-encodes. The store's own
+//! `info/attributes`, which outranks every `.gitattributes`, turns all of them
+//! off for every path ([`ShadowGit::pin_attributes`]), on any git version, so
+//! a snapshot holds the files' bytes as they are and a restore, which writes
+//! the blobs `cat-file` gives, puts back those bytes. Only plumbing commands
 //! run (`ls-files`, `update-index`, `write-tree`, `commit-tree`, `update-ref`,
 //! `for-each-ref`, `diff-tree`, `cat-file`, `gc`): none of them runs a hook.
 
@@ -33,6 +38,14 @@ const CONFIG: &[&str] = &[
     "gc.auto=0",
     "commit.gpgSign=false",
 ];
+
+/// The store's `info/attributes`: no conversion of any kind for any path.
+/// `$GIT_DIR/info/attributes` takes precedence over every `.gitattributes` in
+/// the work tree, attribute by attribute; a string attribute (`eol`,
+/// `working-tree-encoding`) is made unspecified, the others unset. `-text`
+/// also overrides `text=auto` and a macro such as `[attr]x text`.
+pub const ATTRIBUTES: &str = "# OpenMoat: a snapshot holds each file's bytes as they are, whatever the \
+     project's .gitattributes say\n* -text !eol -crlf -ident -filter !working-tree-encoding\n";
 
 /// The name and address git writes into a snapshot commit.
 const IDENTITY: (&str, &str) = ("OpenMoat", "snapshot@openmoat.invalid");
@@ -90,6 +103,24 @@ impl ShadowGit {
             );
         }
         Ok(())
+    }
+
+    /// Write [`ATTRIBUTES`] into the store unless it holds them already;
+    /// whether it did not. A store from before they existed may hold blobs
+    /// hashed with the project's conversions in its index, so the caller
+    /// starts that index again when this returns `true`.
+    pub fn pin_attributes(&self) -> Result<bool> {
+        let path = self.store.join("info").join("attributes");
+        if std::fs::read(&path).is_ok_and(|bytes| bytes == ATTRIBUTES.as_bytes()) {
+            return Ok(false);
+        }
+        crate::home::write_private(&path, ATTRIBUTES.as_bytes())?;
+        Ok(true)
+    }
+
+    /// The index file commands use.
+    pub fn index(&self) -> &Path {
+        &self.index
     }
 
     /// `git <args>` on the store and the project, `stdin` written to it; its
