@@ -15,9 +15,7 @@ mod snapshot;
 
 mod timeline;
 
-pub use approvals::{
-    ApprovalsCommand, ApprovalsStatusArgs, ApproverArgs, ChannelKind, ConnectArgs,
-};
+pub use approvals::{ApprovalsCommand, ApprovalsStatusArgs, ApproverArgs, ConnectArgs};
 pub use audit::{
     AnchorArgs, AuditCommand, DeliverCommand, DeliverFlushArgs, DeliverStatusArgs, DeliverTestArgs,
     EvidenceArgs, ExportArgs, TeamReportArgs, VerifyArgs,
@@ -93,8 +91,9 @@ pub enum Command {
         #[command(subcommand)]
         command: SecretCommand,
     },
-    /// Answer reviews from another device: a Telegram bot sends each held call to the
-    /// people you allow, and an approval lets that exact call run once (ADR-078).
+    /// Answer reviews from another device: a chat channel you connect sends each held
+    /// call to the people you allow, and an approval lets that exact call run once
+    /// (ADR-078).
     Approvals {
         #[command(subcommand)]
         command: ApprovalsCommand,

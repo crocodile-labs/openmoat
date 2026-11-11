@@ -9,7 +9,8 @@ use super::super::channel::Reply;
 use super::super::gate::MAX_WAITING;
 use super::super::listen::{Listener, Records, Row};
 use super::{
-    APPROVER, Fake, NOW, Rows, approve_button, call, gated, only_request, press, review, setup,
+    APPROVER, FAKE, Fake, NOW, Rows, approve_button, call, gated, only_request, press, review,
+    setup,
 };
 
 #[test]
@@ -22,7 +23,7 @@ fn a_channel_that_cannot_send_leaves_the_request_waiting() {
         ..Fake::default()
     };
     let mut rows = Rows::default();
-    let mut listener = Listener::new(&s.store, &s.key, s.settings.clone());
+    let mut listener = Listener::new(&s.store, &s.key, &FAKE, s.settings.clone());
     listener
         .step(&mut fake, &mut rows, Duration::ZERO, &|| NOW + 1)
         .unwrap();
@@ -54,12 +55,12 @@ fn a_plain_message_from_a_stranger_names_their_id() {
     let s = setup();
     let mut fake = Fake::default();
     let mut rows = Rows::default();
-    let mut listener = Listener::new(&s.store, &s.key, s.settings.clone());
+    let mut listener = Listener::new(&s.store, &s.key, &FAKE, s.settings.clone());
     fake.queued.push_back(Reply {
         from: "777".to_owned(),
         name: "@new".to_owned(),
-        button: None,
-        handle: String::new(),
+        text: Some("/start".to_owned()),
+        ..Reply::default()
     });
     listener
         .step(&mut fake, &mut rows, Duration::ZERO, &|| NOW)
@@ -68,7 +69,7 @@ fn a_plain_message_from_a_stranger_names_their_id() {
         listener
             .log
             .iter()
-            .any(|l| l.contains("openmoat approvals allow 777")),
+            .any(|l| l.contains("openmoat approvals allow fake:777")),
         "{:?}",
         listener.log
     );
@@ -88,7 +89,7 @@ fn an_answer_that_cannot_be_recorded_does_not_stand() {
     gated(&s, &call("s1", "npm publish"), review(), NOW);
     let request = only_request(&s);
     let mut fake = Fake::default();
-    let mut listener = Listener::new(&s.store, &s.key, s.settings.clone());
+    let mut listener = Listener::new(&s.store, &s.key, &FAKE, s.settings.clone());
     fake.queued
         .push_back(press(APPROVER, &approve_button(&s, &request)));
     assert!(

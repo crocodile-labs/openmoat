@@ -9,7 +9,7 @@ use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::{HookRequest, Host};
 
 use super::answer::{self, Answer};
-use super::channel::{Channel, Prompt, Reply};
+use super::channel::{Capabilities, Channel, Credential, Options, Prompt, Reply, Spec};
 use super::listen::{Listener, Records, Row};
 use super::request::Request;
 use super::settings::{DEFAULT_EXPIRY_S, Settings};
@@ -17,12 +17,34 @@ use super::store::{DIR, Store};
 use super::*;
 use crate::proxy_session::Key;
 
+mod another;
 mod listen;
 mod text;
 
 /// 2026-11-10 12:00:00 UTC.
 const NOW: i64 = 1_794_312_000_000;
+/// The approver's user id on the fake channel, and its approver id.
 const APPROVER: &str = "4242";
+const APPROVER_ID: &str = "fake:4242";
+
+/// The fake channel's spec: buttons, as most chat channels have.
+static FAKE: Spec = Spec {
+    name: "fake",
+    title: "Fake",
+    capabilities: Capabilities {
+        buttons: true,
+        button_bytes: 64,
+        max_text: 4096,
+    },
+    ask_credential: "",
+    valid_credential: |c| c == "fake-credential",
+    questions: &[],
+    user_id: "a number",
+    valid_user: |id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()),
+    open: |_: Credential, _: &Options| Ok(Box::new(Fake::default())),
+    next_steps: |_| String::new(),
+    revoke: "",
+};
 
 /// A channel that records what it sent and hands out queued replies.
 #[derive(Default)]
@@ -35,8 +57,8 @@ struct Fake {
 }
 
 impl Channel for Fake {
-    fn name(&self) -> &'static str {
-        "fake"
+    fn account(&mut self) -> Result<String> {
+        Ok("@fake".to_owned())
     }
     fn send(&mut self, to: &str, prompt: &Prompt) -> Result<()> {
         if self.fail_send {
@@ -80,7 +102,7 @@ fn setup() -> Setup {
     let store = Store::at(dir.path().join(DIR));
     let key = Key::load_or_create_at(&store.key_path()).unwrap();
     let mut settings = Settings::new("fake", DEFAULT_EXPIRY_S).unwrap();
-    settings.approvers.push(APPROVER.to_owned());
+    settings.approvers.push(APPROVER_ID.to_owned());
     settings.save(&store.settings_path(), &key).unwrap();
     Setup {
         _dir: dir,
@@ -122,13 +144,14 @@ fn press(from: &str, data: &str) -> Reply {
         from: from.to_owned(),
         name: "someone".to_owned(),
         button: Some(data.to_owned()),
+        text: None,
         handle: "cb".to_owned(),
     }
 }
 
 /// The listener's one round at `now`, with `replies` arriving.
 fn listen(s: &Setup, fake: &mut Fake, rows: &mut Rows, replies: Vec<Reply>, now: i64) {
-    let mut listener = Listener::new(&s.store, &s.key, s.settings.clone());
+    let mut listener = Listener::new(&s.store, &s.key, &FAKE, s.settings.clone());
     // The listener sends first, then reads replies, as one round does.
     listener.step(fake, rows, Duration::ZERO, &|| now).unwrap();
     fake.queued.extend(replies);
@@ -197,7 +220,7 @@ fn an_approval_is_used_once() {
     let answer = Answer::signed(
         &s.key,
         &request,
-        (answer::Verdict::Approve, APPROVER, "fake"),
+        (answer::Verdict::Approve, APPROVER_ID, "fake"),
         NOW,
     )
     .unwrap();
@@ -218,7 +241,7 @@ fn a_restored_answer_is_not_used_again() {
     let answer = Answer::signed(
         &s.key,
         &request,
-        (answer::Verdict::Approve, APPROVER, "fake"),
+        (answer::Verdict::Approve, APPROVER_ID, "fake"),
         NOW,
     )
     .unwrap();
@@ -239,7 +262,7 @@ fn an_approval_answers_only_its_own_call() {
     let answer = Answer::signed(
         &s.key,
         &request,
-        (answer::Verdict::Approve, APPROVER, "fake"),
+        (answer::Verdict::Approve, APPROVER_ID, "fake"),
         NOW,
     )
     .unwrap();
@@ -309,7 +332,7 @@ fn an_answer_from_someone_not_allowed_is_refused() {
     let forged = Answer::signed(
         &s.key,
         &request,
-        (answer::Verdict::Approve, "666", "fake"),
+        (answer::Verdict::Approve, "fake:666", "fake"),
         NOW,
     )
     .unwrap();
@@ -358,7 +381,7 @@ fn an_answer_signed_with_another_key_is_refused() {
     let forged = Answer::signed(
         &other,
         &request,
-        (answer::Verdict::Approve, APPROVER, "fake"),
+        (answer::Verdict::Approve, APPROVER_ID, "fake"),
         NOW,
     )
     .unwrap();
@@ -375,7 +398,7 @@ fn an_answer_signed_with_another_key_is_refused() {
     assert!(
         fake.sent
             .iter()
-            .all(|(_, p)| !p.approve.contains(&planted.id))
+            .all(|(_, p)| p.choices.iter().all(|c| !c.data.contains(&planted.id)))
     );
     assert!(rows.0.iter().any(|r| r.rule == REFUSED_RULE));
     assert!(s.store.request(&planted.id).is_none());
@@ -392,7 +415,7 @@ fn an_expired_request_is_not_approved() {
     let mut rows = Rows::default();
     let button = approve_button(&s, &request);
     // Sent while fresh, pressed after it expired.
-    let mut listener = Listener::new(&s.store, &s.key, s.settings.clone());
+    let mut listener = Listener::new(&s.store, &s.key, &FAKE, s.settings.clone());
     listener
         .step(&mut fake, &mut rows, Duration::ZERO, &|| NOW + 1)
         .unwrap();
@@ -412,7 +435,7 @@ fn an_expired_request_is_not_approved() {
     let answer = Answer::signed(
         &s.key,
         &request,
-        (answer::Verdict::Approve, APPROVER, "fake"),
+        (answer::Verdict::Approve, APPROVER_ID, "fake"),
         NOW,
     )
     .unwrap();
@@ -454,7 +477,7 @@ fn tampered_settings_are_refused() {
     let answer = Answer::signed(
         &s.key,
         &request,
-        (answer::Verdict::Approve, "666", "fake"),
+        (answer::Verdict::Approve, "fake:666", "fake"),
         NOW,
     )
     .unwrap();
@@ -462,7 +485,11 @@ fn tampered_settings_are_refused() {
     // `666` added to the list by hand, without the key.
     let path = s.store.settings_path();
     let text = std::fs::read_to_string(&path).unwrap();
-    std::fs::write(&path, text.replace("\"4242\"", "\"4242\", \"666\"")).unwrap();
+    std::fs::write(
+        &path,
+        text.replace("\"fake:4242\"", "\"fake:4242\", \"fake:666\""),
+    )
+    .unwrap();
     assert!(Settings::load(&path, &s.key).is_err());
     let d = gated(&s, &req, review(), NOW + 1);
     assert_eq!(d.verdict, Verdict::Review);

@@ -77,6 +77,7 @@ fn decide(
     if let Some(open) = open {
         if let Some(answer) = store.answer(&open.id)
             && answer.answers(&key, &open)
+            && answer.channel == settings.channel
             && settings.approver(&answer.approver)
         {
             return used(store, &open, &answer, decision);

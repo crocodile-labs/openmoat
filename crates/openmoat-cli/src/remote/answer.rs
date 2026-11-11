@@ -13,9 +13,11 @@ const ANSWER_DOMAIN: &[u8] = b"openmoat-remote-answer-v1\n";
 /// Signed in front of every button's tag.
 const BUTTON_DOMAIN: &[u8] = b"openmoat-remote-button-v1\n";
 const VERSION: u32 = 1;
-/// Bytes of a button's tag (64 bits), so the whole button fits Telegram's
-/// 64 bytes of `callback_data`.
+/// Bytes of a button's tag (64 bits), so the whole button stays short: it is
+/// a button's data, or a reply code an approver sends back.
 const TAG_BYTES: usize = 8;
+/// The length of every button's data: verdict, dot, 32-digit id, dot, tag.
+pub const BUTTON_LEN: usize = 1 + 1 + 32 + 1 + TAG_BYTES * 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -48,8 +50,10 @@ pub struct Answer {
     /// The request's digest.
     pub digest: String,
     pub verdict: Verdict,
-    /// The channel user id that answered.
+    /// The approver id that answered, qualified with the channel's name
+    /// (`<channel>:<user id>`, [`super::channel::approver_id`]).
     pub approver: String,
+    /// The channel the answer came over.
     pub channel: String,
     pub answered_ms: i64,
     /// The request's expiry: the answer holds until then.
@@ -105,7 +109,7 @@ fn tag(key: &Key, verdict: Verdict, request: &Request) -> String {
 }
 
 /// The data of the button that gives `verdict` on `request`:
-/// `<a|d>.<id>.<tag>`, at most 51 bytes.
+/// `<a|d>.<id>.<tag>`, [`BUTTON_LEN`] bytes.
 pub fn button(key: &Key, verdict: Verdict, request: &Request) -> String {
     format!(
         "{}.{}.{}",

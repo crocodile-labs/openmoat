@@ -908,6 +908,33 @@
   context: { cwd: /p, project: /p, moved_dirs: { "~/.moat": /srv/moat } }
   action: { fs_read: "/srv/moat/remote/telegram.token" }
   expect: { verdict: deny, rules: [kernel-self] }
+# Each channel's own folder (ADR-078, "Channel architecture"):
+# ~/.moat/remote/<channel>/credential and settings.json
+- id: T9-read-remote-channel-credential
+  threat: T9
+  action: { fs_read: "~/.moat/remote/telegram/credential" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-cat-remote-channel-credential-glob
+  threat: T9
+  action: { shell: "cat ~/.moat/remote/*/credential" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-read-moved-remote-channel-credential
+  threat: T9
+  context: { cwd: /p, project: /p, moved_dirs: { "~/.moat": /srv/moat } }
+  action: { fs_read: "/srv/moat/remote/slack/credential" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-write-remote-channel-settings
+  threat: T9
+  action: { fs_write: "~/.moat/remote/telegram/settings.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-write-remote-settings
+  threat: T9
+  action: { fs_write: "~/.moat/remote/settings.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-replace-remote-channel-folder
+  threat: T9
+  action: { shell: "rm -rf ~/.moat/remote/telegram" }
+  expect: { verdict: deny, rules: [kernel-self] }
 - id: T9-write-remote-answer
   threat: T9
   action: { fs_write: "~/.moat/remote/answers/0123456789abcdef0123456789abcdef.json" }

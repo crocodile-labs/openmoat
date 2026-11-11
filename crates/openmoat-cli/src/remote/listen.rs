@@ -9,7 +9,7 @@ use anyhow::Result;
 use openmoat_core::Verdict;
 
 use super::answer::{self, Answer};
-use super::channel::{Channel, Prompt, Reply, prompt_text};
+use super::channel::{Channel, Reply, Spec, approver_id, local_id};
 use super::request::Request;
 use super::settings::Settings;
 use super::store::Store;
@@ -36,6 +36,9 @@ pub trait Records {
 pub struct Listener<'a> {
     store: &'a Store,
     key: &'a Key,
+    /// The connected channel's spec: its name qualifies every sender, its
+    /// capabilities shape every prompt.
+    spec: &'a Spec,
     settings: Settings,
     /// Requests already sent in this run.
     sent: HashSet<String>,
@@ -61,10 +64,11 @@ impl<'a> Listener<'a> {
         self.settings = settings;
     }
 
-    pub fn new(store: &'a Store, key: &'a Key, settings: Settings) -> Self {
+    pub fn new(store: &'a Store, key: &'a Key, spec: &'a Spec, settings: Settings) -> Self {
         Self {
             store,
             key,
+            spec,
             settings,
             sent: HashSet::new(),
             log: Vec::new(),
@@ -80,6 +84,13 @@ impl<'a> Listener<'a> {
         wait: Duration,
         now: &dyn Fn() -> i64,
     ) -> Result<()> {
+        if self.settings.channel != self.spec.name {
+            anyhow::bail!(
+                "the connected channel is now {}, not {}",
+                crate::render::clean(&self.settings.channel),
+                self.spec.name
+            );
+        }
         self.sweep(channel, records, now())?;
         for reply in channel.poll(wait)? {
             self.reply(channel, records, &reply, now())?;
@@ -126,15 +137,21 @@ impl<'a> Listener<'a> {
         Ok(())
     }
 
+    /// The approvers of this channel, by their id on it.
+    fn locals(&self) -> Vec<String> {
+        self.settings
+            .approvers
+            .iter()
+            .filter_map(|a| local_id(self.spec.name, a))
+            .map(str::to_owned)
+            .collect()
+    }
+
     fn send(&mut self, channel: &mut dyn Channel, request: &Request) {
-        let prompt = Prompt {
-            text: prompt_text(request),
-            approve: answer::button(self.key, answer::Verdict::Approve, request),
-            deny: answer::button(self.key, answer::Verdict::Deny, request),
-        };
+        let prompt = super::prompt::prompt(self.key, request, &self.spec.capabilities);
         let mut reached = 0;
-        for approver in &self.settings.approvers {
-            match channel.send(approver, &prompt) {
+        for approver in self.locals() {
+            match channel.send(&approver, &prompt) {
                 Ok(()) => reached += 1,
                 Err(error) => self.log.push(format!(
                     "could not send request {} to {approver}: {error:#}",
@@ -171,9 +188,9 @@ impl<'a> Listener<'a> {
                 ),
             ))?;
             if self.sent.contains(&request.id) {
-                for approver in &self.settings.approvers {
+                for approver in self.locals() {
                     let _ = channel.notify(
-                        approver,
+                        &approver,
                         &format!(
                             "OpenMoat: request {} expired unanswered; nothing ran",
                             request.code()
@@ -196,10 +213,24 @@ impl<'a> Listener<'a> {
         reply: &Reply,
         now_ms: i64,
     ) -> Result<()> {
-        let from = crate::render::clean(&reply.from).into_owned();
+        // Qualified here, with the registered name: a channel cannot give an
+        // id of another channel.
+        let who = approver_id(self.spec.name, &reply.from);
+        let from = crate::render::clean(&who).into_owned();
         let name = crate::render::clean(&reply.name).into_owned();
-        let Some(data) = &reply.button else {
-            if self.settings.approver(&reply.from) {
+        // Where prompts carry buttons only a press answers; elsewhere the
+        // reply code sent back as a message does, verified the same way.
+        let data = if self.spec.capabilities.uses_buttons() {
+            reply.button.as_deref()
+        } else {
+            reply
+                .text
+                .as_deref()
+                .map(str::trim)
+                .filter(|t| answer::parse_button(t).is_some())
+        };
+        let Some(data) = data else {
+            if self.settings.approver(&who) {
                 self.log
                     .push(format!("message from approver {name} ({from})"));
             } else {
@@ -226,7 +257,7 @@ impl<'a> Listener<'a> {
                 format!("an answer to request {} was refused: {why}", request.code()),
             )
         };
-        if !self.settings.approver(&reply.from) {
+        if !self.settings.approver(&who) {
             records.record(refuse(&format!("{from} is not an approver")))?;
             self.log.push(format!(
                 "refused an answer from {name} ({from}), who is not an approver"
@@ -248,12 +279,7 @@ impl<'a> Listener<'a> {
             let _ = channel.settle(reply, "This request was already answered.");
             return Ok(());
         }
-        let answer = Answer::signed(
-            self.key,
-            &request,
-            (verdict, &reply.from, channel.name()),
-            now_ms,
-        )?;
+        let answer = Answer::signed(self.key, &request, (verdict, &who, self.spec.name), now_ms)?;
         let (rule, core) = match verdict {
             answer::Verdict::Approve => (APPROVED_ROW_RULE, Verdict::Allow),
             answer::Verdict::Deny => (DENIED_RULE, Verdict::Deny),
@@ -271,7 +297,7 @@ impl<'a> Listener<'a> {
                 "request {} {} by {from} on {}",
                 request.code(),
                 verdict.word(),
-                channel.name()
+                self.spec.name
             ),
         ));
         if let Err(error) = recorded {

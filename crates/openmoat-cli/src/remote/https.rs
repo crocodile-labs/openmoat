@@ -1,7 +1,8 @@
 //! One HTTPS `POST` with a JSON body, over the TLS stack the proxy uses
-//! (rustls with the system's roots) and `std::net`: what the Telegram adapter
-//! needs, and no more. Errors never name the request path, which holds the
-//! bot's token.
+//! (rustls with the system's roots) and `std::net`: the transport the channels
+//! under `channels/` share, and no more. Only a channel calls it; the core
+//! does no network I/O. Errors never name the request path, which may hold a
+//! credential.
 
 use std::io::{ErrorKind, Read as _, Write as _};
 use std::net::{TcpStream, ToSocketAddrs as _};
@@ -137,5 +138,23 @@ fn chunked(mut rest: &[u8]) -> Result<Vec<u8>> {
         }
         out.extend_from_slice(&rest[..size]);
         rest = &rest[size + 2..];
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::body_of;
+
+    #[test]
+    fn response_bodies_by_length_chunks_or_end() {
+        let by_length = b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\n{}xx";
+        assert_eq!(body_of(by_length).unwrap(), b"{}xx");
+        let chunked = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\n{\"\r\n3\r\nok\"\r\n0\r\n\r\n";
+        assert_eq!(body_of(chunked).unwrap(), b"{\"ok\"");
+        let to_end = b"HTTP/1.1 200 OK\r\n\r\n{\"ok\":true}";
+        assert_eq!(body_of(to_end).unwrap(), b"{\"ok\":true}");
+        let cut = b"HTTP/1.1 200 OK\r\nContent-Length: 40\r\n\r\n{}";
+        assert!(body_of(cut).is_err());
+        assert!(body_of(b"HTTP/1.1 200").is_err());
     }
 }

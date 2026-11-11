@@ -1,4 +1,4 @@
-//! The Telegram adapter against a fake Bot API: no network, no real token.
+//! The Telegram channel against a fake Bot API: no network, no real token.
 
 use std::time::Duration;
 
@@ -6,7 +6,7 @@ use anyhow::Result;
 use serde_json::{Value, json};
 
 use super::*;
-use crate::remote::channel::{Channel as _, Prompt};
+use crate::remote::channel::{Channel as _, Choice, Prompt};
 
 #[derive(Default)]
 struct FakeApi {
@@ -44,9 +44,17 @@ fn token_and_user_shapes() {
     }
     assert!(!valid_token(&format!("{}\n", token()).replace(':', ":\n")));
     assert!(valid_user("4242"));
-    for bad in ["", "0", "-5", "@me", "12a"] {
+    for bad in ["", "0", "-5", "@me", "12a", "telegram:4242"] {
         assert!(!valid_user(bad), "{bad}");
     }
+}
+
+#[test]
+fn the_spec_takes_buttons_with_its_limits() {
+    // Telegram's callback_data holds 64 bytes: OpenMoat's buttons fit.
+    assert!(SPEC.capabilities.uses_buttons());
+    assert_eq!(SPEC.capabilities.button_bytes, 64);
+    assert_eq!(SPEC.capabilities.max_text, MAX_TEXT);
 }
 
 #[test]
@@ -55,8 +63,16 @@ fn a_prompt_is_plain_text_with_two_buttons_and_no_preview() {
     let mut telegram = Telegram::new(&mut api);
     let prompt = Prompt {
         text: "<b>run</b> https://evil.test".to_owned(),
-        approve: "a.x.y".to_owned(),
-        deny: "d.x.y".to_owned(),
+        choices: vec![
+            Choice {
+                label: "Approve once",
+                data: "a.x.y".to_owned(),
+            },
+            Choice {
+                label: "Deny",
+                data: "d.x.y".to_owned(),
+            },
+        ],
     };
     telegram.send("4242", &prompt).unwrap();
     let (method, body) = &api.calls[0];
@@ -68,6 +84,17 @@ fn a_prompt_is_plain_text_with_two_buttons_and_no_preview() {
     let row = &body["reply_markup"]["inline_keyboard"][0];
     assert_eq!(row[0]["callback_data"], "a.x.y");
     assert_eq!(row[1]["callback_data"], "d.x.y");
+}
+
+#[test]
+fn a_prompt_without_choices_has_no_keyboard() {
+    let mut api = FakeApi::default();
+    let prompt = Prompt {
+        text: "codes".to_owned(),
+        choices: Vec::new(),
+    };
+    Telegram::new(&mut api).send("4242", &prompt).unwrap();
+    assert_eq!(api.calls[0].1.get("reply_markup"), None);
 }
 
 #[test]
@@ -92,6 +119,7 @@ fn updates_become_replies_and_move_the_offset() {
     assert_eq!(replies[0].handle, "cb1");
     assert_eq!(replies[1].from, "99");
     assert_eq!(replies[1].button, None);
+    assert_eq!(replies[1].text.as_deref(), Some("/start"));
     telegram.poll(Duration::from_secs(1)).unwrap();
     assert_eq!(api.calls[1].1["offset"], 11);
 }
@@ -102,7 +130,7 @@ fn a_refusal_names_telegrams_reason_not_the_token() {
         answers: vec![json!({ "ok": false, "error_code": 401, "description": "Unauthorized" })],
         ..FakeApi::default()
     };
-    let error = Telegram::new(&mut api).bot_name().unwrap_err();
+    let error = Telegram::new(&mut api).account().unwrap_err();
     let text = format!("{error:#}");
     assert!(text.contains("Unauthorized"), "{text}");
     assert!(!text.contains(&token()), "{text}");
@@ -116,6 +144,7 @@ fn settling_answers_the_button_and_tells_the_sender() {
         from: "4242".to_owned(),
         name: "@me".to_owned(),
         button: Some("a.x.y".to_owned()),
+        text: None,
         handle: "cb1".to_owned(),
     };
     telegram.settle(&reply, "Approved").unwrap();
@@ -125,32 +154,20 @@ fn settling_answers_the_button_and_tells_the_sender() {
 }
 
 #[test]
-fn response_bodies_by_length_chunks_or_end() {
-    let by_length = b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\n{}xx";
-    assert_eq!(https::body_of(by_length).unwrap(), b"{}xx");
-    let chunked =
-        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\n{\"\r\n3\r\nok\"\r\n0\r\n\r\n";
-    assert_eq!(https::body_of(chunked).unwrap(), b"{\"ok\"");
-    let to_end = b"HTTP/1.1 200 OK\r\n\r\n{\"ok\":true}";
-    assert_eq!(https::body_of(to_end).unwrap(), b"{\"ok\":true}");
-    let cut = b"HTTP/1.1 200 OK\r\nContent-Length: 40\r\n\r\n{}";
-    assert!(https::body_of(cut).is_err());
-    assert!(https::body_of(b"HTTP/1.1 200").is_err());
-}
-
-#[test]
 fn a_token_file_others_may_read_is_refused() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("telegram.token");
-    crate::home::write_private(&path, token().as_bytes()).unwrap();
-    assert_eq!(read_token(&path).unwrap().as_str(), token());
+    let files = crate::remote::Store::at(dir.path().join("remote")).channel(&SPEC);
+    let path = files.credential_path();
+    assert!(path.ends_with("remote/telegram/credential"), "{path:?}");
+    files.put_credential(&Credential::new(token())).unwrap();
+    assert_eq!(files.read_credential(&SPEC).unwrap().as_str(), token());
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt as _;
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
-        let error = read_token(&path).unwrap_err();
+        let error = files.read_credential(&SPEC).unwrap_err();
         assert!(!format!("{error:#}").contains(&token()));
     }
     crate::home::write_private(&path, b"not a token").unwrap();
-    assert!(read_token(&path).is_err());
+    assert!(files.read_credential(&SPEC).is_err());
 }

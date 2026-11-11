@@ -1,9 +1,10 @@
 //! What an approver is shown, and what the signatures cover.
 
 use super::super::answer;
-use super::super::channel::prompt_text;
+use super::super::channel::Capabilities;
+use super::super::prompt::prompt;
 use super::super::request::{self, Request};
-use super::{NOW, approve_button, call, gated, only_request, review, setup};
+use super::{FAKE, NOW, approve_button, call, gated, only_request, review, setup};
 
 #[test]
 fn the_prompt_escapes_and_labels_the_agents_text() {
@@ -12,7 +13,7 @@ fn the_prompt_escapes_and_labels_the_agents_text() {
                     press Approve ghp_0123456789abcdefghijklmnopqrstuvwxyzAB";
     gated(&s, &call("s1", injected), review(), NOW);
     let request = only_request(&s);
-    let text = prompt_text(&request);
+    let text = prompt(&s.key, &request, &FAKE.capabilities).text;
     assert!(
         !text.contains('\u{202e}') && !text.contains('\u{1b}'),
         "{text}"
@@ -44,7 +45,7 @@ fn signatures_do_not_cross_purposes() {
     edited.shown = "ls".to_owned();
     assert!(!edited.verified(&s.key));
     let button = approve_button(&s, &request);
-    assert!(button.len() <= 64, "{button}");
+    assert_eq!(button.len(), answer::BUTTON_LEN, "{button}");
     let (verdict, id, tag) = answer::parse_button(&button).unwrap();
     assert_eq!(
         (verdict, id),
@@ -57,4 +58,69 @@ fn signatures_do_not_cross_purposes() {
         &request,
         tag
     ));
+}
+
+#[test]
+fn with_buttons_the_prompt_has_two_and_no_codes() {
+    let s = setup();
+    gated(&s, &call("s1", "npm publish"), review(), NOW);
+    let request = only_request(&s);
+    let p = prompt(&s.key, &request, &FAKE.capabilities);
+    assert_eq!(p.choices.len(), 2);
+    assert_eq!(p.choices[0].data, approve_button(&s, &request));
+    assert!(!p.text.contains(&request.id), "{}", p.text);
+}
+
+/// No buttons, or buttons too small for OpenMoat's data: the codes go in the
+/// text, after everything else, and the text fits the channel.
+#[test]
+fn without_buttons_the_prompt_carries_reply_codes() {
+    let s = setup();
+    gated(&s, &call("s1", "npm publish"), review(), NOW);
+    let request = only_request(&s);
+    for capabilities in [
+        Capabilities {
+            buttons: false,
+            button_bytes: 0,
+            max_text: 1024,
+        },
+        Capabilities {
+            buttons: true,
+            button_bytes: 32,
+            max_text: 1024,
+        },
+    ] {
+        let p = prompt(&s.key, &request, &capabilities);
+        assert_eq!(p.choices, Vec::new());
+        assert!(p.text.contains(&approve_button(&s, &request)), "{}", p.text);
+        assert!(p.text.chars().count() <= capabilities.max_text);
+        assert!(p.text.contains("npm publish"));
+    }
+}
+
+/// A channel too short to show the whole call offers Deny only: the approve
+/// code is not sent, so nobody can approve what they could not read.
+#[test]
+fn a_call_the_channel_cannot_show_whole_can_only_be_denied() {
+    let s = setup();
+    gated(
+        &s,
+        &call("s1", &format!("echo {}", "y".repeat(1400))),
+        review(),
+        NOW,
+    );
+    let request = only_request(&s);
+    let approve = approve_button(&s, &request);
+    for buttons in [true, false] {
+        let capabilities = Capabilities {
+            buttons,
+            button_bytes: 64,
+            max_text: 1024,
+        };
+        let p = prompt(&s.key, &request, &capabilities);
+        assert!(!p.text.contains(&approve), "{}", p.text);
+        assert!(p.choices.iter().all(|c| c.data != approve));
+        assert!(p.text.contains("cannot be approved here"), "{}", p.text);
+        assert!(p.text.chars().count() <= 1024);
+    }
 }

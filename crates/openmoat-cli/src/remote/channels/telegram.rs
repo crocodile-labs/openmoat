@@ -1,32 +1,61 @@
 //! The Telegram channel (ADR-078): a bot the person made, reached with the
 //! Bot API's long polling (`getUpdates`), so nothing listens on this machine.
-//! The only code of remote approval that talks to a network.
 //!
 //! Facts used, from <https://core.telegram.org/bots/api>: requests are
 //! `https://api.telegram.org/bot<token>/METHOD`; every answer is a JSON object
 //! with `ok`, then `result` or `description`; a button's `callback_data` is
-//! 1–64 bytes; `getUpdates` does not work while a webhook is set.
+//! 1–64 bytes; message text is at most 4096 characters; `getUpdates` does not
+//! work while a webhook is set.
 
-mod https;
 #[cfg(test)]
 mod tests;
 
-use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context as _, Result, bail};
 use serde_json::{Value, json};
 use zeroize::Zeroizing;
 
-use super::channel::{Channel, Prompt, Reply};
+use crate::remote::channel::{Capabilities, Channel, Credential, Options, Prompt, Reply, Spec};
+use crate::remote::https;
 
-/// The channel's name.
-pub const NAME: &str = "telegram";
+/// The channel, as the registry lists it.
+pub const SPEC: Spec = Spec {
+    name: "telegram",
+    title: "Telegram",
+    capabilities: Capabilities {
+        buttons: true,
+        button_bytes: 64,
+        max_text: MAX_TEXT,
+    },
+    ask_credential: "Paste the bot's token from @BotFather, then Enter: ",
+    valid_credential: valid_token,
+    questions: &[],
+    user_id: "a Telegram user id (a number)",
+    valid_user,
+    open,
+    next_steps,
+    revoke: "revoke the bot's token with @BotFather if it may have been seen",
+};
+
 const API_HOST: &str = "api.telegram.org";
 /// What a request may take beyond the long poll it asks for.
 const SLACK: Duration = Duration::from_secs(15);
 /// Telegram's longest message text.
 const MAX_TEXT: usize = 4096;
+
+fn open(token: Credential, _: &Options) -> Result<Box<dyn Channel>> {
+    Ok(Box::new(Telegram::new(Https::new(token)?)))
+}
+
+fn next_steps(bot: &str) -> String {
+    format!(
+        "  1. send /start to {bot} from your own Telegram account\n  2. run `openmoat \
+         approvals listen` in a terminal of your own; it prints your user id when you \
+         message the bot\n  3. `openmoat approvals allow <your user id>`, then `openmoat \
+         approvals test`"
+    )
+}
 
 /// One Bot API call: the method, its JSON body and how long to wait; the
 /// parsed answer. The real one is HTTPS; tests give a fake.
@@ -36,12 +65,12 @@ pub trait Api {
 
 /// The Bot API over HTTPS, with the token held zeroed-on-drop.
 pub struct Https {
-    token: Zeroizing<String>,
+    token: Credential,
     client: https::Client,
 }
 
 impl Https {
-    pub fn new(token: Zeroizing<String>) -> Result<Self> {
+    pub fn new(token: Credential) -> Result<Self> {
         Ok(Self {
             token,
             client: https::Client::new(API_HOST)?,
@@ -77,17 +106,6 @@ pub fn valid_user(id: &str) -> bool {
     !id.is_empty() && id.len() <= 20 && id.bytes().all(|b| b.is_ascii_digit()) && id != "0"
 }
 
-/// The token in `path`, refused when others may read it (`key_file::read`)
-/// or when it is not shaped like one.
-pub fn read_token(path: &Path) -> Result<Zeroizing<String>> {
-    let text = crate::key_file::read(path)?;
-    let token = Zeroizing::new(text.trim().to_owned());
-    if !valid_token(&token) {
-        bail!("{} does not hold a Telegram bot token", path.display());
-    }
-    Ok(token)
-}
-
 /// `answer`'s `result`, or an error with Telegram's description.
 fn result(method: &str, answer: &Value) -> Result<Value> {
     if answer.get("ok").and_then(Value::as_bool) == Some(true) {
@@ -117,13 +135,6 @@ impl<A: Api> Telegram<A> {
     fn call(&mut self, method: &str, body: &Value, timeout: Duration) -> Result<Value> {
         let answer = self.api.call(method, body, timeout)?;
         result(method, &answer)
-    }
-
-    /// The bot's `@username`, which also proves the token works.
-    pub fn bot_name(&mut self) -> Result<String> {
-        let me = self.call("getMe", &json!({}), SLACK)?;
-        let name = me.get("username").and_then(Value::as_str).unwrap_or("");
-        Ok(format!("@{}", crate::render::clean(name)))
     }
 
     fn message(to: &str, text: &str) -> Result<Value> {
@@ -180,6 +191,7 @@ pub fn replies(updates: &Value, offset: i64) -> (Vec<Reply>, i64) {
                         .unwrap_or("")
                         .to_owned(),
                 ),
+                text: None,
                 handle: handle.to_owned(),
             });
         } else if let Some(message) = update.get("message")
@@ -189,6 +201,13 @@ pub fn replies(updates: &Value, offset: i64) -> (Vec<Reply>, i64) {
                 from,
                 name,
                 button: None,
+                text: Some(
+                    message
+                        .get("text")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_owned(),
+                ),
                 handle: String::new(),
             });
         }
@@ -197,16 +216,23 @@ pub fn replies(updates: &Value, offset: i64) -> (Vec<Reply>, i64) {
 }
 
 impl<A: Api> Channel for Telegram<A> {
-    fn name(&self) -> &'static str {
-        NAME
+    /// The bot's `@username`.
+    fn account(&mut self) -> Result<String> {
+        let me = self.call("getMe", &json!({}), SLACK)?;
+        let name = me.get("username").and_then(Value::as_str).unwrap_or("");
+        Ok(format!("@{}", crate::render::clean(name)))
     }
 
     fn send(&mut self, to: &str, prompt: &Prompt) -> Result<()> {
         let mut body = Self::message(to, &prompt.text)?;
-        body["reply_markup"] = json!({ "inline_keyboard": [[
-            { "text": "Approve once", "callback_data": prompt.approve },
-            { "text": "Deny", "callback_data": prompt.deny },
-        ]]});
+        if !prompt.choices.is_empty() {
+            let row: Vec<Value> = prompt
+                .choices
+                .iter()
+                .map(|c| json!({ "text": c.label, "callback_data": c.data }))
+                .collect();
+            body["reply_markup"] = json!({ "inline_keyboard": [row] });
+        }
         self.call("sendMessage", &body, SLACK).map(drop)
     }
 

@@ -14,7 +14,8 @@ use sha2::{Digest as _, Sha256};
 use crate::common::{OK, Sandbox, USAGE, bash_payload, hook_output, text};
 
 const COMMAND: &str = "npm install left-pad-pro";
-const APPROVER: &str = "4242";
+/// An approver id: the channel's name, then the user id on it.
+const APPROVER: &str = "telegram:4242";
 /// Made for this test; no real key.
 const KEY_HEX: &str = "8f2c1d4e5a6b7c8d9e0f112233445566778899aabbccddeeff00112233445566";
 
@@ -71,7 +72,7 @@ fn connect(sb: &Sandbox) {
     );
     let mut settings: Value = serde_json::from_str(&unsigned).unwrap();
     settings["mac"] = Value::from(mac(b"openmoat-remote-settings-v1\n", unsigned.as_bytes()));
-    write_private(&remote(sb).join("channel.json"), &settings.to_string());
+    write_private(&remote(sb).join("settings.json"), &settings.to_string());
 }
 
 fn requests(sb: &Sandbox) -> Vec<Value> {
@@ -151,10 +152,12 @@ fn an_approved_call_runs_once_and_only_that_call() {
     assert_eq!(sent[0]["host"], "claude-code");
     assert_eq!(sent[0]["session"], "s1");
 
-    // Someone not on the list: still a review.
-    answer(&sb, &sent[0], "approve", "666");
-    assert_eq!(decide(&sb, COMMAND)["permissionDecision"], "ask");
-    std::fs::remove_dir_all(remote(&sb).join("answers")).unwrap();
+    // Someone not on the list, or the approver's bare number: still a review.
+    for stranger in ["telegram:666", "4242"] {
+        answer(&sb, &sent[0], "approve", stranger);
+        assert_eq!(decide(&sb, COMMAND)["permissionDecision"], "ask");
+        std::fs::remove_dir_all(remote(&sb).join("answers")).unwrap();
+    }
 
     answer(&sb, &sent[0], "approve", APPROVER);
     // Another command is not approved by it.
@@ -171,7 +174,7 @@ fn an_approved_call_runs_once_and_only_that_call() {
 
     // `status` reads it all without a terminal and shows no credential.
     let status = text(&sb.moat(&["approvals", "status"]));
-    assert!(status.contains("approvers: 4242"), "{status}");
+    assert!(status.contains("approvers: telegram:4242"), "{status}");
 }
 
 #[cfg(unix)]

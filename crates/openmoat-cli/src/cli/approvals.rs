@@ -2,7 +2,8 @@
 
 use std::path::PathBuf;
 
-use clap::{Args, Subcommand, ValueEnum};
+use clap::builder::PossibleValuesParser;
+use clap::{Args, Subcommand};
 
 use super::Format;
 
@@ -29,20 +30,25 @@ pub enum ApprovalsCommand {
     Disconnect,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum ChannelKind {
-    /// A Telegram bot you made with Telegram's `@BotFather`.
-    Telegram,
+/// The channel names `connect` takes: the registry's, so a new channel needs
+/// no change here.
+fn channel_names() -> PossibleValuesParser {
+    PossibleValuesParser::new(crate::remote::REGISTRY.names())
 }
 
 #[derive(Debug, Args)]
 pub struct ConnectArgs {
-    /// The channel.
-    #[arg(value_enum)]
-    pub channel: ChannelKind,
-    /// Read the bot token from this file instead of the terminal (delete it afterwards).
-    #[arg(long, value_name = "FILE")]
-    pub token_file: Option<PathBuf>,
+    /// The channel (docs/APPROVALS.md describes each).
+    #[arg(value_parser = channel_names())]
+    pub channel: String,
+    /// Read the channel's credential (a bot or app token) from this file instead of the
+    /// terminal (delete it afterwards).
+    #[arg(long, value_name = "FILE", alias = "token-file")]
+    pub credential_file: Option<PathBuf>,
+    /// A setting the channel asks for at `connect`, as KEY=VALUE; asked at the terminal
+    /// when not given. Most channels have none.
+    #[arg(long = "set", value_name = "KEY=VALUE")]
+    pub options: Vec<String>,
     /// How long a request waits for an answer: 1 to 60 minutes (`5m`, `90s`, `1h`);
     /// 5 minutes when not given.
     #[arg(long, value_name = "DURATION")]
@@ -51,8 +57,8 @@ pub struct ConnectArgs {
 
 #[derive(Debug, Args)]
 pub struct ApproverArgs {
-    /// The channel's user id (for Telegram, the number `openmoat approvals listen`
-    /// prints when you message the bot).
+    /// The approver's id: `<channel>:<user id>` as `openmoat approvals listen` prints it
+    /// when they message the channel, or the bare user id on the connected channel.
     pub user_id: String,
 }
 

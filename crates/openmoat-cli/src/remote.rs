@@ -4,17 +4,24 @@
 //! request file ([`gate()`]); `openmoat approvals listen`, run by the person,
 //! sends it to the approvers and turns an approver's button press into a
 //! signed answer ([`Listener`]); the guard uses an approval once, for the
-//! exact call it was made for. Only the channel adapter ([`telegram`]) talks
-//! to a network. Every failure leaves the `review` as it was.
+//! exact call it was made for. Every failure leaves the `review` as it was.
+//!
+//! The core here never names a channel. A channel is a folder under
+//! `channels/` with a [`channel::Spec`] and a [`channel::Channel`], listed once in
+//! [`channels::REGISTRY`]; only a channel talks to a network (through
+//! [`https`]). `tests/architecture.rs` keeps it so.
 
 mod answer;
-mod channel;
+pub mod channel;
+pub mod channels;
+mod connect;
 mod gate;
+mod https;
 mod listen;
+mod prompt;
 mod request;
 mod settings;
 mod store;
-pub mod telegram;
 
 #[cfg(test)]
 mod tests;
@@ -25,7 +32,9 @@ use anyhow::Result;
 use openmoat_audit::NewEvent;
 use openmoat_core::Decision;
 
-pub use channel::Channel;
+pub use channel::{Credential, Options, Spec};
+pub use channels::REGISTRY;
+pub use connect::{account, connect, credential_problem, disconnect, open};
 pub use gate::gate;
 pub use listen::{Listener, Records, Row};
 pub use settings::{DEFAULT_EXPIRY_S, MAX_EXPIRY_S, MIN_EXPIRY_S, Settings};

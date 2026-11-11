@@ -2,25 +2,26 @@
 //! Every command but `status` is a person's, as `openmoat allow` is: it
 //! refuses without a terminal and with an agent among its parents, so an
 //! agent can neither connect a channel, add an approver nor answer.
+//!
+//! No command names a channel: each takes it from the registry
+//! ([`crate::remote::REGISTRY`]) and the settings.
 
 use std::io::Write as _;
 use std::time::Duration;
 
 use anyhow::{Context as _, Result, bail};
-use zeroize::Zeroizing;
 
-use crate::cli::{ApprovalsStatusArgs, ApproverArgs, ChannelKind, ConnectArgs, Format};
+use crate::cli::{ApprovalsStatusArgs, ApproverArgs, ConnectArgs, Format};
 use crate::exit::Code;
 use crate::home::Home;
 use crate::proxy_session::Key;
-use crate::remote::telegram::{self, Https, Telegram};
 use crate::remote::{
-    AuditRecords, Channel as _, DEFAULT_EXPIRY_S, Listener, MAX_EXPIRY_S, MIN_EXPIRY_S, Settings,
-    Store,
+    AuditRecords, Credential, DEFAULT_EXPIRY_S, Listener, MAX_EXPIRY_S, MIN_EXPIRY_S, Options,
+    REGISTRY, Settings, Spec, Store,
 };
 use crate::render::Deferred;
 
-/// How long one `getUpdates` waits for a reply.
+/// How long one poll of the channel waits for a reply.
 const POLL: Duration = Duration::from_secs(25);
 /// The pause after a failed round, so a channel that is down is not hammered.
 const BACKOFF: Duration = Duration::from_secs(5);
@@ -40,31 +41,52 @@ fn store() -> Result<(Home, Store)> {
     Ok((home, store))
 }
 
+/// How to connect one, for messages: the registry's names.
+fn how_to_connect() -> String {
+    format!(
+        "`openmoat approvals connect <{}>` sets one up",
+        REGISTRY.names().join("|")
+    )
+}
+
 /// The key and settings of a connected channel.
 fn connected(store: &Store) -> Result<(Key, Settings)> {
     if !store.connected() {
-        bail!("no channel is connected; `openmoat approvals connect telegram` sets one up");
+        bail!("no channel is connected; {}", how_to_connect());
     }
     let key = Key::load(&store.key_path())?;
     let settings = Settings::load(&store.settings_path(), &key)?;
     Ok((key, settings))
 }
 
-fn channel(store: &Store, settings: &Settings) -> Result<Telegram<Https>> {
-    if settings.channel != telegram::NAME {
-        bail!(
-            "this release does not know the channel `{}`",
-            settings.channel
-        );
-    }
-    let token = telegram::read_token(&store.token_path(telegram::NAME))?;
-    Ok(Telegram::new(Https::new(token)?))
+/// A line the person types at the terminal, after `ask`.
+fn ask(ask: &str) -> Result<String> {
+    eprint!("{ask}");
+    std::io::stderr().flush()?;
+    Ok(crate::terminal::read_answer()?.trim().to_owned())
 }
 
-/// `openmoat approvals connect telegram`.
+/// The answers to `spec`'s questions: from `--set`, else asked.
+fn options(spec: &Spec, given: &[String]) -> Result<Options> {
+    let mut options = Options::new();
+    for pair in given {
+        let (key, value) = pair
+            .split_once('=')
+            .with_context(|| format!("--set {pair} is not KEY=VALUE"))?;
+        options.insert(key.trim().to_owned(), value.trim().to_owned());
+    }
+    for question in spec.questions {
+        if !options.contains_key(question.key) {
+            options.insert(question.key.to_owned(), ask(question.ask)?);
+        }
+    }
+    Ok(options)
+}
+
+/// `openmoat approvals connect <channel>`.
 pub fn connect(args: &ConnectArgs) -> Result<Code> {
     person("openmoat approvals connect")?;
-    let ChannelKind::Telegram = args.channel;
+    let spec = REGISTRY.find(&args.channel)?;
     let expiry_s = match &args.expires {
         None => DEFAULT_EXPIRY_S,
         Some(text) => crate::time::parse_span(text)
@@ -75,49 +97,32 @@ pub fn connect(args: &ConnectArgs) -> Result<Code> {
             })?,
     };
     let (_home, store) = store()?;
-    let token = if let Some(path) = &args.token_file {
-        Zeroizing::new(
+    let credential = if let Some(path) = &args.credential_file {
+        Credential::new(
             std::fs::read_to_string(path)
                 .with_context(|| format!("reading {}", path.display()))?
                 .trim()
                 .to_owned(),
         )
     } else {
-        eprint!("Paste the bot's token from @BotFather, then Enter: ");
-        std::io::stderr().flush()?;
-        Zeroizing::new(crate::terminal::read_answer()?.trim().to_owned())
+        Credential::new(ask(spec.ask_credential)?)
     };
-    if !telegram::valid_token(&token) {
-        bail!("that is not a Telegram bot token (`<digits>:<letters>`); nothing was saved");
-    }
-    let bot = Telegram::new(Https::new(token.clone())?)
-        .bot_name()
-        .context("checking the token with Telegram; nothing was saved")?;
-    let key = Key::load_or_create_at(&store.key_path())?;
-    crate::home::write_private(&store.token_path(telegram::NAME), token.as_bytes())?;
-    // Approvers stay when the same channel is connected again.
-    let mut settings = Settings::new(telegram::NAME, expiry_s)?;
-    if let Ok(old) = Settings::load(&store.settings_path(), &key)
-        && old.channel == settings.channel
-    {
-        settings.approvers = old.approvers;
-    }
-    settings.save(&store.settings_path(), &key)?;
+    let options = options(spec, &args.options)?;
+    let account = crate::remote::connect(&store, spec, &credential, options, expiry_s)?;
     let mut out = Deferred::default();
     writeln!(
         out,
-        "connected the Telegram bot {bot}; its token is in {} (owner-only)",
-        store.token_path(telegram::NAME).display()
+        "connected {} as {account}; its credential is in {} (owner-only)",
+        spec.title,
+        store.channel(spec).credential_path().display()
     )?;
-    if let Some(path) = &args.token_file {
+    if let Some(path) = &args.credential_file {
         writeln!(out, "you can delete {} now", path.display())?;
     }
     writeln!(
         out,
-        "next:\n  1. send /start to {bot} from your own Telegram account\n  2. run \
-         `openmoat approvals listen` in a terminal of your own; it prints your user id when \
-         you message the bot\n  3. `openmoat approvals allow <your user id>`, then \
-         `openmoat approvals test`\nrequests wait {} minute(s) for an answer",
+        "next:\n{}\nrequests wait {} minute(s) for an answer",
+        (spec.next_steps)(&account),
         expiry_s / 60
     )?;
     out.finish()?;
@@ -129,20 +134,18 @@ pub fn allow(args: &ApproverArgs) -> Result<Code> {
     person("openmoat approvals allow")?;
     let (_home, store) = store()?;
     let (key, mut settings) = connected(&store)?;
-    if !telegram::valid_user(&args.user_id) {
-        bail!("`{}` is not a Telegram user id (a number)", args.user_id);
-    }
+    let spec = REGISTRY.find(&settings.channel)?;
+    let id = REGISTRY.approver(spec, &args.user_id)?;
     let mut out = Deferred::default();
-    if settings.approver(&args.user_id) {
-        writeln!(out, "{} can already approve", args.user_id)?;
+    if settings.approver(&id) {
+        writeln!(out, "{id} can already approve")?;
     } else {
-        settings.approvers.push(args.user_id.clone());
+        settings.approvers.push(id.clone());
         settings.save(&store.settings_path(), &key)?;
         writeln!(
             out,
-            "{} can now approve calls held for review on this machine; `openmoat approvals \
-             remove {}` takes that back",
-            args.user_id, args.user_id
+            "{id} can now approve calls held for review on this machine; `openmoat approvals \
+             remove {id}` takes that back"
         )?;
     }
     out.finish()?;
@@ -154,54 +157,73 @@ pub fn remove(args: &ApproverArgs) -> Result<Code> {
     person("openmoat approvals remove")?;
     let (_home, store) = store()?;
     let (key, mut settings) = connected(&store)?;
-    if !settings.approver(&args.user_id) {
-        bail!("{} is not an approver", args.user_id);
+    let spec = REGISTRY.find(&settings.channel)?;
+    let id = REGISTRY.approver(spec, &args.user_id)?;
+    if !settings.approver(&id) {
+        bail!("{id} is not an approver");
     }
-    settings.approvers.retain(|a| a != &args.user_id);
+    settings.approvers.retain(|a| a != &id);
     settings.save(&store.settings_path(), &key)?;
     let mut out = Deferred::default();
     writeln!(
         out,
-        "{} can no longer approve; answers it gave that are not used yet no longer count",
-        args.user_id
+        "{id} can no longer approve; answers it gave that are not used yet no longer count"
     )?;
     out.finish()?;
     Ok(Code::Ok)
 }
 
+/// What `status` reports of a connected channel.
+struct State {
+    settings: Settings,
+    account: Option<String>,
+    waiting: usize,
+    problem: Option<String>,
+}
+
+fn state(store: &Store) -> Result<State> {
+    let (key, settings) = connected(store)?;
+    let now = crate::time::now_ms();
+    let waiting = store
+        .requests()
+        .unwrap_or_default()
+        .into_iter()
+        .flatten()
+        .filter(|r| r.verified(&key) && !r.expired(now))
+        .count();
+    let (account, problem) = match REGISTRY.find(&settings.channel) {
+        Ok(spec) => (
+            crate::remote::account(store, &REGISTRY, &key, &settings),
+            crate::remote::credential_problem(store, spec),
+        ),
+        Err(error) => (None, Some(format!("{error:#}"))),
+    };
+    Ok(State {
+        settings,
+        account,
+        waiting,
+        problem,
+    })
+}
+
 /// `openmoat approvals status`: read-only, so no terminal is needed.
 pub fn status(args: &ApprovalsStatusArgs) -> Result<Code> {
     let (_home, store) = store()?;
-    let now = crate::time::now_ms();
     let state = if store.connected() {
-        connected(&store).map(|(key, settings)| {
-            let waiting = store
-                .requests()
-                .unwrap_or_default()
-                .into_iter()
-                .flatten()
-                .filter(|r| r.verified(&key) && !r.expired(now))
-                .count();
-            let token = store.token_path(&settings.channel);
-            let problem = if token.exists() {
-                crate::key_file::problem(&token)
-            } else {
-                Some(format!("{} is missing", token.display()))
-            };
-            (settings, waiting, problem)
-        })
+        state(&store)
     } else {
         Err(anyhow::Error::msg("no channel connected"))
     };
     if args.format == Format::Json {
         let value = match &state {
-            Ok((settings, waiting, problem)) => serde_json::json!({
+            Ok(s) => serde_json::json!({
                 "connected": true,
-                "channel": settings.channel,
-                "approvers": settings.approvers,
-                "expiry_s": settings.expiry_s,
-                "waiting": waiting,
-                "problem": problem,
+                "channel": s.settings.channel,
+                "account": s.account,
+                "approvers": s.settings.approvers,
+                "expiry_s": s.settings.expiry_s,
+                "waiting": s.waiting,
+                "problem": s.problem,
             }),
             Err(error) => serde_json::json!({
                 "connected": false,
@@ -213,19 +235,22 @@ pub fn status(args: &ApprovalsStatusArgs) -> Result<Code> {
     }
     let mut out = Deferred::default();
     match state {
-        Ok((settings, waiting, problem)) => {
-            writeln!(out, "channel: {}", settings.channel)?;
-            if settings.approvers.is_empty() {
+        Ok(s) => {
+            match &s.account {
+                Some(account) => writeln!(out, "channel: {} ({account})", s.settings.channel)?,
+                None => writeln!(out, "channel: {}", s.settings.channel)?,
+            }
+            if s.settings.approvers.is_empty() {
                 writeln!(
                     out,
                     "approvers: none yet; `openmoat approvals allow <user id>` adds one"
                 )?;
             } else {
-                writeln!(out, "approvers: {}", settings.approvers.join(", "))?;
+                writeln!(out, "approvers: {}", s.settings.approvers.join(", "))?;
             }
-            writeln!(out, "requests wait: {} minute(s)", settings.expiry_s / 60)?;
-            writeln!(out, "waiting now: {waiting}")?;
-            if let Some(problem) = problem {
+            writeln!(out, "requests wait: {} minute(s)", s.settings.expiry_s / 60)?;
+            writeln!(out, "waiting now: {}", s.waiting)?;
+            if let Some(problem) = s.problem {
                 writeln!(out, "problem: {problem}")?;
             }
             writeln!(
@@ -235,8 +260,8 @@ pub fn status(args: &ApprovalsStatusArgs) -> Result<Code> {
         }
         Err(_) if !store.connected() => writeln!(
             out,
-            "no channel connected: reviews are answered where the agent runs; \
-             `openmoat approvals connect telegram` sets one up"
+            "no channel connected: reviews are answered where the agent runs; {}",
+            how_to_connect()
         )?,
         Err(error) => writeln!(
             out,
@@ -251,16 +276,19 @@ pub fn status(args: &ApprovalsStatusArgs) -> Result<Code> {
 pub fn test() -> Result<Code> {
     person("openmoat approvals test")?;
     let (_home, store) = store()?;
-    let (_key, settings) = connected(&store)?;
+    let (key, settings) = connected(&store)?;
     if settings.approvers.is_empty() {
         bail!("no approver yet; `openmoat approvals allow <user id>` adds one");
     }
-    let mut channel = channel(&store, &settings)?;
+    let (spec, mut channel) = crate::remote::open(&store, &REGISTRY, &key, &settings)?;
     let mut out = Deferred::default();
     let mut failed = false;
     for approver in &settings.approvers {
+        let Some(local) = crate::remote::channel::local_id(spec.name, approver) else {
+            continue;
+        };
         match channel.notify(
-            approver,
+            local,
             "OpenMoat: a test message. Calls held for review on this machine will come here \
              while `openmoat approvals listen` runs.",
         ) {
@@ -280,20 +308,23 @@ pub fn listen() -> Result<Code> {
     person("openmoat approvals listen")?;
     let (home, store) = store()?;
     let (key, settings) = connected(&store)?;
-    let mut channel = channel(&store, &settings)?;
+    let (spec, mut channel) = crate::remote::open(&store, &REGISTRY, &key, &settings)?;
     let mut records = AuditRecords { home: &home };
-    let mut listener = Listener::new(&store, &key, settings);
+    let mut listener = Listener::new(&store, &key, spec, settings);
     eprintln!(
         "listening for answers over {}; Ctrl-C stops (requests then wait unanswered and expire)",
-        channel.name()
+        spec.title
     );
     loop {
         // Approvers a person changed meanwhile, and a channel disconnected.
         match connected(&store) {
+            Ok((_, settings)) if settings.channel != spec.name => {
+                bail!("stopped: another channel was connected; run `listen` again")
+            }
             Ok((_, settings)) => listener.update(settings),
             Err(error) => bail!("stopped: {error:#}"),
         }
-        let round = listener.step(&mut channel, &mut records, POLL, &crate::time::now_ms);
+        let round = listener.step(channel.as_mut(), &mut records, POLL, &crate::time::now_ms);
         for line in listener.log.drain(..) {
             eprintln!("{} {line}", crate::time::clock(crate::time::now_ms()));
         }
@@ -308,24 +339,17 @@ pub fn listen() -> Result<Code> {
 pub fn disconnect() -> Result<Code> {
     person("openmoat approvals disconnect")?;
     let (_home, store) = store()?;
-    let mut removed = false;
-    for path in [store.settings_path(), store.token_path(telegram::NAME)] {
-        match std::fs::remove_file(&path) {
-            Ok(()) => removed = true,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e).with_context(|| format!("removing {}", path.display())),
-        }
-    }
-    for dir in ["requests", "answers"] {
-        let _ = std::fs::remove_dir_all(store.dir().join(dir));
-    }
+    let (was, removed) = crate::remote::disconnect(&store, &REGISTRY)?;
     let mut out = Deferred::default();
     if removed {
-        writeln!(
+        write!(
             out,
-            "disconnected: reviews are answered only where the agent runs; revoke the bot's \
-             token with @BotFather if it may have been seen"
+            "disconnected: reviews are answered only where the agent runs"
         )?;
+        match was {
+            Some(spec) => writeln!(out, "; {}", spec.revoke)?,
+            None => writeln!(out)?,
+        }
     } else {
         writeln!(out, "no channel was connected")?;
     }
