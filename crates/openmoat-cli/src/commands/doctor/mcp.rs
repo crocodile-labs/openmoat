@@ -52,7 +52,10 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
     }
     if found.pinned {
         for change in &found.changes {
-            let accept = format!("`openmoat mcp accept {}` shows it and asks", change.name);
+            let accept = format!(
+                "`openmoat mcp accept {}` shows it and asks",
+                crate::render::clean(&change.name)
+            );
             let what = match &change.kind {
                 Kind::Added => "is new",
                 Kind::Changed(_) => "changed; its tool calls are refused",
@@ -62,8 +65,8 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
                 Area::Mcp,
                 false,
                 format!(
-                    "mcp servers      `{}` in {} {what}: {accept}",
-                    change.name,
+                    "mcp servers      {} in {} {what}: {accept}",
+                    crate::render::Named(&change.name),
                     change.file.display()
                 ),
             );

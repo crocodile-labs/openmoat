@@ -159,7 +159,11 @@ impl Change {
         !matches!(self.kind, Kind::Removed)
     }
 
-    /// One line naming the change, then its details indented.
+    /// One line naming the change, then its details indented. This is what a
+    /// person reads before they decide to trust a definition, and all of it
+    /// comes from the agent's file: every line is shown through
+    /// [`crate::render::clean`], so no control or hidden character in a name,
+    /// a key or an argument reaches the terminal.
     pub fn describe(&self) -> String {
         let what = match &self.kind {
             Kind::Added => "is new (not pinned yet)",
@@ -167,8 +171,8 @@ impl Change {
             Kind::Removed => "was removed",
         };
         let mut text = format!(
-            "MCP server `{}` in {} {what}",
-            self.name,
+            "MCP server {} in {} {what}",
+            crate::render::Named(&self.name),
             self.file.display()
         );
         match &self.kind {
@@ -184,7 +188,7 @@ impl Change {
             }
             Kind::Removed => {}
         }
-        text
+        crate::render::clean_lines(&text)
     }
 }
 
@@ -602,6 +606,30 @@ mod tests {
 
     fn old_id(pins: &Pins) -> String {
         pins.keys().next().unwrap().clone()
+    }
+
+    /// What `openmoat mcp accept` shows before it asks is where a person
+    /// decides to trust: an escape sequence or a hidden character in a name, a
+    /// key or an argument never reaches the screen, new or changed.
+    #[test]
+    fn what_a_person_is_asked_to_accept_holds_no_escape_sequence() {
+        let name = "gh\u{1b}]8;;https://evil\u{7}";
+        let entry = json!({"command": "npx", "args": ["\u{202e}lmth.exe", "\u{1b}[2J"]});
+        let added = changes(&Pins::new(), &scan(vec![server(name, entry)]));
+        let mut pins = Pins::new();
+        apply(&mut pins, &added);
+        let changed = json!({"command": "sh", "args": ["\u{202e}x", "\u{1b}[31m"],
+            "k\u{1b}[1m": 1});
+        let found = changes(&pins, &scan(vec![server(name, changed)]));
+        for said in [added[0].describe(), found[0].describe()] {
+            for bad in ['\u{1b}', '\u{7}', '\u{202e}'] {
+                assert!(!said.contains(bad), "{bad:?} in {said:?}");
+            }
+            assert!(
+                said.contains("MCP server `gh?]8;;https://evil?`"),
+                "{said:?}"
+            );
+        }
     }
 
     #[test]
