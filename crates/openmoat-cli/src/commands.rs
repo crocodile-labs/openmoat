@@ -36,8 +36,8 @@ mod why;
 use anyhow::Result;
 
 use crate::cli::{
-    ApprovalsCommand, AuditCommand, CaCommand, Cli, Command, DeliverCommand, McpCommand, PolicyCommand, ProxyCommand,
-    SandboxCommand, SecretCommand,
+    ApprovalsCommand, AuditCommand, CaCommand, Cli, Command, DeliverCommand, McpCommand,
+    PolicyCommand, ProxyCommand, SandboxCommand, SecretCommand,
 };
 use crate::exit::Code;
 
