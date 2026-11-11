@@ -179,8 +179,9 @@ const REASON_CHARS: usize = 200;
 /// calls could not be read in time, a state file is broken): recorded in the
 /// audit log, but a person sees each only as one more refused call in the
 /// agent. A guard that fails every call must not leave doctor saying all is
-/// well, so this row says how many, when the latest was, in which session and
-/// why, and what to do next.
+/// well, so this row says how many, when the latest was, on which agent and
+/// why, and what to do next. A session id is not printed: it can be a
+/// credential-like handle, and `openmoat why <id>` shows the call in full.
 pub(super) fn kernel_errors(store: &openmoat_audit::Store, now_ms: i64) -> Option<String> {
     let seen = store
         .rule_since(
@@ -203,13 +204,12 @@ pub(super) fn kernel_errors(store: &openmoat_audit::Store, now_ms: i64) -> Optio
     };
     Some(format!(
         "guard            {} call(s){sessions} denied in the last 24 hours because OpenMoat could \
-         not decide them (kernel-error); the latest at {}, {} session {}{reason}. \
+         not decide them (kernel-error); the latest at {}, from {}{reason}. \
          `openmoat why {}` shows it in full; if calls keep being denied this way, \
          `openmoat doctor --bundle moat-bundle.json` writes a file for a bug report",
         seen.count,
         time::timestamp(newest.ts_ms),
         newest.host,
-        newest.session_id,
         newest.id,
     ))
 }
@@ -326,7 +326,8 @@ mod tests {
             "{row}"
         );
         assert!(row.contains("(kernel-error)"), "{row}");
-        assert!(row.contains("some-agent session s2"), "{row}");
+        assert!(row.contains("from some-agent: "), "{row}");
+        assert!(!row.contains("s2"), "no session id is printed: {row}");
         assert!(row.contains(": OpenMoat was still reading"), "{row}");
         assert!(row.contains('…'), "the reason is cut short: {row}");
         assert!(row.contains("`openmoat why 4`"), "{row}");
