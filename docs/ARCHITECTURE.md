@@ -177,7 +177,12 @@ appends `<ms> <host> <phase> <elapsed ms>` to `~/.moat/guard-hangs.log`, the
 phase being the step the guard was in (`stdin`, `relay` for a hook inside `openmoat run`
 waiting for the run to decide, `lock`, `context`, `compile`, `taint`, `cache`,
 `record`, `answer`); `openmoat doctor` reports the hangs of the last
-week and the phase most of them were in.
+week and the phase most of them were in. A call the guard denied because it could
+not decide it in time or at all (`kernel-error`, recorded in the audit log, such as a
+session whose earlier calls could not be read before the taint deadline) is a doctor
+row too: how many in the last day, in how many sessions, and the latest one's time,
+host, session, reason and event id (`openmoat why <id>`), so doctor never says "All
+good" while the guard refuses every call.
 
 ## 3. Classification
 

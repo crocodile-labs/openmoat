@@ -341,6 +341,35 @@ fn open_existing_refuses_a_missing_database() {
 }
 
 #[test]
+fn rule_since_counts_the_recent_events_of_exactly_that_rule() {
+    let store = Store::open_in_memory().unwrap();
+    let a = Action::Shell {
+        command: "ls".into(),
+    };
+    let record = |session: &str, rule: &str, reason: &str| {
+        let d = decision(Verdict::Deny, rule, reason);
+        let event = NewEvent {
+            session_id: session,
+            ..sample(&d, &a)
+        };
+        store.record(&event).unwrap()
+    };
+    assert_eq!(store.rule_since("kernel-error", 0).unwrap(), None);
+    record("s1", "KERNEL-ERROR", "case");
+    record("s1", "kernel_error", "any character");
+    assert_eq!(store.rule_since("kernel-error", 0).unwrap(), None);
+    record("s1", "kernel-error", "first");
+    record("s2", "kernel-error", "second");
+    let newest = record("s2", "kernel-error", "third");
+    let seen = store.rule_since("kernel-error", 0).unwrap().unwrap();
+    assert_eq!((seen.count, seen.sessions), (3, 2));
+    assert_eq!(seen.newest.id, newest);
+    assert_eq!(seen.newest.session_id, "s2");
+    assert_eq!(seen.newest.reasons, ["third"]);
+    assert_eq!(store.rule_since("kernel-error", i64::MAX).unwrap(), None);
+}
+
+#[test]
 fn session_has_rule_matches_the_rule_exactly_and_only_in_that_session() {
     let store = Store::open_in_memory().unwrap();
     let a = Action::Shell {
