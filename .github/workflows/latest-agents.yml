@@ -113,7 +113,8 @@ jobs:
         # Ubuntu 24.04's AppArmor blocks the unprivileged user namespaces bwrap needs.
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q bubblewrap socat
+          # strace: which hook file Antigravity CLI opens (latest-agents.sh, agy_diagnose).
+          sudo apt-get install -y -q bubblewrap socat strace
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
