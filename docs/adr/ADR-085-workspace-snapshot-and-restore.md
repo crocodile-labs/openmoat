@@ -82,6 +82,26 @@ privilege, and stores unchanged files once.
    Each file is written beside its place under a fresh name and renamed over it, so a link
    at the path is replaced, not followed. The audit log records the restore. `openmoat
    restore <undo id>` undoes it.
+
+   **The check and the write are one step.** A restore needs a person's terminal, but the
+   agent, or a process it left behind (a `nohup` loop survives its session, and one under
+   `openmoat run` still writes the project), may still be running while it writes. Checked
+   by path and written by path later, a folder on the path could be swapped for a link
+   between the two: rename `a` away and link `a` to `~/.ssh`, and a file the agent once
+   planted at `a/authorized_keys`, deleted so the restore brings it back, is written into
+   `~/.ssh` by the person's own unconfined process; a delete removes a file there the
+   same way. A tight rename loop wins such a race often enough, so it is treated as real.
+   On Unix the restore therefore opens each folder from the project down with
+   `O_DIRECTORY | O_NOFOLLOW` (creating missing ones with `mkdirat`) and makes every later
+   step relative to the folder it holds open: the temporary file (`openat` with
+   `O_CREAT | O_EXCL | O_NOFOLLOW`) or link (`symlinkat`), the rename (`renameat`) and the
+   delete (`unlinkat`), through `rustix`, so no `unsafe` is needed. Whatever is put at a
+   folder's name after it was opened is never followed; a folder the agent moves out of
+   the project takes the write with it to a place the agent could write anyway. Windows
+   has no such calls in the standard library: there every folder is checked again, and
+   its resolved place compared, right before the rename or the delete, and any change
+   refuses that path; the moment between that check and the call remains, and a junction
+   needs the agent to be running on Windows during the restore (LIMITS.md).
 6. **Retention.** Per project the newest 50 snapshots, none older than 14 days, and always the
    newest; pruned at every `openmoat run` start and by `openmoat snapshot --prune`, then
    `git gc --prune=1.hour.ago` drops the files no snapshot holds, once they are an hour old.

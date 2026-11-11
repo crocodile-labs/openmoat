@@ -187,7 +187,8 @@ impl Store {
     /// Make the project match `plan`, under the store's lock (held since the
     /// undo snapshot, so no prune drops the snapshot between plan and write):
     /// deletes first, then writes, each path only through real folders inside
-    /// the project.
+    /// the project, made in the folder that was checked (`paths.rs`), so an
+    /// agent's process still running cannot swap one for a link meanwhile.
     pub fn apply(&self, held: &Held, plan: &Plan) -> Result<Applied> {
         self.check_held(held)?;
         let mut applied = Applied::default();
@@ -197,7 +198,7 @@ impl Store {
             .partition(|c| c.kind == ChangeKind::Deleted);
         for change in deletes {
             match paths::checked_target(&self.project, &change.path, false) {
-                Ok(path) => match paths::remove(&path) {
+                Ok(target) => match paths::remove(&target) {
                     Ok(()) => applied.deleted += 1,
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                     Err(error) => applied

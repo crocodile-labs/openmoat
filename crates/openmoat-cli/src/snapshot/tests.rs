@@ -10,6 +10,8 @@ use super::paths::{self, Blocked, in_state_folder, is_plain};
 use super::restore::{Applied, parse_raw_for_tests};
 use super::*;
 
+#[cfg(unix)]
+mod race;
 mod store;
 
 /// A project and a store side by side in a fresh temporary directory, with
@@ -480,8 +482,8 @@ fn checked_target_refuses_names_outside_the_project() {
         "a/.moat/policy.yaml",
     ] {
         assert_eq!(
-            paths::checked_target(&root, bad, true),
-            Err(Blocked::Name),
+            paths::checked_target(&root, bad, true).err(),
+            Some(Blocked::Name),
             "{bad}"
         );
     }

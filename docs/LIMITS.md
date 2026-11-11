@@ -383,7 +383,11 @@ exits, and `openmoat restore` puts them back ([USAGE.md](USAGE.md#put-the-projec
   goes on.
 - **A restore while the agent runs.** Stop the agent first: a file it writes during the
   restore can be overwritten or left half-restored. A path whose folder is a link or a file
-  now is skipped and named, never written through.
+  now is skipped and named, never written through. On macOS and Linux this holds even
+  when the agent swaps a folder for a link while the restore writes: each write and delete
+  is made in the folder that was checked, held open. On Windows each folder is checked
+  again right before the change, which leaves a moment in which a junction swapped in is
+  not seen.
 - **Lost files after the retention.** Per project the newest 50 snapshots are kept, none
   older than 14 days (the newest always). The store holds old contents of the project's
   files on this machine until then; `openmoat uninstall --purge` deletes it.

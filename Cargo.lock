@@ -697,6 +697,7 @@ dependencies = [
  "openmoat-proxy",
  "rcgen",
  "regex",
+ "rustix",
  "rustls",
  "seccompiler",
  "serde",
