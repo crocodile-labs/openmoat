@@ -1,0 +1,4 @@
+### Fixed
+- A long agent session that moves to another folder no longer has every call denied with `kernel-error` while OpenMoat reads the session's earlier calls again: the session's taint is kept for every directory, and only calls recorded without a working directory keep a directory's own ([#786](https://github.com/crocodile-labs/openmoat/pull/786)).
+- Working out a session's taint classifies each earlier call once instead of twice, so a session read again after an upgrade or a policy edit catches up in fewer calls ([#786](https://github.com/crocodile-labs/openmoat/pull/786)).
+- `openmoat doctor` lists the calls the guard denied in the last day because it could not decide them (`kernel-error`), with the latest one's time, session and reason and what to run next, so it no longer says "All good" while the guard refuses every call ([#786](https://github.com/crocodile-labs/openmoat/pull/786)).

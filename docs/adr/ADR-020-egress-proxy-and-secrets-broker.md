@@ -99,3 +99,49 @@ This note explains the accepted decision above; it does not change it.
 - A `ClientHello` carrying an `encrypted_client_hello` extension under the codepoints
   of ECH drafts 08 to 12 (`0xfe08` to `0xfe0c`) is refused like one with `0xfe0d`: a
   server speaking a draft acts on the encrypted inner name all the same.
+
+## Note (2026-11-10): the session cache and the working directory
+
+This note explains how session taint is computed in long sessions; the decision above
+does not change.
+
+Session taint is the fold of a session's earlier calls. Since #570 the guard keeps that
+fold in the audit database (`session_folds`, see ARCHITECTURE.md, "Session cache"), so a
+late call folds only the calls recorded since. No ADR introduced that cache; this note
+records the rule it follows now.
+
+- **What a row is keyed by.** The digest covers this build's version, the host, the
+  effective policy and its context. The context's working directory is left out: the
+  fold classifies each call in the directory it was recorded with, never in the
+  context's. Before, the digest held the directory of the call being decided, so the
+  first call after the agent moved to another folder found no row, folded the session
+  from its first call, and in a long session ran out of time on every call (each one
+  denied with `kernel-error`).
+- **Calls recorded without a directory.** Such a call is taken to have run in the
+  directory of the call being decided, so a fold that holds one belongs to that
+  directory. The fold records whether it took one in. A fold that took in none is the
+  same in every directory and is kept in the shared row; one that did is kept in a row
+  of its directory's own, which only that directory reads. A call reads the further on
+  of the two rows it may use.
+- **Why the answer is the same as a full fold.** A fold is a left fold over the
+  session's calls in order, so reading on from a fold of the first `k` calls gives the
+  fold of them all. The directory of the call being decided enters it only through the
+  calls without a directory; a fold that holds none of those is the fold every directory
+  would compute. A test compares the cached answer with a fold from the first call, at
+  every call, over sessions that mix directories, calls without one, a relative read that
+  is a secret from one directory only, stopped calls and catch-ups.
+- **Unchanged.** A fold that runs out of time still saves what it reached and denies the
+  call: part of a session is never an answer. An upgrade, a policy edit or a move to
+  another project still changes the digest, and the session is folded again from its
+  first call; that is what the classifier of the new build or policy would answer. Each
+  fold now classifies a call once for its taint and its collection (ADR-061) instead of
+  twice, and `openmoat doctor` lists the calls the guard could not decide in the last day,
+  so a guard that denies every call is never shown as all good.
+- **Measured** (release build, default policy, one macOS 12 laptop): classifying is
+  what a fold spends its time on. 2,000 distinct calls took 2.27 s classified twice and
+  1.41 s once; reading 50,000 events took 0.69 s; a fold of 50,000 calls with 2,000
+  distinct, from the first, 2.2 s. The first call after a move to another folder of the
+  project, 50,000 calls in, folded one event and took 0.14 s, policy compile included.
+  Real agents' commands are longer than these (heredocs, long pipelines), so a refold
+  after an upgrade or a policy edit can still take more than one call's 20 s; each call
+  then reads on from where the last one stopped.

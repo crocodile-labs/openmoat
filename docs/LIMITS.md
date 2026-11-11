@@ -234,6 +234,16 @@ Each agent's gaps and the reasons are in
 
 ## Limits of single checks
 
+- **After an upgrade, a policy edit or a move to another project, a long session's
+  first calls may be refused.** OpenMoat works out the session's taint from its earlier
+  calls again under the new version, policy or project, and a call it cannot decide in
+  time is denied (`kernel-error`) rather than judged on part of the session. What it read
+  is kept, so each try reads on; the agent's `PostToolUse` hook (Claude Code, the Cline
+  CLI) reads on after a call ran too. A move to another folder of the same project
+  starts over only when some of the session's calls were recorded without a working
+  directory. `openmoat doctor` lists these denials of the last day
+  ([ARCHITECTURE.md, "Session cache"](ARCHITECTURE.md)).
+
 - **Injected input is linked only with Claude Code, the Cline CLI and wrapped MCP
   servers, and only for the same request.** Other agents report no call output (their
   wrapped MCP servers' results are read by the gateway). Another spelling of a planted
