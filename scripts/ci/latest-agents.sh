@@ -27,7 +27,7 @@
 #      account (after_call.py): reported in the job's annotations, never failed;
 #   7. where step 4 starts the agent, makes OpenMoat's hook fail in the ways
 #      its guard cannot catch itself (the binary exits 1 with nothing printed,
-#      is gone, or hangs past the agent's time limit), has the agent read a
+#      or is gone; a hang is not tried, see hook_fails), has the agent read a
 #      probe file each time, and compares what the agent did with the host
 #      fact `openmoat status --format json` reports (`hook_failure`, ADR-079):
 #      a call that ran where the fact says the agent blocks fails the job; a
@@ -1140,32 +1140,18 @@ probe_agent() {
 # hook_fails <mode>: the hook binary made to fail as <mode> says, the agent
 # probed, the outcome compared with the host fact, the binary put back.
 #   crash    exits 1 with nothing printed (a crash the guard cannot catch);
-#   missing  is gone (an upgrade or uninstall removed it);
-#   hang     answers nothing until well past the agent's time limit.
+#   missing  is gone (an upgrade or uninstall removed it).
+# A hook that hangs is not tried here: waiting out an agent's time limit
+# (30 s to 600 s) under every agent would outlast the job's own time limit.
 hook_fails() {
     local mode=$1 fact limit=180 calls="$out/hook-failure-$mode-calls.log"
     begin "hook fails: $mode"
-    case "$mode" in
-    hang) fact=$(check hook-failure-fact "$host" "$out/status.json" times_out) ;;
-    *) fact=$(check hook-failure-fact "$host" "$out/status.json" fails) ;;
-    esac
-    if [ "$mode" = hang ]; then
-        local seconds
-        seconds=$(check hook-failure-fact "$host" "$out/status.json" timeout_s)
-        # A limit of minutes would hold the runner that long for one answer.
-        if [ "$seconds" = none ] || [ "$seconds" -gt 120 ]; then
-            check hook-failure-skip "$agent" "$mode" "$fact" \
-                "the time limit is ${seconds} s; not waited for" "$out/hook-failure.json"
-            return 0
-        fi
-        limit=$((seconds + 180))
-    fi
+    fact=$(check hook-failure-fact "$host" "$out/status.json" fails)
     mv "$moat" "$moat.real"
     : >"$calls"
     # shellcheck disable=SC2016 # `$$` and `$*` are the stand-in's own, at run time
     case "$mode" in
     crash) printf '#!/bin/sh\necho "$$ $*" >>"%s"\nexit 1\n' "$calls" >"$moat" ;;
-    hang) printf '#!/bin/sh\necho "$$ $*" >>"%s"\nexec sleep %s\n' "$calls" "$((limit + 60))" >"$moat" ;;
     missing) ;;
     esac
     [ ! -f "$moat" ] || chmod +x "$moat"
@@ -1188,7 +1174,7 @@ cursor | hermes | opencode-2)
     ;;
 *)
     pinned_port=${fake_port:-0}
-    for mode in crash missing hang; do
+    for mode in crash missing; do
         hook_fails "$mode"
     done
     ;;

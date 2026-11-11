@@ -82,8 +82,9 @@ was tried against a running agent; the weekly job (Decision 3) is the first to.
 `init` writes the hook naming a copy of the binary in the throwaway root; the step puts a
 stand-in there, starts the agent once per case with one call that reads a probe file and
 copies it into the project, then puts the binary back. The cases: `crash` (exit 1, nothing
-printed), `missing` (no file) and `hang` (minutes past the time limit, only where the
-limit is 120 s or less). The call ran when the probe's marker reaches the agent's output,
+printed) and `missing` (no file). A hook that hangs is not tried: waiting out each agent's
+time limit (30 s to 600 s) would make the job outlast its own time limit, so the
+`times_out` facts rest on the vendors' documentation and source alone. The call ran when the probe's marker reaches the agent's output,
 the fake API or the copy; it was blocked when the marker is nowhere and the hook started or
 the agent sent the model a result of the call.
 
@@ -92,8 +93,8 @@ the agent sent the model a result of the call.
   evidence either way, are **reported** in the job's annotations and `hook-failure.json`.
   A fact is changed only from the vendor's documentation or source, never from a run alone:
   one run of one version cannot say what the agent promises.
-- Cursor (an account), Hermes Agent and OpenCode 2 (no model call driven) and `hang` where
-  the limit is longer than 120 s are recorded as not run.
+- Cursor (an account), Hermes Agent and OpenCode 2 (no model call driven) are recorded as
+  not run.
 
 ## Decision 4: the OWASP table states its evidence
 
@@ -132,8 +133,8 @@ evidence at all, and the end-to-end tests that do test some of them were not lin
   `~/.gemini/config/hooks.json` at all, so until that is understood and fixed it is not
   protected by its hook, whatever the hook would answer; this ADR does not change how
   its hook is installed.
-- The weekly job takes longer: up to three more agent runs per agent, one of which waits
-  past a time limit of up to 120 s.
+- The weekly job takes a little longer: two more short agent runs per agent, within the
+  job's existing time limit.
 - The OWASP table can no longer say more than the tests show: a risk without a fixture
   class or a marked test reads `not tested`, and a new end-to-end test is linked to a risk
   only by its mark.

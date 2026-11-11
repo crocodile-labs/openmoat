@@ -138,7 +138,10 @@ the binary back:
 |---|---|---|
 | `crash` | exits 1 with nothing printed | `hook_failure.fails` |
 | `missing` | none: the hook names a file that is gone | `hook_failure.fails` |
-| `hang` | sleeps four minutes past the time limit, while the agent is given three; only where the limit is 120 s or less (OpenClaw, pi, OpenCode 1, Cline, goose), others are recorded as not run | `hook_failure.times_out` |
+
+A hook that hangs is not tried: waiting out each agent's time limit (30 s to 600 s) would
+make the job outlast its own time limit, so `hook_failure.times_out` rests on the vendors'
+documentation and source alone.
 
 The call ran when the probe file's marker is in what the agent printed, in the fake API's
 log, or in the copy in the project. It was blocked when the marker is nowhere and the
@@ -153,7 +156,7 @@ outcome is a line of `hook-failure.json` in the artefact.
 - **Reported as proving nothing** (`::warning`): neither evidence, for example an agent
   that never made the call.
 - **Not run:** Cursor (an account), Hermes Agent and OpenCode 2 (no model call is driven
-  through them here), and `hang` where the time limit is longer than 120 s.
+  through them here).
 
 `python3 -I scripts/ci/latest-agents/test_check.py` (in the quality gate) tests how an
 outcome is read and compared; only a run of this job shows what an agent does.
