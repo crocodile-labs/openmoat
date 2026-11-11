@@ -1,7 +1,7 @@
 //! Approving a `review` from another device (ADR-078).
 //!
 //! The guard sends a call it holds for review to a channel only as a signed
-//! request file ([`gate`]); `openmoat approvals listen`, run by the person,
+//! request file ([`gate()`]); `openmoat approvals listen`, run by the person,
 //! sends it to the approvers and turns an approver's button press into a
 //! signed answer ([`Listener`]); the guard uses an approval once, for the
 //! exact call it was made for. Only the channel adapter ([`telegram`]) talks
@@ -46,7 +46,7 @@ pub const EXPIRED_RULE: &str = "remote-expired";
 /// The tool name of the listener's rows.
 pub const ROW_TOOL: &str = "approval";
 
-/// [`gate`] in this guard's state directory, now; without a state directory
+/// [`gate()`] in this guard's state directory, now; without a state directory
 /// there is no channel, and `decision` stays.
 pub fn gated(
     request: &openmoat_hosts::HookRequest,

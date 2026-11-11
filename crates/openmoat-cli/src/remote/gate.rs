@@ -52,7 +52,7 @@ fn with_reason(mut decision: Decision, reason: String) -> Decision {
 
 /// The decision once remote approval had its say: an approval used, an
 /// approver's deny, or the `review` with a reason naming the request sent or
-/// waiting. An error keeps the `review` ([`gate`] adds why).
+/// waiting. An error keeps the `review` ([`gate()`] adds why).
 fn decide(
     store: &Store,
     request: &HookRequest,
