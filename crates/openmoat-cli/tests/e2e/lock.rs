@@ -38,11 +38,17 @@ fn init_writes_a_lock_covering_policy_and_hooks() {
     let lock: Value =
         serde_json::from_str(&std::fs::read_to_string(lock_path(&sb)).unwrap()).unwrap();
     let entries = lock["entries"].as_object().unwrap();
-    assert_eq!(entries.len(), 7, "{entries:?}");
-    // No `openmoat trust` yet: its file is pinned as missing, so one planted
-    // there is drift.
-    let trust = entries.iter().find(|(k, _)| k.ends_with("trust.json"));
-    assert_eq!(trust.map(|(_, v)| v.as_str()), Some(Some("absent")));
+    assert_eq!(entries.len(), 8, "{entries:?}");
+    // No `openmoat trust` and no audit delivery yet: their files are pinned
+    // as missing, so one planted there is drift.
+    for missing in ["trust.json", "delivery.yaml"] {
+        let pin = entries.iter().find(|(k, _)| k.ends_with(missing));
+        assert_eq!(
+            pin.map(|(_, v)| v.as_str()),
+            Some(Some("absent")),
+            "{missing}: {entries:?}"
+        );
+    }
     for name in [
         "hosts.json",
         "policy.yaml",
