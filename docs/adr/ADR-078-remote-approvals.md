@@ -211,8 +211,9 @@ send `/start`); if it can, nothing changes, since the allowlist decides.
 
 More channels will follow Telegram (Slack, GitHub, Discord, Matrix, email, a webhook,
 ntfy, Signal, WhatsApp). Adding one must mean a new folder and one registry row, no
-edit to the core, and no weaker check. Before fixing the layout we read how four
-open-source projects structure their messaging channels, from their source.
+edit to the core, and no weaker check. Before fixing the layout we read how five
+open-source projects structure their messaging channels, from their source: Hermes
+Agent, OpenClaw (its core and its `extensions/`), NanoClaw, Errbot and matterbridge.
 
 ### What other projects do
 
@@ -265,7 +266,78 @@ Sources (files read):
   [gateway/handlers.go](https://github.com/42wim/matterbridge/blob/master/gateway/handlers.go),
   [gateway/bridgemap/bridgemap.go](https://github.com/42wim/matterbridge/blob/master/gateway/bridgemap/bridgemap.go).
 
-What we take: a small trait with typed capabilities, as data, not inferred (OpenClaw);
+### How a channel is packaged and registered
+
+Read 2026-11-11 at openclaw `83fd655`, nanoclaw `60efd61` and hermes-agent `e2a0b32`.
+
+- **OpenClaw extensions.** Each channel is a folder under `extensions/<id>/` with a
+  manifest, `openclaw.plugin.json`: `id`, `name`, `channels`, `activation`, and a
+  required `configSchema` (JSON Schema; `additionalProperties: false` in Telegram,
+  Slack, Discord and Matrix). More static facts sit under the `openclaw` key of its
+  `package.json`: the environment variables that mean "configured", `approvalFlags`,
+  `markdownCapable`, and `setup.fields[]`, each `{key, kind, sensitive, cli.flags,
+  envVars}`. `index.ts` calls `defineBundledChannelEntry` with lazy specifier and export
+  pairs, so setup can load without the runtime. Capabilities (`ChannelCapabilities`) are
+  in code, not in the manifest. The loader refuses a manifest without `configSchema`,
+  reads it with a size cap, rejects hard links and ids reserved for the core, and
+  validates the plugin's configuration against the schema before importing the module.
+  Bundled channel ids come from a fixed list and a generated file. Secrets are declared per
+  channel by a secret contract that names the secret fields.
+  Sources: [extensions/telegram/openclaw.plugin.json](https://github.com/openclaw/openclaw/blob/83fd655f3facaa19db62b62b0fa262bf3043ed2c/extensions/telegram/openclaw.plugin.json),
+  [extensions/slack/openclaw.plugin.json](https://github.com/openclaw/openclaw/blob/83fd655f3facaa19db62b62b0fa262bf3043ed2c/extensions/slack/openclaw.plugin.json),
+  [extensions/discord/openclaw.plugin.json](https://github.com/openclaw/openclaw/blob/83fd655f3facaa19db62b62b0fa262bf3043ed2c/extensions/discord/openclaw.plugin.json),
+  [extensions/matrix/openclaw.plugin.json](https://github.com/openclaw/openclaw/blob/83fd655f3facaa19db62b62b0fa262bf3043ed2c/extensions/matrix/openclaw.plugin.json),
+  [extensions/telegram/package.json](https://github.com/openclaw/openclaw/blob/83fd655f3facaa19db62b62b0fa262bf3043ed2c/extensions/telegram/package.json),
+  [extensions/telegram/index.ts](https://github.com/openclaw/openclaw/blob/83fd655f3facaa19db62b62b0fa262bf3043ed2c/extensions/telegram/index.ts),
+  [src/plugins/manifest.ts](https://github.com/openclaw/openclaw/blob/83fd655f3facaa19db62b62b0fa262bf3043ed2c/src/plugins/manifest.ts),
+  [src/plugins/loader-runtime-candidate.ts](https://github.com/openclaw/openclaw/blob/83fd655f3facaa19db62b62b0fa262bf3043ed2c/src/plugins/loader-runtime-candidate.ts),
+  [src/channels/plugins/bundled-ids.ts](https://github.com/openclaw/openclaw/blob/83fd655f3facaa19db62b62b0fa262bf3043ed2c/src/channels/plugins/bundled-ids.ts).
+- **NanoClaw.** A channel implements `ChannelAdapter` (`name`, `channelType`,
+  `supportsThreads`, `setup`, `teardown`, `isConnected`, `deliver`, optional `openDM`
+  and others; button presses come back through `onAction`). It registers itself on
+  import with `registerChannelAdapter(name, {factory, defaults, …})` into a map; a
+  factory returns `null` when its credentials are missing. Main ships only the `cli`
+  channel. A skill adds one by copying its adapter, appending an import to
+  `src/channels/index.ts` and a pairing step to `setup/index.ts`, so adding a channel
+  edits two core files. Credentials are `.env` keys, read without being put in the
+  process environment, so child processes do not inherit them. User ids are
+  `<channelType>:<handle>`, and `parseUserId` refuses an id with no prefix. No fake
+  channel was found.
+  Sources: [src/channels/adapter.ts](https://github.com/nanocoai/nanoclaw/blob/60efd61b3c7939fd9910df72a1cb66923ca40dac/src/channels/adapter.ts),
+  [src/channels/channel-registry.ts](https://github.com/nanocoai/nanoclaw/blob/60efd61b3c7939fd9910df72a1cb66923ca40dac/src/channels/channel-registry.ts),
+  [src/channels/index.ts](https://github.com/nanocoai/nanoclaw/blob/60efd61b3c7939fd9910df72a1cb66923ca40dac/src/channels/index.ts),
+  [.claude/skills/add-telegram/SKILL.md](https://github.com/nanocoai/nanoclaw/blob/60efd61b3c7939fd9910df72a1cb66923ca40dac/.claude/skills/add-telegram/SKILL.md),
+  [src/env.ts](https://github.com/nanocoai/nanoclaw/blob/60efd61b3c7939fd9910df72a1cb66923ca40dac/src/env.ts),
+  [src/modules/permissions/user-dm.ts](https://github.com/nanocoai/nanoclaw/blob/60efd61b3c7939fd9910df72a1cb66923ca40dac/src/modules/permissions/user-dm.ts).
+- **Hermes Agent plugins.** Each platform has `plugins/platforms/<name>/plugin.yaml`
+  (`name`, `label`, `kind: platform`, `version`, and `requires_env[]`/`optional_env[]`,
+  each `{name, description, prompt, url, password}`). The registry records
+  `requires_env` as an activation hint before importing anything; `register(ctx)` later
+  calls `ctx.register_platform(...)` with the capabilities (`max_message_length`) in
+  code. Manifest validation is soft: a bad field is logged and ignored, and a
+  `config_schema` mismatch only warns.
+  Sources: [plugins/platforms/telegram/plugin.yaml](https://github.com/NousResearch/hermes-agent/blob/e2a0b3292bf4f62ba86d267cd1ae830005cd1005/plugins/platforms/telegram/plugin.yaml),
+  [hermes_cli/plugins_manifest.py](https://github.com/NousResearch/hermes-agent/blob/e2a0b3292bf4f62ba86d267cd1ae830005cd1005/hermes_cli/plugins_manifest.py),
+  [hermes_cli/plugins.py](https://github.com/NousResearch/hermes-agent/blob/e2a0b3292bf4f62ba86d267cd1ae830005cd1005/hermes_cli/plugins.py).
+
+What we take from these three: every channel's facts are static data that can be read
+without building the channel (OpenClaw's manifest, Hermes's deferred `requires_env`,
+NanoClaw's `defaults`); here that is the `const SPEC`, which does no I/O. The values
+`connect` takes are declared as typed fields, each with a secret flag (OpenClaw's
+`setup.fields{sensitive}`, Hermes's `password: true`), so one prompt, one store and one
+check serve every channel, and a channel with two secrets (Slack's bot and app tokens)
+needs no core change. Settings are strict at load, as OpenClaw checks
+`additionalProperties: false` before import, and unlike Hermes's warnings. Ids carry the
+channel's prefix and an unprefixed id is never matched (NanoClaw, OpenClaw).
+
+What we leave: a JSON or YAML manifest read at run time, a directory scan or a generated
+id list. In a compiled Rust binary the `const SPEC` is the manifest: the compiler checks
+its types, and the architecture test checks that the registry lists every channel
+folder. We also leave self-registration on import (NanoClaw; in Rust, link-time
+registration through `inventory` or `ctor`), because an explicit list is easier to
+audit.
+
+What we take from the first comparison: a small trait with typed capabilities, as data, not inferred (OpenClaw);
 one place that builds the approval text and one data format for every channel
 (Hermes); a fallback that never weakens the check, and Deny only when the call cannot
 be shown whole (Hermes, OpenClaw); qualified approver ids (OpenClaw); one registry of
@@ -291,10 +363,13 @@ connection), and edits, threads and reactions (no decision depends on them).
    shorter than 1024 characters.
 3. **The contract** (`remote/channel.rs`). `Channel` has `account`, `send`, `notify`,
    `poll` and `settle`; only a channel does network I/O, through the shared transport
-   `remote/https.rs`. `Spec` carries the name and title, typed `Capabilities`
-   (`buttons`, `button_bytes`, `max_text`), the credential's prompt and shape check,
-   the `connect` questions, the user id's shape check, `open`, the next steps after
-   `connect`, and how to revoke the credential.
+   `remote/https.rs`. `Spec`, the channel's manifest as a `const`, carries the name and
+   title, typed `Capabilities` (`buttons`, `button_bytes`, `max_text`), the `fields`
+   `connect` takes (each `Field { key, ask, secret, valid }`), the user id's shape check,
+   `open` (given the checked secrets and settings), the next steps after `connect`, and
+   how to revoke the credentials. A secret field is asked at the terminal or read with
+   `--credential-file`, never taken from `--set` (other programs can read a command
+   line), and never shown in an error.
 4. **The core adapts the message** (`remote/prompt.rs`). With buttons that hold
    OpenMoat's 51 bytes, the prompt has Approve and Deny buttons. Without, or when they
    are smaller, the text ends with the two reply codes (the same verdict, id and HMAC
@@ -309,10 +384,12 @@ connection), and edits, threads and reactions (no decision depends on them).
    channel, checks it with the channel's `valid_user`, and refuses another channel's
    id. Signed settings with an approver of another channel are refused at load and
    save, and the guard refuses an answer whose channel is not the connected one.
-6. **Per-channel files.** `~/.moat/remote/<channel>/credential` (owner-only, read with
-   `key_file::read`, shape-checked) and `~/.moat/remote/<channel>/settings.json` (the
-   account and `connect` answers, signed under its own domain and bound to the
-   channel's name). The folder name always comes from the registered spec, never from
+6. **Per-channel files.** `~/.moat/remote/<channel>/credential` (the secret fields as one
+   JSON object, owner-only, read with `key_file::read`, and refused unless it holds
+   exactly the spec's secret fields, each valid) and
+   `~/.moat/remote/<channel>/settings.json` (the account and the other fields, signed
+   under its own domain, bound to the channel's name, and checked against the spec's
+   fields on every open). Both settings files are read with `deny_unknown_fields`. The folder name always comes from the registered spec, never from
    a file. The shared files stay where they were: `approval.key`, `settings.json`,
    `requests/`, `answers/`, `used/`. `kernel-self` already denies reading anything
    under `~/.moat/remote/**` and writing under `~/.moat/**`; new conformance fixtures
@@ -329,7 +406,7 @@ connection), and edits, threads and reactions (no decision depends on them).
    that starts empty and only shrinks; nothing outside `remote/` reaches into a
    channel's module; no core file uses the network.
 9. **A second channel proves it.** `remote::tests::another` registers a text-only
-   "pager" channel with a `connect` question beside the real registry and takes it
+   "pager" channel with two secret fields and one setting beside the real registry and takes it
    through connect, approver ids, open, reply codes, a stranger refused, an approval
    and the one allowed call, with no core change.
 

@@ -76,7 +76,7 @@ From now on, every call held for review is also sent to you while `listen` runs.
 
 | Command | What it does | Who can run it |
 |---|---|---|
-| `openmoat approvals connect <channel> [--credential-file FILE] [--set KEY=VALUE] [--expires 5m]` | checks the credential with the channel, stores it, makes the approval key, keeps approvers you already allowed on that channel; `--set` answers a channel's own questions (Telegram has none) | a person at a terminal |
+| `openmoat approvals connect <channel> [--credential-file FILE] [--set KEY=VALUE] [--expires 5m]` | checks the credential with the channel, stores it, makes the approval key, keeps approvers you already allowed on that channel; `--set` gives a channel's other settings, never a secret (Telegram has none) | a person at a terminal |
 | `openmoat approvals allow <channel>:<user-id>` | lets that user approve (a bare user id means the connected channel) | a person at a terminal |
 | `openmoat approvals remove <channel>:<user-id>` | takes that back; answers they gave that are not used yet stop counting | a person at a terminal |
 | `openmoat approvals listen` | sends waiting requests and takes answers, until Ctrl-C | a person at a terminal |
@@ -128,8 +128,8 @@ reading any of it and writing anywhere under `~/.moat`.
 |---|---|
 | `approval.key` | the key every request, answer, button and settings file is signed with |
 | `settings.json` | the connected channel, the approver ids and the expiry, signed |
-| `<channel>/credential` | the channel's secret (the Telegram bot token) |
-| `<channel>/settings.json` | the channel's account (the bot's name) and its own settings, signed |
+| `<channel>/credential` | the channel's secrets, one JSON object (for Telegram, the bot token) |
+| `<channel>/settings.json` | the channel's account (the bot's name) and its other settings, signed |
 | `requests/`, `answers/`, `used/` | calls waiting, answers given, approvals used |
 
 ## Limits
@@ -190,8 +190,12 @@ ADR-078, "Channel architecture". To add one called `example`:
    - `capabilities`: `buttons` only if the server reports who pressed a button;
      `button_bytes` (OpenMoat's data is 51 bytes; smaller means reply codes);
      `max_text`, at least 1024;
-   - `ask_credential` and `valid_credential` (a strict shape check);
-   - `questions` for any other setting `connect` must ask (each with a check), else `&[]`;
+   - `fields`: every value `connect` takes, each a `Field { key, ask, secret, valid }`
+     with a strict check. Mark tokens and keys `secret: true`: they are asked at the
+     terminal or read with `--credential-file` (when there is one), never taken from
+     `--set`, and stored together in `~/.moat/remote/example/credential`, owner-only.
+     The others (a room, a workspace) go in the channel's signed settings and can be
+     given with `--set KEY=VALUE`. Both are checked again on every load;
    - `user_id` and `valid_user`, a strict check of a user id on the channel;
    - `open`, `next_steps` and `revoke`.
 3. **Put its tests in `channels/example/tests.rs`**, against a fake of the service's
