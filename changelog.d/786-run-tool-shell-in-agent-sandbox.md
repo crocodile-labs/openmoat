@@ -1,2 +1,0 @@
-### Fixed
-- Under `openmoat run`, Claude Code's Bash tool no longer fails on every call when OpenMoat is installed under the home directory (`~/.cargo/bin`, Homebrew on Linux): Claude Code's sandbox, with the `blockReadsOutsideWorkingDirectories` that `openmoat init` sets, hides that directory, and the tool-shell wrapper was a link to it. The wrapper's directory in the system temp directory now holds a copy of the binary, so it starts with nothing outside that directory (ADR-075) ([#786](https://github.com/crocodile-labs/openmoat/pull/786)).
