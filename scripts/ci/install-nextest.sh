@@ -41,10 +41,12 @@ if ! err=$(curl -fsSL --retry 5 --retry-all-errors -o "$dir/$archive" "$url" 2>&
     echo "::error::downloading $url failed: $err"
     exit 1
 fi
+# Hashed from standard input: given a path with a backslash (Windows), GNU
+# sha256sum escapes its output line and puts a `\` before the hash.
 if command -v sha256sum > /dev/null; then
-    got=$(sha256sum "$dir/$archive" | cut -d' ' -f1)
+    got=$(sha256sum < "$dir/$archive" | cut -d' ' -f1)
 else
-    got=$(shasum -a 256 "$dir/$archive" | cut -d' ' -f1)
+    got=$(shasum -a 256 < "$dir/$archive" | cut -d' ' -f1)
 fi
 if [ "$got" != "$sha256" ]; then
     echo "::error::$archive: sha256 $got does not match the pinned $sha256" >&2
