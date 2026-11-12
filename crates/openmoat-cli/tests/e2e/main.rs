@@ -74,6 +74,7 @@ mod proxy_session;
 mod push;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod relay_token;
+mod remote_approvals;
 mod replay_report;
 mod repo_policy;
 mod required_level;

@@ -49,6 +49,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         edits: Vec::new(),
         patch: None,
         mcp_arguments: None,
+        input: None,
         sandboxed: false,
         event: HookEvent::ConfigChange {
             source: p.source,

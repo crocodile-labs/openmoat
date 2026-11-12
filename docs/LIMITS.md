@@ -23,6 +23,12 @@ Each agent's gaps and the reasons are in
   in YOLO mode receive a `review` as a deny that says how to approve the call
   (`openmoat`, or `openmoat allow --last`); GitHub Copilot CLI in autopilot turns it into
   a deny itself.
+- **A remote approval answers the next try, not the prompt.** With a channel connected
+  ([APPROVALS.md](APPROVALS.md)), an agent that prompts keeps its prompt on screen; an
+  approval from the phone lets the same call run once when the agent tries it again
+  before the request expires. Answers arrive only while `openmoat approvals listen` runs,
+  anyone who controls an approver's Telegram account can approve, and the redacted call
+  is sent to Telegram.
 - **OpenCode 2's `--auto` approves OpenMoat's reviews** as it approves OpenCode's own,
   and OpenMoat's plugin cannot tell. OpenCode before 1.3.4 is not supported:
   `openmoat init` does not set it up and `openmoat status` says to upgrade.

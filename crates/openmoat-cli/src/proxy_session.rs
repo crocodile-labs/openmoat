@@ -77,18 +77,33 @@ impl Key {
     /// The key of `home`, made first when there is none. Two processes making
     /// it at once end with the same key: only the first file is kept.
     pub fn load_or_create(home: &Home) -> Result<Self> {
-        let path = key_path(home);
+        Self::load_or_create_at(&key_path(home))
+    }
+
+    /// The key in `path`, made first when there is none, as
+    /// [`Self::load_or_create`] makes it. The remote approval key (ADR-078) is
+    /// one of these in its own file.
+    pub fn load_or_create_at(path: &Path) -> Result<Self> {
         if !path.exists() {
             let mut raw = Zeroizing::new([0u8; 32]);
             getrandom::fill(raw.as_mut_slice())
                 .map_err(|e| anyhow::Error::msg(e.to_string()))
-                .context("reading random bytes for the proxy session key")?;
+                .context("reading random bytes for a key")?;
             let mut text = Zeroizing::new(String::with_capacity(65));
             hex_into(&mut text, raw.as_slice());
             text.push('\n');
-            crate::home::write_private_new(&path, text.as_bytes())?;
+            crate::home::write_private_new(path, text.as_bytes())?;
         }
-        Self::load(&path)
+        Self::load(path)
+    }
+
+    /// `HMAC-SHA-256(key, domain || message)`. Every caller passes a domain of
+    /// its own, so a signature made for one purpose means nothing for another.
+    pub fn mac(&self, domain: &[u8], message: &[u8]) -> [u8; 32] {
+        let mut signed = Vec::with_capacity(domain.len() + message.len());
+        signed.extend_from_slice(domain);
+        signed.extend_from_slice(message);
+        hmac::sha256(self.0.as_slice(), &signed)
     }
 
     /// The key in `path`; an error when it is missing or malformed, or when

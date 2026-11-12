@@ -94,6 +94,8 @@ fn linux_adds_working_directory_rules_for_wildcard_denies() {
             "Read(./**/.moat/proxy.key)",
             "Read(./**/.moat/proxy-ca)",
             "Read(./**/.moat/proxy-ca/**)",
+            "Read(./**/.moat/remote)",
+            "Read(./**/.moat/remote/**)",
             "Edit(./.env)",
             "Edit(./.envrc)",
             "Edit(./.moat)",

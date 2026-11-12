@@ -320,6 +320,7 @@ fn parse(host: Host, p: Payload) -> Result<HookRequest, HostError> {
         edits: Vec::new(),
         patch: None,
         mcp_arguments,
+        input: Some(crate::wire::canonical(&call.input)),
         sandboxed: false,
         event: HookEvent::PreToolUse,
     })

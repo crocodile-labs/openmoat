@@ -33,6 +33,7 @@ mod proxy_ca;
 mod proxy_session;
 mod push;
 mod realpath;
+mod remote;
 mod render;
 mod repo;
 mod report;

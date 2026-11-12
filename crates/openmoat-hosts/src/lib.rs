@@ -371,6 +371,14 @@ pub struct HookRequest {
     /// them: `openmoat mcp proxy` passes a call on to the server only when it
     /// matches one the hook decided (ADR-045). `None` for any other call.
     pub mcp_arguments: Option<String>,
+    /// The call's whole arguments as the host sent them, in canonical JSON
+    /// (keys sorted, no whitespace): a remote approval's digest binds them
+    /// all, so a field no adapter reads (a notebook cell's new source, the
+    /// text of a write a host sends under its own name) still changes it.
+    /// No host's arguments are known to hold a field that changes between
+    /// two identical calls; ids and timestamps sit outside them. `None` for
+    /// an event that carries no tool call.
+    pub input: Option<String>,
     /// Whether the host says it runs the call inside its own OS sandbox
     /// (Cursor `beforeShellExecution` `sandbox: true`). The guard clears it
     /// when OpenMoat's sandbox settings for the host are not installed; while

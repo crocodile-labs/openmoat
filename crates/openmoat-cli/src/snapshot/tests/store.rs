@@ -143,3 +143,16 @@ fn a_prune_keeps_objects_younger_than_its_grace() {
         .output(&["cat-file", "-e", &in_flight], None)
         .unwrap();
 }
+
+/// A file changed at once to new bytes of the same size is a change: the
+/// take's copy of the index keeps the index's time, so git does not take the
+/// file's cached entry as current ("racy git") and keep its old bytes.
+#[test]
+fn a_same_size_change_in_the_same_second_is_a_new_snapshot() {
+    let f = fixture();
+    f.write("a.txt", "a\n");
+    f.take(Reason::Manual);
+    f.write("a.txt", "b\n");
+    let again = f.try_take(Limits::default(), Reason::Manual, None).unwrap();
+    assert!(matches!(again, Taken::New(_)), "{again:?}");
+}

@@ -160,11 +160,14 @@
         "/Users/me/.moat/delivery",
         "/**/.moat/delivery",
         "/**/.moat/delivery/**",
+        "/Users/me/.moat/remote",
         "/**/.moat/audit.db*",
         "/**/.moat/policy.lock",
         "/**/.moat/proxy.key",
         "/**/.moat/proxy-ca",
-        "/**/.moat/proxy-ca/**"
+        "/**/.moat/proxy-ca/**",
+        "/**/.moat/remote",
+        "/**/.moat/remote/**"
       ],
       "denyWrite": [
         "/Users/me/.ssh",

@@ -384,6 +384,7 @@ fn parse(host: Host, api: Api, payload: &str) -> Result<HookRequest, HostError> 
         edits,
         patch,
         mcp_arguments,
+        input: Some(crate::wire::canonical(args)),
         sandboxed: false,
         event: hook_event(api),
     })

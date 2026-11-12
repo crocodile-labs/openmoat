@@ -12,7 +12,7 @@ use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{KnownSecrets, Store};
 use openmoat_core::{CompiledPolicy, Decision, Verdict};
 use openmoat_hosts::{HookEvent, HookRequest, Host};
-use record::{Recorded, record};
+use record::Recorded;
 
 use crate::approvals::{self, Grants};
 use crate::cli::GuardArgs;
@@ -247,8 +247,12 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
         unseen::mark(host, r);
     }
     // Where the host has no flow of its own for `defer`, OpenMoat holds the call for review (ADR-025).
+    // Last: a `review` a person approved from another device runs once, and
+    // one not yet sent is sent (ADR-078); anything else is left as it is.
+    let mut approved = None;
     if let Some(r) = &request {
-        decision = host.decided(&r.event, decision);
+        (decision, approved) =
+            crate::remote::gated(r, host.decided(&r.event, decision), &out.known);
     }
     // What the agent and its person read about a deny or review (ADR-059);
     // presentation only, never recorded. A deny that replaces the decision
@@ -269,12 +273,8 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
         provenance: out.provenance,
         relayed: by_run,
     };
-    if let Err(error) = record(host, recorded) {
-        decision = kernel_error(&error.context("audit log unavailable"));
-    } else if let Some(pending) = &out.proxy_credential
-        && let Err(error) = pending.write()
-    {
-        decision = kernel_error(&error.context("writing the session's environment file"));
+    if let Some(deny) = record::refusal(host, recorded, out.proxy_credential.as_ref(), approved) {
+        decision = deny;
     }
     if stray_relay {
         // A note beside the call's row; the call stays as decided.
@@ -355,7 +355,7 @@ fn relay_once(reply: &guard_relay::Reply) -> Code {
     }
 }
 
-/// What deciding a call leaves for [`record()`], besides the decision.
+/// What deciding a call leaves for [`record::record()`], besides the decision.
 #[derive(Default)]
 struct Evaluated {
     /// The brokered secret values to mask in the audit row, set as soon as

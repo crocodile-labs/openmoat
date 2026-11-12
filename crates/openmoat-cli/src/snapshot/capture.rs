@@ -108,10 +108,15 @@ impl Store {
         // hashed: no `index.lock` is shared with another process, and the
         // shared index changes only by a rename once the tree is written.
         let own = private_name(&shared);
-        if let Err(e) = fs::copy(&shared, &own)
-            && e.kind() != std::io::ErrorKind::NotFound
-        {
-            return Err(e).context("copying the snapshot index");
+        match fs::copy(&shared, &own) {
+            // The copy keeps the shared index's modification time: git trusts
+            // a cached entry only for a file older than its index ("racy git"),
+            // and a copy stamped now would make a file changed in the same
+            // second, at the same size, look unchanged, so the snapshot would
+            // keep its old bytes.
+            Ok(_) => keep_mtime(&shared, &own).context("copying the snapshot index's time")?,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e).context("copying the snapshot index"),
         }
         let git = self.git.with_index(own.clone());
         let tree = (|| {
@@ -312,6 +317,15 @@ fn remove_if_there(path: &Path) -> std::io::Result<()> {
         Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
         _ => Ok(()),
     }
+}
+
+/// Give `copy` the modification time of `original`.
+fn keep_mtime(original: &Path, copy: &Path) -> std::io::Result<()> {
+    let modified = fs::metadata(original)?.modified()?;
+    fs::OpenOptions::new()
+        .write(true)
+        .open(copy)?
+        .set_modified(modified)
 }
 
 /// The millisecond a snapshot's ref name starts with.
