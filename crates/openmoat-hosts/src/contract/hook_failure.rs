@@ -1,7 +1,7 @@
 //! What a host does with a tool call when OpenMoat's hook fails (ADR-079):
 //! one typed fact per case, with the vendor documentation or source it comes
 //! from. `moat doctor` reports a host that fails open from it, and
-//! `docs/LIMITS.md` "If the hook fails" is generated from it (`tests/docs.rs`).
+//! `docs/LIMITS.md` "If the hook fails" is generated from it (`tests/docs/`).
 
 use super::Version;
 

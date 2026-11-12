@@ -139,6 +139,7 @@ fn a_repository_policy_can_require_it() {
 /// The attack: a cloud credential in the environment `openmoat run` was
 /// started from. Under the requirement the command does not get it; a
 /// variable the person added does, and the run names what it withheld.
+// protection: credentials every linux,macos
 #[test]
 fn a_planted_credential_does_not_reach_a_command_and_an_added_variable_does() {
     if stock_linux() {

@@ -53,6 +53,7 @@ fn namespaced(out: &Output) -> bool {
     !refused
 }
 
+// protection: credentials claude-code linux,macos
 #[test]
 fn the_running_agent_keeps_its_login_and_cannot_read_another_agents() {
     let (sb, project) = installed_with_secret();

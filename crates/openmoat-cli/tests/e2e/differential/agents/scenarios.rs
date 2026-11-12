@@ -56,6 +56,7 @@ fn provenance_b(project: &Path) -> Value {
     json!([bash("bash run.sh"), call("Write", write)])
 }
 
+// protection: hook claude-code linux,macos
 #[test]
 fn real_claude_token_egress_is_denied() {
     let Some(agent) = Agent::find("token egress") else {
@@ -124,6 +125,7 @@ fn real_claude_package_near_miss_needs_review_and_does_not_install() {
     assert!(!text(&said).contains(RAN), "pip ran: {}", text(&said));
 }
 
+// protection: mcp claude-code linux,macos
 #[test]
 fn real_claude_changed_mcp_server_is_denied() {
     let Some(agent) = Agent::find("MCP server pinning") else {

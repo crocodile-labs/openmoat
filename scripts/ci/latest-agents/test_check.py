@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests of check.py's hook-failure commands (ADR-079), the part of the weekly
-job's hook-failure step that can be proved without an agent. Run by hand:
+job's hook-failure step that can be proved without an agent, and the records'
+`proves` (ADR-079 decision 5). Run by hand:
 
     python3 -I scripts/ci/latest-agents/test_check.py
 """
@@ -108,6 +109,24 @@ class HookFailure(unittest.TestCase):
             self.assertEqual(out.getvalue().strip(), want)
         with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
             check.cmd_hook_failure_fact("missing-host", str(path), "fails")
+
+
+class Proves(unittest.TestCase):
+    """A record's `proves`, which docs/PROTECTION.md shows as evidence."""
+
+    def test_known_claims_pass_and_a_record_without_the_hook_says_why(self):
+        self.assertEqual(check.proves_problems({"proves": ["hook", "hook-failure", "mcp"]}), [])
+        self.assertEqual(check.proves_problems({"proves": [], "why": "no model call"}), [])
+
+    def test_a_wrong_record_is_a_problem(self):
+        for rec in ({}, {"proves": "hook"}, {"proves": ["sandbox"]},
+                    {"proves": ["hook", "hook"]}, {"proves": []},
+                    {"proves": ["hook"], "why": "x"}):
+            self.assertNotEqual(check.proves_problems(rec), [], rec)
+
+    def test_every_record_in_the_file_is_consistent(self):
+        for agent, rec in check.records().items():
+            self.assertEqual(check.proves_problems(rec), [], agent)
 
 
 if __name__ == "__main__":

@@ -310,6 +310,12 @@ runs the hook. Test at least:
   THREAT_MODEL §5, with sources, and to its spec's `on_hook_failure` and `gaps`; add its payload shape
   to `e2e/host_failures.rs`. Its hook timeout must stay above `GUARD_BUDGET_S`.
 - Say whether the agent can prompt, and what the person does when it cannot.
+- **Its row in [PROTECTION.md](PROTECTION.md) starts as preview.** The page is generated
+  from the spec. A claim becomes more than preview only with evidence: a test marked
+  `// protection: <claim> <agent-id> <oses>` above its `#[test]` (a real run of the agent
+  for `hook`), or a weekly record in `scripts/ci/latest-agents/agents.json` whose
+  `proves` names it. Regenerate with `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p
+  openmoat-hosts --test docs`.
 
 ## The pull request
 

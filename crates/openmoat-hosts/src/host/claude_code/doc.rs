@@ -1,5 +1,5 @@
 //! What the docs say about Claude Code: its README row and its rows of the
-//! "Host tool mapping" table (`tests/docs.rs` generates both). The mapping is
+//! "Host tool mapping" table (`tests/docs/` generates both). The mapping is
 //! [`crate::wire::pre_tool_use`]'s; a tool it matches must have a row here.
 
 use crate::contract::{HostDocs, ToolRow};

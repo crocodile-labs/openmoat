@@ -1,5 +1,5 @@
 //! What the generated host tables in the docs say about a host beyond the
-//! other spec facts (`tests/docs.rs` writes and checks them).
+//! other spec facts (`tests/docs/` writes and checks them).
 
 /// A host's lines in the generated tables of `README.md` ("Supported agents")
 /// and `docs/ARCHITECTURE.md` §3 ("Host tool mapping").
@@ -12,11 +12,11 @@ pub struct HostDocs {
     /// What checks the host's tool calls: `hook + OS sandbox` when OpenMoat
     /// writes the host's sandbox ([`HostSpec::sandbox`](super::HostSpec::sandbox)),
     /// with the platforms it runs on when it is not written on native Windows,
-    /// else `hook only` (`tests/docs.rs` checks the two agree).
+    /// else `hook only` (`tests/docs/` checks the two agree).
     pub protection: &'static str,
     /// How each tool the adapter maps becomes an action, one row per tool or
     /// group of tools, and which tools it leaves ungoverned. Every tool name
-    /// the adapter's code matches appears in these rows (`tests/docs.rs`).
+    /// the adapter's code matches appears in these rows (`tests/docs/`).
     pub tools: &'static [ToolRow],
 }
 

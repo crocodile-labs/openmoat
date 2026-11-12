@@ -71,6 +71,7 @@ fn assert_refused(out: &std::process::Output, marker: &Path, why: &str) {
     assert!(!marker.exists(), "the server ran: {}", marker.display());
 }
 
+// protection: mcp claude-code linux,macos
 #[cfg(unix)]
 #[test]
 fn an_unaccepted_definition_never_starts_and_an_accepted_one_does() {

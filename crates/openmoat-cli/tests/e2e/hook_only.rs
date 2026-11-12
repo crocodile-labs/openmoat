@@ -215,6 +215,7 @@ mod launch {
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
 
+    // protection: run no-own-sandbox linux,macos
     #[test]
     fn each_hook_only_agent_holds_under_openmoat_run() {
         for host in hook_only() {
@@ -224,6 +225,7 @@ mod launch {
     }
 
     /// The command `status` names on Linux.
+    // protection: run no-own-sandbox linux
     #[cfg(target_os = "linux")]
     #[test]
     fn each_hook_only_agent_holds_under_isolate() {

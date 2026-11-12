@@ -41,6 +41,7 @@ fn assert_denied(row: &Row, out: &Output, what: &str) {
     assert_reason(row, out, "kernel-error", what);
 }
 
+// protection: payloads every every
 #[test]
 fn payloads_guard_cannot_read_are_denied_in_each_hosts_format() {
     let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);

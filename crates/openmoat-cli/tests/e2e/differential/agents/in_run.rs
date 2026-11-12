@@ -13,6 +13,7 @@ use crate::common::{DENY, OK, Sandbox, json as json_of, skip_without_host_binary
 use crate::run::confined::ran;
 use crate::run::run_sh_with;
 
+// protection: run codex linux,macos
 #[test]
 fn real_codex_starts_inside_moat_run_and_its_hook_is_decided_outside() {
     let Some(codex) = std::env::var_os("MOAT_CODEX_BIN").filter(|v| !v.is_empty()) else {

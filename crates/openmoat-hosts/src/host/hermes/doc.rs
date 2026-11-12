@@ -1,5 +1,5 @@
 //! What the docs say about Hermes Agent: its README row and its rows of the
-//! "Host tool mapping" table (`tests/docs.rs` generates both, and checks that
+//! "Host tool mapping" table (`tests/docs/` generates both, and checks that
 //! every tool name `tools.rs` matches has a row).
 
 use crate::contract::{HostDocs, ToolRow};

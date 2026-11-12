@@ -128,6 +128,28 @@ def pointer(doc, path, value=None, set_value=False):
     return pointer(child, rest, value, set_value)
 
 
+# What a record's `proves` may name: the claims a passing run of this job
+# asserts against the real agent, which docs/PROTECTION.md shows as evidence
+# (ADR-079 decision 5; crates/openmoat-hosts/tests/docs/weekly.rs reads them).
+PROVES = ("hook", "hook-failure", "mcp")
+
+
+def proves_problems(rec):
+    """Why a record's `proves` and `why` are wrong: a list of known claims,
+    each once, and a reason whenever the hook is not among them."""
+    proves = rec.get("proves")
+    if not isinstance(proves, list) or not all(isinstance(p, str) for p in proves):
+        return ["`proves` is not a list of claims"]
+    problems = [f"`proves` names unknown claim {p!r}" for p in proves if p not in PROVES]
+    if len(set(proves)) != len(proves):
+        problems.append("`proves` names a claim twice")
+    if "hook" not in proves and not rec.get("why"):
+        problems.append("proves no hook call and gives no `why`")
+    if rec.get("why") and "hook" in proves:
+        problems.append("`why` is for a record that proves no hook call")
+    return problems
+
+
 def cmd_records():
     problems = []
     for agent, rec in records().items():
@@ -152,6 +174,7 @@ def cmd_records():
         for runner in rec.get("runners", []):
             if runner not in ("ubuntu-latest", "macos-15"):
                 problems.append(f"{agent}: unknown runner {runner}")
+        problems.extend(f"{agent}: {p}" for p in proves_problems(rec))
     for line in problems:
         print(f"agents.json: {line}")
     if problems:

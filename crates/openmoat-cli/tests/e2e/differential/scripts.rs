@@ -455,6 +455,7 @@ pub mod executing {
 
     /// The Lightweight tier: `--no-isolate`, since Linux starts the Isolated
     /// tier by default where bubblewrap works (ADR-080); macOS has only this one.
+    // protection: run every linux,macos
     #[test]
     fn hostile_scripts_meet_the_os_layer() {
         let layer = if OS == "macos" {
@@ -466,6 +467,7 @@ pub mod executing {
     }
 
     /// The Isolated tier, where bubblewrap can run (CI's Linux job installs it).
+    // protection: run every linux
     #[cfg(target_os = "linux")]
     #[test]
     fn hostile_scripts_meet_the_isolated_tier() {

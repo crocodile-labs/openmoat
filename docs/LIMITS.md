@@ -220,7 +220,8 @@ sandbox holds the boundary when the hook does not (`docs/SANDBOX.md`), and add
 The weekly latest-agent job runs the real agents with the hook made to fail and fails
 when an agent runs a call this table says it blocks (ADR-079). Generated from each host's
 `HostSpec::hook_failure` (`OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test
-docs`); do not edit the table.
+docs`); do not edit the table. [PROTECTION.md](PROTECTION.md) puts these facts beside the
+rest of each agent's protection on each OS, with the runs that back them.
 
 <!-- generated:hosts-hook-failure -->
 | Agent | Hook cannot start, crashes or exits non-zero | Hook times out | Time limit | Turned off (every call runs unchecked) | Fails open | Source |

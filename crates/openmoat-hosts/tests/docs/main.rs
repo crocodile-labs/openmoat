@@ -4,6 +4,8 @@
 //! the hook fails" table of `docs/LIMITS.md` among them (ADR-079). Tables that
 //! need more than the spec says (what each hook sees, the detailed per-case
 //! "When the hook fails" table of `docs/THREAT_MODEL.md` §5) stay hand-written.
+//! `docs/PROTECTION.md` is built from the specs and the evidence behind each
+//! claim (`protection.rs`, ADR-079 decision 5).
 //!
 //! Regenerate with `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs`.
 
@@ -13,6 +15,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use openmoat_hosts::{Host, HostSpec, SessionDir};
+
+mod cfg;
+mod marks;
+mod matrix;
+mod protection;
+mod weekly;
 
 const END: &str = "<!-- /generated -->";
 const UPDATE: &str = "OPENMOAT_TEST_UPDATE_DOCS";
