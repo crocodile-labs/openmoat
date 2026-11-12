@@ -94,6 +94,11 @@ pub fn unavailable() -> Option<String> {
     os_version::run_floor(os_version::macos().as_deref()).map(|reason| refusal(&reason))
 }
 
+/// None: Landlock is Linux's (ADR-082).
+pub fn landlock() -> Option<crate::sandbox::landlock::abi::Kernel> {
+    None
+}
+
 /// None: Seatbelt names the proxy's address, not only its port.
 pub fn port_only_network() -> Option<String> {
     None

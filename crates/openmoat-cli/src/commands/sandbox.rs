@@ -14,6 +14,7 @@ use crate::install::{HookState, HostConfig};
 use crate::integrity::{self, HookPins};
 use crate::render::{self, Deferred};
 use crate::sandbox::backend::{Pin, SandboxBackend, SecretMask};
+use crate::sandbox::landlock::abi;
 use crate::sandbox::{Grants, Plan, Report, install, landlock_rules, own_login, seatbelt_profile};
 
 /// One host's generated settings, ready to print.
@@ -39,6 +40,8 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
         ("Seatbelt (macOS)", &seatbelt.profile, &seatbelt.report),
         ("Landlock (Linux)", &landlock_text, &landlock.report),
     ];
+    // The kernel's Landlock ABI, on Linux (ADR-082).
+    let kernel = super::run::landlock();
     let masks = shown_masks(&plan, &policy.secrets)?;
     let mut hosts = Vec::new();
     for host in install::hosts() {
@@ -70,7 +73,11 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
             "hosts": doc,
             "lightweight": {
                 "seatbelt": { "profile": &seatbelt.profile, "report": &seatbelt.report },
-                "landlock": { "rules": &landlock.rules, "report": &landlock.report },
+                "landlock": {
+                    "rules": &landlock.rules,
+                    "report": &landlock.report,
+                    "abi": kernel.as_ref().map(abi::json),
+                },
             },
         }))?;
         return Ok(Code::Ok);
@@ -106,6 +113,12 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
         )?;
         writeln!(out, "{}", text.trim_end())?;
         write_report(&mut out, report)?;
+    }
+    if let Some(kernel) = &kernel {
+        writeln!(out, "{}", abi::summary(kernel))?;
+        for line in abi::lines(kernel) {
+            writeln!(out, "  {line}")?;
+        }
     }
     writeln!(out, "dry run: nothing was written")?;
     Ok(Code::Ok)

@@ -14,6 +14,7 @@ use crate::integrity::{self, HookPinGap, HookPins, Lock};
 use crate::protection;
 use crate::render::Deferred;
 use crate::report::{Mark, Row};
+use crate::sandbox::landlock::abi::{self, Kernel};
 use human::Place;
 use rows::Report;
 
@@ -152,6 +153,9 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         Some((false, text)) => report.line(Area::Sandbox, true, text),
         None => {}
     }
+    if let Some(kernel) = super::run::landlock() {
+        landlock(&mut report, &kernel, args.verbose);
+    }
     if let Some(policy) = &policy {
         let hosts = crate::mcp::set_up_hosts(&home, &binary);
         let names = super::run::withheld_names(policy, &hosts);
@@ -186,6 +190,23 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         return json::finish(&report.rows, report.problems.len());
     }
     finish(report, args.verbose)
+}
+
+/// The kernel's Landlock ABI and what `openmoat run` applies from it (ADR-082):
+/// a warning below the floor, where `openmoat run` refuses; each step of the
+/// ladder with `verbose`.
+fn landlock(report: &mut Report, kernel: &Kernel, verbose: bool) {
+    let text = format!("landlock         {}", abi::summary(kernel));
+    if kernel.meets_floor() {
+        report.line(Area::Sandbox, true, text);
+    } else {
+        report.warn(&text);
+    }
+    if verbose {
+        for line in abi::lines(kernel) {
+            report.human(Place::Details, Row::new(Mark::Info, "Landlock", line));
+        }
+    }
 }
 
 /// Each agent's protection level, its limit and its known gaps; the text

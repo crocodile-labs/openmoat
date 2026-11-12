@@ -11,8 +11,12 @@
 //! - TCP connections are restricted by port only (ABI 4): the proxy's port is
 //!   reachable on any host, unless `moat run` also gives the agent a network
 //!   namespace (`commands/run/linux/netns.rs`), which drops this allowance;
-//! - Landlock does not restrict UDP or connecting to Unix sockets: `moat run`'s
-//!   seccomp filter (`super::seccomp`) closes them, so they are not listed.
+//! - Landlock at the floor ABI does not restrict UDP or Unix sockets: `moat
+//!   run`'s seccomp filter (`super::seccomp`) closes them, so they are not
+//!   listed; newer ABIs are added beside it where the kernel has them
+//!   ([`abi`], ADR-082).
+
+pub mod abi;
 
 use openmoat_core::ir::{Access, Checker, Effect, Enforcement};
 use openmoat_core::{AtomicAction, Kind};

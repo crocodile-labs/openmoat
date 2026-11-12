@@ -348,7 +348,9 @@ bubblewrap.
   [evidence in #351](https://github.com/crocodile-labs/openmoat/pull/351)). CI's
   macOS 15 runners (`macos-15-intel`) did not show it.
 - **Linux 6.7 or later:** Landlock rules, plus a seccomp filter that allows only TCP
-  sockets (no UDP, Unix sockets or `ptrace`), no TCP Fast Open send
+  sockets (no UDP, Unix sockets or `ptrace`) and only stream and sequenced-packet
+  socket pairs (a datagram pair could be sent to a pathname socket outside), no TCP
+  Fast Open send
   (`MSG_FASTOPEN`, which connects without the `connect()` Landlock checks), refuses
   the kernel keyrings (`keyctl`,
   `add_key`, `request_key`), refuses new namespaces (`unshare`, and `clone` with a
@@ -357,6 +359,30 @@ bubblewrap.
   and a container runtime's `exec` fail), and refuses `pidfd_getfd` (copying an open
   file of another process; `pidfd_open` stays). Containers, bubblewrap and Chromium's own
   sandbox cannot start inside. Windows refuses.
+- **Newer Linux kernels (the Landlock ABI ladder, ADR-082).** `openmoat run` needs
+  Landlock ABI 4 and adds what a newer kernel has beside the seccomp filter, never in
+  its place, so an older kernel keeps exactly the protection above:
+
+  | Landlock ABI | First Linux | What `openmoat run` does with it |
+  |---|---|---|
+  | 4 | 6.7 | required: files and the proxy's TCP port |
+  | 5 | 6.10 | not used (device `ioctl`): the terminal's own calls must work; seccomp refuses `TIOCSTI` and `TIOCLINUX` |
+  | 6 | 6.12 | used: abstract Unix sockets and signals outside the sandbox refused |
+  | 7 | 6.15 | not used (kernel audit logging): OpenMoat's audit log records its own decisions |
+  | 8 | 7.0 | not used (one ruleset for all threads): OpenMoat's proxy thread must stay outside |
+  | 9 | 7.1 | used: a pathname Unix socket made outside the sandbox cannot be connected or sent to |
+  | 10 | 7.2 | not used yet (UDP): the `landlock` crate cannot ask for it; seccomp refuses UDP |
+  | 11 | 7.3 | nothing to add (`no_new_privs` is set already) |
+  | 12 | 7.4 | not used yet (capabilities, namespaces): seccomp refuses new namespaces |
+
+  `openmoat doctor` shows the kernel's ABI and what applies (each step with
+  `--verbose`), as do `openmoat sandbox show` and `openmoat run --verbose`, and every
+  run writes it to the audit log (rule `run-landlock-abi`):
+
+  ```bash
+  openmoat doctor --verbose          # landlock  Landlock ABI 6 here: `openmoat run` applies ABI 4, 6; …
+  openmoat sandbox show --format json | jq .lightweight.landlock.abi
+  ```
 - **The network on Linux.** Landlock restricts TCP connections by port only, and a
   seccomp filter cannot read the address `connect()` is given (it gets a pointer), so
   those two alone would let a command reach any host on the proxy's port and go around
@@ -551,9 +577,10 @@ a wrapped command gets a Landlock layer of its own. The relay itself needs no ne
 
 - macOS: the profile's one way out stays `(allow network-outbound (remote ip
   "localhost:<port>"))`; no Unix socket is allowed.
-- Linux: Landlock does not restrict connecting to a Unix socket by path at the ABI
-  `openmoat run` uses (ABI 6 scopes only abstract sockets), which is why the seccomp
-  filter refuses Unix sockets altogether. The relay uses the proxy's TCP port, so that
+- Linux: Landlock restricts connecting to a Unix socket by path only from ABI 9
+  (Linux 7.1), which `openmoat run` adds where the kernel has it (ADR-082); below it
+  ABI 6 scopes only abstract sockets, which is why the seccomp filter refuses Unix
+  sockets and datagram socket pairs on every kernel. The relay uses the proxy's TCP port, so that
   filter and the Landlock port rule stay as they are, in the network namespace and
   under `--isolate` too.
 

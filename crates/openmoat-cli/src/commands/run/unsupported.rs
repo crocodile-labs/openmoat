@@ -49,6 +49,11 @@ pub fn unavailable() -> Option<String> {
     ))
 }
 
+/// None: Landlock is Linux's (ADR-082).
+pub fn landlock() -> Option<crate::sandbox::landlock::abi::Kernel> {
+    None
+}
+
 /// None: `moat run` refuses here.
 pub fn port_only_network() -> Option<String> {
     None
