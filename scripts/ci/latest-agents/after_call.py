@@ -160,6 +160,18 @@ def requests_of(log):
     return [(float(at), int(results)) for at, results in REQUEST.findall(text)]
 
 
+def refusal_of(log):
+    """The first tool result the agent's own validation refused, or None."""
+    try:
+        text = Path(log).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        if "error in tool validation" in line:
+            return line.strip()[:300]
+    return None
+
+
 def waited(timings, requests):
     """Whether the agent held its next model request until the hook had finished."""
     if requests is None:
@@ -178,7 +190,7 @@ def waited(timings, requests):
     return f"no, its next model request came during the hook's {WAIT_SECONDS} s"
 
 
-def not_captured(agent, spec, requests, step):
+def not_captured(agent, spec, requests, step, refused=None):
     """Why no payload arrived, as far as the job can tell."""
     reasons = []
     if step != "done":
@@ -189,6 +201,9 @@ def not_captured(agent, spec, requests, step):
         entry = False
     if not entry:
         reasons.append("the recording hook is not in the agent's hook file")
+    elif refused:
+        reasons.append("the agent refused the fake model's call in its own tool validation, "
+                       f"before any hook could run: {refused}")
     elif requests is None:
         reasons.append("the hook never started; whether the harmless call ran is unknown, "
                        "the model is the agent's own test double")
@@ -253,9 +268,10 @@ def cmd_report(agent, directory, fake_log, step):
         return
     title = f"after-call {agent} {spec['event']}"
     requests = requests_of(fake_log) if fake_log != "-" else None
+    refused = refusal_of(fake_log) if fake_log != "-" else None
     files = sorted(Path(directory).glob(f"{agent}-{spec['event']}-*.json"))
     if not files:
-        notice(title, not_captured(agent, spec, requests, step))
+        notice(title, not_captured(agent, spec, requests, step, refused))
         return
     payloads = [json.loads(path.read_text(encoding="utf-8")) for path in files]
     timings = [json.loads(path.with_suffix(".timing").read_text(encoding="utf-8"))

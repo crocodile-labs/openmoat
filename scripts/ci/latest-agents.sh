@@ -479,9 +479,12 @@ antigravity-cli)
     # A probe entry beside OpenMoat's, with events that need no matcher and the
     # documented example matchers: it tells why no hook ran (agy_probe.py).
     python3 -I "$lib/agy_probe.py" install "$HOME/.gemini/config/hooks.json" "$out/agy-probe.log"
+    # agy 1.5.5 refuses a `run_command` call without `toolSummary` and
+    # `WaitMsBeforeAsync` in its own tool validation, before any hook runs
+    # (run 43151268400: "missing properties 'toolSummary', 'WaitMsBeforeAsync'").
     start_fake "$out/fake-api.log" python3 -I "$lib/fake_gemini.py" \
-        --call run_command="{\"CommandLine\": \"$denied\"}" \
-        --then run_command="{\"CommandLine\": \"$harmless\"}"
+        --call run_command="{\"CommandLine\": \"$denied\", \"toolSummary\": \"probe\", \"WaitMsBeforeAsync\": 0}" \
+        --then run_command="{\"CommandLine\": \"$harmless\", \"toolSummary\": \"after-call capture\", \"WaitMsBeforeAsync\": 0}"
     ;;
 opencode-1)
     # OpenCode 1's opencode.json: an OpenAI-compatible provider (its SDK is
@@ -1129,7 +1132,7 @@ probe_agent() {
         ;;
     antigravity-cli)
         start_fake "$log-api.log" python3 -I "$lib/fake_gemini.py" \
-            --call run_command="{\"CommandLine\": \"$probe_cmd\"}"
+            --call run_command="{\"CommandLine\": \"$probe_cmd\", \"toolSummary\": \"probe\", \"WaitMsBeforeAsync\": 0}"
         (cd "$project" && GEMINI_API_KEY=fake-key GOOGLE_GEMINI_BASE_URL="http://127.0.0.1:$fake_port" \
             bounded "$limit" "$bin" -p "run it" --dangerously-skip-permissions) </dev/null >"$log-agent.txt" 2>&1 || true
         ;;

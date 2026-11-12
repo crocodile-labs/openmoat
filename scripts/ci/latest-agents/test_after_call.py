@@ -270,6 +270,10 @@ class Commands(unittest.TestCase):
         self.assertIn("the hook never started", report("codex", self.dir, log))
         self.assertIn("unknown", report("codex", self.dir, "-"))
         self.assertIn("stopped in step `init`", report("codex", self.dir, log, "init"))
+        log.write_text("model request at=1.5 results=1\n  result 1: run_command: {\"error\": "
+                       "\"Encountered error in tool validation: invalid arguments\"}\n",
+                       encoding="utf-8")
+        self.assertIn("own tool validation", report("codex", self.dir, log))
 
     def test_report_on_an_unreadable_payload_is_a_notice_and_exit_zero(self):
         self.dir.mkdir()
