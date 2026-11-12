@@ -82,20 +82,31 @@ fn a_datagram_pair_is_refused_and_nothing_reaches_a_socket_outside() {
 #[test]
 fn doctor_and_sandbox_show_name_the_kernels_landlock_abi() {
     let (sb, _project) = installed_with_secret();
+    let json = sb.moat(&["sandbox", "show", "--format", "json"]);
+    let doc: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    let abi = &doc["lightweight"]["landlock"]["abi"];
+    assert_eq!(abi["floor"], 4, "{abi}");
     let doctor = sb.moat(&["doctor", "--verbose"]);
+    // Below ABI 4, or without Landlock, `openmoat run` refuses to start
+    // (`confined::ran`). CI kernels have it, so there the test must run.
+    if !abi["kernel"]["abi"].as_u64().is_some_and(|n| n >= 4) {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "CI's kernel must have Landlock ABI 4: {abi}"
+        );
+        assert!(
+            text(&doctor).contains("`openmoat run` refuses to start"),
+            "{}",
+            text(&doctor)
+        );
+        eprintln!("skipped: this kernel has no Landlock ABI 4");
+        return;
+    }
     assert!(text(&doctor).contains("Landlock ABI "), "{}", text(&doctor));
     let show = sb.moat(&["sandbox", "show"]);
     assert!(
         stdout(&show).contains("ABI 4 (Linux 6.7)"),
         "{}",
         text(&show)
-    );
-    let json = sb.moat(&["sandbox", "show", "--format", "json"]);
-    let doc: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
-    let abi = &doc["lightweight"]["landlock"]["abi"];
-    assert_eq!(abi["floor"], 4, "{abi}");
-    assert!(
-        abi["kernel"]["abi"].as_u64().is_some_and(|n| n >= 4),
-        "{abi}"
     );
 }

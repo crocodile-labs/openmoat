@@ -222,13 +222,35 @@ fn the_filter_refuses_tcp_fast_open_and_allows_other_sends() {
     );
 }
 
+/// The errno of a datagram socket pair made under the real filter, on a thread
+/// of its own.
+fn filtered_datagram_pair() -> Option<i32> {
+    let filter = seccomp_filter().expect("the filter compiles");
+    std::thread::spawn(move || {
+        seccompiler::apply_filter(&filter).expect("the filter applies");
+        UnixDatagram::pair().err().and_then(|e| e.raw_os_error())
+    })
+    .join()
+    .expect("the filtered thread finishes")
+}
+
 /// The Landlock rules alone (no seccomp filter), on a thread of their own: a
 /// datagram pair made inside sends to a pathname socket bound outside. Where
 /// the kernel has ABI 9 Landlock refuses it (`EACCES`); below, Landlock lets
 /// it through, which is why the seccomp filter refuses datagram pairs
 /// (`the_filter_refuses_unix_and_udp_sockets_and_allows_tcp_and_socketpair`).
+/// Below ABI 4, or without Landlock, `openmoat run` refuses to start.
 #[test]
 fn landlock_abi_9_refuses_pathname_unix_sockets_made_outside() {
+    let kernel = abi::kernel();
+    if !kernel.meets_floor() {
+        let refused = restricted(&Rules::default(), Report::default(), Command::new("true"));
+        let why = format!("{:#}", refused.err().expect("no Landlock ABI 4: refused"));
+        assert!(why.contains("needs Landlock ABI 4"), "{why}");
+        assert_eq!(filtered_datagram_pair(), Some(libc::EPERM));
+        eprintln!("skipped: no Landlock ABI 4 here ({kernel:?}); `openmoat run` refuses to start");
+        return;
+    }
     // Short: a socket's path must fit in 108 bytes.
     let dir = std::env::temp_dir().join(format!("landlock-unix-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -249,7 +271,7 @@ fn landlock_abi_9_refuses_pathname_unix_sockets_made_outside() {
     .expect("the restricted thread finishes");
     let received = outside.recv(&mut [0; 1]).is_ok();
     let _ = std::fs::remove_dir_all(&dir);
-    match abi::kernel() {
+    match kernel {
         crate::sandbox::landlock::abi::Kernel::Abi(n) if n >= 9 => {
             assert_eq!(sent, Err(Some(libc::EACCES)));
             assert!(!received, "nothing reached the socket outside");
@@ -257,6 +279,8 @@ fn landlock_abi_9_refuses_pathname_unix_sockets_made_outside() {
         kernel => {
             eprintln!("Landlock below ABI 9 here ({kernel:?}): the seccomp filter alone holds");
             assert_eq!(sent, Ok(1), "the fallback the seccomp filter closes");
+            assert!(received, "Landlock below ABI 9 lets the send through");
+            assert_eq!(filtered_datagram_pair(), Some(libc::EPERM));
         }
     }
 }
