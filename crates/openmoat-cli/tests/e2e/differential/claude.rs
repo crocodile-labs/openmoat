@@ -285,6 +285,7 @@ fn claude_layer_blocks_every_attack() {
 /// The hostile project scripts (#346) under Claude Code's sandbox with the
 /// settings `moat init` generates for the default policy: network through
 /// Claude Code's own proxy, which allows only the policy's hosts.
+// protection: sandbox claude-code linux,macos
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
 fn hostile_scripts_meet_the_claude_code_sandbox() {

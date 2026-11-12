@@ -347,7 +347,11 @@ mod tests {
         let mut report = super::super::rows::Report::new(crate::render::Deferred::quiet());
         report.warn(&row);
         let footer = super::super::human::footer_line(&report.human, 0, true);
-        assert_eq!(footer, "1 thing needs you");
+        assert_eq!(
+            footer,
+            "1 thing needs you · each agent on each OS, and the tests behind it: \
+             docs/PROTECTION.md"
+        );
     }
 
     #[test]

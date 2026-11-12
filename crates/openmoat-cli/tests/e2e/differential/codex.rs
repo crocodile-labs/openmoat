@@ -84,6 +84,7 @@ impl Fixtures {
 /// The hostile project scripts (#346) under `codex sandbox -P moat`, the
 /// profile `moat init` generates for the default policy, with no proxy
 /// variables set: network as Codex itself gives it to the sandbox.
+// protection: sandbox codex linux,macos
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
 fn hostile_scripts_meet_the_codex_profile() {

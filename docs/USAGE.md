@@ -154,6 +154,9 @@ OpenMoat
 
 `openmoat doctor --verbose` adds every check with its paths and, for each agent, what its
 hook and sandbox do not cover (the full list is in [THREAT_MODEL.md](THREAT_MODEL.md) §5).
+Its last line points to [PROTECTION.md](PROTECTION.md): what each agent gets on Linux,
+macOS and Windows (hook, its own sandbox, the `openmoat run` tier, MCP servers, what a
+command can read), and the tests behind each claim.
 When the agent's program on the search path reports a version with a published security
 advisory that a later version fixes, both print a warning line (`!`) naming the
 advisory, how many more apply, the version to upgrade to and where it is published,

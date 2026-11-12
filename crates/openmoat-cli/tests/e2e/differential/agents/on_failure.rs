@@ -12,6 +12,7 @@ use crate::common::text;
 /// The first Claude Code release that reads `onFailure`.
 const ON_FAILURE_SINCE: (u64, u64, u64) = (2, 1, 295);
 
+// protection: hook-failure claude-code linux,macos
 #[test]
 fn real_claude_hook_failure_blocks_from_2_1_295() {
     let Some(agent) = Agent::find("onFailure: block") else {

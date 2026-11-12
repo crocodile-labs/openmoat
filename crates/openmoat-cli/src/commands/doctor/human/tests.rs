@@ -180,7 +180,13 @@ fn verbose_lists_every_check_with_its_path_shortened() {
         shown.contains("Gemini CLI hook only (no OS sandbox"),
         "{shown}"
     );
-    assert!(shown.ends_with("2 things need you\n"), "{shown}");
+    assert!(
+        shown.ends_with(
+            "2 things need you · each agent on each OS, and the tests behind it: \
+             docs/PROTECTION.md\n"
+        ),
+        "{shown}"
+    );
 }
 
 #[test]

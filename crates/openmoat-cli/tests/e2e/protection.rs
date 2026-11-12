@@ -322,6 +322,15 @@ fn status_and_doctor_print_their_sections_in_order() {
             "✔ Audit log ",
         ],
     );
+    // ... and ends with where each agent on each OS is set out with its tests.
+    assert!(
+        verbose
+            .lines()
+            .last()
+            .unwrap_or_default()
+            .ends_with("the tests behind it: docs/PROTECTION.md"),
+        "{verbose}"
+    );
 }
 
 #[test]

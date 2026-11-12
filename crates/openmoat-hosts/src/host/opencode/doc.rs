@@ -1,5 +1,5 @@
 //! What the docs say about OpenCode: its README row and its rows of the "Host
-//! tool mapping" table (`tests/docs.rs` generates both, and checks that every
+//! tool mapping" table (`tests/docs/` generates both, and checks that every
 //! tool name `tools/v1.rs` and `tools/v2.rs` match has a row).
 
 use crate::contract::{HostDocs, ToolRow};

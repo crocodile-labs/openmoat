@@ -1,6 +1,6 @@
 # ADR-079: What each agent does when the hook fails, and coverage from tests
 
-Status: accepted · Date: 2026-11-10 · Builds on ADR-004, ADR-033, ADR-064, ADR-076 and ADR-077
+Status: accepted · Date: 2026-11-10, amended 2026-11-11 (decision 5) · Builds on ADR-004, ADR-033, ADR-064, ADR-076 and ADR-077
 
 ## Context
 
@@ -119,6 +119,50 @@ evidence at all, and the end-to-end tests that do test some of them were not lin
    risk is handled; the reason column still says what is left out. ASI07 and ASI08 have no
    evidence and read `not tested`.
 
+## Decision 5: one protection matrix per agent and OS, from the same evidence
+
+Amendment of 2026-11-11. The per-agent facts were spread over five generated or
+hand-written tables (README, LIMITS, SANDBOX, EVIDENCE, THREAT_MODEL §5), none of which
+said, for one agent on one OS, everything that protects its calls and what each part
+rests on.
+
+1. **`docs/PROTECTION.md`, generated.** One row per agent and OS (Linux, macOS, Windows):
+   the hook (protected, preview, or none), what the agent does when the hook fails
+   (decision 1's facts), the agent's own sandbox (`HostSpec::sandbox`, none on Windows
+   where it is not written there), the tier `openmoat run` starts (Isolated on Linux,
+   Lightweight on macOS, none on Windows or for an agent whose run facts say why not, with
+   the command `status` offers), the MCP servers (pinned, wrapped or only named, what a
+   project's do, and that a server not wrapped runs before any check) and what a command
+   can read inside a run (the agent's own login, the inherited variables, the allowlist
+   of ADR-077 with the host's names). `tests/docs/` in `openmoat-hosts` writes it beside
+   the other generated host tables and fails when it differs; no workflow changes.
+2. **Evidence is marked, as in decision 4.** An end-to-end test is evidence when a line
+   `// protection: <claim> <agents> <oses>` is above its `#[test]`: claims `hook` (a real
+   agent ran OpenMoat's hook and the decision held), `payloads`, `hook-failure`, `sandbox`,
+   `run`, `mcp` and `credentials`; agents `every`, `installed`, `no-own-sandbox` or ids;
+   OSes `every` or `linux`, `macos`, `windows`. The weekly job's record of an agent in
+   `scripts/ci/latest-agents/agents.json` names what a passing run asserts against the
+   real agent (`proves`: `hook`, `hook-failure`, `mcp`), on its runners' OSes, and says
+   `why` when it proves no hook call. Its golden payload fixture is listed too.
+3. **A mark cannot claim more than the test compiles for.** The docs test reads the
+   `#[cfg]` above the test, around an inline module, and above each `mod` line from the
+   crate root down, and fails on a mark naming an OS the test is compiled out of, an
+   unknown claim, agent or OS, or no test below it. `check.py records` fails on an unknown
+   `proves` entry and on a record without the hook and without `why`.
+4. **No evidence, no claim.** A claim nothing backs on that OS ends in `no evidence yet`
+   in the table, and the summary at the top calls it `preview`. The hook is shown
+   protected only from a `hook` test or from the weekly job, and only when every record of
+   the agent (OpenCode 1 and OpenCode 2) proves it there: `payloads` tests check
+   OpenMoat's side, not the agent, so they never make a hook protected. No real agent runs
+   on Windows in CI, so every hook there reads preview.
+5. **`openmoat doctor --verbose`** ends with a pointer to the page, in place of the hint
+   to run `--verbose` that the plain output ends with.
+6. **What a mark claims.** Like decision 4's, a mark says the test exercises that part of
+   the claim for those agents on those OSes, not that every case is covered. Several
+   marked tests need an agent's pinned binary and skip without it; CI's `standard tier`
+   jobs fail them instead. A test that loops over agents and skips some names its agents
+   explicitly.
+
 ## Consequences
 
 - A new host cannot be added without saying, with a source, what it does when the hook
@@ -135,6 +179,10 @@ evidence at all, and the end-to-end tests that do test some of them were not lin
   its hook is installed.
 - The weekly job takes a little longer: two more short agent runs per agent, within the
   job's existing time limit.
+- `docs/PROTECTION.md` can no longer say more than the marked tests and the weekly
+  records show; a test that newly proves a claim is linked to it only by its mark, and a
+  weekly check only by its record's `proves`. Neither is checked against what the test or
+  the job asserts: a reviewer reads the mark with the test.
 - The OWASP table can no longer say more than the tests show: a risk without a fixture
   class or a marked test reads `not tested`, and a new end-to-end test is linked to a risk
   only by its mark.

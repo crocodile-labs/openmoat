@@ -1,5 +1,5 @@
 {
-  "_comment": "binary is relative to the install directory ({platform} is node's process.platform-process.arch); for Claude Code and OpenCode the npm bin is a stub that only the postinstall replaces, so the platform package's own binary is used. The agents the weekly latest-agent check installs (scripts/ci/latest-agents.sh). checked.version is the release the adapter was last checked against, and checked.source the file that says so; `check.py records` (in the quality gate) fails when that file no longer names the version. payload is the host's golden shell payload, with the JSON pointers of its command and of the verdict in the hook's reply.",
+  "_comment": "binary is relative to the install directory ({platform} is node's process.platform-process.arch); for Claude Code and OpenCode the npm bin is a stub that only the postinstall replaces, so the platform package's own binary is used. The agents the weekly latest-agent check installs (scripts/ci/latest-agents.sh). checked.version is the release the adapter was last checked against, and checked.source the file that says so; `check.py records` (in the quality gate) fails when that file no longer names the version. payload is the host's golden shell payload, with the JSON pointers of its command and of the verdict in the hook's reply. proves lists what a passing run asserts against the real agent (hook: a call decided by OpenMoat's hook and held; hook-failure: the hook-failure step's comparison; mcp: an MCP call decided by the hook), which docs/PROTECTION.md shows as evidence per runner; why says why a record proves no hook call.",
   "claude-code": {
     "host": "claude-code",
     "name": "Claude Code",
@@ -10,6 +10,7 @@
     "config": [["{CLAUDE_CONFIG_DIR}/settings.json", "json"]],
     "payload": {"fixture": "claude_code/fixtures/bash.json", "command": "/tool_input/command",
                 "verdict": "/hookSpecificOutput/permissionDecision"},
+    "proves": ["hook", "hook-failure", "mcp"],
     "runners": ["ubuntu-latest", "macos-15"]
   },
   "codex": {
@@ -22,6 +23,7 @@
     "config": [["{CODEX_HOME}/hooks.json", "json"]],
     "payload": {"fixture": "codex/fixtures/pretooluse-shell.json", "command": "/tool_input/command",
                 "verdict": "/hookSpecificOutput/permissionDecision", "allow_is_silent": true},
+    "proves": ["hook", "hook-failure"],
     "runners": ["ubuntu-latest", "macos-15"]
   },
   "opencode-1": {
@@ -35,6 +37,7 @@
                ["{XDG_CONFIG_HOME}/opencode/opencode.json", "json"]],
     "payload": {"fixture": "opencode/fixtures/bash.json", "command": "/args/command",
                 "verdict": "/decision"},
+    "proves": ["hook", "hook-failure"],
     "runners": ["ubuntu-latest", "macos-15"]
   },
   "opencode-2": {
@@ -47,6 +50,8 @@
     "config": [["{XDG_CONFIG_HOME}/opencode/plugins/openmoat.js", "javascript"]],
     "payload": {"fixture": "opencode/fixtures/v2-shell.json", "command": "/input/command",
                 "verdict": "/decision"},
+    "proves": [],
+    "why": "it checks only that OpenCode 2 reports OpenMoat's plugin active; no model call is driven through it yet",
     "runners": ["ubuntu-latest", "macos-15"]
   },
   "gemini-cli": {
@@ -59,6 +64,7 @@
     "config": [["{GEMINI_CLI_HOME}/.gemini/settings.json", "json"]],
     "payload": {"fixture": "gemini_cli/fixtures/run_shell_command.json", "command": "/tool_input/command",
                 "verdict": "/decision"},
+    "proves": ["hook", "hook-failure"],
     "runners": ["ubuntu-latest"]
   },
   "copilot-cli": {
@@ -71,6 +77,7 @@
     "config": [["{COPILOT_HOME}/hooks/openmoat.json", "json"]],
     "payload": {"fixture": "copilot_cli/fixtures/bash.json", "command": "/toolArgs/command",
                 "verdict": "/permissionDecision"},
+    "proves": ["hook", "hook-failure"],
     "runners": ["ubuntu-latest", "macos-15"]
   },
   "pi": {
@@ -84,6 +91,7 @@
                ["{PI_CODING_AGENT_DIR}/models.json", "json"]],
     "payload": {"fixture": "pi/fixtures/bash.json", "command": "/input/command",
                 "verdict": "/decision"},
+    "proves": ["hook", "hook-failure"],
     "runners": ["ubuntu-latest"]
   },
   "openclaw": {
@@ -96,6 +104,7 @@
     "config": [["{OPENCLAW_STATE_DIR}/openclaw.json", "openclaw"]],
     "payload": {"fixture": "openclaw/fixtures/exec.json", "command": "/params/command",
                 "verdict": "/decision"},
+    "proves": ["hook", "hook-failure"],
     "runners": ["ubuntu-latest", "macos-15"]
   },
   "hermes": {
@@ -107,6 +116,8 @@
     "config": [["{HERMES_HOME}/config.yaml", "hermes"]],
     "payload": {"fixture": "hermes/fixtures/terminal.json", "command": "/tool_input/command",
                 "verdict": "hermes"},
+    "proves": [],
+    "why": "`hermes hooks test` runs OpenMoat's hook through the code a session uses, but no model turn dispatches to it",
     "runners": ["ubuntu-latest", "macos-15"]
   },
   "cline": {
@@ -119,6 +130,7 @@
     "config": [["{CLINE_DIR}/hooks/PreToolUse", "shell"]],
     "payload": {"fixture": "cline/fixtures/run_commands.json", "command": "/tool_call/input/commands/0",
                 "verdict": "cline"},
+    "proves": ["hook", "hook-failure"],
     "runners": ["ubuntu-latest", "macos-15"]
   },
   "goose": {
@@ -130,6 +142,7 @@
     "config": [["{HOME}/.agents/plugins/openmoat/hooks/hooks.json", "json"]],
     "payload": {"fixture": "goose/fixtures/shell.json", "command": "/tool_input/command",
                 "verdict": "goose", "allow_is_silent": true},
+    "proves": ["hook", "hook-failure"],
     "runners": ["ubuntu-latest", "macos-15"]
   },
   "antigravity-cli": {
@@ -142,6 +155,8 @@
     "config": [["{HOME}/.gemini/config/hooks.json", "json"]],
     "payload": {"fixture": "antigravity_cli/fixtures/run_command.json", "command": "/toolCall/args/CommandLine",
                 "verdict": "/decision"},
+    "proves": [],
+    "why": "in its runs so far the agent ran its tools without starting OpenMoat's hook, so the job fails until that is understood and fixed",
     "runners": ["ubuntu-latest", "macos-15"]
   },
   "cursor": {
@@ -154,6 +169,8 @@
     "config": [["{CURSOR_CONFIG_DIR}/hooks.json", "json"]],
     "payload": {"fixture": "cursor/fixtures/beforeShellExecution.json", "command": "/command",
                 "verdict": "/permission"},
+    "proves": [],
+    "why": "every `cursor-agent` run needs a Cursor account, so the job never starts the agent",
     "runners": ["ubuntu-latest", "macos-15"]
   },
   "continue": {
@@ -163,6 +180,8 @@
     "package": "@continuedev/cli",
     "checked": {"version": null, "source": "crates/openmoat-hosts/src/host/continue_cli/HOST.md",
                 "note": "not set up by openmoat init: the released cn runs no hooks; this job fails once it does"},
+    "proves": [],
+    "why": "the released `cn` runs no hook, so `openmoat init` does not set it up",
     "runners": ["ubuntu-latest"]
   }
 }

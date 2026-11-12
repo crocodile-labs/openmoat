@@ -21,6 +21,7 @@ fn agent(sb: &Sandbox, id: &str) -> Value {
 /// The servers in the host's MCP file are pinned at `init`; a changed one
 /// holds back only its own tools until a person accepts it, and the other
 /// servers and calls run: it is not drift of the whole file.
+// protection: mcp cline,copilot-cli,goose,hermes,openclaw,opencode,pi every
 #[test]
 fn a_changed_mcp_server_holds_back_only_its_tools() {
     for host in Host::ALL {

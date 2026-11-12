@@ -127,7 +127,7 @@ pub struct HostSpec {
     /// What the hook and sandbox do not cover for this host, and what it does
     /// when the hook fails, as `moat status` and `moat doctor` report it.
     /// Mirrors `docs/LIMITS.md` and `docs/THREAT_MODEL.md` §5, whose per-host
-    /// list of it and of [`Self::on_hook_failure`] is generated (`tests/docs.rs`);
+    /// list of it and of [`Self::on_hook_failure`] is generated (`tests/docs/`);
     /// change `docs/LIMITS.md` with it.
     pub gaps: &'static str,
     /// Where `moat init` installs the hook; `None` for a host that runs another
@@ -157,7 +157,7 @@ pub struct HostSpec {
     /// Published security advisories of the host's releases, which `moat
     /// doctor` and `moat status` warn about for the version on the search path.
     pub advisories: Advisories,
-    /// What the generated host tables of the docs say (`tests/docs.rs`).
+    /// What the generated host tables of the docs say (`tests/docs/`).
     pub docs: HostDocs,
     /// Which directory of a call is the session's, the one whose project is
     /// `${project}`.

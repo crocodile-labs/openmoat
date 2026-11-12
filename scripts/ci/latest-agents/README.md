@@ -47,6 +47,15 @@ its configuration files parsing (JSON; JavaScript with `node --check`; OpenClaw'
 whose `payload` sets `allow_is_silent` (Codex, which rejects a bare
 `permissionDecision: allow`) passes the allow payload with exit 0 and no output.
 
+Each record's `proves` lists what a passing run asserts against the real agent: `hook`
+(a call decided by OpenMoat's hook, the denied read above), `hook-failure` (the step
+below compared the agent with its facts) and `mcp` (Claude Code's MCP call decided by
+`PreToolUse`). A record without `hook` says `why`. `docs/PROTECTION.md` shows them as the
+evidence for that agent on the OSes of its `runners`, and shows an agent's hook protected
+only when every record of it proves `hook` there (ADR-079 decision 5). Change `proves`
+together with what the script asserts; `check.py records` (in the quality gate) refuses an
+unknown claim and a record without `hook` and without `why`.
+
 ## Lifecycle checks (Claude Code)
 
 - **Interrupt and resume.** The fake API holds its fifth request (`--hold-at`) and the

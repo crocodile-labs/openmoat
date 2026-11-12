@@ -166,10 +166,12 @@ pub(super) fn footer_line(human: &[Placed], problems: usize, verbose: bool) -> S
         .filter(|p| p.place == Place::Attention && p.row.mark == Mark::Attention)
         .count();
     let total = warnings + problems;
+    // With `--verbose`, where each agent's gaps are listed, the pointer goes on
+    // to the matrix of what each agent gets on each OS (ADR-079 decision 5).
     let gaps = if verbose {
-        String::new()
+        " · each agent on each OS, and the tests behind it: docs/PROTECTION.md"
     } else {
-        " · known gaps per agent: openmoat doctor --verbose".to_owned()
+        " · known gaps per agent: openmoat doctor --verbose"
     };
     if total == 0 {
         format!("All good.{gaps}")

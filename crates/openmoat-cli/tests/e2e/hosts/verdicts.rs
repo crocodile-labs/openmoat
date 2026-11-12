@@ -8,6 +8,7 @@ use openmoat_hosts::Host;
 use super::{assert_reason, dir_of, guard, row, verdict};
 use crate::common::{DENY, OK, Sandbox, stdout, text};
 
+// protection: payloads antigravity-cli,cline,copilot-cli,cursor,gemini-cli,goose,hermes,openclaw,opencode,pi every
 #[test]
 fn a_secret_read_is_denied_in_the_hosts_format() {
     for host in Host::ALL {
