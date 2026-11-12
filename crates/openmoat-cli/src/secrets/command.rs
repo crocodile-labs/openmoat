@@ -54,6 +54,10 @@ pub struct Program {
     /// The resolved program file.
     path: PathBuf,
     /// The program as the policy names it, home expanded: its `argv[0]`.
+    #[cfg_attr(
+        not(unix),
+        expect(dead_code, reason = "only Unix sets a program's argv[0]")
+    )]
     written: String,
     args: Vec<String>,
     /// SHA-256 of the program when the proxy started.
@@ -95,6 +99,10 @@ impl Program {
 
     /// The same program with a shorter time limit, for tests.
     #[cfg(test)]
+    #[cfg_attr(
+        not(unix),
+        expect(dead_code, reason = "the stand-in programs are Unix scripts")
+    )]
     pub fn with_time_limit(self, time_limit: Duration) -> Self {
         Self { time_limit, ..self }
     }
