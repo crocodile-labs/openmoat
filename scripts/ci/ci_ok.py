@@ -19,6 +19,14 @@ A matrix job reports one result for all its legs: `failure` if any leg
 failed. Legs with nothing to run (a documentation-only pull request, or the
 slow legs `changes` held back) run their skipped steps and report `success`.
 
+On a pull request, ci.yml runs the copy of this file on the branch the pull
+request lands on (the merge commit's first parent), not the pull request's
+own, so a pull request cannot change how its own run is judged; it checks
+the pull request's ci.yml, the workflow that actually ran. A change to this
+file sets `full` on that pull request (scripts/ci/changes.py) and judges runs
+from the next pull request after it merges. Only while the base branch has no
+copy of this file does the pull request's copy run, with a warning.
+
 The workflow is read as text, not YAML (no YAML parser in the standard
 library): a job is a line `  <id>:` under `jobs:`, its condition the line
 `    if: …` below it. Anything the reader does not understand fails the job.

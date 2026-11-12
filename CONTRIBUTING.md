@@ -102,23 +102,34 @@ What a pull request runs (`.github/workflows/ci.yml`, the `changes` job,
   (the Windows end-to-end tests in two parts), the standard tier, guard latency, a
   one-minute fuzz smoke per target and every lint job.
 - The slow legs, `macos-15-intel` and ADR-062 step 0 (`adr062-poc.yml`), run on a PR
-  only when it changes platform sandbox code (the Seatbelt, bubblewrap, Landlock and
-  seccomp backends, `openmoat run` on macOS and Linux, the default policy, the
-  toolchain, `.github/`, the CI decision scripts) or is labelled `ci:full`. Ten minutes
-  of fuzzing per target runs on a PR only with `ci:full`. The label is read when the
-  `changes` job runs: label the PR, then re-run its jobs. A leg held back still reports
-  success under its name, with every step skipped.
+  only when it changes platform code or is labelled `ci:full`. Platform code is the
+  sandbox backends (`src/sandbox*`), `openmoat run` (`commands/run*`), the OS sandbox
+  protection level, their end-to-end tests (`tests/e2e/sandbox*`, `cursor_sandbox*`,
+  `run*`), the default policy, the toolchain, `Cargo.lock`, `.github/`, the CI decision
+  scripts and `quality-gate.sh`, and any changed `.rs` file that tests the platform
+  (`cfg(target_os`, `cfg(unix`, `cfg(windows`, `target_arch`). ADR-062 step 0 also runs
+  when a PR changes what it measures: the proxy crate, `openmoat proxy`, the proxy CA,
+  `commands/run.rs` and its two scripts. Ten minutes of fuzzing per target runs on a PR
+  only with `ci:full`. The label is read when the `changes` job runs: label the PR, then
+  **re-run all jobs**, not only the failed ones: a leg held back passed with every step
+  skipped, under its own name, and a re-run of the failed jobs leaves it so.
+- On a PR, the `changes` job and `ci-ok` run `changes.py` and `ci_ok.py` as they are on
+  the branch the PR lands on, not the PR's own copies, so a PR cannot decide what its own
+  run skips or how it is judged. A PR that changes them runs the slow legs, and its new
+  rules apply from the next PR after it merges. A push, the schedule and a run by hand
+  use the commit's own copies.
 - A PR that changes documentation only skips the Rust, JavaScript, fuzz and latency jobs;
   links, spelling, changelog fragments and release version strings are still checked.
   A document that any test, build or script names (the generated tables in `README.md`,
   `docs/USAGE.md`, `docs/COVERAGE.md`, `docs/EVIDENCE.md`, …) counts as code, so
   changing it runs everything.
-- When the `changes` job cannot tell (an error, an empty diff, labels it cannot read),
-  everything runs.
-- Every push to `main`, the weekly schedule and a run by hand run every leg, with long
-  fuzz. A release tag publishes only when the `ci` run of the push to `main` at that
-  commit completed green (`scripts/ci/main_ci_green.py`, the first step of
-  `release.yml`).
+- When the `changes` job cannot tell (an error, an empty diff, a changed file or labels
+  it cannot read), everything runs.
+- Every push to `main`, the weekly schedule and a run by hand (Actions → ci → Run
+  workflow) run every leg, with long fuzz. A release tag publishes only when the `ci`
+  run of the push to `main` at that commit completed green
+  (`scripts/ci/main_ci_green.py`, the first step of `release.yml`); a run still going,
+  or not yet started on a commit that is on `main`, is waited for up to 150 minutes.
 - Rust build caches are saved by runs on `main` only, one per job; a PR restores them
   and never writes one.
 - `guard latency` builds the commit the PR lands on as well and times both on the same
