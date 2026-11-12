@@ -16,12 +16,21 @@
 //! Values are zeroed when dropped and never formatted: [`Debug`] and every
 //! reason this module writes name the secret's id and host only.
 
+use std::sync::{Arc, RwLock};
+
 use openmoat_core::{Decision, Secret, Verdict};
 use zeroize::Zeroizing;
+
+use self::value::{Slot, read};
 
 /// Rule id for a request refused because it carries a brokered secret to a
 /// host that is not the secret's own.
 pub const RULE_SECRET: &str = "proxy-secret";
+
+/// Rule id for a request that would get a secret whose value has expired and
+/// was not renewed (ADR-087): it is not sent, rather than sent with a stale
+/// value or without one.
+pub const RULE_SECRET_EXPIRED: &str = "proxy-secret-expired";
 
 /// Where a request to a secret's host travels, which decides whether the
 /// secret goes in.
@@ -37,10 +46,27 @@ pub(crate) enum Channel {
 struct Held {
     secret: Secret,
     placeholder: String,
-    value: Zeroizing<String>,
+    slot: Arc<RwLock<Slot>>,
 }
 
 impl Held {
+    /// The value to put in now; `None` once it expired unrenewed.
+    fn live(&self) -> Option<Zeroizing<String>> {
+        read(&self.slot).live().cloned()
+    }
+
+    /// Whether `bytes` hold a value of this secret, current or replaced.
+    fn value_in(&self, bytes: &[u8]) -> bool {
+        read(&self.slot)
+            .known()
+            .any(|v| contains(bytes, v.as_bytes()))
+    }
+
+    /// The length of the longest value the checks look for.
+    fn longest_value(&self) -> usize {
+        read(&self.slot).known().map(|v| v.len()).max().unwrap_or(0)
+    }
+
     /// Whether a request to `host` over `channel` gets this secret.
     fn injects(&self, host: &str, channel: Channel) -> bool {
         self.secret.host == host
@@ -125,19 +151,24 @@ impl Broker {
     pub fn new(secrets: Vec<(Secret, Zeroizing<String>)>) -> Result<Self, BrokerError> {
         let mut held = Vec::with_capacity(secrets.len());
         for (secret, value) in secrets {
-            if value.is_empty() {
-                return Err(BrokerError::Empty(secret.id));
-            }
-            if value.chars().any(char::is_control) {
-                return Err(BrokerError::Control(secret.id));
-            }
+            usable(&secret.id, &value)?;
             held.push(Held {
                 placeholder: secret.placeholder(),
                 secret,
-                value,
+                slot: Slot::fixed(value),
             });
         }
         Ok(Self { held })
+    }
+
+    /// The handle that renews secret `id`'s value while the proxy runs, and
+    /// gives it a deadline (ADR-087). `None` for an id the broker does not hold.
+    #[must_use]
+    pub fn rotation(&self, id: &str) -> Option<Rotation> {
+        self.held
+            .iter()
+            .find(|h| h.secret.id == id)
+            .map(|h| Rotation::new(id, &h.slot))
     }
 
     /// True when no secret is brokered.
@@ -163,7 +194,7 @@ impl Broker {
             .find_map(|h| {
                 let carried = if contains(bytes, h.placeholder.as_bytes()) {
                     Carried::Placeholder
-                } else if contains(bytes, h.value.as_bytes()) {
+                } else if h.value_in(bytes) {
                     Carried::Value
                 } else {
                     return None;
@@ -207,17 +238,19 @@ impl Broker {
     /// becomes the value; a secret whose header is absent, or holds no
     /// placeholder, gets its own header line. `None` when there is no such
     /// secret. The caller has checked the request against their `allow` rules
-    /// ([`Broker::admit`]).
+    /// and deadlines ([`Broker::admit`]); a value that expired since is left
+    /// out, never put in.
     pub(crate) fn inject(
         &self,
         host: &str,
         channel: Channel,
         head: &[u8],
     ) -> Option<Zeroizing<Vec<u8>>> {
-        let owned: Vec<&Held> = self
+        let owned: Vec<(&Held, Zeroizing<String>)> = self
             .held
             .iter()
             .filter(|h| h.injects(host, channel))
+            .filter_map(|h| Some((h, h.live()?)))
             .collect();
         // Each line keeps its `\r`; only the `\n`s are split on and re-added.
         let lines = head.strip_suffix(b"\n\r\n")?;
@@ -231,14 +264,14 @@ impl Broker {
             let named = header_name(line).filter(|_| n > 0).and_then(|name| {
                 owned
                     .iter()
-                    .position(|h| name.eq_ignore_ascii_case(h.secret.header.as_bytes()))
+                    .position(|(h, _)| name.eq_ignore_ascii_case(h.secret.header.as_bytes()))
             });
             match named {
                 None => out.extend_from_slice(line),
-                Some(i) if contains(line, owned[i].placeholder.as_bytes()) => {
+                Some(i) if contains(line, owned[i].0.placeholder.as_bytes()) => {
                     placed[i] = true;
-                    let h = owned[i];
-                    replace(line, h.placeholder.as_bytes(), h.value.as_bytes(), &mut out);
+                    let (h, value) = &owned[i];
+                    replace(line, h.placeholder.as_bytes(), value.as_bytes(), &mut out);
                 }
                 // A value the client chose would reach the owner in place of
                 // the secret: it is dropped, and the secret's line added below.
@@ -246,9 +279,9 @@ impl Broker {
             }
             out.extend_from_slice(b"\n");
         }
-        for (h, _) in owned.iter().zip(&placed).filter(|(_, p)| !**p) {
+        for ((h, value), _) in owned.iter().zip(&placed).filter(|(_, p)| !**p) {
             out.extend_from_slice(format!("{}: ", h.secret.header).as_bytes());
-            out.extend_from_slice(h.value.as_bytes());
+            out.extend_from_slice(value.as_bytes());
             out.extend_from_slice(b"\r\n");
         }
         out.extend_from_slice(b"\r\n");
@@ -261,10 +294,21 @@ impl Broker {
     fn longest(&self) -> usize {
         self.held
             .iter()
-            .map(|h| h.placeholder.len().max(h.value.len()))
+            .map(|h| h.placeholder.len().max(h.longest_value()))
             .max()
             .unwrap_or(0)
     }
+}
+
+/// Refuse a value that would break the header it goes in.
+fn usable(id: &str, value: &str) -> Result<(), BrokerError> {
+    if value.is_empty() {
+        return Err(BrokerError::Empty(id.to_owned()));
+    }
+    if value.chars().any(char::is_control) {
+        return Err(BrokerError::Control(id.to_owned()));
+    }
+    Ok(())
 }
 
 /// Watches one client stream towards `host`, chunk by chunk.
@@ -329,9 +373,11 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 
 mod echo;
 mod route;
+mod value;
 
 pub(crate) use self::echo::{Echo, Holdback, value_came_back};
 pub use self::route::RULE_SECRET_ROUTE;
+pub use self::value::Rotation;
 
 #[cfg(test)]
 mod tests;

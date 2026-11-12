@@ -5,7 +5,7 @@
 
 use openmoat_core::{Decision, Permit, Verdict};
 
-use super::{Broker, Channel};
+use super::{Broker, Channel, RULE_SECRET_EXPIRED};
 
 /// Rule id for a request to a secret's host that the secret's `allow` rules
 /// do not name: it would have received the value, so it is not sent.
@@ -13,8 +13,8 @@ pub const RULE_SECRET_ROUTE: &str = "proxy-secret-route";
 
 impl Broker {
     /// Check `head` (a complete request head the proxy wrote) to `host` over
-    /// `channel` against the `allow` rules of every secret that would go into
-    /// it. `Ok` holds one reason per rule matched, for the audit row; `Err`
+    /// `channel` against the deadline and the `allow` rules of every secret
+    /// that would go into it. `Ok` holds one reason per rule matched, for the audit row; `Err`
     /// the deny to record.
     pub(crate) fn admit(
         &self,
@@ -28,6 +28,20 @@ impl Broker {
             .iter()
             .filter(|h| h.injects(host, channel))
             .collect();
+        // A value past its deadline is never sent, and neither is the request
+        // without it: the server would answer to no credential, or to the
+        // placeholder, and the person would not learn why (ADR-087).
+        if let Some(expired) = injecting.iter().find(|h| h.live().is_none()) {
+            return Err(Decision::single(
+                Verdict::Deny,
+                RULE_SECRET_EXPIRED,
+                format!(
+                    "secret `{}` for {host} expired and was not renewed (its command failed or \
+                     has not answered); the request was not sent",
+                    expired.secret.id
+                ),
+            ));
+        }
         if injecting.iter().all(|h| h.secret.allow.is_empty()) {
             return Ok(Vec::new());
         }

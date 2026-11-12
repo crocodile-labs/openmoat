@@ -10,8 +10,11 @@ use std::fmt;
 
 mod check_diff;
 mod ports;
+mod secrets;
 mod taint;
 mod titles;
+
+pub use secrets::{exposed_source, write_denied};
 
 pub use titles::untitled;
 
@@ -19,7 +22,6 @@ use crate::kind::Kind;
 use crate::paths;
 use crate::pattern::{self, GlobPattern, ShellPattern};
 use crate::policy::{Defaults, Policy, RuleGroup};
-use crate::secret::{SECRET_RULE_PREFIX, Source as SecretSource};
 
 /// `ask`, the name `review` had before ADR-053: still read, but the person
 /// should know, and `openmoat policy upgrade` renames it.
@@ -94,7 +96,7 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
         fetch_exclusions_net_matches(group, &mut out);
     }
     ports::malformed(policy, &mut out);
-    secrets(policy, &mut out);
+    secrets::warn(policy, &mut out);
     if policy.sandbox.as_ref().is_some_and(|s| s.proxy_allow_ech) {
         out.push(Warning {
             rule: "sandbox.proxy_allow_ech".to_owned(),
@@ -140,64 +142,6 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
         });
     }
     out
-}
-
-/// A secret whose host the proxy refuses is never injected, and one whose
-/// source the agent may read is not kept from the agent.
-fn secrets(policy: &Policy, out: &mut Vec<Warning>) {
-    for secret in &policy.secrets {
-        let mut warn = |message: String| {
-            out.push(Warning {
-                rule: format!("{SECRET_RULE_PREFIX}{}", secret.id),
-                message,
-            });
-        };
-        if !listed(&policy.allow, &[Kind::Net, Kind::Fetch], &secret.host) {
-            warn(format!(
-                "no net or fetch allow rule names {}, so `openmoat proxy` refuses it and the \
-                 secret is never injected",
-                secret.host
-            ));
-        }
-        if let Some(message) = exposed_source(policy, secret) {
-            warn(message);
-        }
-        if secret.plain_http && secret.is_loopback() {
-            warn(format!(
-                "`plain_http: true` names {}, a loopback host; `openmoat proxy` never connects to \
-                 a loopback address, so the secret is never injected",
-                secret.host
-            ));
-        } else if secret.plain_http {
-            warn(format!(
-                "`plain_http: true` sends the value to {} in clear text, readable by anyone \
-                 on the network path",
-                secret.host
-            ));
-        }
-        if secret.terminates() && secret.is_loopback() {
-            warn(format!(
-                "`tls: terminate` names {}, a loopback host; `openmoat proxy` never connects to \
-                 a loopback address, so the secret is never injected",
-                secret.host
-            ));
-        }
-    }
-}
-
-/// Why the agent can read `secret`'s value itself, when no deny rule covers
-/// its source: a `file` no `fs.read` deny names, an `env` variable no
-/// `env.read` deny names. `None` for a covered source and for the keychain.
-#[must_use]
-pub fn exposed_source(policy: &Policy, secret: &crate::Secret) -> Option<String> {
-    match &secret.source {
-        SecretSource::File(path) => paths::expand_pattern(path, HOME, Some(PROJECT))
-            .filter(|p| !listed(&policy.deny, &[Kind::FsRead], p))
-            .map(|_| format!("no deny fs.read rule covers `{path}`, so the agent can read it")),
-        SecretSource::Env(name) => (!listed(&policy.deny, &[Kind::EnvRead], name))
-            .then(|| format!("no deny env.read rule covers `{name}`, so the agent can read it")),
-        SecretSource::Keychain { .. } => None,
-    }
 }
 
 /// Does a group in `groups` match `candidate` in one of `kinds`, `!` exclusions

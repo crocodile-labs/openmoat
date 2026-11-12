@@ -288,3 +288,56 @@ fn a_plain_http_answer_without_the_value_reaches_the_client_whole() {
     assert!(reply.as_bytes().ends_with(UPSTREAM_REPLY), "{reply}");
     assert!(h.rows().iter().all(|r| r.rules == ["test-hosts"]));
 }
+
+/// A value from a `command` source (ADR-087): a renewed one goes in, and one
+/// past its deadline is never sent: the request is refused before anything
+/// goes upstream, and the row names the secret, not a value.
+#[test]
+fn a_renewed_value_goes_in_and_an_expired_one_stops_the_request() {
+    const RENEWED: &str = "fake-renewed-3b8e61f0a9d4c257";
+    let upstream = upstream();
+    let policy = Policy::parse(&format!(
+        "version: 1\nsecrets:\n  - id: svc\n    host: owner.test\n    header: X-Api-Key\n    \
+         plain_http: true\n    port: {}\n    source:\n      \
+         command: {{ run: [/usr/bin/fake], lifetime: 15m }}\n",
+        upstream.0.port()
+    ))
+    .unwrap();
+    let secrets = policy
+        .secrets
+        .into_iter()
+        .map(|s| (s, Zeroizing::new(VALUE.to_owned())))
+        .collect();
+    let broker = Broker::new(secrets).unwrap();
+    let rotation = broker.rotation("svc").unwrap();
+    let h = launch(None, Limits::default(), broker, upstream);
+    let port = h.port();
+    let request =
+        format!("GET http://owner.test:{port}/ HTTP/1.1\r\nX-Api-Key: {PLACEHOLDER}\r\n\r\n");
+    rotation
+        .renew(Zeroizing::new(RENEWED.to_owned()), Duration::from_secs(60))
+        .unwrap();
+    let reply = h.exchange(&request);
+    assert!(reply.starts_with("HTTP/1.1 200"), "{reply}");
+    let head = String::from_utf8(h.received.recv_timeout(WAIT).unwrap()).unwrap();
+    assert!(head.contains(&format!("X-Api-Key: {RENEWED}")), "{head}");
+    assert!(!head.contains(VALUE), "{head}");
+    rotation
+        .renew(Zeroizing::new(RENEWED.to_owned()), Duration::ZERO)
+        .unwrap();
+    let reply = h.exchange(&request);
+    assert!(reply.starts_with("HTTP/1.1 403"), "{reply}");
+    assert!(h.nothing_forwarded());
+    let rows = h.rows();
+    let last = rows.last().unwrap();
+    assert_eq!(last.rules, ["proxy-secret-expired"], "{rows:?}");
+    assert!(last.reasons.join(" ").contains("secret `svc`"), "{last:?}");
+    for row in &rows {
+        let shown = format!("{row:?}");
+        assert!(
+            !shown.contains(VALUE) && !shown.contains(RENEWED),
+            "{shown}"
+        );
+    }
+    assert!(!reply.contains(RENEWED), "{reply}");
+}

@@ -201,7 +201,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     // this process decides their calls on the proxy's port (ADR-028).
     // Only the calls of the agent this run starts, in its own sessions (ADR-070).
     let (guard, guard_token) = guard_service(&home, &run_session, agent_host)?;
-    let exit = Exit::open(&home, policy, ctx, Some(credential))?
+    let exit = Exit::open(&home, policy, ctx, Some(credential), &write_roots)?
         .with_guard(guard)
         .with_tls(terminating.map(|t| t.tls))
         .with_requests(request_poc::requests()?);

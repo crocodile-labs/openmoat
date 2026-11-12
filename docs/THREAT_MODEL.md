@@ -753,8 +753,8 @@ something OpenMoat claims to stop.
   experimental ([sandboxing](https://code.claude.com/docs/en/sandboxing#mask-credentials)).
   Sandboxed commands then hold a placeholder and Claude Code's proxy, which now
   terminates their TLS, sends the value to that host. OpenMoat does not see or record
-  those requests, and Claude Code's proxy adds no content filtering. A `keychain`
-  source, a host outside `net` allow, and a `plain_http` secret (which goes to one port
+  those requests, and Claude Code's proxy adds no content filtering. A `keychain` or
+  `command` source, a host outside `net` allow, and a `plain_http` secret (which goes to one port
   only, while Claude Code's broker would inject it on every port) are not masked; they keep the hook's and `openmoat proxy`'s handling. On macOS a `file`
   source is denied, not masked. `openmoat doctor` reports each secret's state and flags a
   hand-set `credentials.allowPlaintextInject`.
@@ -1527,8 +1527,8 @@ something OpenMoat claims to stop.
   or `env` source the guard can read. Known token formats are removed by pattern. Nothing else is guaranteed: a
   secret OpenMoat does not hold (one only in the agent's environment or files) and of
   no known format is stored as sent; so is a brokered value that was encoded (base64,
-  URL escapes), split, or shorter than 8 bytes; a keychain-sourced value is not
-  masked in guard rows; values from before a secret was added stay in old rows. The
+  URL escapes), split, or shorter than 8 bytes; a keychain-sourced value, or one from a
+  `command` source (which only the proxy runs, ADR-087), is not masked in guard rows; values from before a secret was added stay in old rows. The
   matcher's copy of the values is not zeroed when the process exits. Redaction limits
   what the log reveals; it does not stop the secret being sent, which is the policy's
   and the proxy's job.

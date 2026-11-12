@@ -116,6 +116,18 @@ fn entries(secrets: &[BrokeredSecret], allowed: &[String], report: &mut Report) 
                 );
                 continue;
             }
+            // Never written to the host's settings, which would run it, or
+            // keep a value past its lifetime (ADR-087).
+            SecretSource::Command(_) => {
+                report.loss(
+                    Kind::Net,
+                    &rule,
+                    "Claude Code's broker reads env and file sources only; a `command` source is \
+                     run and renewed by `openmoat proxy` alone, where the secret still works"
+                        .into(),
+                );
+                continue;
+            }
         };
         entries.push(Entry {
             id: secret.id.clone(),

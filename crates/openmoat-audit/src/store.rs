@@ -324,6 +324,12 @@ impl Store {
         Self { secrets, ..self }
     }
 
+    /// Mask `secrets` from now on in place of those set before: a proxy whose
+    /// brokered values are renewed while it runs (ADR-087) masks each new one.
+    pub fn set_secrets(&mut self, secrets: KnownSecrets) {
+        self.secrets = secrets;
+    }
+
     /// Append one decision and return its id.
     pub fn record(&self, event: &NewEvent<'_>) -> Result<EventId, StoreError> {
         self.record_at(event, now_ms())

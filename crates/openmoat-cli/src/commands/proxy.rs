@@ -72,6 +72,7 @@ pub fn run(args: &ProxyArgs) -> Result<Code> {
         policy,
         context::eval_context(&home, None, None)?,
         None,
+        &[],
     )?;
     let listener = TcpListener::bind(listen).with_context(|| format!("listening on {listen}"))?;
     let addr = listener
@@ -367,12 +368,17 @@ impl Exit {
     /// that session alone and records under its id (`moat run`); without, it
     /// serves the sessions their hooks issued credentials to, and records what
     /// it serves without one under a `proxy-<ms>` session (`moat proxy`, ADR-044).
+    /// `granted` are the folders `moat run`'s sandbox lets the agent write.
     pub(super) fn open(
         home: &Home,
         policy: Policy,
         ctx: EvalContext,
         credential: Option<Credential>,
+        granted: &[String],
     ) -> Result<Self> {
+        // Secrets, and the rules that let a `command` program run, come from
+        // the person's own policy: a repository's is the agent's to write.
+        let user = policy.clone();
         // `moat run` knows its project: the repository policy's deny rules
         // refuse hosts at its proxy too (its allow rules never widen it).
         let policy = if credential.is_some() {
@@ -381,11 +387,18 @@ impl Exit {
             policy
         };
         CompiledPolicy::compile(&policy, &ctx)?;
-        let (broker, known) = secrets::broker(&policy.secrets, &ctx.home)?;
+        let writable = secrets::writable(&ctx, granted);
+        let place = secrets::Place {
+            home: &ctx.home,
+            state: home.root(),
+            writable: &writable,
+        };
+        let (broker, refresher) = secrets::broker(&user, &place)?;
         let audit_path = home.audit_path();
         let store = Store::open_existing(&audit_path)
             .with_context(|| format!("opening {}", audit_path.display()))?
-            .with_secrets(known);
+            .with_secrets(refresher.known()?);
+        let masks = refresher.masks();
         let session = credential.as_ref().map_or_else(
             || format!("proxy-{}", crate::time::now_ms()),
             |c| c.session().to_owned(),
@@ -406,6 +419,8 @@ impl Exit {
             }
             None => None,
         };
+        // `command` sources are renewed from here on (ADR-087).
+        refresher.spawn();
         Ok(Self {
             policy,
             ctx,
@@ -413,6 +428,7 @@ impl Exit {
             recorder: AuditLog {
                 store: Mutex::new(store),
                 session,
+                masks,
             },
             run,
             issued,
@@ -517,6 +533,8 @@ impl Exit {
 struct AuditLog {
     store: Mutex<Store>,
     session: String,
+    /// Masks for renewed values, taken up before the next row (ADR-087).
+    masks: secrets::Masks,
 }
 
 impl Recorder for AuditLog {
@@ -548,10 +566,18 @@ impl Recorder for AuditLog {
             decision: c.decision,
             latency_us: c.latency_us,
         };
-        let store = self
+        let mut store = self
             .store
             .lock()
             .map_err(|_| RecordError("audit writer poisoned by an earlier panic".to_owned()))?;
+        let renewed = self
+            .masks
+            .lock()
+            .map_err(|_| RecordError("secret masks poisoned by an earlier panic".to_owned()))?
+            .take();
+        if let Some(known) = renewed {
+            store.set_secrets(known);
+        }
         store
             .record(&event)
             .map(drop)

@@ -192,7 +192,8 @@ sandbox can broker it too, below).
 
 - **`source`.** `file` is absolute or under `~/`; the value is its contents without the
   trailing newline. `env` is a variable of the `openmoat proxy` process. `keychain` is an item
-  in the operating system's keychain.
+  in the operating system's keychain. `command` (preview) is a program `openmoat proxy`
+  runs for a short-lived value and runs again before the value expires (§2.2).
 - **`header`** must be an HTTP header name. Headers that frame the request or the
   connection (`Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Proxy-*`, …)
   are refused. Two secrets cannot set the same header for the same host.
@@ -295,12 +296,131 @@ as a Claude Code `mask` entry for that one host, and turns on Claude Code's
 `network.tlsTerminate`, which masking needs. Sandboxed commands then see Claude Code's
 own placeholder in that variable or file, and Claude Code's proxy sends the value to the
 host. The value is read by Claude Code from the same source, not by `openmoat proxy`. A
-secret Claude Code cannot mask (a `keychain` source, a host outside `net` allow, or a
-`plain_http: true` secret, which goes to one port only, `port` or 80, while Claude
+secret Claude Code cannot mask (a `keychain` or `command` source, a host outside `net`
+allow, or a `plain_http: true` secret, which goes to one port only, `port` or 80, while Claude
 Code's broker would inject it on every port of the host) is left to `openmoat proxy`
 as above, and OpenMoat never sets Claude Code's `allowPlaintextInject`; on
 macOS a `file` source is denied rather than masked. `openmoat sandbox show` and
 `openmoat doctor` list what Claude Code does with each secret ([SANDBOX.md](SANDBOX.md#host-sandboxes-standard-tier)).
+
+### 2.2 Short-lived values from a program (`source: command`, preview)
+
+A token that lives for minutes is worth little once its time is up. A `command` source
+names a program you chose that prints such a token; `openmoat proxy` runs it, uses the
+value for at most `lifetime`, and runs it again before the value ends
+([ADR-087](adr/ADR-087-short-lived-brokered-credentials.md)). This example uses
+HashiCorp Vault's CLI, one program file, to make a child token that lives 15 minutes; it
+is an example only, so check your tool's own command and the header its API expects:
+
+```yaml
+secrets:
+  - id: vault
+    host: vault.example.com
+    header: X-Vault-Token
+    tls: terminate
+    source:
+      command:
+        run: ["/usr/local/bin/vault", "token", "create", "-address=https://vault.example.com",
+              "-ttl=15m", "-field=token"]
+        lifetime: 15m          # 1m to 12h: the longest one value is used
+        refresh_before: 3m     # optional; a fifth of lifetime when unset (at least 10s)
+        home: user             # its own login is in ~/.vault-token
+```
+
+The agent sends `X-Vault-Token: moat-secret:vault:placeholder`; the proxy puts the token
+in place of the placeholder. Installed by an administrator (`sudo install vault
+/usr/local/bin/`), `/usr/local/bin/vault` and every folder above it belong to root, so
+no rule is needed. Installed with Homebrew under `/opt/homebrew`, which is yours, it needs
+a deny rule for that whole folder (`realpath` shows where the link in `/opt/homebrew/bin`
+leads), which also stops the agent installing with Homebrew:
+
+```yaml
+deny:
+  - id: credential-programs     # the agent must not be able to change the program
+    fs.write: ["/opt/homebrew/**"]
+```
+
+**Why not `gcloud`.** Google Cloud's `gcloud` is a shell script that starts Python, and
+Python then loads the SDK's modules, and with `CLOUDSDK_PYTHON` an interpreter, from
+folders you can write. Only the script and its interpreter are pinned, so the agent could
+change the code that runs; and under Homebrew the SDK's folders sit in `/opt/homebrew`,
+which is yours. Use a tool that is one program file, or point `run` at such a program
+that an administrator installed.
+
+- **`run`** is the program and its arguments, run without a shell. The program is an
+  absolute path or starts with `~/`; a bare name, a path with `.` or `..`, and a path
+  under `/tmp`, `/var/tmp` or `/dev/shm` do not load.
+- **Who can change the program.** It runs as you, outside every sandbox, so the agent must
+  not be able to change it. `openmoat proxy` runs it only when the path in `run`, the file
+  it resolves to, and every folder above that file up to your home are each covered by a
+  deny `fs.write` rule of your own policy (a folder with everything in it, as
+  `/opt/homebrew/**` covers; a repository policy's rules never count, since the agent
+  can write one), or
+  only an administrator can change them (on macOS and Linux: they belong to root and no
+  group or other user may write them, as `/usr/bin` does). Otherwise it refuses to start
+  and names the rule to add; `openmoat policy lint` warns when no rule covers the program.
+  The default policy only asks before writes to `/opt/homebrew/bin` and `~/.local/bin`
+  (`persistence`), which is not enough.
+- **Not in the project.** A deny rule counts only outside the folders a sandbox lets the
+  agent write: the project, and under `openmoat run` its temp folder and `--write`
+  folders. Linux's Landlock cannot keep a file from the agent inside a folder it may
+  write, so a program there must be one only an administrator can change.
+- **Scripts.** A program whose first line is `#!` is a script: the interpreter that line
+  names must pass the same check, must not be a script itself, and is pinned too.
+  `#!/usr/bin/env …` is refused, since `env` looks the interpreter up in a search path.
+- **Not pinned: what the program loads.** Only the program file and a script's
+  interpreter are checked and pinned. Libraries, modules and plug-ins it loads, and files
+  it reads (its configuration, such as `~/.aws/config`, `~/.config/gcloud`), are not: keep
+  them from the agent with deny `fs.write` rules, or choose a program that is one file.
+  The default `secrets-paths` rule denies writes to those two folders and `~/.vault-token`.
+- **Pinned.** At start the proxy reads the program once, takes the SHA-256 of what it
+  read and runs a private copy of those bytes from `secret-programs/` in OpenMoat's state
+  folder, never the file at the path. Before every run it checks the copy, the program
+  and the interpreter: if any changed, it is not run, and the value is not renewed.
+  After you update the tool, restart `openmoat proxy` (or `openmoat run`). A program
+  that looks for its own files beside the running executable, rather than beside the
+  path in `run`, does not find them.
+- **Where it starts.** In `/` (on Windows the Windows folder), never in the proxy's own
+  folder: that is your project, where the agent writes, and a tool reads `.git`, tool
+  shims and per-folder configuration from the folder it runs in.
+- **`home`** (optional) is the `HOME` the program gets:
+  - unset (`private`): an empty folder of its own, `secret-homes/<id>` in OpenMoat's state
+    folder, which only you can open and the agent cannot write. The program reads none of
+    your dotfiles, and none the agent planted in your home. Use this when the program
+    takes everything it needs as arguments.
+  - `home: user`: your home. For a tool that keeps its login there (`~/.vault-token`,
+    `~/.config/<tool>`). The program then reads files in your home, so keep the ones it
+    reads from the agent with deny `fs.write` rules too.
+- **How it runs.** No input, no terminal (its own process group, which is ended with
+  everything in it when the run ends, on macOS and Linux), a time limit of 30 seconds, at most 64 KiB of output, its error output dropped, and a bare environment:
+  `HOME` (above), `PATH` (`/usr/bin:/bin:/usr/sbin:/sbin` only, never the program's own folder), `USER`,
+  `LOGNAME`, `LANG`, `LC_ALL`, `TMPDIR` and `TZ` (on Windows `SystemRoot`, the profile
+  folders and `TEMP`). Pass anything else, such as a profile name, as an argument.
+- **What it prints.** The value alone (one line), or JSON:
+  `{"value": "…", "expires_in": 3599}` or `{"value": "…", "expires_at": 1767225600}`
+  (Unix seconds). The value is used until the earlier of `lifetime` and that expiry; an
+  answer that expires in less than 10 seconds is refused. An empty value, a control
+  character, other JSON keys, more than one line or non-UTF-8 output are refused.
+- **When it runs again.** Before the value's own end: `refresh_before` ahead of it, or a
+  fifth of the value's lifetime ahead when that is shorter (a token that says it lives an
+  hour, from a source with `lifetime: 12h`, is renewed 12 minutes before its hour is up),
+  and never less than a minute ahead. A program that answered is not run again within a
+  minute. Each secret is renewed on its own thread, so a slow program does not delay
+  another.
+- **When it fails.** At start, `openmoat proxy` does not start (exit 64), as for any
+  source. Later, the proxy says so on its standard error (the secret's id and the
+  reason, never the output) and runs it again every 15 seconds. Until the old value
+  expires, it is still used; after that, a request that would get it is refused before
+  anything is sent, with rule `proxy-secret-expired` in the audit log. A stale value is
+  never sent.
+- **Where it runs.** Only in `openmoat proxy` (and the proxy of `openmoat run`).
+  `openmoat guard` never runs it and does not mask its value (no file of values is
+  written for it to read; [LIMITS.md](LIMITS.md)); audit delivery refuses a
+  `command` source; Claude Code's broker is never given it (`openmoat sandbox show`
+  lists it as handled by `openmoat proxy`). A repository policy or a pack cannot add any
+  secret.
+- **Masking.** Every value it gave (the last five) is masked in the proxy's audit rows,
+  and the leak and echo checks look for the value it replaced too.
 
 ## 3. Pattern syntax
 

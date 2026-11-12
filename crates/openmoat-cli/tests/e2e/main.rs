@@ -86,6 +86,8 @@ mod sandbox;
 mod sandbox_exec;
 mod sandbox_sync;
 mod secret;
+#[cfg(unix)]
+mod secret_command;
 mod serve;
 mod session_code;
 #[cfg(unix)]

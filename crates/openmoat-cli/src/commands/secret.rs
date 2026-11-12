@@ -54,11 +54,10 @@ pub fn list(args: &SecretListArgs) -> Result<Code> {
     for item in &listed {
         let s = item.secret;
         let source = match &s.source {
-            SecretSource::File(path) => format!("file {path}"),
-            SecretSource::Env(name) => format!("env {name}"),
             SecretSource::Keychain { service, account } => {
                 format!("keychain {service}/{account}")
             }
+            other => other.describe(),
         };
         writeln!(
             out,
@@ -231,7 +230,7 @@ fn with_source_deny(policy: &str, secret: &Secret) -> Result<Option<(String, Str
     let (kind, value) = match &secret.source {
         SecretSource::Env(name) => ("env.read", name),
         SecretSource::File(path) => ("fs.read", path),
-        SecretSource::Keychain { .. } => return Ok(None),
+        SecretSource::Keychain { .. } | SecretSource::Command(_) => return Ok(None),
     };
     let id = format!("secret-{}", secret.id);
     let lines: Vec<&str> = policy.lines().collect();

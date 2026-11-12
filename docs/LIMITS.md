@@ -125,6 +125,23 @@ Each agent's gaps and the reasons are in
   a file or link that changes between the check and the command running, and hard
   links that already exist, are not seen. Inside `openmoat run` the OS sandbox still
   holds ([THREAT_MODEL](THREAT_MODEL.md), ADR-009).
+- **A `command` secret source trusts what the program reads** (preview, POLICY.md §2.2).
+  The proxy checks that the agent cannot change the program file, the folders above it
+  or a script's interpreter, and pins their digests, but not the files the program loads
+  or reads (a script's modules, a program's libraries, its configuration): cover them
+  with deny `fs.write` rules too, or use a program that is one file. The standalone
+  `openmoat proxy` counts only the project of the folder it was started in as granted
+  to the agent, not the write roots of an agent's own sandbox, so a deny rule inside one
+  of those still counts there. A hook-only agent's writes
+  through a program the hook cannot see are not stopped by those rules; only an OS
+  sandbox stops them. On macOS and Linux everything left in the program's process group is
+  ended with it; a child that started a session of its own (`setsid`) is not. On Windows
+  only the program is ended, and a child it left holding its output keeps one waiting
+  thread of the proxy until the child ends.
+- **`openmoat guard` does not mask a `command` source's value in its audit rows**
+  (preview, ADR-087 §6). Only the proxy has the value, and OpenMoat does not write it to
+  a file for the guard to read. A tool call carries the value only if the agent already
+  got hold of it; the proxy's own audit rows mask every value it gave.
 
 ## What the hook does not see
 

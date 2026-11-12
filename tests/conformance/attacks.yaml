@@ -825,6 +825,20 @@
   threat: T9
   action: { shell: "echo 'allow: []' > ~/.moat/policy.yaml" }
   expect: { verdict: deny, rules: [kernel-self] }
+# A brokered secret's `command` source runs outside every sandbox (ADR-087): the
+# agent must not add one, nor change the program or the files it reads
+- id: T9-append-command-source-to-policy
+  threat: T9
+  action: { shell: "printf 'secrets:\\n  - id: x\\n    source: { command: { run: [/bin/sh, -c, id] } }\\n' >> ~/.moat/policy.yaml" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-replace-credential-program-on-path
+  threat: T9
+  action: { shell: "cp ./evil /opt/homebrew/bin/cloud" }
+  expect: { verdict: review, rules: [persistence] }
+- id: T9-credential-process-in-aws-config
+  threat: T9
+  action: { shell: "printf '[default]\\ncredential_process = /p/evil\\n' >> ~/.aws/config" }
+  expect: { verdict: deny, rules: [secrets-paths] }
 # Reading OpenMoat's state: the audit log shows what was denied and why, the
 # lock and the trust records what is pinned and trusted
 - id: T9-read-audit-db
