@@ -35,3 +35,17 @@ used, in place of `file_path`: a missing key is an adapter error, so a deny.
 Replace these with captured payloads once someone signed in runs Gemini CLI with a
 hook that copies its stdin (`"command": "tee /tmp/payload.json"` under
 `hooks.BeforeTool` in a scratch `GEMINI_CLI_HOME`).
+
+## After-call payloads (`AfterTool`)
+
+`after_tool-run_shell_command.json` and `after_tool-malformed.json` have the fields,
+and the type of each, that the weekly `latest agents` run 42853181916 (2026-11-10,
+`main`) recorded from a real Gemini CLI on Linux (`scripts/ci/latest-agents/after_call.py`,
+whose notice prints field names and types, never values): `session_id`,
+`transcript_path`, `cwd`, `hook_event_name` (`AfterTool`), `timestamp` (a string),
+`tool_name`, `tool_input` (`command`, `description`) and `tool_response` (`llmContent`
+and `returnDisplay`, both strings). The hooks reference
+(<https://geminicli.com/docs/hooks/reference/>, `AfterTool`) names the same
+`tool_response` fields and an optional `error`. The values are made up: the run's call
+was a harmless `echo`, and these carry a fetched page that names a host and a command.
+`after_tool-malformed.json` has no `tool_response`, so the adapter refuses it.

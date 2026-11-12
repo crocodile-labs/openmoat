@@ -218,7 +218,7 @@ impl Host {
         match serde_json::from_str::<Envelope>(payload) {
             Ok(e) => match e.hook_event_name.or(e.hook_name) {
                 Some(event) => registry::adapter(self).event_of(&event),
-                None => HookEvent::PreToolUse,
+                None => registry::adapter(self).unnamed_event(payload),
             },
             Err(_) => HookEvent::PreToolUse,
         }

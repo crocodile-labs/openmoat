@@ -6,6 +6,7 @@ pub(crate) mod guard_command;
 pub(crate) mod hook_file;
 pub(crate) mod mcp;
 pub(crate) mod mcp_call;
+pub(crate) mod output;
 pub(crate) mod owned_file;
 pub(crate) mod plugin_config;
 pub(crate) mod pre_tool_use;

@@ -1,7 +1,7 @@
 # Gemini CLI (`gemini-cli`)
 
-Gemini CLI (`gemini`, npm `@google/gemini-cli`), through its `BeforeTool` command hook,
-checked against the source of 0.65.0. Since 2026-06-18 Gemini CLI signs individual
+Gemini CLI (`gemini`, npm `@google/gemini-cli`), through its `BeforeTool` command hook
+(and `AfterTool` for what a call returned), checked against the source of 0.65.0. Since 2026-06-18 Gemini CLI signs individual
 accounts in only with an API key or Vertex AI; Google's own sign-in for them moved to the
 Antigravity CLI ([its own host](../antigravity_cli/HOST.md)). Every fact here comes from
 [`gemini_cli.rs`](../gemini_cli.rs) and [`doc.rs`](doc.rs); if they disagree, the code wins.
@@ -11,10 +11,21 @@ Antigravity CLI ([its own host](../antigravity_cli/HOST.md)). Every fact here co
 | Event | Matcher | Timeout |
 |---|---|---|
 | `BeforeTool` | `*` | 600 s |
+| `AfterTool` | `run_shell_command\|web_fetch\|google_web_search\|mcp_.*` | 60 s |
 
 Input is `session_id`, `transcript_path`, `cwd`, `hook_event_name`, `timestamp`,
 `tool_name`, `tool_input` and, for an MCP tool, `mcp_context`. `{"decision": "deny"}` or
 exit 2 blocks; no output, or `"allow"`, leaves the call to Gemini CLI's own policy.
+
+`AfterTool` adds `tool_response` (`llmContent`, `returnDisplay` and, for a failed tool,
+`error`), what the call returned: the weekly latest-agents run 42853181916 (2026-11-10)
+recorded `llmContent` and `returnDisplay` as strings for a shell call from a real Gemini
+CLI, and the [hooks reference](https://geminicli.com/docs/hooks/reference/) names all
+three. Its answer can hide or add to the result, so Gemini CLI holds the result for it;
+the run could not time how long. OpenMoat answers it with nothing; only a failure of
+`openmoat guard` (a broken lock, an audit log it cannot write) exits 2, and then Gemini
+CLI gives the model OpenMoat's reason in place of the call's output. The call itself is
+not undone.
 
 ## Tools OpenMoat sees
 
@@ -72,9 +83,11 @@ and prints something, as a missing `openmoat` does.
 
 ## Known gaps
 
-Injected input (ADR-057): OpenMoat does not install Gemini CLI's `AfterTool` hook, so it
-never sees what a call returned. A host, path or command untrusted output named is not
-linked to the later call that uses it; only session taint applies.
+Injected input (ADR-057, ADR-063): OpenMoat's `AfterTool` entry reads what a shell
+command, a fetch, a search or an MCP tool returned, so a host, path or command untrusted
+output named makes a later call that uses it need review (`injected-input`). A folder
+Gemini CLI does not trust runs neither entry, and an install from before the entry links
+nothing until `openmoat init` runs once; only session taint applies there.
 
 No OS sandbox from OpenMoat; in a folder Gemini CLI does not trust it runs no settings
 hooks at all and asks the person before every tool instead; a project's

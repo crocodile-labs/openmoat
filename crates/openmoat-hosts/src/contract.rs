@@ -73,6 +73,12 @@ pub(crate) trait HostAdapter: Sync {
         HookEvent::PreToolUse
     }
 
+    /// The event a payload that names none is answered for (GitHub Copilot
+    /// CLI's camelCase payloads), even when it fails [`HostAdapter::parse`].
+    fn unnamed_event(&self, _payload: &str) -> HookEvent {
+        HookEvent::PreToolUse
+    }
+
     /// The response document the host expects on stdout.
     fn render(&self, event: &HookEvent, decision: &Decision) -> String;
 

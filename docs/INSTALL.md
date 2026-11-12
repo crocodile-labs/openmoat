@@ -119,7 +119,7 @@ OpenMoat 0.15.0 · protecting the agents on this machine
   OpenClaw     ✔ hook only
 
 Next steps
-  1. Codex: open Codex and trust OpenMoat's hook in /hooks; Codex runs a changed hook only then
+  1. Codex: open Codex and trust OpenMoat's hooks in /hooks; Codex runs a changed hook only then
   2. Restart your agents (a new session reads the new settings)
   3. Try it: openmoat policy check "cat ~/.ssh/id_rsa"
 
@@ -165,7 +165,7 @@ other systems; Cursor's `sandbox.json` is not written, because Cursor documents 
 sandbox for macOS and Linux only.
 
 Codex runs a new or changed hook only once you trust it: after `openmoat init`, open
-Codex, run `/hooks` and trust the OpenMoat hook (OpenMoat supports Codex 0.160.1 to
+Codex, run `/hooks` and trust both OpenMoat hooks (OpenMoat supports Codex 0.160.1 to
 0.166.0). Existing args-style entries are broken: `init`, `policy upgrade`
 and `sandbox sync` rewrite them as one command string and re-pin the lock. Trust the
 replacement again. `status` and `doctor` report an args-style entry as a failure
@@ -423,12 +423,12 @@ table is generated from each agent's `HostSpec` (`OPENMOAT_TEST_UPDATE_DOCS=1 ca
 | Agent | Directory | Moved by | Hook file | Entries `openmoat init` writes |
 |---|---|---|---|---|
 | Claude Code | `~/.claude` | `CLAUDE_CONFIG_DIR` | `settings.json` | `PreToolUse` (600 s), `ConfigChange` (60 s), `SessionStart` (60 s), `PostToolUse` (60 s) |
-| Codex | `~/.codex` | `CODEX_HOME` | `hooks.json` | `PreToolUse` (600 s) |
+| Codex | `~/.codex` | `CODEX_HOME` | `hooks.json` | `PreToolUse` (600 s), `PostToolUse` (60 s) |
 | Cursor | `~/.cursor` | `CURSOR_CONFIG_DIR` | `hooks.json` | `beforeShellExecution` (600 s), `beforeMCPExecution` (600 s), `beforeReadFile` (600 s), `preToolUse` (600 s), `beforeTabFileRead` (600 s) |
 | OpenClaw | `~/.openclaw` | `OPENCLAW_STATE_DIR` | `openclaw.json` | `before_tool_call` (60 s) |
-| GitHub Copilot CLI | `~/.copilot` | `COPILOT_HOME` | `hooks/openmoat.json` | `preToolUse` (600 s) |
+| GitHub Copilot CLI | `~/.copilot` | `COPILOT_HOME` | `hooks/openmoat.json` | `preToolUse` (600 s), `postToolUse` (60 s) |
 | pi | `~/.pi/agent` | `PI_CODING_AGENT_DIR` | `extensions/openmoat.js` | `tool_call` (45 s) |
-| Gemini CLI | `~/.gemini` | `GEMINI_CLI_HOME` | `settings.json` | `BeforeTool` (600 s) |
+| Gemini CLI | `~/.gemini` | `GEMINI_CLI_HOME` | `settings.json` | `BeforeTool` (600 s), `AfterTool` (60 s) |
 | OpenCode | `~/.config/opencode` | `XDG_CONFIG_HOME` | `plugins/openmoat.js` | `tool.execute.before` (45 s), `execute.before` (45 s) |
 | Hermes Agent | `~/.hermes` | `HERMES_HOME` | `config.yaml` | `pre_tool_call` (60 s) |
 | Cline CLI | `~/.cline` | `CLINE_DIR` | `hooks/PreToolUse` | `PreToolUse` (120 s) |

@@ -1,4 +1,5 @@
-//! Gemini CLI (`gemini`, npm `@google/gemini-cli`): the `BeforeTool` command hook.
+//! Gemini CLI (`gemini`, npm `@google/gemini-cli`): the `BeforeTool` command
+//! hook, and `AfterTool` for what a call returned ([`after_tool`]).
 //!
 //! Hook docs: <https://geminicli.com/docs/hooks/reference/>; behaviour checked
 //! against the source of `@google/gemini-cli` 0.65.0 (`hooks/hookRunner.js`,
@@ -25,12 +26,13 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Reviews, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
+    Reviews, CONFIG_HOOK_TIMEOUT_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
     ProjectSettingsSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod advisories;
+mod after_tool;
 mod bench;
 mod doc;
 pub(crate) mod hook_file;
@@ -39,13 +41,25 @@ mod protect;
 mod settings;
 mod tools;
 
-/// The one event OpenMoat answers.
+/// The event OpenMoat decides calls on.
 pub(crate) const EVENT: &str = "BeforeTool";
 
 /// `*` matches every tool name, MCP tools included (`hookPlanner.js`
 /// `matchesContext`). Gemini CLI takes the timeout in milliseconds; the
-/// installer converts ([`hook_file::Gemini`]).
-const HOOKS: &[HookSpec] = &[HookSpec::new(EVENT, "*", TOOL_HOOK_TIMEOUT_S, false)];
+/// installer converts ([`hook_file::Gemini`]). `AfterTool` reports what a
+/// call returned (ADR-063) for the tools whose output may be content an
+/// attacker controls: the shell, a fetch, a search and MCP tools
+/// (`mcp_<server>_<tool>`); a matcher is a regular expression (the hooks
+/// reference). It runs after the call and has nothing to block.
+const HOOKS: &[HookSpec] = &[
+    HookSpec::new(EVENT, "*", TOOL_HOOK_TIMEOUT_S, false),
+    HookSpec::new(
+        after_tool::EVENT,
+        "run_shell_command|web_fetch|google_web_search|mcp_.*",
+        CONFIG_HOOK_TIMEOUT_S,
+        false,
+    ),
+];
 
 /// Gemini CLI puts a `review` to the person itself.
 pub(crate) static SPEC: HostSpec = HostSpec {
@@ -197,12 +211,28 @@ impl HostAdapter for Adapter {
     ) -> Result<HookRequest, HostError> {
         match event {
             Some(EVENT) => parse(host, payload),
+            Some(after_tool::EVENT) => after_tool::parse(host, payload),
             other => Err(wrong_event(other)),
         }
     }
 
-    fn render(&self, _event: &HookEvent, decision: &Decision) -> String {
-        render(decision)
+    /// `AfterTool` is what a call returned (ADR-057).
+    fn event_of(&self, event: &str) -> HookEvent {
+        match event {
+            after_tool::EVENT => HookEvent::PostToolUse {
+                output: String::new(),
+            },
+            _ => HookEvent::PreToolUse,
+        }
+    }
+
+    /// Nothing for what a call returned, whatever was decided: a `deny`
+    /// there hides the result from the model.
+    fn render(&self, event: &HookEvent, decision: &Decision) -> String {
+        match event {
+            HookEvent::PostToolUse { .. } => String::new(),
+            _ => render(decision),
+        }
     }
 
     fn bench_payload(&self, call: &Call, at: &Place<'_>) -> Option<String> {

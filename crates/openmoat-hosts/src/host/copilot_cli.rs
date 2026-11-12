@@ -1,5 +1,6 @@
 //! GitHub Copilot CLI (`copilot`, npm `@github/copilot`): its `preToolUse`
-//! command hook, in the camelCase format.
+//! command hook, in the camelCase format, and `postToolUse` for what a call
+//! returned ([`post_tool_use`]).
 //!
 //! Hooks: <https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference>
 //! and <https://docs.github.com/en/copilot/reference/hooks-configuration>, checked
@@ -25,7 +26,7 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Reviews, HookDir, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, 
+    Reviews, CONFIG_HOOK_TIMEOUT_S, HookDir, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, 
     McpSpec, McpServersJson, ProjectSettingsSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -35,6 +36,7 @@ mod bench;
 mod doc;
 pub(crate) mod hook_file;
 mod mcp;
+mod post_tool_use;
 mod protect;
 mod tools;
 
@@ -46,7 +48,14 @@ pub(crate) const EVENT: &str = "preToolUse";
 /// One entry for every tool: the hook payload does not mark MCP tools, so a
 /// matcher could not list them. 600 s is far above the guard's own budget, so
 /// a slow guard denies before Copilot's fail-open timeout is reached.
-const HOOKS: &[HookSpec] = &[HookSpec::new(EVENT, "", TOOL_HOOK_TIMEOUT_S, false)];
+/// `postToolUse` reports what a call returned (ADR-063), for every tool for
+/// the same reason; the guard keeps fingerprints only of output from outside
+/// (`CompiledPolicy::output_source`). It runs after the call and has nothing
+/// to block.
+const HOOKS: &[HookSpec] = &[
+    HookSpec::new(EVENT, "", TOOL_HOOK_TIMEOUT_S, false),
+    HookSpec::new(post_tool_use::EVENT, "", CONFIG_HOOK_TIMEOUT_S, false),
+];
 
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "copilot-cli",
@@ -148,7 +157,8 @@ impl HostAdapter for Adapter {
     }
 
     /// The camelCase payload names no event; a payload that names one other
-    /// than `preToolUse` is not this hook's.
+    /// than `preToolUse` is not this hook's. One with a `toolResult` is a
+    /// `postToolUse` ([`post_tool_use`]).
     fn parse(
         &self,
         host: Host,
@@ -156,13 +166,28 @@ impl HostAdapter for Adapter {
         payload: &str,
     ) -> Result<HookRequest, HostError> {
         match event {
+            None if post_tool_use::is_after_call(payload) => post_tool_use::parse(host, payload),
             None | Some(EVENT) => parse(host, payload),
             other => Err(wrong_event(other)),
         }
     }
 
-    fn render(&self, _event: &HookEvent, decision: &Decision) -> String {
-        render(decision)
+    fn unnamed_event(&self, payload: &str) -> HookEvent {
+        if post_tool_use::is_after_call(payload) {
+            HookEvent::PostToolUse {
+                output: String::new(),
+            }
+        } else {
+            HookEvent::PreToolUse
+        }
+    }
+
+    /// Nothing for what a call returned, whatever was decided.
+    fn render(&self, event: &HookEvent, decision: &Decision) -> String {
+        match event {
+            HookEvent::PostToolUse { .. } => String::new(),
+            _ => render(decision),
+        }
     }
 
     fn bench_payload(&self, call: &Call, at: &Place<'_>) -> Option<String> {

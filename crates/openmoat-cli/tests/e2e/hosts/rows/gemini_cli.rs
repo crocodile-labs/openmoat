@@ -18,9 +18,10 @@ pub fn row() -> Row {
             json!({"session_id": "s", "cwd": "/p", "hook_event_name": "BeforeTool",
                 "tool_name": "future_tool", "tool_input": {"path": "~/.ssh/id_rsa"}})
         },
+        // `AfterTool` is handled since ADR-063 (`gemini_cli.rs`).
         unknown_event: || {
-            json!({"session_id": "s", "cwd": "/p", "hook_event_name": "AfterTool",
-                "tool_name": "read_file", "tool_input": {"file_path": "/p/x"}})
+            json!({"session_id": "s", "cwd": "/p", "hook_event_name": "BeforeModel",
+                "llm_request": {"model": "gemini-2.5-pro", "messages": []}})
         },
         checks_unknown_tools: true,
         secret_read: Some(|sb| {

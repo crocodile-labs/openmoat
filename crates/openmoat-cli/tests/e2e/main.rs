@@ -45,6 +45,7 @@ mod hosts;
 #[cfg(unix)]
 mod human_only;
 mod injected;
+mod injected_hosts;
 #[cfg(unix)]
 mod install_path;
 mod listings;

@@ -60,3 +60,34 @@ fn absent_stale_disabled_and_wrong_source_records_warn() {
         assert!(Codex.warning(&hooks(), &state, "source", digest).is_some());
     }
 }
+
+/// The hash of an identity, as its event's name: enough to tell the two apart.
+fn by_event(bytes: &[u8]) -> String {
+    let value: Value = serde_json::from_slice(bytes).unwrap();
+    value["event_name"].as_str().unwrap().to_owned()
+}
+
+/// Once `init` added the `PostToolUse` entry (ADR-063), it must be trusted too.
+#[test]
+fn an_after_call_entry_needs_its_own_trust() {
+    let entry = |event| {
+        super::super::hook_file::Codex.entry(
+            &crate::HookSpec::new(event, "Bash", 600, false),
+            "codex",
+            &crate::GuardCommand::new("openmoat"),
+            false,
+        )
+    };
+    let hooks = json!({"hooks":{
+        "PreToolUse":[entry("PreToolUse")],
+        "PostToolUse":[entry("PostToolUse")],
+    }});
+    let pre = json!({"trusted_hash":"sha256:pre_tool_use"});
+    let post = json!({"trusted_hash":"sha256:post_tool_use"});
+    let only_pre = json!({"hooks":{"state":{"source:pre_tool_use:0:0": pre}}});
+    assert!(Codex.warning(&hooks, &only_pre, "source", by_event).is_some());
+    let both = json!({"hooks":{"state":{
+        "source:pre_tool_use:0:0": pre, "source:post_tool_use:0:0": post,
+    }}});
+    assert_eq!(Codex.warning(&hooks, &both, "source", by_event), None);
+}

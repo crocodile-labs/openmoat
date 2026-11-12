@@ -274,3 +274,60 @@ fn replies_are_copilot_permission_decisions_and_defer_is_silent() {
         "an interactive Copilot session puts the question to the person"
     );
 }
+
+/// `postToolUse` (ADR-063): no event name, a `toolResult`; the call as its
+/// `preToolUse` maps it, `toolArgs` as an object as Copilot sends it there,
+/// with `textResultForLlm` as its output.
+#[test]
+fn post_tool_use_reports_the_call_and_what_it_returned() {
+    let req = fixture("post-bash");
+    let pre = call("bash", json!({"command": "curl -s https://docs.example/setup.txt"})).unwrap();
+    assert_eq!(req.action, pre.action);
+    let HookEvent::PostToolUse { output } = &req.event else {
+        panic!("{:?}", req.event);
+    };
+    assert!(output.contains("https://collect.evil.example/x"), "{output}");
+    assert!(!output.contains("success"), "{output}");
+    let text = std::fs::read_to_string(format!("{FIXTURES}/post-bash.json")).unwrap();
+    assert!(matches!(
+        Host::CopilotCli.event_of(&text),
+        HookEvent::PostToolUse { .. }
+    ));
+}
+
+/// A `toolResult` without its text is an error, so a deny; a payload whose
+/// `toolResult` is `null`, or that has none, is decided as a call, never
+/// passed as an after-call report.
+#[test]
+fn a_malformed_tool_result_is_an_error_and_a_call_without_one_is_decided() {
+    assert!(matches!(
+        fixture_error("post-malformed"),
+        HostError::MissingField {
+            field: "toolResult.textResultForLlm",
+            ..
+        }
+    ));
+    let not_text = json!({"sessionId": "s", "cwd": "/p", "toolName": "bash",
+        "toolArgs": {"command": "ls"}, "toolResult": "done"});
+    assert!(Host::CopilotCli.parse_request(&not_text.to_string()).is_err());
+    let null = json!({"sessionId": "s", "cwd": "/p", "toolName": "bash",
+        "toolArgs": {"command": "ls"}, "toolResult": null});
+    assert_eq!(Host::CopilotCli.event_of(&null.to_string()), HookEvent::PreToolUse);
+    let req = Host::CopilotCli.parse_request(&null.to_string()).unwrap();
+    assert_eq!(req.event, HookEvent::PreToolUse);
+    assert_eq!(
+        Host::CopilotCli.event_of(&fixture_text("bash")),
+        HookEvent::PreToolUse
+    );
+    let event = HookEvent::PostToolUse {
+        output: String::new(),
+    };
+    for verdict in [Verdict::Allow, Verdict::Review, Verdict::Deny] {
+        let decision = Host::CopilotCli.answer(&event, &Decision::new(verdict));
+        assert_eq!(Host::CopilotCli.render_response(&event, &decision), "");
+    }
+}
+
+fn fixture_text(name: &str) -> String {
+    std::fs::read_to_string(format!("{FIXTURES}/{name}.json")).unwrap()
+}

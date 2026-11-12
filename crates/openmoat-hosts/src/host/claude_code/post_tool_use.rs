@@ -12,11 +12,11 @@
 //! as it does for every `PostToolUse` hook (the hooks reference, on exit code 2
 //! for each event).
 
-use openmoat_core::{Decision, MAX_INJECTED_SCAN_BYTES};
+use openmoat_core::Decision;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::wire::pre_tool_use;
+use crate::wire::{output, pre_tool_use};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 pub(crate) const EVENT: &str = "PostToolUse";
@@ -31,33 +31,9 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
     // The same mapping as the call's `PreToolUse`, editor tools included.
     let mut request = pre_tool_use::parse_with(host, payload, super::ide_tools::action)?;
     let p: Payload = serde_json::from_str(payload)?;
-    let mut output = String::new();
-    collect_text(&p.tool_response, &mut output);
+    let output = output::text_of(&p.tool_response);
     request.event = HookEvent::PostToolUse { output };
     Ok(request)
-}
-
-/// Append every string `value` holds to `out`, one per line, until `out`
-/// reaches [`MAX_INJECTED_SCAN_BYTES`]; a string is cut at a character
-/// boundary. Object keys are the tool's field names, not its output.
-fn collect_text(value: &Value, out: &mut String) {
-    if out.len() >= MAX_INJECTED_SCAN_BYTES {
-        return;
-    }
-    match value {
-        Value::String(text) => {
-            let room = MAX_INJECTED_SCAN_BYTES - out.len();
-            let mut end = text.len().min(room);
-            while !text.is_char_boundary(end) {
-                end -= 1;
-            }
-            out.push_str(&text[..end]);
-            out.push('\n');
-        }
-        Value::Array(items) => items.iter().for_each(|v| collect_text(v, out)),
-        Value::Object(fields) => fields.values().for_each(|v| collect_text(v, out)),
-        Value::Null | Value::Bool(_) | Value::Number(_) => {}
-    }
 }
 
 /// Always empty: nothing here is for the model.
@@ -120,10 +96,9 @@ mod tests {
 
     #[test]
     fn the_output_is_bounded_and_the_response_empty() {
-        let mut out = String::new();
-        let big = Value::String("é".repeat(MAX_INJECTED_SCAN_BYTES));
-        collect_text(&serde_json::json!([big.clone(), big]), &mut out);
-        assert!(out.len() <= MAX_INJECTED_SCAN_BYTES + 1, "{}", out.len());
+        let big = Value::String("é".repeat(openmoat_core::MAX_INJECTED_SCAN_BYTES));
+        let out = output::text_of(&serde_json::json!([big.clone(), big]));
+        assert!(out.len() <= openmoat_core::MAX_INJECTED_SCAN_BYTES + 1, "{}", out.len());
         let event = HookEvent::PostToolUse { output: out };
         for verdict in [Verdict::Allow, Verdict::Deny] {
             assert_eq!(Host::ClaudeCode.render_response(&event, &Decision::new(verdict)), "");
