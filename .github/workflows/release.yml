@@ -33,6 +33,9 @@ jobs:
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read # main's ci runs, for the release gate
     # Only what later jobs need: GitHub drops a job output that might contain a secret,
     # and the whole ~100 KB manifest tripped that check, leaving no build matrix. The
     # full manifest travels as the artifacts-plan-dist-manifest artifact.
@@ -46,6 +49,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Pull requests merge without being up to date and run a fast subset of
+      # CI, so a tag is released only when the full `ci` run of the push to
+      # main at that very commit has completed green. Every later job needs
+      # this one, so a refusal publishes nothing. Re-run the failed jobs on
+      # main, then this workflow's failed jobs.
+      - name: main's ci run for this commit is green
+        if: github.event_name == 'push'
+        env:
+          REPO: ${{ github.repository }}
+        # The commit checked out, which an annotated tag points to as well.
+        run: python3 -I scripts/ci/main_ci_green.py "$REPO" "$(git rev-parse HEAD)"
       - run: scripts/ci/install-dist.sh
         shell: bash
       - id: plan

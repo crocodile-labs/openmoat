@@ -1,20 +1,18 @@
 # Not a required check: ADR-062 step 0 (the proof of concept of request rules
 # in `openmoat run`) measured on real clients against the real api.github.com.
-# It reaches the network, so it never gates a pull request; it runs when the
-# files it measures change, and by hand. Its job summary is the table that
-# goes into ADR-062 "Step 0 results". No token or secret is given to it.
+# It reaches the network, so it never gates a pull request. It is a slow leg:
+# it runs on every push to main, weekly and by hand; on a pull request only
+# when the changes job says `full` (the `ci:full` label, or platform sandbox
+# code; scripts/ci/changes.py). Its job summary is the table that goes into
+# ADR-062 "Step 0 results". No token or secret is given to it.
 name: adr-062 poc
 
 on:
+  push:
+    branches: [main]
   pull_request:
-    paths:
-      - crates/openmoat-proxy/**
-      - crates/openmoat-cli/src/proxy_ca.rs
-      - crates/openmoat-cli/src/proxy_ca/**
-      - crates/openmoat-cli/src/commands/run.rs
-      - crates/openmoat-cli/src/commands/proxy.rs
-      - scripts/ci/adr062-poc.py
-      - scripts/ci/latency_ab.py
+  schedule:
+    - cron: "41 6 * * 1" # weekly, beside ci's weekly run
   workflow_dispatch:
 
 concurrency:
@@ -28,8 +26,35 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # The same decision as ci.yml's changes job; only `full` is used here. When
+  # it fails, its outputs are empty and `!= 'false'` runs the measurement.
+  changes:
+    name: adr-062 changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read # the `ci:full` label, read now so a re-run sees it
+    outputs:
+      full: ${{ steps.what.outputs.full }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2 # a pull request's merge commit and the base it lands on
+      - name: what changed
+        id: what
+        env:
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 scripts/ci/changes.py --event "$EVENT" --pr "$PR" HEAD^1 HEAD >> "$GITHUB_OUTPUT"
+
   measure:
     name: adr-062 step 0 (${{ matrix.os }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.full != 'false' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -45,6 +70,9 @@ jobs:
         # The channel, components and targets come from rust-toolchain.toml.
         run: rustup toolchain install --no-self-update
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          shared-key: adr062-poc
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # Node 24: its `fetch` follows HTTPS_PROXY with NODE_USE_ENV_PROXY=1.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
