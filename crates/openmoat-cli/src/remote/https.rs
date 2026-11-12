@@ -129,15 +129,20 @@ fn chunked(mut rest: &[u8]) -> Result<Vec<u8>> {
         let size_text = std::str::from_utf8(&rest[..line_end]).context("a bad chunk size")?;
         let size_text = size_text.split(';').next().unwrap_or("").trim();
         let size = usize::from_str_radix(size_text, 16).context("a bad chunk size")?;
-        rest = &rest[line_end + 2..];
+        // A size no response of MAX_RESPONSE bytes can hold is refused, before
+        // any arithmetic on it can overflow.
+        if !u64::try_from(size).is_ok_and(|s| s <= MAX_RESPONSE) {
+            bail!("a chunk larger than any response OpenMoat reads");
+        }
+        rest = rest.get(line_end + 2..).unwrap_or_default();
         if size == 0 {
             return Ok(out);
         }
-        if rest.len() < size + 2 {
+        let (Some(chunk), Some(after)) = (rest.get(..size), size.checked_add(2)) else {
             bail!("the response was cut short");
-        }
-        out.extend_from_slice(&rest[..size]);
-        rest = &rest[size + 2..];
+        };
+        out.extend_from_slice(chunk);
+        rest = rest.get(after..).context("the response was cut short")?;
     }
 }
 
@@ -156,5 +161,26 @@ mod tests {
         let cut = b"HTTP/1.1 200 OK\r\nContent-Length: 40\r\n\r\n{}";
         assert!(body_of(cut).is_err());
         assert!(body_of(b"HTTP/1.1 200").is_err());
+    }
+
+    /// A chunk size near `usize::MAX` once made `size + 2` overflow (a panic
+    /// in a debug build, a slice out of range in a release one); any size
+    /// past the response limit is refused, as is a chunk cut short.
+    #[test]
+    fn chunk_sizes_past_the_limit_or_cut_short_are_errors() {
+        let huge = format!(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{:x}\r\nab\r\n0\r\n\r\n",
+            usize::MAX
+        );
+        assert!(body_of(huge.as_bytes()).is_err());
+        let over = format!(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{:x}\r\nab\r\n0\r\n\r\n",
+            super::MAX_RESPONSE + 1
+        );
+        assert!(body_of(over.as_bytes()).is_err());
+        let short = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nab";
+        assert!(body_of(short).is_err());
+        let no_crlf = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nab";
+        assert!(body_of(no_crlf).is_err());
     }
 }
