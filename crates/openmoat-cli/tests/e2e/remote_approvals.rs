@@ -3,6 +3,12 @@
 //! machine's key and given by an allowlisted approver lets that exact call run
 //! once; a deny is never sent. No network and no token: the answer is written
 //! here as `openmoat approvals listen` would write it.
+// The tests that sign answers need the key's owner-only mode, which only Unix
+// has; elsewhere their helpers are unused.
+#![cfg_attr(
+    not(unix),
+    expect(dead_code, reason = "the tests that use these helpers are Unix only")
+)]
 
 use std::path::{Path, PathBuf};
 
