@@ -15,6 +15,7 @@ use openmoat_core::{Decision, Verdict};
 
 use crate::cli::RunArgs;
 use crate::home::Home;
+use crate::sandbox::landlock::abi::{self, Kernel};
 use crate::taint::run::LINK_HOST;
 
 /// The rule of the row a run started with `--no-isolate` writes.
@@ -185,15 +186,43 @@ pub fn record(home: &Home, session: &str, cwd: &str, tier: &Tier) -> Result<()> 
     let Some((rule, reason)) = row(tier) else {
         return Ok(());
     };
+    write_row(home, (session, cwd), (TOOL, rule), reason)
+}
+
+/// The rule of the row that records the kernel's Landlock ABI (ADR-082).
+pub const LANDLOCK_RULE: &str = "run-landlock-abi";
+
+/// Write which Landlock ABI the run's sandbox has and what it applies from
+/// it (ADR-082), on Linux; `kernel` is `None` elsewhere. Its tool is
+/// `landlock`, apart from the tier's rows, and never a host id.
+pub fn record_landlock(
+    home: &Home,
+    session: &str,
+    cwd: &str,
+    kernel: Option<&Kernel>,
+) -> Result<()> {
+    let Some(kernel) = kernel else {
+        return Ok(());
+    };
+    let reason = abi::summary(kernel);
+    write_row(home, (session, cwd), ("landlock", LANDLOCK_RULE), reason)
+}
+
+fn write_row(
+    home: &Home,
+    (session, cwd): (&str, &str),
+    (tool, rule): (&str, &str),
+    reason: String,
+) -> Result<()> {
     let decision = Decision::single(Verdict::Allow, rule, reason);
     let store = Store::open_existing(&home.audit_path())
-        .context("opening the audit log to record the run's tier")?;
+        .context("opening the audit log to record the run's sandbox")?;
     store.record(&NewEvent {
         host: LINK_HOST,
         session_id: session,
         call_id: None,
         cwd: Some(cwd),
-        tool: TOOL,
+        tool,
         action: None,
         decision: &decision,
         latency_us: 0,

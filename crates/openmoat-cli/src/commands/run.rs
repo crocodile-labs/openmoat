@@ -66,6 +66,7 @@ use crate::sandbox::Grants;
 use crate::sandbox::Report;
 use crate::sandbox::git_env;
 use crate::sandbox::kerberos;
+use crate::sandbox::landlock::abi::{self, Kernel};
 use crate::sandbox::own_login::{self, Owner};
 use crate::sandbox::shared_temp;
 use crate::snapshot::RunSnapshots;
@@ -191,6 +192,9 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let run_session = credential.session().to_owned();
     // A run weaker than the default is on record before the agent starts.
     isolation::record(&home, &run_session, &ctx.cwd, &tier)?;
+    // And the Landlock ABI the sandbox has, on Linux (ADR-082).
+    let landlock = platform::landlock();
+    isolation::record_landlock(&home, &run_session, &ctx.cwd, landlock.as_ref())?;
     // Outside the sandbox, before the agent starts (ADR-085).
     let snapshots = RunSnapshots::start(&home, &ctx, args.no_snapshot, &run_session);
     // The hooks the agent starts run in its sandbox, without OpenMoat's home:
@@ -206,7 +210,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         port,
         exit.session(),
         &agent,
-        (&tier, args.verbose),
+        (&tier, landlock.as_ref(), args.verbose),
     )?;
     let notices = ca_notice
         .into_iter()
@@ -396,6 +400,12 @@ pub fn port_only_network() -> Option<String> {
     platform::port_only_network()
 }
 
+/// The kernel's Landlock ABI on Linux, for `doctor` and `sandbox show`
+/// (ADR-082); `None` elsewhere.
+pub fn landlock() -> Option<Kernel> {
+    platform::landlock()
+}
+
 /// On Linux, whether the system's bubblewrap is installed; `None` elsewhere,
 /// where plain `moat run` has no gap inside the project to name ([`tier`]).
 pub fn bubblewrap() -> Option<bool> {
@@ -464,7 +474,7 @@ fn notice(
     port: u16,
     session: &str,
     agent: &platform::Confined,
-    (tier, verbose): (&Tier, bool),
+    (tier, landlock, verbose): (&Tier, Option<&Kernel>, bool),
 ) -> Result<()> {
     let report: &Report = agent.report();
     let mut err = std::io::stderr().lock();
@@ -504,6 +514,12 @@ fn notice(
              agent's own sandbox."
         )?;
         write_report(&mut err, report)?;
+        if let Some(kernel) = landlock {
+            writeln!(err, "  {}", abi::summary(kernel))?;
+            for line in abi::lines(kernel) {
+                writeln!(err, "    {line}")?;
+            }
+        }
     } else {
         writeln!(
             err,

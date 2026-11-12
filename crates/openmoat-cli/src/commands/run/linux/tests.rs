@@ -9,19 +9,23 @@ use super::*;
 fn the_filter_refuses_unix_and_udp_sockets_and_allows_tcp_and_socketpair() {
     let filter = seccomp_filter().expect("the filter compiles");
     let errno = |result: std::io::Result<()>| result.err().and_then(|e| e.raw_os_error());
-    let (unix, udp, tcp, pair) = std::thread::spawn(move || {
+    let (unix, udp, tcp, pair, datagram_pair) = std::thread::spawn(move || {
         seccompiler::apply_filter(&filter).expect("the filter applies");
         (
             errno(UnixDatagram::unbound().map(drop)),
             errno(UdpSocket::bind("127.0.0.1:0").map(drop)),
             errno(TcpListener::bind("127.0.0.1:0").map(drop)),
             errno(UnixStream::pair().map(drop)),
+            errno(UnixDatagram::pair().map(drop)),
         )
     })
     .join()
     .expect("the filtered thread finishes");
     assert_eq!((unix, udp), (Some(libc::EPERM), Some(libc::EPERM)));
     assert_eq!((tcp, pair), (None, None));
+    // A datagram pair could be sent to any pathname datagram socket (ADR-082).
+    assert_eq!(datagram_pair, Some(libc::EPERM));
+    assert!(UnixDatagram::pair().is_ok(), "this thread is not filtered");
     assert!(
         UdpSocket::bind("127.0.0.1:0").is_ok(),
         "this thread is not filtered"
@@ -216,4 +220,67 @@ fn the_filter_refuses_tcp_fast_open_and_allows_other_sends() {
         unfiltered.ends_with(" 0") && !unfiltered.starts_with(&format!("{} ", libc::EPERM)),
         "{unfiltered}"
     );
+}
+
+/// The errno of a datagram socket pair made under the real filter, on a thread
+/// of its own.
+fn filtered_datagram_pair() -> Option<i32> {
+    let filter = seccomp_filter().expect("the filter compiles");
+    std::thread::spawn(move || {
+        seccompiler::apply_filter(&filter).expect("the filter applies");
+        UnixDatagram::pair().err().and_then(|e| e.raw_os_error())
+    })
+    .join()
+    .expect("the filtered thread finishes")
+}
+
+/// The Landlock rules alone (no seccomp filter), on a thread of their own: a
+/// datagram pair made inside sends to a pathname socket bound outside. Where
+/// the kernel has ABI 9 Landlock refuses it (`EACCES`); below, Landlock lets
+/// it through, which is why the seccomp filter refuses datagram pairs
+/// (`the_filter_refuses_unix_and_udp_sockets_and_allows_tcp_and_socketpair`).
+/// Below ABI 4, or without Landlock, `openmoat run` refuses to start.
+#[test]
+fn landlock_abi_9_refuses_pathname_unix_sockets_made_outside() {
+    let kernel = abi::kernel();
+    if !kernel.meets_floor() {
+        let refused = restricted(&Rules::default(), Report::default(), Command::new("true"));
+        let why = format!("{:#}", refused.err().expect("no Landlock ABI 4: refused"));
+        assert!(why.contains("needs Landlock ABI 4"), "{why}");
+        assert_eq!(filtered_datagram_pair(), Some(libc::EPERM));
+        eprintln!("skipped: no Landlock ABI 4 here ({kernel:?}); `openmoat run` refuses to start");
+        return;
+    }
+    // Short: a socket's path must fit in 108 bytes.
+    let dir = std::env::temp_dir().join(format!("landlock-unix-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("outside.sock");
+    let _ = std::fs::remove_file(&path);
+    let outside = UnixDatagram::bind(&path).unwrap();
+    outside.set_nonblocking(true).unwrap();
+    let rules = Rules::default();
+    let confined = restricted(&rules, Report::default(), Command::new("true")).unwrap();
+    let (ruleset, _) = confined.restrict.unwrap();
+    let target = path.clone();
+    let sent = std::thread::spawn(move || {
+        ruleset.restrict_self().expect("the rules apply");
+        let (inside, _) = UnixDatagram::pair().expect("no seccomp filter here");
+        inside.send_to(b"x", &target).map_err(|e| e.raw_os_error())
+    })
+    .join()
+    .expect("the restricted thread finishes");
+    let received = outside.recv(&mut [0; 1]).is_ok();
+    let _ = std::fs::remove_dir_all(&dir);
+    match kernel {
+        crate::sandbox::landlock::abi::Kernel::Abi(n) if n >= 9 => {
+            assert_eq!(sent, Err(Some(libc::EACCES)));
+            assert!(!received, "nothing reached the socket outside");
+        }
+        kernel => {
+            eprintln!("Landlock below ABI 9 here ({kernel:?}): the seccomp filter alone holds");
+            assert_eq!(sent, Ok(1), "the fallback the seccomp filter closes");
+            assert!(received, "Landlock below ABI 9 lets the send through");
+            assert_eq!(filtered_datagram_pair(), Some(libc::EPERM));
+        }
+    }
 }

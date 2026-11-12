@@ -390,7 +390,11 @@ something OpenMoat claims to stop.
     so a command cannot read the person's session keys, make a user namespace in which
     to mount over what the sandbox hides, or enter another container's; containers and Chromium's own sandbox do not start inside. Names resolve
     only through the proxy: a tool that ignores `HTTP(S)_PROXY` cannot resolve them.
-    `socketpair()` stays allowed; its sockets reach only each other.
+    `socketpair()` stays allowed for stream and sequenced-packet sockets, which reach
+    only each other; a datagram pair, which could be sent to any pathname datagram
+    socket the person may write (`/dev/log`), is refused. Where the kernel has
+    Landlock ABI 9 (Linux 7.1), Landlock also refuses connecting or sending to a
+    pathname Unix socket made outside the sandbox, beside the filter (ADR-082).
   - The agent shares the user's terminal. Typing into it is refused: `TIOCSTI` on
     macOS (Seatbelt), `TIOCSTI` and `TIOCLINUX` on Linux (the seccomp filter, also
     inside `--isolate`), whatever the kernel's `dev.tty.legacy_tiocsti` says.

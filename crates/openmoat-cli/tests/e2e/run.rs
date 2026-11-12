@@ -38,6 +38,10 @@ mod strict;
 /// The run's own temp directory, and the shared ones out of reach.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod temp_dirs;
+/// Linux: pathname Unix sockets outside stay out of reach; the Landlock ABI
+/// is shown and on record (ADR-082).
+#[cfg(target_os = "linux")]
+mod unix_sockets;
 
 /// Set by CI's `stock linux` job, whose runner has no bubblewrap and keeps
 /// unprivileged user namespaces restricted, as a stock Ubuntu does: there

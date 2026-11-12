@@ -53,3 +53,18 @@ fn unix_netlink_packet_raw_udp_sctp_and_mptcp_are_refused() {
         assert!(!allows(call), "{call:?}");
     }
 }
+
+/// A datagram pair can be connected again or sent to with an address, so it
+/// would reach a pathname datagram socket outside the sandbox (ADR-082).
+#[test]
+fn socket_pairs_are_streams_or_sequenced_packets_never_datagrams() {
+    for ty in [SOCK_STREAM, SOCK_SEQPACKET] {
+        for flags in [0, SOCK_NONBLOCK, SOCK_CLOEXEC, SOCK_NONBLOCK | SOCK_CLOEXEC] {
+            assert!(SOCKETPAIR_TYPES.contains(&(ty | flags)), "{ty} {flags}");
+        }
+    }
+    for flags in [0, SOCK_NONBLOCK, SOCK_CLOEXEC, SOCK_NONBLOCK | SOCK_CLOEXEC] {
+        assert!(!SOCKETPAIR_TYPES.contains(&(SOCK_DGRAM | flags)), "{flags}");
+        assert!(!SOCKETPAIR_TYPES.contains(&(SOCK_RAW | flags)), "{flags}");
+    }
+}

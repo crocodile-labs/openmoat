@@ -26,12 +26,14 @@ use seccompiler::{
 
 use super::isolation::Offered;
 use crate::sandbox::landlock::Rules;
-use crate::sandbox::seccomp::SOCKET_ARGS;
+use crate::sandbox::seccomp::{SOCKET_ARGS, SOCKETPAIR_TYPES};
 use crate::sandbox::{
     Grants, Report, exposure, kernel_self_in_writes, landlock_rules, missing_hook_settings,
     netns_masks, netns_project_masks, session_tmpdir,
 };
 
+/// The kernel's Landlock ABI, read without restricting anything (ADR-082).
+mod abi;
 /// `moat run --isolate`: bubblewrap around the same rules.
 mod isolate;
 /// `moat run`: the agent's own network namespace, where bubblewrap runs.
@@ -127,6 +129,12 @@ const X32_SENDS: &[(i64, u8)] = &[(44, 3), (518, 2), (538, 3)];
 #[cfg(not(target_arch = "x86_64"))]
 const X32_SENDS: &[(i64, u8)] = &[];
 
+/// `socketpair()` under x32, numbered from [`X32`].
+#[cfg(target_arch = "x86_64")]
+const X32_SOCKETPAIR: &[i64] = &[53];
+#[cfg(not(target_arch = "x86_64"))]
+const X32_SOCKETPAIR: &[i64] = &[];
+
 /// `ioctl()` under x32, numbered from [`X32`].
 #[cfg(target_arch = "x86_64")]
 const X32_IOCTL: &[i64] = &[514];
@@ -213,6 +221,15 @@ pub const BASE_ENV: &[&str] = &["HOSTNAME", "DISPLAY", "WAYLAND_DISPLAY"];
 /// lacks what it needs, so nothing runs unconfined.
 pub fn unavailable() -> Option<String> {
     None
+}
+
+/// The kernel's Landlock ABI, for the ladder (ADR-082).
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "one signature on every platform: `None` where there is no Landlock"
+)]
+pub fn landlock() -> Option<crate::sandbox::landlock::abi::Kernel> {
+    Some(abi::kernel())
 }
 
 /// Why `moat run` here would restrict the network by port only, for `moat doctor`.
@@ -319,10 +336,13 @@ fn restricted(rules: &Rules, report: Report, command: Command) -> Result<Confine
             .set_compatibility(CompatLevel::HardRequirement)
             .handle_access(AccessFs::from_all(ABI_REQUIRED))?
             .handle_access(AccessNet::from_all(ABI_REQUIRED))?
-            // Abstract Unix sockets and signals outside the sandbox (Linux
-            // 6.12), where the kernel has them.
+            // Where the kernel has them, beside the seccomp filter (ADR-082):
+            // abstract Unix sockets and signals outside the sandbox (ABI 6),
+            // and pathname Unix sockets made outside it (ABI 9), which no
+            // rule below grants.
             .set_compatibility(CompatLevel::BestEffort)
             .scope(Scope::from_all(ABI::V6))?
+            .handle_access(AccessFs::ResolveUnix)?
             .create()?
             .add_rules(path_beneath_rules(
                 &rules.read,
@@ -383,7 +403,8 @@ fn any_flag(flags: &[u64]) -> Result<Vec<SeccompRule>> {
         .collect()
 }
 
-/// `socket()` only with the values in [`SOCKET_ARGS`], `ioctl()` with none of
+/// `socket()` only with the values in [`SOCKET_ARGS`], `socketpair()` only
+/// with a type in [`SOCKETPAIR_TYPES`], `ioctl()` with none of
 /// [`TERMINAL_INPUT`], [`SENDS`] without `MSG_FASTOPEN`, `clone()` and
 /// `unshare()` with none of [`CLONE_NAMESPACES`], none of [`DENIED`]: those
 /// calls fail with `EPERM`, and every other call is allowed.
@@ -396,6 +417,15 @@ fn seccomp_filter() -> Result<BpfProgram> {
         });
         socket.push(SeccompRule::new(other.collect::<Result<_, _>>()?)?);
     }
+    // `socketpair()` is refused when its type is none of them.
+    let other = SOCKETPAIR_TYPES
+        .map(|ty| SeccompCondition::new(1, SeccompCmpArgLen::Dword, SeccompCmpOp::Ne, ty.into()));
+    let pair = vec![SeccompRule::new(
+        other.into_iter().collect::<Result<_, _>>()?,
+    )?];
+    let x32_pair = X32_SOCKETPAIR.iter().map(|nr| X32 + nr);
+    let pairs = [libc::SYS_socketpair].into_iter().chain(x32_pair);
+    let pairs = pairs.map(|nr| (nr, pair.clone()));
     // `ioctl()` is refused when its request is one of them.
     let mut terminal = Vec::new();
     for request in TERMINAL_INPUT {
@@ -439,6 +469,7 @@ fn seccomp_filter() -> Result<BpfProgram> {
         .chain(sends)
         .chain(clone)
         .chain(unshare)
+        .chain(pairs)
         .chain([(libc::SYS_socket, socket)])
         .collect();
     let filter = SeccompFilter::new(
