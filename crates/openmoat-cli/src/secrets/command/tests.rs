@@ -185,9 +185,15 @@ mod programs {
     fn a_child_left_holding_the_output_is_ended_at_the_limit() {
         let stand = Stand::new();
         let pid_file = format!("{}/child", stand.root);
-        let program = stand
-            .shell(&format!("sleep 30 &\necho $! > '{pid_file}'\necho {VALUE}"))
-            .with_time_limit(Duration::from_secs(2));
+        let go = format!("{}/go", stand.root);
+        let program = stand.shell(&format!(
+            "if [ -e '{go}' ]; then sleep 30 & echo $! > '{pid_file}'; fi\necho {VALUE}"
+        ));
+        // A first run within the stand's longer limit: the system checks a
+        // new program file the first time it starts, which can be slow.
+        assert_eq!(program.fetch().unwrap().value.as_str(), VALUE);
+        let program = program.with_time_limit(Duration::from_secs(2));
+        std::fs::write(&go, "").unwrap();
         let started = std::time::Instant::now();
         let error = format!("{:#}", program.fetch().err().unwrap());
         let took = started.elapsed();
