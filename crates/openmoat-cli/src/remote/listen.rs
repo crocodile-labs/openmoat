@@ -92,9 +92,18 @@ impl<'a> Listener<'a> {
             );
         }
         self.sweep(channel, records, now())?;
+        // Every reply of the poll is handled: one that fails is logged, and
+        // the next is still answered. Only then does the channel move past
+        // them, so none is dropped unread.
         for reply in channel.poll(wait)? {
-            self.reply(channel, records, &reply, now())?;
+            if let Err(error) = self.reply(channel, records, &reply, now()) {
+                self.log.push(format!(
+                    "a reply from {} could not be handled: {error:#}",
+                    crate::render::clean(&reply.from)
+                ));
+            }
         }
+        channel.handled();
         Ok(())
     }
 

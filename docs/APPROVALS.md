@@ -188,7 +188,9 @@ ADR-078, "Channel architecture". To add one called `example`:
    belongs to; this call also proves the credential works), `send` (a `Prompt`: plain
    text and, when the channel has buttons, its `choices`), `notify`, `poll` (each
    message or button press as a `Reply`: the sender's id as the channel's server gives
-   it, a button's data or a message's text) and `settle`. Talk to the network only
+   it, a button's data or a message's text), `handled` (optional: called once every
+   reply of the last poll was handled; move past them on the server only then, so a
+   reply is never dropped unread) and `settle`. Talk to the network only
    through `remote/https.rs` or a reviewed transport; never read a credential from the
    environment.
 2. **Define `pub const SPEC: Spec`** in the same file, with `name: "example"`:

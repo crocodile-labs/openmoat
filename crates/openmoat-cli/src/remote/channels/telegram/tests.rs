@@ -112,6 +112,9 @@ fn updates_become_replies_and_move_the_offset() {
     };
     let mut telegram = Telegram::new(&mut api);
     let replies = telegram.poll(Duration::from_secs(1)).unwrap();
+    // Not past them until they are handled: a poll before that asks again.
+    assert_eq!(telegram.offset, 0);
+    telegram.handled();
     assert_eq!(telegram.offset, 11);
     assert_eq!(replies.len(), 2, "{replies:?}");
     assert_eq!(replies[0].from, "4242");
@@ -122,6 +125,22 @@ fn updates_become_replies_and_move_the_offset() {
     assert_eq!(replies[1].text.as_deref(), Some("/start"));
     telegram.poll(Duration::from_secs(1)).unwrap();
     assert_eq!(api.calls[1].1["offset"], 11);
+}
+
+/// Updates a poll returned but nobody handled are fetched again.
+#[test]
+fn unhandled_updates_are_fetched_again() {
+    let mut api = FakeApi {
+        answers: vec![json!({ "ok": true, "result": [
+            { "update_id": 7, "callback_query": { "id": "cb1",
+                "from": { "id": 4242, "is_bot": false }, "data": "a.x.y" } }
+        ]})],
+        ..FakeApi::default()
+    };
+    let mut telegram = Telegram::new(&mut api);
+    assert_eq!(telegram.poll(Duration::ZERO).unwrap().len(), 1);
+    telegram.poll(Duration::ZERO).unwrap();
+    assert_eq!(api.calls[1].1["offset"], 0);
 }
 
 #[test]

@@ -79,27 +79,55 @@ fn a_plain_message_from_a_stranger_names_their_id() {
     assert_eq!(rows.0, Vec::<Row>::new());
 }
 
+/// An answer that cannot be recorded does not stand, and the rest of the
+/// poll is still answered: one failing reply never drops the others, and
+/// the channel moves past the poll only once every reply was handled.
 #[test]
 fn an_answer_that_cannot_be_recorded_does_not_stand() {
-    struct Failing;
-    impl Records for Failing {
+    /// The first row fails, as an audit log that is briefly unavailable.
+    #[derive(Default)]
+    struct FailsFirst(usize);
+    impl Records for FailsFirst {
         fn record(&mut self, _: Row) -> Result<()> {
-            anyhow::bail!("audit log unavailable")
+            self.0 += 1;
+            if self.0 == 1 {
+                anyhow::bail!("audit log unavailable")
+            }
+            Ok(())
         }
     }
     let s = setup();
     gated(&s, &call("s1", "npm publish"), review(), NOW);
-    let request = only_request(&s);
+    gated(&s, &call("s1", "npm test"), review(), NOW);
+    let all: Vec<_> = s.store.requests().unwrap().into_iter().flatten().collect();
+    assert_eq!(all.len(), 2);
     let mut fake = Fake::default();
+    let mut records = FailsFirst::default();
     let mut listener = Listener::new(&s.store, &s.key, &FAKE, s.settings.clone());
-    fake.queued
-        .push_back(press(APPROVER, &approve_button(&s, &request)));
+    for request in &all {
+        fake.queued
+            .push_back(press(APPROVER, &approve_button(&s, request)));
+    }
+    listener
+        .step(&mut fake, &mut records, Duration::ZERO, &|| NOW + 1)
+        .unwrap();
+    assert!(
+        s.store.answer(&all[0].id).is_none(),
+        "not recorded, so not applied"
+    );
+    assert!(
+        s.store.answer(&all[1].id).is_some(),
+        "the next reply still answered"
+    );
     assert!(
         listener
-            .step(&mut fake, &mut Failing, Duration::ZERO, &|| NOW + 1)
-            .is_err()
+            .log
+            .iter()
+            .any(|l| l.contains("could not be handled: audit log unavailable")),
+        "{:?}",
+        listener.log
     );
-    assert!(s.store.answer(&request.id).is_none());
+    assert_eq!(fake.handled, 1);
 }
 
 /// An approval the guard used for a call it then refused (its row could not

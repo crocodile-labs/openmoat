@@ -393,7 +393,9 @@ connection), and edits, threads and reactions (no decision depends on them).
    uses (`requests`, `answers`, `used`), a duplicate, or a channel whose messages are
    shorter than 1024 characters.
 3. **The contract** (`remote/channel.rs`). `Channel` has `account`, `send`, `notify`,
-   `poll` and `settle`; only a channel does network I/O, through the shared transport
+   `poll`, `handled` and `settle`. The listener handles every reply of a poll (one that
+   fails is logged, and the next is still answered), then calls `handled`, and only then
+   does a channel move past them on its server (Telegram's `getUpdates` offset); only a channel does network I/O, through the shared transport
    `remote/https.rs`. `Spec`, the channel's manifest as a `const`, carries the name and
    title, typed `Capabilities` (`buttons`, `button_bytes`, `max_text`), the `fields`
    `connect` takes (each `Field { key, ask, secret, valid }`), the user id's shape check,

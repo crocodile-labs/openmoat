@@ -52,6 +52,8 @@ struct Fake {
     settled: Vec<(Reply, String)>,
     queued: VecDeque<Reply>,
     fail_send: bool,
+    /// How many polls the listener said it handled every reply of.
+    handled: usize,
 }
 
 impl Channel for Fake {
@@ -71,6 +73,9 @@ impl Channel for Fake {
     }
     fn poll(&mut self, _: Duration) -> Result<Vec<Reply>> {
         Ok(self.queued.drain(..).collect())
+    }
+    fn handled(&mut self) {
+        self.handled += 1;
     }
     fn settle(&mut self, reply: &Reply, text: &str) -> Result<()> {
         self.settled.push((reply.clone(), text.to_owned()));

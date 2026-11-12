@@ -138,8 +138,13 @@ pub trait Channel {
     fn send(&mut self, to: &str, prompt: &Prompt) -> Result<()>;
     /// Send plain `text`, no buttons, to `to`.
     fn notify(&mut self, to: &str, text: &str) -> Result<()>;
-    /// What arrived within `wait`.
+    /// What arrived within `wait`. Until [`Channel::handled`], the next
+    /// poll may return the same replies again.
     fn poll(&mut self, wait: Duration) -> Result<Vec<Reply>>;
+    /// Every reply of the last poll was handled: the channel may now move
+    /// past them on its server. A channel that keeps no such place does
+    /// nothing.
+    fn handled(&mut self) {}
     /// Tell the sender of `reply` what became of it.
     fn settle(&mut self, reply: &Reply, text: &str) -> Result<()>;
 }

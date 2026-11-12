@@ -131,13 +131,19 @@ fn result(method: &str, answer: &Value) -> Result<Value> {
 
 pub struct Telegram<A: Api> {
     api: A,
-    /// One more than the last update id seen.
+    /// One more than the last update id handled: where `getUpdates` asks from.
     offset: i64,
+    /// One more than the last update id the last poll returned.
+    next: i64,
 }
 
 impl<A: Api> Telegram<A> {
     pub fn new(api: A) -> Self {
-        Self { api, offset: 0 }
+        Self {
+            api,
+            offset: 0,
+            next: 0,
+        }
     }
 
     fn call(&mut self, method: &str, body: &Value, timeout: Duration) -> Result<Value> {
@@ -257,8 +263,14 @@ impl<A: Api> Channel for Telegram<A> {
         });
         let updates = self.call("getUpdates", &body, wait + SLACK)?;
         let (out, next) = replies(&updates, self.offset);
-        self.offset = next;
+        self.next = next;
         Ok(out)
+    }
+
+    /// The next `getUpdates` asks from past these, which confirms them to
+    /// Telegram; until then they are fetched again.
+    fn handled(&mut self) {
+        self.offset = self.next;
     }
 
     fn settle(&mut self, reply: &Reply, text: &str) -> Result<()> {
