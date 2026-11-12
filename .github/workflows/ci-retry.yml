@@ -1,0 +1,117 @@
+# After each `ci` run (CONTRIBUTING "CI"):
+# - infrastructure: a run that failed only on infrastructure (a runner not
+#   acquired or lost, a name that did not resolve, an HTTP 5xx from GitHub)
+#   has its failed jobs re-run, once (`run_attempt == 1`). A test failure, a
+#   job timeout or anything else is never re-run (scripts/ci/infra_retry.py).
+# - main: once a push to main's run is final (not about to be re-run), an
+#   issue is opened or updated when it is red, for each test that passed only
+#   on its retry, and for a test that failed in two runs in a row
+#   (scripts/ci/main_watch.py); the test parts' times are compared.
+#
+# It runs the default branch's copy of these scripts, never the triggering
+# run's code; it reads the run through the API by its id. Each job has only
+# the permissions it uses: reading the run, re-running it, writing issues.
+name: ci retry and main watch
+
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers] checks out the default branch only, runs no code of the triggering run; each job's token is scoped to its one task
+    workflows: [ci]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: ci-retry-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  # Whether the failed run is infrastructure only, on its first attempt.
+  decide:
+    name: infrastructure only?
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read # the run's jobs
+      checks: read # each job's annotations
+      contents: read
+    outputs:
+      retry: ${{ steps.decide.outputs.retry }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: read the failed jobs' annotations
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: python3 -I scripts/ci/infra_retry.py "$RUN_ID" "$ATTEMPT" >> "$GITHUB_OUTPUT"
+
+  retry:
+    name: re-run the failed jobs once
+    needs: decide
+    if: needs.decide.outputs.retry == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write # the re-run, and nothing else
+    steps:
+      - name: re-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          echo "::notice::infrastructure only: re-running the failed jobs of run $RUN_ID once"
+          gh run rerun "$RUN_ID" --failed
+
+  # A push to main's run, once it is final: green, red and not re-run, or
+  # red on its second attempt.
+  main-watch:
+    name: main watch
+    needs: decide
+    if: >-
+      always()
+      && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_branch == 'main'
+      && github.event.workflow_run.conclusion != 'cancelled'
+      && needs.decide.outputs.retry != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read # the run, its jobs and its test reports
+      checks: read # each job's annotations
+      contents: read
+      issues: write # the issues it opens or updates
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: issues for a red run and for flaky or repeated test failures
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: python3 -I scripts/ci/main_watch.py "$RUN_ID" "$ATTEMPT" "$CONCLUSION"
+      - name: the test parts' balance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          dir="$RUNNER_TEMP/junit"
+          if ! gh run download "$RUN_ID" --pattern 'junit-*' --dir "$dir"; then
+            echo "::notice::no test reports to compare"
+            exit 0
+          fi
+          for os in linux macos windows; do
+            mapfile -t reports < <(find "$dir" -path "*junit-$os-*" -name junit.xml | sort)
+            if [ "${#reports[@]}" -gt 1 ]; then
+              python3 -I scripts/ci/junit_summary.py balance "${reports[@]}"
+            fi
+          done
