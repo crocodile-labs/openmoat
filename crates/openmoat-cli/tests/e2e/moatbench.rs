@@ -268,7 +268,7 @@ fn moatbench_report_answers_every_promise_per_layer() {
     );
     // The OS rows ran the attack, or say why not; never a pass without a run.
     // CI's macOS jobs run Seatbelt and its Linux jobs Landlock in a network
-    // namespace, so there they must pass; the `stock linux` job may report
+    // namespace, so there they must pass; a stock-Linux run may report
     // NOT TESTED HERE with its reason.
     let must_run = os_rows_must_run();
     for promise in [

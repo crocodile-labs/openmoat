@@ -2,7 +2,7 @@
 """The checks of the weekly latest-agent job (scripts/ci/latest-agents.sh) that
 read JSON, and the agent records they come from (agents.json beside this file).
 
-    check.py records                         every record is consistent (quality gate)
+    check.py records                         every record is consistent
     check.py matrix                          the workflow's job matrix, as JSON
     check.py get <agent> <key>               one field of a record (`checked.version`)
     check.py version <agent> <installed>     the installed version against the checked one

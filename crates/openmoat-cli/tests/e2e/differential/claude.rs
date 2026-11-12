@@ -10,7 +10,7 @@
 //!
 //! The binary is `MOAT_CLAUDE_BIN` only (never `claude` from `PATH`) and the fake API is
 //! `MOAT_FAKE_API` (else `python3`); without either the layer skips visibly,
-//! except in CI's `standard tier` job, which fails it (`skip_without_host_binary`).
+//! except when `MOAT_REQUIRE_HOST_BINARIES` is set, which fails it (`skip_without_host_binary`).
 //!
 //! Scope: the layer asserts that every attack is **blocked**: the command fails,
 //! or, where `scenarios.yaml` records it `contained` for this OS, it completes
@@ -54,8 +54,8 @@ pub(super) const PERL: &str = "/usr/bin/perl";
 /// The issue tracking the headless benign-verification limitation.
 const BENIGN_GAP: u32 = 238;
 
-/// `MOAT_CLAUDE_BIN` only (scripts/ci/differential.sh sets it from `PATH`): the
-/// quality gate must not run whatever Claude Code a developer has installed.
+/// `MOAT_CLAUDE_BIN` only (scripts/ci/host-binaries.sh prints it): the tests
+/// must not run whatever Claude Code a developer has installed.
 pub(super) fn claude_binary() -> Option<PathBuf> {
     std::env::var_os("MOAT_CLAUDE_BIN")
         .filter(|v| !v.is_empty())

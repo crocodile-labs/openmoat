@@ -2,10 +2,10 @@
 //! runs under `codex sandbox -P moat`, the Seatbelt (macOS) or Landlock (Linux)
 //! profile Codex derives from the `[permissions.moat]` profile `moat init`
 //! generates, with `moat proxy` running as Codex's upstream. The binary is
-//! `MOAT_CODEX_BIN` only (scripts/ci/differential.sh sets it from `PATH`), so the
-//! quality gate never picks up whatever `codex` a developer has installed; without
-//! it the layer prints a visible skip and the suite passes on the other layers,
-//! except in CI's `standard tier` job, which fails it (`skip_without_host_binary`).
+//! `MOAT_CODEX_BIN` only (scripts/ci/host-binaries.sh prints it), so the tests
+//! never pick up whatever `codex` a developer has installed; without it the layer
+//! prints a visible skip and the suite passes on the other layers, except when
+//! `MOAT_REQUIRE_HOST_BINARIES` is set, which fails it (`skip_without_host_binary`).
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};

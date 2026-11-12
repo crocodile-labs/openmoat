@@ -7,7 +7,8 @@
 #
 #   scripts/ci/host-binaries.sh <dir> >> "$GITHUB_ENV"
 #
-# prints MOAT_CLAUDE_BIN=… and MOAT_CODEX_BIN=… for scripts/ci/differential.sh.
+# prints MOAT_CLAUDE_BIN=… and MOAT_CODEX_BIN=… for the differential tests
+# (`cargo test -p openmoat --test e2e -- differential`).
 set -euo pipefail
 dir=${1:?usage: host-binaries.sh <dir>}
 

@@ -142,4 +142,4 @@ agent's own CLI saves an MCP server or starts an MCP sign-in; per-session creden
 at both egress proxies, so a session's taint and connection share apply to its
 commands' traffic and other local programs are refused (ADR-027, ADR-044); a warning when an
 installed agent has a published security advisory; redaction before audit storage; owner-only permissions on state files (macOS and Linux); a pure core
-with no I/O and no `unsafe`; dependency and licence auditing in CI.
+with no I/O and no `unsafe`; dependency and licence auditing with `cargo deny`.

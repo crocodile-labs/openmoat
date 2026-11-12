@@ -21,7 +21,7 @@ in `AGENTS.md`, the working contract for people and coding agents.
 ```bash
 git clone https://github.com/crocodile-labs/openmoat && cd openmoat
 git config core.hooksPath .githooks        # runs the quality gate before every push
-scripts/ci/quality-gate.sh                 # fmt, clippy -D warnings, doc, tests, policy lint
+scripts/ci/quality-gate.sh                 # fmt, clippy -D warnings, tests: what CI runs
 ```
 
 Rust 1.99 (pinned in `rust-toolchain.toml`). No other tooling is required.
@@ -31,20 +31,13 @@ Rust 1.99 (pinned in `rust-toolchain.toml`). No other tooling is required.
 The minimum supported Rust version (MSRV) is the pinned toolchain: `rust-version =
 "1.99"` in `Cargo.toml`, `channel = "1.99"` in `rust-toolchain.toml`. It is raised on
 purpose and only in a minor release (0.2.x → 0.3.0), with a `### Changed` line in
-`CHANGELOG.md`, never in a patch release. The `weekly` workflow
-(`.github/workflows/weekly.yml`, also runnable by hand) runs clippy and the tests on
-the latest stable and beta, so a new compiler or clippy lint shows up there before the
-pin moves. It is not a required check; a failure becomes an issue.
+`CHANGELOG.md`, never in a patch release.
 
 ## Coverage
 
-The same `weekly` workflow measures line coverage of the workspace with
-[cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) on the pinned toolchain. The
-job summary shows a table per crate, and the `coverage` artefact holds `lcov.info` and
-the HTML report. No coverage service is used and no threshold is enforced. Locally:
-`cargo install cargo-llvm-cov --version 0.9.1 --locked`, then `cargo llvm-cov --workspace
---open`. `docs/COVERAGE.md` is a different thing: which threats the conformance
-fixtures cover.
+CI does not measure line coverage. Locally: `cargo install cargo-llvm-cov --version 0.9.1
+--locked`, then `cargo llvm-cov --workspace --open`. `docs/COVERAGE.md` is a different
+thing: which threats the conformance fixtures cover.
 
 ## Your first pull request
 
@@ -57,107 +50,52 @@ is pushed to `main` directly.
    test fix can go straight to a pull request.
 2. **Branch** from `main` as `<type>/<short-topic>` (for example `fix/windows-paths`).
    Keep the PR to one concern and under 500 changed lines; split larger changes into a
-   stack of PRs, or justify them with the `size: override` label.
+   stack of PRs, or say in the PR why it cannot be split.
 3. **Add tests at the right level** for a behaviour change:
    - unit tests next to the code (`#[cfg(test)]`),
    - conformance fixtures in `tests/conformance/` for every rule or parser change,
    - end-to-end tests in `crates/openmoat-cli/tests/` for CLI and hook behaviour,
    - architecture tests (`crates/*/tests/architecture.rs`) when crate boundaries move.
-4. **Run `scripts/ci/quality-gate.sh`.** CI runs the same script on macOS, Linux and
-   Windows.
+4. **Run `scripts/ci/quality-gate.sh`.** It runs what CI's `lint` and `test` jobs run;
+   CI runs the tests on macOS, Linux and Windows.
 5. **Open the PR with the template.** The title follows Conventional Commits
    (`fix(cli): …`); **Testing** and **Security impact** are required sections, and the
-   **Release note** line feeds `CHANGELOG.md`. Labels are set for you (below).
+   **Release note** line feeds `CHANGELOG.md`.
    A user-visible change adds a fragment in `changelog.d/` (see "Changelog").
-6. **Answer the review.** `moat-reviewer` posts a first pass; address or answer its
-   🔴 and 🟠 items. A maintainer makes the call.
+6. **Answer the review.** A maintainer reviews and makes the call.
 
-## Pull request standards
+## CI
 
-`pr-standards.yml` labels every PR and fails it when the standards are not met:
+`.github/workflows/ci.yml` runs on every pull request, every push to `main` and by hand
+(Actions → ci → Run workflow):
 
-| Label group | How it is set | Meaning |
+| Job | Runner | What it does |
 |---|---|---|
-| `type: *` | from the Conventional Commits title | what kind of change |
-| `area: *` | from changed paths | `core`, `hosts`, `audit`, `proxy`, `cli`, `policy`, `ci`, `docs`, `deps` |
-| `size: *` | additions + deletions | `XS` ≤ 10 · `S` ≤ 50 · `M` ≤ 200 · `L` ≤ 500 · `XL` fails without `size: override` |
-| `risk: *` | from changed paths | `high`: engine, lexer/classifier, policy, guard, exit codes, proxy and broker, OS sandbox generation, `openmoat run`, integrity, secrets, workflows, SECURITY · `medium`: adapters, install, audit · `low`: the rest |
-| `needs: fixture` | core or policy changed without `tests/conformance/` | add a fixture |
+| `changes` | `ubuntu-latest` | `code=false` when a pull request changes documentation only (`*.md`, `docs/**`, `LICENSE*`, `changelog.d/**`); `true` on a push, a run by hand and any error |
+| `lint` | `ubuntu-latest` | `cargo fmt --all --check` and `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` |
+| `test` | `ubuntu-latest`, `macos-15`, `windows-latest` | `cargo test --workspace --all-features --locked`; Linux installs bubblewrap first |
+| `required` | `ubuntu-latest` | fails when any job above failed or was cancelled; a skipped job is fine |
 
-Checks that must pass before merge (enforced by the `main` ruleset; names as shown on the
-PR): `ci-ok`, `conventional` (title), `labels · size · risk · body` (pr-standards) and
-`review threads answered`. `ci-ok` is the last job of `.github/workflows/ci.yml`: it waits
-for every other job there and fails when any failed or was cancelled, or was skipped
-without the `changes` job ordering it (`scripts/ci/ci_ok.py`), so a new or renamed CI job
-needs no ruleset change. Every job of `ci.yml` counts, `fuzz (smoke)`, the JavaScript jobs
-and the shell lexer against bash included. CodeQL and `adr-062 poc` are not required.
-Windows and macOS run the end-to-end tests in two parts (`<runner> e2e (2 of 2)` runs
-beside each gate leg) so that each job stays within its time limit.
+A documentation-only pull request skips `lint` and `test`; every push to `main` runs
+them, so a document a test reads is still checked there. The `main` ruleset requires
+`required`, `conventional` (the title, `pr-title.yml`) and `labels · size · risk · body`
+(`pr-standards.yml`): a new CI job goes in `required`'s `needs`, not in the ruleset. A new push cancels
+the pull request's older run; runs on `main` are never cancelled. Rust build caches are
+saved by runs on `main` only.
 
-What a pull request runs (`.github/workflows/ci.yml`, the `changes` job,
-`scripts/ci/changes.py`):
+Not required: `codeql.yml` (CodeQL), `latest-agents.yml` (weekly, below) and
+`release.yml` (on a pull request that changes the manifests, `dist plan` only).
 
-- Every PR runs the quality gate on `ubuntu-latest`, `macos-15` and `windows-latest`
-  (the Windows end-to-end tests in two parts), the standard tier, guard latency, a
-  one-minute fuzz smoke per target and every lint job.
-- The slow legs, `macos-15-intel` and ADR-062 step 0 (`adr062-poc.yml`), run on a PR
-  only when it changes platform code or is labelled `ci:full`. Platform code is the
-  sandbox backends (`src/sandbox*`), `openmoat run` (`commands/run*`), the OS sandbox
-  protection level, their end-to-end tests (`tests/e2e/sandbox*`, `cursor_sandbox*`,
-  `run*`), the default policy, the toolchain, `Cargo.lock`, `.github/`, the CI decision
-  scripts and `quality-gate.sh`, and any changed `.rs` file that tests the platform
-  (`cfg(target_os`, `cfg(unix`, `cfg(windows`, `target_arch`). ADR-062 step 0 also runs
-  when a PR changes what it measures: the proxy crate, `openmoat proxy`, the proxy CA,
-  `commands/run.rs` and its two scripts. Ten minutes of fuzzing per target runs on a PR
-  only with `ci:full`. The label is read when the `changes` job runs: label the PR, then
-  **re-run all jobs**, not only the failed ones: a leg held back passed with every step
-  skipped, under its own name, and a re-run of the failed jobs leaves it so.
-- On a PR, the `changes` job and `ci-ok` run `changes.py` and `ci_ok.py` as they are on
-  the branch the PR lands on, not the PR's own copies, so a PR cannot decide what its own
-  run skips or how it is judged. A PR that changes them runs the slow legs, and its new
-  rules apply from the next PR after it merges. A push, the schedule and a run by hand
-  use the commit's own copies.
-- A PR that changes documentation only skips the Rust, JavaScript, fuzz and latency jobs;
-  links, spelling, changelog fragments and release version strings are still checked.
-  A document that any test, build or script names (the generated tables in `README.md`,
-  `docs/USAGE.md`, `docs/COVERAGE.md`, `docs/EVIDENCE.md`, …) counts as code, so
-  changing it runs everything.
-- When the `changes` job cannot tell (an error, an empty diff, a changed file or labels
-  it cannot read), everything runs.
-- Every push to `main`, the weekly schedule and a run by hand (Actions → ci → Run
-  workflow) run every leg, with long fuzz. A release tag publishes only when the `ci`
-  run of the push to `main` at that commit completed green
-  (`scripts/ci/main_ci_green.py`, the first step of `release.yml`); a run still going,
-  or not yet started on a commit that is on `main`, is waited for up to 150 minutes.
-- Rust build caches are saved by runs on `main` only, one per job; a PR restores them
-  and never writes one.
-- `guard latency` builds the commit the PR lands on as well and times both on the same
-  runner, in turn; it fails when the PR makes the guard's own p95 clearly slower (more
-  than 1.25 times and 5 ms over), or above 150 ms whatever the base measured
-  (`scripts/ci/latency_ab.py`).
-- A new push cancels the PR's previous run. Runs on `main` are never cancelled.
+## Pull requests
 
-Until the ruleset drops it, a PR must be up to date with `main` before it merges; after,
-two PRs that pass alone can still break `main` together, which `main`'s own run shows
-and the release gate keeps out of a release. The PR body must have non-empty **Testing** and
-**Security impact** sections. CODEOWNERS requests the maintainer's review on `risk:
-high` paths; with one maintainer it is not enforced by the ruleset (two-maintainer
-review is a v1.0 item). Squash-merge; the PR title becomes the commit subject and the
-**Release note** line feeds `CHANGELOG.md`.
+The PR body must have non-empty **Testing** and **Security impact** sections. CODEOWNERS
+requests the maintainer's review on the paths it lists; with one maintainer it is not
+enforced by the ruleset (two-maintainer review is a v1.0 item). Squash-merge; the PR
+title becomes the commit subject and the **Release note** line feeds `CHANGELOG.md`.
 
 Release tags (`v*`) can only be created, moved or deleted by repository admins (the
 `release tags` ruleset), because pushing one starts the release workflow. Publishing to
 crates.io additionally waits for approval on the `release` environment.
-
-Labels are defined in `scripts/ci/sync-labels.sh`; edit that script, not the GitHub UI.
-
-Every pull request also gets a first-pass review from `moat-reviewer`, an automated
-reviewer that checks the diff against `AGENTS.md` and posts inline comments tagged
-`🔴 blocker` · `🟠 should fix` · `🟡 nit` · `💡 idea` plus one summary per revision. It is
-advisory: address or answer its 🔴/🟠 items, push back in a reply when it is wrong, and
-expect a maintainer to make the final call. Comment `@moat-reviewer` to run it again
-(this is also how maintainers trigger it on fork PRs). Details and setup:
-`.github/moat-reviewer/README.md`.
 
 ## AI-assisted contributions
 
@@ -176,8 +114,8 @@ reviewer can read; a generated wall of text is a reason to ask for a rewrite, no
 - Library crates (`openmoat-core`, `openmoat-hosts`, `openmoat-audit`, `openmoat-proxy`,
   `openmoat-sdk`) use typed `thiserror` errors and never print; nor does `openmoat-wasm`.
   `anyhow` and terminal output live only in `openmoat-cli`.
-- `openmoat-core` has no I/O, no `unsafe`, and no internal dependencies; CI builds it
-  for `wasm32` to prove it.
+- `openmoat-core` has no I/O, no `unsafe`, and no internal dependencies; it builds for
+  `wasm32` (`cargo build -p openmoat-core --target wasm32-unknown-unknown`).
 - Rust files stay at or under 500 lines of code; functions under 200 (clippy enforces
   the latter). `crates/openmoat-core/tests/architecture.rs` counts the code lines of
   every `.rs` file in each crate's `src/` and `tests/`: blank and comment lines, files
@@ -185,10 +123,11 @@ reviewer can read; a generated wall of text is a reason to ask for a rewrite, no
   `@generated` in their first lines are not counted. The cap only goes down.
 - Comments explain *why*. Code says *what*.
 - A new dependency needs a sentence in the PR on why the standard library or an
-  existing dependency does not cover it. `cargo-deny` checks licences and advisories.
+  existing dependency does not cover it. `cargo deny check` (`deny.toml`) checks licences
+  and advisories.
 - Workflows pin every action to a commit SHA, check out with `persist-credentials: false`,
   pass expressions to `run:` blocks through `env:`, and give tokens only the permissions
-  they use. CI runs `actionlint` and `zizmor` on `.github/workflows/`.
+  they use.
 
 ## Changelog
 
@@ -216,23 +155,16 @@ Entries of releases up to 0.2.0 predate this rule and stay as they are.
 
 ## Checks beyond the Rust gate
 
-CI runs these on every pull request. `scripts/ci/quality-gate.sh` runs each one whose
-tool is installed and prints a skip line for the others, so nothing extra is required
-locally.
+CodeQL runs in CI but is not required; the others are worth running by hand when you
+touch what they check.
 
-- **Shell scripts:** `shellcheck` 0.11.0 on every `*.sh` file and `.githooks/pre-push`.
-  Fix the finding; a `# shellcheck disable=SCxxxx` comment needs the reason on the same
-  line.
-- **Markdown links:** `python3 scripts/ci/check-links.py` fails on a relative link to a
-  missing file or heading, in Markdown and in HTML `href`, `src` and `srcset`. It is
-  offline: links to websites are not fetched. The weekly `clean install` workflow runs it
-  with `--online README.md`, which also fetches every website link and image there.
+- **Shell scripts:** `shellcheck` on every `*.sh` file and `.githooks/pre-push`.
+  A `# shellcheck disable=SCxxxx` comment needs the reason on the same line.
 - **CodeQL:** `.github/workflows/codeql.yml` analyses the workflows, the JavaScript
   plugins, the Python scripts and the Rust code on every pull request (forks included),
   on `main` and weekly, without building anything. It analyses shipped code only
   (`.github/codeql/codeql-config.yml` leaves out test files and folders, whose assertion
-  messages it would read as log injection); an alert's review thread must be resolved
-  before a pull request merges.
+  messages it would read as log injection).
 - **Spelling:** [`typos`](https://github.com/crate-ci/typos) 1.51.1
   (`cargo install typos-cli --version 1.51.1 --locked`) with `_typos.toml`. The project
   writes British English (`behaviour`, `licence`); an American spelling that is someone
@@ -244,25 +176,21 @@ locally.
   it; if it is used in a way machete cannot see, list it under
   `[package.metadata.cargo-machete] ignored` with a comment saying where it is used.
 
-Two more checks cover the JavaScript plugins OpenMoat installs into OpenClaw, pi and
-OpenCode (`crates/openmoat-hosts/src/host/*/integration/`):
-
-- **Plugin behaviour:** `cargo test -p openmoat-hosts --test js_plugins` runs each
-  plugin under Node against a stand-in for its host and for `openmoat guard`
-  (`tests/js_plugins/`). It is part of the gate's tests and skips, saying so, when
-  `node` is not on `PATH`.
-- **Plugin types:** `scripts/ci/check-js.sh` type-checks the plugins (`// @ts-check`,
-  strict, `crates/openmoat-hosts/jsconfig.json`) with TypeScript and `@types/node` at
-  pinned versions, installed into a throwaway directory. It needs `npm` and the
-  registry, so the gate does not run it; CI does. Describe a host's objects with JSDoc
-  types rather than `any`, and keep the plugins free of dependencies.
+The JavaScript plugins OpenMoat installs into OpenClaw, pi and OpenCode
+(`crates/openmoat-hosts/src/host/*/integration/`) are tested by `cargo test -p
+openmoat-hosts --test js_plugins`, which runs each plugin under Node against a stand-in
+for its host and for `openmoat guard` (`tests/js_plugins/`). It is part of the tests and
+skips, saying so, when `node` is not on `PATH`. The plugins start with `// @ts-check`
+(`crates/openmoat-hosts/jsconfig.json`); describe a host's objects with JSDoc types
+rather than `any`, and keep the plugins free of dependencies.
 
 ## Testing with real agents
 
-Most end-to-end tests hand `openmoat guard` a hook payload the test wrote. CI's
-`standard tier` job also runs the pinned Claude Code and Codex binaries
-(`scripts/ci/host-binaries.sh`, then `scripts/ci/differential.sh`), with no account and
-no traffic leaving the machine:
+Most end-to-end tests hand `openmoat guard` a hook payload the test wrote. The
+differential tests also run the real Claude Code and Codex binaries when
+`MOAT_CLAUDE_BIN` and `MOAT_CODEX_BIN` name them (`scripts/ci/host-binaries.sh <dir>`
+fetches the pinned ones and prints both lines; then `cargo test -p openmoat --test e2e
+-- differential`), with no account and no traffic leaving the machine:
 
 - `differential::claude` and `differential::codex` run the attack scenarios under each
   agent's own sandbox, without OpenMoat's hook.
@@ -276,7 +204,7 @@ no traffic leaving the machine:
   on every machine.
 - Codex is driven only through `codex sandbox`, and inside `openmoat run` the only network
   is the run's proxy, which refuses loopback, so no fake model API is reachable there.
-  For hooks inside `openmoat run`, CI checks that the real `codex` starts inside the run and
+  For hooks inside `openmoat run`, the tests check that the real `codex` starts inside the run and
   that a Codex hook call made in the run is decided and recorded outside it.
 
 ### Latest agents, weekly
@@ -308,20 +236,8 @@ against; a newer one is reported, not failed. A failure opens one issue per agen
 the only one with a write permission: `issues: write`). No job has a secret. What each
 agent's run proves and what it cannot is in `scripts/ci/latest-agents/README.md`; when an
 adapter is checked against a new release, update the version in its `HOST.md` (or the
-file its record names) and in `agents.json` together: the quality gate fails when they
-disagree.
-
-### Clean install
-
-The `clean install` workflow (`.github/workflows/clean-install.yml`: weekly, after each
-release and by hand) installs the published release on clean macOS and Ubuntu runners
-with Homebrew, the shell installer (its sha256 and build attestation checked first) and
-`cargo install openmoat --locked`, and for each runs `scripts/ci/clean-install.sh`: the
-README quick start as written (the blocks marked `<!-- ci:quickstart … -->`; the `policy
-check` output must be the one the README shows), `openmoat demo`, `status` and `doctor`,
-`openmoat init` with no agent and then with Claude Code started once against a fake API,
-and `openmoat uninstall`, after which every file in the home must be as it was, byte for
-byte. Its last job fetches every link and image in the README.
+file its record names) and in `agents.json` together:
+`python3 -I scripts/ci/latest-agents/check.py records` fails when they disagree.
 
 ### By hand, with your own keys
 
@@ -389,8 +305,8 @@ python3 fuzz/seed_corpus.py          # seeds from the conformance fixtures and h
 cd fuzz && cargo fuzz run -O decide_shell corpus/decide_shell   # fuzz/rust-toolchain.toml selects the pinned nightly
 ```
 
-CI runs each target for a minute on pull requests and ten minutes in the weekly run. A
-crash becomes a unit test or fixture next to the fix.
+CI does not fuzz; run a target before changing the surface it covers. A crash becomes a
+unit test or fixture next to the fix.
 
 ## Releasing
 
@@ -414,8 +330,7 @@ touch the manifests or the workflow run `dist plan` only. Running the workflow b
    (the "The latest release is" lines; the install commands carry no version). The
    release fails without that CHANGELOG section; its text becomes the release notes,
    after a line saying what the operating system does and does not enforce (ADR-013).
-   `python3 scripts/ci/check-versions.py` (in the quality gate and the `crates package`
-   CI job) fails until the manifests, `sdk/js/package.json`, both lockfiles, the README and ROADMAP "The latest
+   Run `python3 scripts/ci/check-versions.py`: it fails until the manifests, `sdk/js/package.json`, both lockfiles, the README and ROADMAP "The latest
    release is" lines and the CHANGELOG headings agree.
 3. After the merge, tag the merge commit: `git tag -s vX.Y.Z -m vX.Y.Z`
    and `git push origin vX.Y.Z`.
@@ -465,21 +380,14 @@ token with contents write on `crocodile-labs/homebrew-tap` only (the tap needs o
 `openmoat-core`, `openmoat-hosts`, `openmoat-audit` and `openmoat-proxy` are published
 libraries, and `openmoat-sdk` joins them with its first release (ADR-046 is its
 stability contract). While the version is 0.x, a breaking change to their public API needs a minor
-bump (0.1.x → 0.2.0) and anything else a patch bump. The `semver of the library crates`
-CI job runs [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks)
-0.51.0 twice:
+bump (0.1.x → 0.2.0) and anything else a patch bump. An intended break is said in the
+PR's **Release note** (what breaks and what to use instead); its changelog fragment goes
+under `### Changed` or `### Removed` and the entry starts with **Breaking** and the crate.
 
-- **against the PR's base commit**, blocking, `openmoat-sdk` included: a PR that breaks the API fails. If the
-  break is intended, say so in the PR's **Release note** (what breaks and what to use
-  instead), ask a maintainer to add the `breaking` label, and re-run the job; it then
-  passes with a warning. Its changelog fragment goes under `### Changed` or
-  `### Removed` and the entry starts with **Breaking** and the crate.
-- **against the latest crates.io release** (the four crates published so far), reporting
-  only, except on a release PR (`build: release …`), where it blocks until the version
-  bump covers every break since that release.
-
-Locally: `cargo install cargo-semver-checks --version 0.51.0 --locked`, then
-`cargo semver-checks check-release -p openmoat-core --baseline-rev origin/main`.
+Check a change with [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks):
+`cargo install cargo-semver-checks --version 0.51.0 --locked`, then
+`cargo semver-checks check-release -p openmoat-core --baseline-rev origin/main`; before a
+release, against the latest crates.io release (no `--baseline-rev`).
 
 ## Decisions
 

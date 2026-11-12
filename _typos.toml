@@ -1,4 +1,4 @@
-# Spell check (https://github.com/crate-ci/typos), run by CI and the quality gate.
+# Spell check (https://github.com/crate-ci/typos): `typos` (CONTRIBUTING "Checks beyond the Rust gate").
 # The project writes British English; the words below are American spellings or
 # fragments that belong to someone else's name and must stay as they are.
 

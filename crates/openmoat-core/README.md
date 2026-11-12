@@ -5,7 +5,7 @@ model, POSIX shell lexer and classifier, pattern matching, path normalisation, t
 decision engine and the policy compiler for OS layers.
 
 **Pure by construction.** No I/O, no OS calls, no `unsafe`, no internal
-dependencies. The crate builds for `wasm32-unknown-unknown` in CI, and an
+dependencies. The crate builds for `wasm32-unknown-unknown`, and an
 architecture test pins the dependency allowlist and a 500-line file budget.
 
 ```rust

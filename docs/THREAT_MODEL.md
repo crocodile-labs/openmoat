@@ -342,8 +342,8 @@ something OpenMoat claims to stop.
     names `(ioctl-command TIOCSTI)`, an identifier `sandbox-exec` only recognises
     from macOS 13 onwards. On macOS 12 and earlier `openmoat run` refuses without
     starting the agent (fail closed); where it cannot read the macOS version it
-    tries, and `sandbox-exec` refuses the profile itself. CI covers `macos-15` and
-    `macos-15-intel`; GitHub Actions no longer offers `macos-13` or `macos-14`
+    tries, and `sandbox-exec` refuses the profile itself. CI covers `macos-15`
+    (Apple silicon only); GitHub Actions no longer offers `macos-13` or `macos-14`
     runners, so macOS 13 and 14 are not exercised (#389).
   - The profile leaves every file's existence, size and times visible.
   - On Linux, Landlock only grants. Secrets inside a granted tree stay readable and
@@ -1556,20 +1556,21 @@ something OpenMoat claims to stop.
 - **Fuzzing.** `cargo fuzz` targets for the shell path through the engine, policy
   parsing, host payloads, `openmoat allow --always` patterns, the proxy's request
   parser, OpenClaw's JSON5 config, repository policy merging, the MCP gateway's
-  framing and routing, and `check-diff`'s diff parser run in CI on every pull request
-  and weekly.
+  framing and routing, and `check-diff`'s diff parser, run by hand (CONTRIBUTING
+  "Fuzzing").
 - **Differential suite** (`tests/differential/scenarios.yaml`): each scenario runs
   against the hook decision and each host sandbox whose binary is present, and hostile
   project scripts run under `openmoat run`, Claude Code's sandbox and Codex's `openmoat`
   profile on macOS and Linux, with the OS outcome (`EPERM`, `EACCES`, a proxy's 403)
-  asserted. CI's `standard tier` job runs the host sandboxes with pinned Claude Code
-  and Codex binaries, a local fake API and no account. [EVIDENCE.md](EVIDENCE.md) is
+  asserted. CI runs the hook layer and `openmoat run`; the host sandboxes run with the
+  pinned Claude Code and Codex binaries (`scripts/ci/host-binaries.sh`), a local fake
+  API and no account. [EVIDENCE.md](EVIDENCE.md) is
   the results table, generated from the same file; known gaps are listed there as gaps.
 - **Lexer against bash** (`crates/openmoat-core/tests/lexer_vs_bash.rs`): the conformance
   `shell:` lines and a set of quoting and operator cases run under a real bash with an
   empty `PATH`, whose `command_not_found_handle` records each command's argv, and the
   argv is compared with the lexer's words. Lines bash would expand (variables,
-  substitutions, globs, braces, `~`) or that use builtins are skipped. CI's `lexer-vs-bash`
-  job runs it on Linux; it is not a required check yet.
+  substitutions, globs, braces, `~`) or that use builtins are skipped. It is ignored by
+  default and run by hand on Linux (`-- --ignored`).
 - **Planned:** the full MoatBench, which measures attack success with and without OpenMoat across live agents ([ROADMAP.md](ROADMAP.md)). Prompt fatigue is measured
   today only by `openmoat report` (reviews per active hour).
