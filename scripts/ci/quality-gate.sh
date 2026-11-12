@@ -44,13 +44,18 @@ run cargo fmt --all --check
 # fuzz/ is its own workspace (nightly, outside `--all`); rustfmt checks its
 # targets on the pinned stable toolchain. CI's fuzz job runs clippy there.
 run rustfmt --check --edition 2024 fuzz/fuzz_targets/*.rs
-run cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
-# Library and binary code may not unwrap, expect, panic or reach unreachable!;
-# tests may. Set here rather than in Cargo.toml so the helpers under `tests/`
-# keep their unwraps without an `#[allow]`.
-run cargo clippy --locked --workspace --lib --bins --all-features -- -D warnings \
-    -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic -D clippy::unreachable
-run cargo doc --locked --workspace --no-deps --document-private-items
+# GATE_LINT=0 (CI's macos-15-intel leg) leaves clippy and the docs to the
+# macos-15 leg: the same OS, and no macOS code depends on the CPU, so the
+# lints cannot differ; the slow Intel runner then spends its time on tests.
+if [ "${GATE_LINT:-1}" != 0 ]; then
+    run cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+    # Library and binary code may not unwrap, expect, panic or reach unreachable!;
+    # tests may. Set here rather than in Cargo.toml so the helpers under `tests/`
+    # keep their unwraps without an `#[allow]`.
+    run cargo clippy --locked --workspace --lib --bins --all-features -- -D warnings \
+        -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic -D clippy::unreachable
+    run cargo doc --locked --workspace --no-deps --document-private-items
+fi
 if [ "$E2E_PART" = 1 ]; then
     # Everything but the end-to-end modules part 2 runs (see E2E_SPLIT).
     tests cargo test --locked --workspace --all-features --no-fail-fast --exclude openmoat

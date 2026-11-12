@@ -106,6 +106,8 @@ jobs:
             e2e_part: "1"
           - os: macos-15-intel
             e2e_part: "1"
+            # Tests only: clippy and the docs run on macos-15 (same OS).
+            gate_lint: "0"
     steps:
       - name: nothing to run
         if: env.RUN_LEG != 'true'
@@ -138,6 +140,7 @@ jobs:
         if: env.RUN_LEG == 'true'
         env:
           E2E_PART: ${{ matrix.e2e_part }}
+          GATE_LINT: ${{ matrix.gate_lint }}
         run: scripts/ci/quality-gate.sh
         shell: bash
 
