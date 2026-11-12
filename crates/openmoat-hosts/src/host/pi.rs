@@ -329,6 +329,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         edits,
         patch: None,
         mcp_arguments,
+        input: Some(crate::wire::canonical(&p.input)),
         sandboxed: false,
         event,
     })

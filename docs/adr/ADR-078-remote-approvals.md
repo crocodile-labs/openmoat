@@ -23,7 +23,11 @@ must not be able to read or reach whatever issues one.
 2. **A request carries** the host, the host's session id, the working directory, the
    tool, the action as the engine decided it, the SHA-256 of what the call writes or
    sends that the action does not name (a `Write`'s content, an `Edit`'s replacements, a
-   patch envelope, MCP arguments), whether the host said it sandboxes the call, and the
+   patch envelope, MCP arguments), the host's whole tool arguments as canonical JSON
+   (`HookRequest::input`: keys sorted, no whitespace, so a field no adapter reads, such
+   as a notebook cell's new source or the text of a host's own write or replace tool, is
+   bound too; no host's arguments are known to hold a field that changes between two
+   identical calls, so none is left out), whether the host said it sandboxes the call, and the
    ids of the rules that held it for review. These are hashed, after a domain string,
    into the **request digest**. Two calls with the same digest are the same call in
    every respect OpenMoat decides on.
@@ -152,6 +156,7 @@ shown as the command it is.
 | Spoofed approver: someone else messages the bot or presses a forwarded button | the sender's id from Telegram's server must be on the allowlist the person set | `remote::tests::an_answer_from_someone_not_allowed_is_refused` |
 | Forged approval file written by the agent | writes under `.moat` denied; answers signed with a key the agent cannot read | `remote::tests::an_answer_signed_with_another_key_is_refused`, conformance `T9-write-remote-answer` |
 | Approval for one call used for another (changed command, content, session, project) | answer bound to the request digest | `remote::tests::an_approval_answers_only_its_own_call` |
+| Approval for one call used for another whose content sits in a field no adapter reads (notebook source, a host's own write tool, an unknown tool's arguments) | the digest binds the canonical hash of the whole tool input | `remote::tests::text::the_digest_binds_the_whole_tool_input` |
 | Replay of a used approval, or two guards racing | create-new `used/<id>` before allowing | `remote::tests::an_approval_is_used_once`, `remote::tests::a_restored_answer_is_not_used_again` |
 | Stale approval (late answer, old answer file) | request expiry checked by `listen` and again by the guard | `remote::tests::an_expired_request_is_not_approved` |
 | Agent reads the bot token or the key | `kernel-self` read deny, sandbox deny, owner-only files with mode check | conformance `T9-read-remote-token`, `T9-cat-remote-key`, `T9-read-moved-remote-token` |

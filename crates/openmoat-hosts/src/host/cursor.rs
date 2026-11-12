@@ -304,6 +304,7 @@ fn parse_payload(host: Host, p: Payload, event: &str) -> Result<HookRequest, Hos
         edits: Vec::new(),
         patch: None,
         mcp_arguments,
+        input: Some(crate::wire::canonical(&p.tool_input)),
         sandboxed,
         event: event_kind(event),
     };

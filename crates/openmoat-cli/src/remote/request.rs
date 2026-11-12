@@ -15,7 +15,7 @@ use super::{hex, verify_hex};
 use crate::proxy_session::Key;
 
 /// Hashed in front of every request digest.
-const DIGEST_DOMAIN: &[u8] = b"openmoat-remote-request-digest-v1\n";
+const DIGEST_DOMAIN: &[u8] = b"openmoat-remote-request-digest-v2\n";
 /// Signed in front of every request record.
 const REQUEST_DOMAIN: &[u8] = b"openmoat-remote-request-v1\n";
 /// The record's format.
@@ -126,7 +126,14 @@ pub fn digest(request: &HookRequest, action: &Action, decision: &Decision) -> Re
     field(&mut out, request.tool.as_bytes());
     let action = serde_json::to_vec(action).context("encoding the action")?;
     field(&mut out, &action);
-    for optional in [&request.content, &request.patch, &request.mcp_arguments] {
+    // The host's whole arguments too, canonical: a field no adapter reads
+    // (a notebook cell's new source, a host's own write tool) is bound.
+    for optional in [
+        &request.content,
+        &request.patch,
+        &request.mcp_arguments,
+        &request.input,
+    ] {
         match optional {
             Some(text) => {
                 field(&mut out, b"1");

@@ -24,9 +24,57 @@ pub(crate) fn host_verdict(verdict: Verdict) -> &'static str {
     }
 }
 
+/// `value` as canonical JSON: object keys sorted, no whitespace, so two
+/// payloads with the same arguments give the same text whatever order the
+/// host wrote them in ([`crate::HookRequest::input`]).
+pub(crate) fn canonical(value: &serde_json::Value) -> String {
+    fn write(value: &serde_json::Value, out: &mut String) {
+        match value {
+            serde_json::Value::Object(map) => {
+                let mut entries: Vec<(&String, &serde_json::Value)> = map.iter().collect();
+                entries.sort_by(|a, b| a.0.cmp(b.0));
+                out.push('{');
+                for (n, (key, item)) in entries.into_iter().enumerate() {
+                    if n > 0 {
+                        out.push(',');
+                    }
+                    out.push_str(&serde_json::Value::from(key.as_str()).to_string());
+                    out.push(':');
+                    write(item, out);
+                }
+                out.push('}');
+            }
+            serde_json::Value::Array(items) => {
+                out.push('[');
+                for (n, item) in items.iter().enumerate() {
+                    if n > 0 {
+                        out.push(',');
+                    }
+                    write(item, out);
+                }
+                out.push(']');
+            }
+            other => out.push_str(&other.to_string()),
+        }
+    }
+    let mut out = String::new();
+    write(value, &mut out);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use openmoat_core::Verdict;
+
+    #[test]
+    fn canonical_json_sorts_keys_and_drops_whitespace() {
+        let a: serde_json::Value =
+            serde_json::from_str(r#"{ "b": [1, {"y": 2, "x": "\n"}], "a": null }"#).unwrap();
+        assert_eq!(
+            super::canonical(&a),
+            r#"{"a":null,"b":[1,{"x":"\n","y":2}]}"#
+        );
+    }
 
     use super::host_verdict;
 

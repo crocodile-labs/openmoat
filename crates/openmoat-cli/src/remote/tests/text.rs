@@ -129,6 +129,58 @@ fn a_call_redaction_changed_can_only_be_denied() {
     );
 }
 
+/// The digest binds every argument the host sent, also those no adapter
+/// reads: an approval of one notebook cell's text, or of one unknown tool's
+/// arguments, answers no other. The order the host wrote keys in does not
+/// matter.
+#[test]
+fn the_digest_binds_the_whole_tool_input() {
+    let digest = |r: &openmoat_hosts::HookRequest| {
+        request::digest(r, r.action.as_ref().unwrap(), &review()).unwrap()
+    };
+    let cell = |source: &str| {
+        tool_call(
+            "NotebookEdit",
+            &serde_json::json!({
+                "notebook_path": "/p/a.ipynb", "cell_id": "c1", "new_source": source,
+            }),
+        )
+    };
+    assert_ne!(
+        digest(&cell("print(1)")),
+        digest(&cell("import os; os.system('sh')"))
+    );
+    assert_eq!(digest(&cell("print(1)")), digest(&cell("print(1)")));
+    let reordered = tool_call(
+        "NotebookEdit",
+        &serde_json::from_str(
+            r#"{"new_source": "print(1)", "cell_id": "c1", "notebook_path": "/p/a.ipynb"}"#,
+        )
+        .unwrap(),
+    );
+    assert_eq!(digest(&cell("print(1)")), digest(&reordered));
+    // A tool its adapter does not know, in the format of a host that maps
+    // one to `UnknownTool`.
+    let unknown = |value: &str| {
+        let payload = serde_json::json!({
+            "session_id": "s1",
+            "cwd": "/p",
+            "hook_event_name": "BeforeTool",
+            "timestamp": "2026-10-20T10:00:13.000Z",
+            "tool_name": "deploy_preview",
+            "tool_input": { "target": "staging", "payload": value },
+        });
+        openmoat_hosts::Host::GeminiCli
+            .parse_request(&payload.to_string())
+            .unwrap()
+    };
+    assert!(matches!(
+        unknown("a").action,
+        Some(openmoat_core::Action::UnknownTool { .. })
+    ));
+    assert_ne!(digest(&unknown("a")), digest(&unknown("b")));
+}
+
 /// A valid, signed approval of `request` by the approver leaves `call` held
 /// for review, and is not used up.
 fn assert_not_approvable(s: &super::Setup, call: &openmoat_hosts::HookRequest, request: &Request) {

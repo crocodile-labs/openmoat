@@ -99,6 +99,7 @@ pub(crate) fn parse_with(
         edits,
         patch,
         mcp_arguments,
+        input: Some(crate::wire::canonical(&p.tool_input)),
         sandboxed: false,
         event,
     })
