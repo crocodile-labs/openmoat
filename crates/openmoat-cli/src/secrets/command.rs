@@ -20,6 +20,7 @@ use openmoat_core::{Policy, SecretCommand, SecretCommandHome};
 use serde::Deserialize;
 use zeroize::Zeroizing;
 
+use super::copy::Copy;
 use super::{Place, program};
 
 /// How long the program may take.
@@ -60,8 +61,8 @@ pub struct Program {
     )]
     written: String,
     args: Vec<String>,
-    /// SHA-256 of the program when the proxy started.
-    digest: String,
+    /// What runs: the program's bytes as hashed when the proxy started.
+    copy: Copy,
     /// A script's interpreter and its SHA-256 when the proxy started.
     interpreter: Option<(PathBuf, String)>,
     /// The `HOME` it gets: a private empty folder, or the person's home.
@@ -91,8 +92,8 @@ impl Program {
             Some(rest) => format!("{home}/{rest}"),
             None => source.program().to_owned(),
         };
-        let checked = program::check(&written, policy, home)?;
-        let digest = program::digest(&checked.path)?;
+        let checked = program::check(&written, policy, home, place.writable)?;
+        let copy = Copy::make(&checked.path, id, place.state)?;
         let interpreter = checked
             .interpreter
             .map(|path| program::digest(&path).map(|digest| (path, digest)))
@@ -102,7 +103,7 @@ impl Program {
             path: checked.path,
             written,
             args: source.run.iter().skip(1).cloned().collect(),
-            digest,
+            copy,
             interpreter,
             home: program_home(id, source.home, place)?,
             lifetime: Duration::from_secs(source.lifetime_secs()),
@@ -134,15 +135,18 @@ impl Program {
     /// Run the program and read its answer. Refused when the program file
     /// changed since the proxy started.
     pub fn fetch(&self) -> Result<Answer> {
-        let pinned = std::iter::once((&self.path, &self.digest))
-            .chain(self.interpreter.iter().map(|(path, digest)| (path, digest)));
+        // The file at the path is not what runs, but a change there is an
+        // update the person should restart for, or a swap to refuse.
+        let pinned = std::iter::once((&self.path, self.copy.digest()))
+            .chain(self.interpreter.iter().map(|(p, d)| (p, d.as_str())));
         for (path, digest) in pinned {
             ensure!(
-                program::digest(path)? == *digest,
+                program::digest(path)? == digest,
                 "{} changed since the proxy started; restart `openmoat proxy` to use the new one",
                 path.display()
             );
         }
+        self.copy.verify()?;
         let out = self.run()?;
         let unix_now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -151,7 +155,7 @@ impl Program {
     }
 
     fn command(&self) -> Command {
-        let mut command = Command::new(&self.path);
+        let mut command = Command::new(self.copy.path());
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt as _;

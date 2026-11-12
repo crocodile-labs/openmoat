@@ -129,7 +129,10 @@ Each agent's gaps and the reasons are in
   The proxy checks that the agent cannot change the program file, the folders above it
   or a script's interpreter, and pins their digests, but not the files the program loads
   or reads (a script's modules, a program's libraries, its configuration): cover them
-  with deny `fs.write` rules too, or use a program that is one file. A hook-only agent's writes
+  with deny `fs.write` rules too, or use a program that is one file. The standalone
+  `openmoat proxy` counts only the project of the folder it was started in as granted
+  to the agent, not the write roots of an agent's own sandbox, so a deny rule inside one
+  of those still counts there. A hook-only agent's writes
   through a program the hook cannot see are not stopped by those rules; only an OS
   sandbox stops them. A program that leaves a child running past its time limit keeps
   that child, and one waiting thread of the proxy, until the child ends.

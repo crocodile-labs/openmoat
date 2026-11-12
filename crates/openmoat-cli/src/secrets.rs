@@ -6,6 +6,7 @@
 //! never what was read.
 
 mod command;
+mod copy;
 mod keychain;
 mod program;
 mod refresh;
@@ -24,8 +25,24 @@ pub use refresh::{Masks, Refresher};
 pub struct Place<'a> {
     /// The person's home directory in slash form, for `~/` sources.
     pub home: &'a str,
-    /// OpenMoat's state directory: the programs' private homes are made there.
+    /// OpenMoat's state directory: the programs' private copies and homes
+    /// are made there.
     pub state: &'a std::path::Path,
+    /// The folders the agent's sandboxes let it write, slash-separated: a
+    /// deny rule there is not proof, since an OS sandbox cannot hold a deny
+    /// inside a folder it grants (Landlock).
+    pub writable: &'a [String],
+}
+
+/// The folders a sandbox around the agent lets it write: the project (as
+/// written and resolved) and `granted`, the run's own write roots.
+pub fn writable(ctx: &openmoat_core::EvalContext, granted: &[String]) -> Vec<String> {
+    let project = [&ctx.project, &ctx.real_project].into_iter().flatten();
+    project
+        .chain(granted)
+        .map(|p| p.replace('\\', "/").trim_end_matches('/').to_owned())
+        .filter(|p| !p.is_empty())
+        .collect()
 }
 
 /// A broker holding the value of every secret of `policy`, and what renews

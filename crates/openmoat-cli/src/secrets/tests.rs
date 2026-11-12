@@ -10,6 +10,7 @@ fn at(home: &str) -> Place<'_> {
     Place {
         home,
         state: std::path::Path::new(home),
+        writable: &[],
     }
 }
 

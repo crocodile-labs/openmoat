@@ -33,18 +33,34 @@ pub struct Checked {
     pub interpreter: Option<PathBuf>,
 }
 
+/// What says the agent cannot change a file.
+struct Rules<'a> {
+    policy: &'a Policy,
+    /// The person's home in slash form, without a trailing slash.
+    home: &'a str,
+    /// Folders the agent's sandboxes let it write: a deny rule inside them is
+    /// not proof, since Landlock cannot hold a deny within a folder it grants.
+    writable: &'a [String],
+}
+
 /// The resolved program file of `written` (absolute, home already expanded),
 /// once it, and the interpreter it names if it is a script, are programs the
-/// agent cannot change. `home` is the person's home in slash form.
-pub fn check(written: &str, policy: &Policy, home: &str) -> Result<Checked> {
-    let path = check_file(written, policy, home)?;
+/// agent cannot change. `home` is the person's home in slash form; `writable`
+/// the folders the agent's sandboxes let it write.
+pub fn check(written: &str, policy: &Policy, home: &str, writable: &[String]) -> Result<Checked> {
+    let rules = Rules {
+        policy,
+        home: home.trim_end_matches('/'),
+        writable,
+    };
+    let path = check_file(written, &rules)?;
     let Some(named) = interpreter_of(&path)? else {
         return Ok(Checked {
             path,
             interpreter: None,
         });
     };
-    let interpreter = check_file(&named, policy, home)
+    let interpreter = check_file(&named, &rules)
         .with_context(|| format!("checking {named}, the interpreter of {written}"))?;
     ensure!(
         interpreter_of(&interpreter)?.is_none(),
@@ -58,7 +74,8 @@ pub fn check(written: &str, policy: &Policy, home: &str) -> Result<Checked> {
 }
 
 /// The resolved file of `written`, once it is a file the agent cannot change.
-fn check_file(written: &str, policy: &Policy, home: &str) -> Result<PathBuf> {
+fn check_file(written: &str, rules: &Rules<'_>) -> Result<PathBuf> {
+    let home = rules.home;
     let real = std::fs::canonicalize(written)
         .with_context(|| format!("source command {written} cannot be found"))?;
     let meta = std::fs::metadata(&real).with_context(|| format!("reading {}", real.display()))?;
@@ -77,14 +94,23 @@ fn check_file(written: &str, policy: &Policy, home: &str) -> Result<PathBuf> {
             bail!("source command {path} is under {dir}, where any user can put a file");
         }
     }
-    let as_written = denied(policy, home, written, false) || admin_only(Path::new(written));
-    let open = open_folder(&real, policy, home);
+    let as_written = denied(rules, written, false) || admin_only(Path::new(written));
+    let open = open_folder(&real, rules);
     if as_written && open.is_none() {
         return Ok(real);
     }
-    let rule = match open {
-        Some(dir) => format!("{}/**", policy_form(&slashed(&dir), home)),
-        None => policy_form(&written.replace('\\', "/"), home),
+    let open = open.map_or_else(|| written.replace('\\', "/"), |dir| slashed(&dir));
+    if let Some(root) = granted(rules, &open) {
+        bail!(
+            "source command {written} could be changed by the agent: {open} is in {root}, which \
+             the agent's sandbox lets it write, and a deny rule there is not enforced by every \
+             sandbox; use a program outside it that only an administrator can change"
+        );
+    }
+    let rule = if open == shown || open == written.replace('\\', "/") {
+        policy_form(&open, home)
+    } else {
+        format!("{}/**", policy_form(&open, home))
     };
     bail!(
         "source command {written} could be changed by the agent: add a deny rule with \
@@ -97,15 +123,14 @@ fn check_file(written: &str, policy: &Policy, home: &str) -> Result<PathBuf> {
 /// The highest folder above `real` (or `real` itself) that neither the policy
 /// nor the system keeps from the agent, up to and without the person's home
 /// and a Windows drive's root; none when all are kept.
-fn open_folder(real: &Path, policy: &Policy, home: &str) -> Option<PathBuf> {
-    let home = home.trim_end_matches('/');
+fn open_folder(real: &Path, rules: &Rules<'_>) -> Option<PathBuf> {
     let mut open = None;
     for (i, p) in real.ancestors().enumerate() {
         let text = slashed(p);
-        if text == home || text.is_empty() || (p.parent().is_none() && !cfg!(unix)) {
+        if text == rules.home || text.is_empty() || (p.parent().is_none() && !cfg!(unix)) {
             break;
         }
-        if !(admin_one(p) || denied(policy, home, &text, i > 0)) {
+        if !(admin_one(p) || denied(rules, &text, i > 0)) {
             open = Some(p.to_path_buf());
         }
     }
@@ -113,16 +138,27 @@ fn open_folder(real: &Path, policy: &Policy, home: &str) -> Option<PathBuf> {
 }
 
 /// Whether a deny `fs.write` rule covers `path` and, for a folder, anything
-/// put in it. A rule may name a file under the home as `~/…` or by its full
-/// path.
-fn denied(policy: &Policy, home: &str, path: &str, folder: bool) -> bool {
+/// put in it, outside every folder a sandbox lets the agent write. A rule may
+/// name a file under the home as `~/…` or by its full path.
+fn denied(rules: &Rules<'_>, path: &str, folder: bool) -> bool {
     let path = path.replace('\\', "/");
     let covers = |p: &str| {
-        [policy_form(p, home), p.to_owned()]
+        [policy_form(p, rules.home), p.to_owned()]
             .iter()
-            .any(|form| openmoat_core::lint::write_denied(policy, form))
+            .any(|form| openmoat_core::lint::write_denied(rules.policy, form))
     };
-    covers(&path) && (!folder || covers(&format!("{path}/.openmoat-new-file")))
+    granted(rules, &path).is_none()
+        && covers(&path)
+        && (!folder || covers(&format!("{path}/.openmoat-new-file")))
+}
+
+/// The folder a sandbox lets the agent write that holds `path`, if any.
+fn granted<'r>(rules: &Rules<'r>, path: &str) -> Option<&'r str> {
+    rules
+        .writable
+        .iter()
+        .map(String::as_str)
+        .find(|root| path == *root || path.strip_prefix(*root).is_some_and(|r| r.starts_with('/')))
 }
 
 /// The interpreter a `#!` line at the start of `path` names; none when the

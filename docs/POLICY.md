@@ -359,6 +359,10 @@ that an administrator installed.
   and names the rule to add; `openmoat policy lint` warns when no rule covers the program.
   The default policy only asks before writes to `/opt/homebrew/bin` and `~/.local/bin`
   (`persistence`), which is not enough.
+- **Not in the project.** A deny rule counts only outside the folders a sandbox lets the
+  agent write: the project, and under `openmoat run` its temp folder and `--write`
+  folders. Linux's Landlock cannot keep a file from the agent inside a folder it may
+  write, so a program there must be one only an administrator can change.
 - **Scripts.** A program whose first line is `#!` is a script: the interpreter that line
   names must pass the same check, must not be a script itself, and is pinned too.
   `#!/usr/bin/env …` is refused, since `env` looks the interpreter up in a search path.
@@ -367,9 +371,13 @@ that an administrator installed.
   it reads (its configuration, such as `~/.aws/config`, `~/.config/gcloud`), are not: keep
   them from the agent with deny `fs.write` rules, or choose a program that is one file.
   The default `secrets-paths` rule denies writes to those two folders and `~/.vault-token`.
-- **Pinned.** The proxy takes the program's SHA-256 at start and checks it before every
-  run: a program changed since is not run, and the value is not renewed. After you
-  update the tool, restart `openmoat proxy` (or `openmoat run`).
+- **Pinned.** At start the proxy reads the program once, takes the SHA-256 of what it
+  read and runs a private copy of those bytes from `secret-programs/` in OpenMoat's state
+  folder, never the file at the path. Before every run it checks the copy, the program
+  and the interpreter: if any changed, it is not run, and the value is not renewed.
+  After you update the tool, restart `openmoat proxy` (or `openmoat run`). A program
+  that looks for its own files beside the running executable, rather than beside the
+  path in `run`, does not find them.
 - **Where it starts.** In `/` (on Windows the Windows folder), never in the proxy's own
   folder: that is your project, where the agent writes, and a tool reads `.git`, tool
   shims and per-folder configuration from the folder it runs in.

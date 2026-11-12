@@ -80,7 +80,8 @@ fn an_unusable_answer_is_refused_without_quoting_it() {
 /// Stand-in programs (`stand.rs`).
 #[cfg(unix)]
 mod programs {
-    use std::path::Path;
+    use std::os::unix::fs::PermissionsExt as _;
+    use std::path::{Path, PathBuf};
     use std::time::Duration;
 
     use openmoat_core::Policy;
@@ -151,6 +152,32 @@ mod programs {
         assert!(!Path::new(&marker).exists(), "the planted python3 ran");
     }
 
+    /// Attack: the file is swapped between the hash and the start. What runs
+    /// is a private copy of the bytes that were hashed, checked again before
+    /// each run, and removed with the program.
+    #[test]
+    fn the_bytes_that_were_hashed_are_the_ones_that_run() {
+        let stand = Stand::new();
+        let path = stand.script("token", "echo \"$0\"");
+        let program = stand.program(&path, &stand.policy).unwrap();
+        let ran = PathBuf::from(program.fetch().unwrap().value.as_str());
+        let copies = std::fs::canonicalize(stand.state())
+            .unwrap()
+            .join("secret-programs");
+        assert_eq!(
+            std::fs::canonicalize(&ran).unwrap().parent(),
+            Some(copies.as_path())
+        );
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!((mode(&copies), mode(&ran)), (0o700, 0o700));
+        // A changed copy is not run.
+        std::fs::write(&ran, "#!/bin/sh\necho fake-planted-value-0000\n").unwrap();
+        let error = format!("{:#}", program.fetch().err().unwrap());
+        assert!(error.contains("private copy"), "{error}");
+        drop(program);
+        assert!(!ran.exists());
+    }
+
     #[test]
     fn a_program_the_agent_could_change_is_not_run() {
         let stand = Stand::new();
@@ -203,7 +230,10 @@ mod programs {
                 "control character",
             ),
         ] {
-            let program = stand.shell(&body);
+            let mut program = stand.shell(&body);
+            if name == "hangs" {
+                program = program.with_time_limit(Duration::from_secs(2));
+            }
             let error = format!("{:#}", program.fetch().err().unwrap());
             assert!(error.contains(why), "{name}: {error}");
             assert!(!error.contains(VALUE), "{name}: {error}");

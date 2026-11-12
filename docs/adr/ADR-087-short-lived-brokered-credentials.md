@@ -64,9 +64,20 @@ program, or name it, runs code as the person.
      files the person can write (Google Cloud's `gcloud`, a shell script that starts
      Python, which loads the SDK's modules) is outside what this check can hold, so the
      example is a tool that is one program file.
-   - **Pinned by digest.** The proxy takes the program's SHA-256 (and its interpreter's)
-     at start and compares them before every run; a changed program is not run and the
-     value is not renewed. It runs the resolved file, so re-pointing a link does nothing.
+   - **A deny rule is proof only outside what a sandbox grants.** Landlock cannot hold a
+     deny inside a folder it grants for writing, so a deny rule counts only for a path
+     outside the project and outside `openmoat run`'s write roots (its temp folder and
+     `--write` folders); inside them only root ownership counts. The standalone
+     `openmoat proxy` knows the project of the folder it was started in.
+   - **Pinned by digest, and the hashed bytes are what runs.** At start the proxy reads
+     the program once, hashes those bytes and writes them to a private copy in
+     `secret-programs/` under its state directory (an owner-only folder and file, which
+     `kernel-self` keeps from the agent); it runs that copy, never the file at the path,
+     which could be swapped between the hash and the start. Before every run it checks the
+     copy's digest, the program's at its path and the interpreter's; any change stops the
+     runs and the value is not renewed. The copy is removed when the proxy ends. A program
+     that finds its own files beside its executable (not by its path in `run`, which is
+     its `argv[0]`) does not find them from the copy.
    - **Where it starts.** In `/` (Windows: `%SystemRoot%`), not in the proxy's working
      folder, which is the agent's project: Git, tool shims and per-folder configuration
      there would let the agent run code through the program.

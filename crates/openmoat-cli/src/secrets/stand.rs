@@ -10,6 +10,12 @@ use openmoat_core::{Policy, SecretCommand};
 use super::Place;
 use super::command::Program;
 
+/// The tests' time limit. What runs is a fresh private copy of the program,
+/// and macOS checks a new program file the first time it starts, which takes
+/// a while when many tests start one at once; the tests of the limit itself
+/// set a shorter one.
+const LIMIT: Duration = Duration::from_secs(10);
+
 /// A folder beside the test binary: the system's temp folder is `/tmp` on
 /// Linux, where no command source may be.
 pub fn scratch() -> tempfile::TempDir {
@@ -54,6 +60,7 @@ impl Stand {
         Place {
             home: &self.root,
             state: self.state.path(),
+            writable: &[],
         }
     }
 
@@ -80,7 +87,7 @@ impl Stand {
         }
     }
 
-    /// `path --print` made ready under `policy`, with a two-second time limit.
+    /// `path --print` made ready under `policy`, with the tests' time limit.
     pub fn program(&self, path: &Path, policy: &Policy) -> anyhow::Result<Program> {
         let path = path.to_string_lossy();
         Program::prepare(
@@ -89,13 +96,11 @@ impl Stand {
             policy,
             &self.place(),
         )
-        .map(|p| p.with_time_limit(Duration::from_secs(2)))
+        .map(|p| p.with_time_limit(LIMIT))
     }
 
     /// `/bin/sh -c body --print`: a program only an administrator can change,
-    /// so no policy rule is needed. A script the test wrote is not run: a
-    /// file just written can still be open in a process another test started
-    /// meanwhile, and starting it then stalls.
+    /// so no policy rule is needed.
     pub fn shell(&self, body: &str) -> Program {
         self.shell_with(&Self::source(&["/bin/sh", "-c", body, "sh", "--print"]))
     }
@@ -105,6 +110,6 @@ impl Stand {
         let open = Policy::parse("version: 1\n").unwrap();
         Program::prepare("t", source, &open, &self.place())
             .unwrap()
-            .with_time_limit(Duration::from_secs(2))
+            .with_time_limit(LIMIT)
     }
 }

@@ -72,6 +72,7 @@ pub fn run(args: &ProxyArgs) -> Result<Code> {
         policy,
         context::eval_context(&home, None, None)?,
         None,
+        &[],
     )?;
     let listener = TcpListener::bind(listen).with_context(|| format!("listening on {listen}"))?;
     let addr = listener
@@ -367,11 +368,13 @@ impl Exit {
     /// that session alone and records under its id (`moat run`); without, it
     /// serves the sessions their hooks issued credentials to, and records what
     /// it serves without one under a `proxy-<ms>` session (`moat proxy`, ADR-044).
+    /// `granted` are the folders `moat run`'s sandbox lets the agent write.
     pub(super) fn open(
         home: &Home,
         policy: Policy,
         ctx: EvalContext,
         credential: Option<Credential>,
+        granted: &[String],
     ) -> Result<Self> {
         // `moat run` knows its project: the repository policy's deny rules
         // refuse hosts at its proxy too (its allow rules never widen it).
@@ -381,9 +384,11 @@ impl Exit {
             policy
         };
         CompiledPolicy::compile(&policy, &ctx)?;
+        let writable = secrets::writable(&ctx, granted);
         let place = secrets::Place {
             home: &ctx.home,
             state: home.root(),
+            writable: &writable,
         };
         let (broker, refresher) = secrets::broker(&policy, &place)?;
         let audit_path = home.audit_path();

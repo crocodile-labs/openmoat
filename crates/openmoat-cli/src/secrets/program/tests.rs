@@ -61,16 +61,19 @@ mod programs {
         let stand = Stand::new();
         let file = put(&stand, "sdk/bin/tool", "\x7fELF");
         let only_file = denying(std::slice::from_ref(&file));
-        let error = format!("{:#}", check(&file, &only_file, &stand.root).err().unwrap());
+        let error = format!(
+            "{:#}",
+            check(&file, &only_file, &stand.root, &[]).err().unwrap()
+        );
         assert!(error.contains("could be changed by the agent"), "{error}");
         // The highest open folder is named, as a rule for all below it.
         assert!(error.contains("\"~/sdk/**\""), "{error}");
         // The program's own folder alone is not enough either.
         let bin = denying(&[format!("{}/sdk/bin/**", stand.root)]);
-        let error = format!("{:#}", check(&file, &bin, &stand.root).err().unwrap());
+        let error = format!("{:#}", check(&file, &bin, &stand.root, &[]).err().unwrap());
         assert!(error.contains("\"~/sdk/**\""), "{error}");
         let all = denying(&[format!("{}/sdk/**", stand.root)]);
-        let checked = check(&file, &all, &stand.root).unwrap();
+        let checked = check(&file, &all, &stand.root, &[]).unwrap();
         assert_eq!(checked.path, std::fs::canonicalize(&file).unwrap());
         assert!(checked.interpreter.is_none());
     }
@@ -84,14 +87,14 @@ mod programs {
         let env = put(&stand, "env-script", "#!/usr/bin/env python3\nprint(1)\n");
         let error = format!(
             "{:#}",
-            check(&env, &stand.policy, &stand.root).err().unwrap()
+            check(&env, &stand.policy, &stand.root, &[]).err().unwrap()
         );
         assert!(error.contains("/usr/bin/env"), "{error}");
         assert!(error.contains("search path"), "{error}");
         let bare = put(&stand, "bare-script", "#! python3\n");
         let error = format!(
             "{:#}",
-            check(&bare, &stand.policy, &stand.root).err().unwrap()
+            check(&bare, &stand.policy, &stand.root, &[]).err().unwrap()
         );
         assert!(error.contains("full path"), "{error}");
         // An interpreter outside every deny rule, in a folder of the person's.
@@ -106,7 +109,9 @@ mod programs {
         );
         let error = format!(
             "{:#}",
-            check(&script, &stand.policy, &stand.root).err().unwrap()
+            check(&script, &stand.policy, &stand.root, &[])
+                .err()
+                .unwrap()
         );
         assert!(error.contains("the interpreter of"), "{error}");
         assert!(error.contains("could be changed by the agent"), "{error}");
@@ -115,15 +120,48 @@ mod programs {
         let outer = put(&stand, "outer", &format!("#!{inner}\n"));
         let error = format!(
             "{:#}",
-            check(&outer, &stand.policy, &stand.root).err().unwrap()
+            check(&outer, &stand.policy, &stand.root, &[])
+                .err()
+                .unwrap()
         );
         assert!(error.contains("a script itself"), "{error}");
         // `/bin/sh` is kept by the system: the script passes, pinned with it.
         let ok = put(&stand, "ok", "#!/bin/sh\necho x\n");
-        let checked = check(&ok, &stand.policy, &stand.root).unwrap();
+        let checked = check(&ok, &stand.policy, &stand.root, &[]).unwrap();
         assert_eq!(
             checked.interpreter,
             Some(std::fs::canonicalize("/bin/sh").unwrap())
         );
+    }
+
+    /// Attack: the program sits in the project, which the agent's sandbox
+    /// lets it write. Landlock cannot hold a deny rule inside a folder it
+    /// grants, so the rule is no proof there; only root ownership is.
+    #[test]
+    fn a_deny_rule_inside_a_folder_the_sandbox_grants_is_no_proof() {
+        let stand = Stand::new();
+        let file = put(&stand, "project/tools/token", "\x7fELF");
+        let project = format!("{}/project", stand.root);
+        assert!(check(&file, &stand.policy, &stand.root, &[]).is_ok());
+        for granted in [project.clone(), format!("{project}/tools")] {
+            let error = format!(
+                "{:#}",
+                check(
+                    &file,
+                    &stand.policy,
+                    &stand.root,
+                    std::slice::from_ref(&granted)
+                )
+                .err()
+                .unwrap()
+            );
+            assert!(error.contains("could be changed by the agent"), "{error}");
+            assert!(error.contains(&format!("is in {granted}")), "{error}");
+        }
+        // A folder beside it with a longer name is not inside it.
+        let beside = [format!("{}/proj", stand.root)];
+        assert!(check(&file, &stand.policy, &stand.root, &beside).is_ok());
+        // A system program in a granted folder still passes on its ownership.
+        assert!(check("/bin/sh", &stand.policy, &stand.root, &["/bin".to_owned()]).is_ok());
     }
 }
