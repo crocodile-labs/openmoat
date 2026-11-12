@@ -1,2 +1,0 @@
-### Changed
-- **Breaking** `openmoat-core`: `SecretSource` has a `Command` variant (`SecretCommand`), so an exhaustive `match` on it needs an arm; `SecretSource::proxy_only` and `describe`, and `lint::write_denied`, are new. `openmoat-proxy` adds `Broker::rotation`, `Rotation` and `RULE_SECRET_EXPIRED`; `openmoat-audit` adds `Store::set_secrets` ([#790](https://github.com/crocodile-labs/openmoat/pull/790)).
