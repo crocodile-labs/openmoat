@@ -134,9 +134,14 @@ impl Program {
         &self.id
     }
 
-    /// How long before the value expires a new one is asked for.
+    /// How long before the value expires a new one is asked for, at most.
     pub fn refresh_before(&self) -> Duration {
         self.refresh_before
+    }
+
+    /// How long one run may take.
+    pub fn time_limit(&self) -> Duration {
+        self.time_limit
     }
 
     /// Run the program and read its answer. Refused when the program file

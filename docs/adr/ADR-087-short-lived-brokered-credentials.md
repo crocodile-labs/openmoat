@@ -98,9 +98,16 @@ program, or name it, runs code as the person.
      `lifetime` wins. No error quotes the output.
    - Values are held in memory only (zeroized on drop), never written to disk or to the
      audit log.
-2. **Refresh outside the request path.** A thread of the proxy runs each program once the
-   value is within `refresh_before` of its deadline, and again every 15 seconds after a
-   failure, which it reports on standard error with the secret's id and the reason. Before
+2. **Refresh outside the request path.** Each secret has a thread of its own, so a slow
+   program does not hold up another secret's renewal. It runs the program once the value
+   is within its lead time of the deadline, counted from the lifetime the value actually
+   got (the shorter of `lifetime` and the expiry the program printed): `refresh_before`,
+   or a fifth of that lifetime when that is shorter, and never less than twice the time
+   limit (60 seconds). A program that answered is not run again within 60 seconds, so a
+   source whose program reports a shorter expiry than `lifetime` (an hour for a 12-hour
+   `lifetime`) is renewed about every 48 minutes, not on every look. A failed run is
+   tried again after 15 seconds, and reported on standard error with the secret's id and
+   the reason. Before
    a renewed value is used, the audit writer is given masks for it (the last five values
    of each secret, and the fixed ones). The broker keeps the four values a secret replaced
    for its leak and echo checks: a replaced token may still be valid.

@@ -307,7 +307,7 @@ macOS a `file` source is denied rather than masked. `openmoat sandbox show` and
 
 A token that lives for minutes is worth little once its time is up. A `command` source
 names a program you chose that prints such a token; `openmoat proxy` runs it, uses the
-value for at most `lifetime`, and runs it again `refresh_before` the end
+value for at most `lifetime`, and runs it again before the value ends
 ([ADR-087](adr/ADR-087-short-lived-brokered-credentials.md)). This example uses
 HashiCorp Vault's CLI, one program file, to make a child token that lives 15 minutes; it
 is an example only, so check your tool's own command and the header its API expects:
@@ -399,6 +399,12 @@ that an administrator installed.
   (Unix seconds). The value is used until the earlier of `lifetime` and that expiry; an
   answer that expires in less than 10 seconds is refused. An empty value, a control
   character, other JSON keys, more than one line or non-UTF-8 output are refused.
+- **When it runs again.** Before the value's own end: `refresh_before` ahead of it, or a
+  fifth of the value's lifetime ahead when that is shorter (a token that says it lives an
+  hour, from a source with `lifetime: 12h`, is renewed 12 minutes before its hour is up),
+  and never less than a minute ahead. A program that answered is not run again within a
+  minute. Each secret is renewed on its own thread, so a slow program does not delay
+  another.
 - **When it fails.** At start, `openmoat proxy` does not start (exit 64), as for any
   source. Later, the proxy says so on its standard error (the secret's id and the
   reason, never the output) and runs it again every 15 seconds. Until the old value
