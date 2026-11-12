@@ -38,16 +38,20 @@ fn writes_a_hook_file_of_its_own_with_a_command_per_shell() {
         Outcome::Installed
     );
     assert!(cfg.settings_path.ends_with("hooks/openmoat.json"));
+    // `postToolUse` reports what a call returned (ADR-063).
+    let entry = |timeout: u64| {
+        json!([{
+            "type": "command",
+            "bash": r"'/Users/o'\''neil/bin/openmoat' guard --host copilot-cli --home /h/.moat",
+            "powershell": "& '/Users/o''neil/bin/openmoat' guard --host copilot-cli --home /h/.moat",
+            "timeoutSec": timeout,
+        }])
+    };
     assert_eq!(
         root(&cfg),
         json!({
             "version": 1,
-            "hooks": {"preToolUse": [{
-                "type": "command",
-                "bash": r"'/Users/o'\''neil/bin/openmoat' guard --host copilot-cli --home /h/.moat",
-                "powershell": "& '/Users/o''neil/bin/openmoat' guard --host copilot-cli --home /h/.moat",
-                "timeoutSec": 600,
-            }]},
+            "hooks": {"preToolUse": entry(600), "postToolUse": entry(60)},
         })
     );
     assert_eq!(state(&cfg, binary), HookState::Installed);
