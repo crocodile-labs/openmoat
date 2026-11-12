@@ -89,7 +89,7 @@ fn doctor_and_sandbox_show_name_the_kernels_landlock_abi() {
     let doctor = sb.moat(&["doctor", "--verbose"]);
     // Below ABI 4, or without Landlock, `openmoat run` refuses to start
     // (`confined::ran`). CI kernels have it, so there the test must run.
-    if !abi["kernel"]["abi"].as_u64().is_some_and(|n| n >= 4) {
+    if abi["kernel"]["abi"].as_u64().is_none_or(|n| n < 4) {
         assert!(
             std::env::var_os("CI").is_none(),
             "CI's kernel must have Landlock ABI 4: {abi}"
