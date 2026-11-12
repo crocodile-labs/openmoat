@@ -134,6 +134,23 @@ mod programs {
         );
     }
 
+    /// Attack: the agent writes a repository policy whose deny rule covers a
+    /// program it put in place; under `openmoat run` that rule is merged into
+    /// the proxy's policy. Only the person's own rules count.
+    #[test]
+    fn a_repository_deny_rule_is_no_proof() {
+        let stand = Stand::new();
+        let file = put(&stand, "token", "\x7fELF");
+        assert!(check(&file, &stand.policy, &stand.root, &[]).is_ok());
+        let mut merged = stand.policy.clone();
+        merged.deny[0].id = format!("{}credential-programs", openmoat_core::REPO_RULE_PREFIX);
+        let error = format!(
+            "{:#}",
+            check(&file, &merged, &stand.root, &[]).err().unwrap()
+        );
+        assert!(error.contains("could be changed by the agent"), "{error}");
+    }
+
     /// Attack: the program sits in the project, which the agent's sandbox
     /// lets it write. Landlock cannot hold a deny rule inside a folder it
     /// grants, so the rule is no proof there; only root ownership is.

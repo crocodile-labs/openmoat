@@ -5,7 +5,8 @@
 //! run only when the path the policy names, the file it resolves to and every
 //! folder above that file (up to the person's home) are each
 //!
-//! - kept from the agent by the policy: a deny `fs.write` rule covers them,
+//! - kept from the agent by the person's own policy (never a repository's,
+//!   which the agent can write): a deny `fs.write` rule covers them,
 //!   a folder together with everything in it (`openmoat_core::lint::write_denied`), or
 //! - kept from every user but an administrator by the system: on Unix owned
 //!   by root and writable by no group or other user.
@@ -20,7 +21,7 @@ use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail, ensure};
-use openmoat_core::{Policy, SecretCommand};
+use openmoat_core::{Policy, REPO_RULE_PREFIX, SecretCommand};
 
 /// How much of a file is read for a `#!` line.
 const SHEBANG_MAX: u64 = 512;
@@ -48,8 +49,18 @@ struct Rules<'a> {
 /// agent cannot change. `home` is the person's home in slash form; `writable`
 /// the folders the agent's sandboxes let it write.
 pub fn check(written: &str, policy: &Policy, home: &str, writable: &[String]) -> Result<Checked> {
+    // The person's own rules only: a repository's are the agent's to write.
+    let own = Policy {
+        deny: policy
+            .deny
+            .iter()
+            .filter(|g| !g.id.starts_with(REPO_RULE_PREFIX))
+            .cloned()
+            .collect(),
+        ..policy.clone()
+    };
     let rules = Rules {
-        policy,
+        policy: &own,
         home: home.trim_end_matches('/'),
         writable,
     };

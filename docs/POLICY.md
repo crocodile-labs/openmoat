@@ -353,7 +353,9 @@ that an administrator installed.
 - **Who can change the program.** It runs as you, outside every sandbox, so the agent must
   not be able to change it. `openmoat proxy` runs it only when the path in `run`, the file
   it resolves to, and every folder above that file up to your home are each covered by a
-  deny `fs.write` rule (a folder with everything in it, as `/opt/homebrew/**` covers), or
+  deny `fs.write` rule of your own policy (a folder with everything in it, as
+  `/opt/homebrew/**` covers; a repository policy's rules never count, since the agent
+  can write one), or
   only an administrator can change them (on macOS and Linux: they belong to root and no
   group or other user may write them, as `/usr/bin` does). Otherwise it refuses to start
   and names the rule to add; `openmoat policy lint` warns when no rule covers the program.

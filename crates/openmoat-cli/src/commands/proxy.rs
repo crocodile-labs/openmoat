@@ -376,6 +376,9 @@ impl Exit {
         credential: Option<Credential>,
         granted: &[String],
     ) -> Result<Self> {
+        // Secrets, and the rules that let a `command` program run, come from
+        // the person's own policy: a repository's is the agent's to write.
+        let user = policy.clone();
         // `moat run` knows its project: the repository policy's deny rules
         // refuse hosts at its proxy too (its allow rules never widen it).
         let policy = if credential.is_some() {
@@ -390,7 +393,7 @@ impl Exit {
             state: home.root(),
             writable: &writable,
         };
-        let (broker, refresher) = secrets::broker(&policy, &place)?;
+        let (broker, refresher) = secrets::broker(&user, &place)?;
         let audit_path = home.audit_path();
         let store = Store::open_existing(&audit_path)
             .with_context(|| format!("opening {}", audit_path.display()))?

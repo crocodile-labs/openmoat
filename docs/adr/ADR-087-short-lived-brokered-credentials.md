@@ -122,7 +122,11 @@ program, or name it, runs code as the person.
 5. **Agents cannot add or run sources.** `secrets:` is read from the person's policy only:
    a repository policy and a signed pack cannot declare one (their schema has no
    `secrets:`), `kernel-self` denies the agent writing the policy, and the lock check stops
-   the proxy if the policy changed. `openmoat guard` never runs a `command` source and does
+   the proxy if the policy changed. The deny rules that let a program run are the person's
+   own too: `openmoat run`'s proxy merges a repository policy's deny rules for its hosts,
+   but builds the broker from the person's policy alone, and the program check skips any
+   rule from a repository (`repo:` ids), which the agent could have written to vouch for a
+   program it planted. `openmoat guard` never runs a `command` source and does
    not mask its value; audit delivery refuses one as a key source; Claude Code's broker is
    never given one (`sandbox show` and `doctor` list it as handled by `openmoat proxy`).
 
