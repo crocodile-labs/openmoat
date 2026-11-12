@@ -1,6 +1,6 @@
 # ADR-063: Injected input for more agents, and safe normalised links
 
-Status: proposed · Date: 2026-11-06 · Builds on ADR-020, ADR-029, ADR-057 and ADR-058
+Status: proposed; plan steps 1 to 6 built (step 4 to 6: Codex, Gemini CLI, GitHub Copilot CLI, from the payloads the weekly latest-agents run 42853181916 recorded) · Date: 2026-11-06 · Builds on ADR-020, ADR-029, ADR-057 and ADR-058
 
 ## Context
 
@@ -27,9 +27,9 @@ What the repository shows today about each host's after-call event:
 | Claude Code | `PostToolUse` (`tool_response`) | fixtures `post-tool-use-{bash,mcp,webfetch}.json`, parser | installed (ADR-057) | no; 60 s |
 | Continue CLI | Claude Code's `PostToolUse` | via Claude Code | inherits | as Claude Code |
 | Cline | `PostToolUse` (`hookName: "tool_result"`, `tool_result`) | fixture `cline/fixtures/tool_result.json`; parser returns `WrongEvent` | not installed | unverified |
-| Codex | `PostToolUse` | named in ADR-057 only, no fixture | not installed | unverified |
-| Gemini CLI | `AfterTool` | named in ADR-057 only, no fixture | not installed | unverified |
-| GitHub Copilot CLI | `postToolUse` | named in ADR-057 only, no fixture | not installed | unverified |
+| Codex | `PostToolUse` | named in ADR-057 only, no fixture (since: fixture from run 42853181916) | not installed (since: installed, step 4) | unverified (since: waits, run 42853181916) |
+| Gemini CLI | `AfterTool` | named in ADR-057 only, no fixture (since: fixture from run 42853181916) | not installed (since: installed, step 5) | unverified (since: not timed; the answer can replace the result) |
+| GitHub Copilot CLI | `postToolUse` | named in ADR-057 only, no fixture (since: fixture from run 42853181916) | not installed (since: installed, step 6) | unverified (since: waits, run 42853181916) |
 | Cursor | `afterShellExecution`, `afterMCPExecution` | named in ADR-057 only, no fixture | not installed | unverified |
 | goose | `PostToolUse` (plugin `hooks.json`) | named in HOST.md only, no fixture | not installed | unverified |
 | Hermes Agent | `post_tool_call` | named in HOST.md only, no fixture | not installed | unverified |
@@ -161,9 +161,16 @@ real release (the latest-agents job records one per host before its PR) waits fo
 2. `host(cline)`: parse `tool_result` (fixture exists), install the `PostToolUse` script.
 3. `feat(core)`: host and command normalisation for injected-input, with unit and
    conformance fixtures. No host change.
-4. `host(codex)`: `PostToolUse`, after a captured payload.
-5. `host(gemini-cli)`: `AfterTool`.
-6. `host(copilot-cli)`: `postToolUse`.
+4. `host(codex)`: `PostToolUse`, after a captured payload. Built: the latest-agents run
+   42853181916 (2026-11-10) recorded `tool_response` as a string for a shell call, and
+   that Codex waits for the hook.
+5. `host(gemini-cli)`: `AfterTool`. Built from the same run: `tool_response.llmContent`
+   and `tool_response.returnDisplay`; whether Gemini CLI waits could not be timed there
+   (its model is the agent's own test double), the hooks reference says the answer can
+   replace the result.
+6. `host(copilot-cli)`: `postToolUse`. Built from the same run:
+   `toolResult.textResultForLlm` and `toolResult.resultType`, no event name in the
+   payload (a `toolResult` marks it), and Copilot waits for the hook.
 7. `host(cursor)`: `afterShellExecution`, `afterMCPExecution`.
 8. `host(goose)` and `host(hermes)`: `PostToolUse`, `post_tool_call`.
 9. `host(opencode)`, `host(pi)`, `host(openclaw)`: plugin handlers, one PR each.
@@ -172,7 +179,9 @@ real release (the latest-agents job records one per host before its PR) waits fo
 ## Open questions
 
 1. Which hosts block the agent on an after-call hook, and for how long? Unverified for
-   every host but Claude Code; the CI capture should record it.
+   every host but Claude Code; the CI capture should record it. Recorded since: Codex
+   and GitHub Copilot CLI wait for it (run 42853181916); Gemini CLI's wait could not be
+   timed there. How long each process start costs is step 10's.
 2. Should a host whose after-call event is blocking and slow be left out rather than add
    latency to every matched call?
 3. Should the gateway's fingerprints be kept for sessions whose agent also reports MCP

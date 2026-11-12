@@ -198,7 +198,7 @@ Each agent's gaps and the reasons are in
 
 - **Some agents run a call when the hook fails.** Codex, and Claude Code before
   2.1.295, run a call unchecked if `openmoat` is missing. Codex also skips untrusted
-  hooks: after `openmoat init`, open Codex, run `/hooks` and trust the OpenMoat hook;
+  hooks: after `openmoat init`, open Codex, run `/hooks` and trust both OpenMoat hooks;
   `status` and `doctor` report missing trust and broken legacy entries. GitHub Copilot
   CLI and Gemini CLI run a call whose hook times out. OpenClaw, pi and OpenCode run calls
   unchecked when they do not load OpenMoat's plugin or extension (OpenCode 1 with
@@ -300,22 +300,24 @@ rest of each agent's protection on each OS, with the runs that back them.
   first calls may be refused.** OpenMoat works out the session's taint from its earlier
   calls again under the new version, policy or project, and a call it cannot decide in
   time is denied (`kernel-error`) rather than judged on part of the session. What it read
-  is kept, so each try reads on; the agent's `PostToolUse` hook (Claude Code, the Cline
-  CLI) reads on after a call ran too. A move to another folder of the same project
+  is kept, so each try reads on; the agent's after-call hook (Claude Code, Codex, Gemini CLI,
+  GitHub Copilot CLI, the Cline CLI) reads on after a call ran too. A move to another folder of the same project
   starts over only when some of the session's calls were recorded without a working
   directory. `openmoat doctor` lists these denials of the last day
   ([ARCHITECTURE.md, "Session cache"](ARCHITECTURE.md)).
 
-- **Injected input is linked only with Claude Code, the Cline CLI and wrapped MCP
-  servers, and only for the same request.** Other agents report no call output (their
+- **Injected input is linked only with Claude Code, Codex, Gemini CLI, GitHub Copilot
+  CLI, the Cline CLI and wrapped MCP servers, and only for the same request.** Other
+  agents report no call output (their
   wrapped MCP servers' results are read by the gateway). Another spelling of a planted
   address, a subdomain of a planted URL host and a planted command run through a wrapper
   are linked; a host by another name, a reworded command or a relative path is not
-  ([POLICY.md §4.1.2](POLICY.md#412-injected-input)). Only the output of `Bash`,
-  `WebFetch`, `WebSearch`, MCP resource reads and MCP tools is read, each kept up to fixed
+  ([POLICY.md §4.1.2](POLICY.md#412-injected-input)). Only the output of the shell,
+  fetches, searches, MCP resource reads and MCP tools is read (every tool's on Copilot), each kept up to fixed
   bounds, so a page full of decoys can push a planted host out. Fetches, searches and MCP
   calls themselves are not checked against it, and an install without the
-  `PostToolUse` entry (`openmoat init` adds it) links nothing
+  after-call entry (`openmoat init` adds it; Codex runs it once trusted in `/hooks`)
+  links nothing
   ([ADR-057](adr/ADR-057-injected-input-and-instruction-files.md)).
 - **Sending what a session collected is recorded, not stopped.** A send after the session
   read many files outside the project, or packed them into an archive or an encoding,

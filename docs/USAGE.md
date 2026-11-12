@@ -134,7 +134,7 @@ and never with `NO_COLOR` set. For example:
 OpenMoat 0.15.0 · doctor
 
 Needs your attention (2)
-  ! Codex     hook installed but not trusted → open Codex and trust OpenMoat's hook in /hooks
+  ! Codex     hook installed but not trusted → open Codex and trust OpenMoat's hooks in /hooks
   ! OpenClaw  2026.5.2 has 5 security advisories; upgrade to 2026.8.1 or later
 
 Agents
@@ -338,7 +338,9 @@ write, whose result the hook cannot see, needs review each time. Under
 connections; a new run starts clean. [POLICY.md](POLICY.md) §4.1 has the full rules and
 the list of protected files.
 
-With Claude Code, OpenMoat also follows what the untrusted content said (ADR-057).
+With Claude Code, Codex, Gemini CLI, GitHub Copilot CLI and the Cline CLI, OpenMoat also
+follows what the untrusted content said (ADR-057, ADR-063): their after-call hook reports
+what a call returned.
 A later shell command or write that uses a host, a path outside the project, or a command
 from a page, an issue body (`gh issue view`) or an MCP result needs review, with rule
 `injected-input`, and the reason names where it came from:
@@ -351,7 +353,9 @@ may follow an instruction planted there
 
 What the policy allows on its own (`cargo build`, a project file, `git push`, the
 registries) stays allowed, and fetches and searches are your agent's prompt as before.
-After upgrading, run `openmoat init` once to add the `PostToolUse` hook entry this needs.
+After upgrading, run `openmoat init` once to add the after-call hook entry this needs
+(`PostToolUse`; Gemini CLI's `AfterTool`, Copilot's `postToolUse`); Codex then runs it
+only once you trust it in `/hooks`.
 `openmoat doctor` reports the hook as needing `openmoat init` until then.
 OpenMoat keeps fingerprints of the output, not the text ([POLICY.md](POLICY.md) §4.1.2).
 
@@ -1042,7 +1046,7 @@ these takes one command in your own terminal (agents are denied all of them):
   `review` is Copilot's own prompt; in autopilot Copilot turns it into a deny, which
   `openmoat allow --last` approves.
 - **Codex runs no checks**: Codex runs a new or changed hook only once you trust it. After
-  `openmoat init`, open Codex, run `/hooks` and trust the OpenMoat hook. Repeat after an
+  `openmoat init`, open Codex, run `/hooks` and trust both OpenMoat hooks. Repeat after an
   upgrade that rewrites the entry. `status` and `doctor` fail for an args-style legacy
   hook (repair with `openmoat init`), and only warn about an installed but not trusted
   hook: the internal hash mirror never blocks calls or commands. `policy
