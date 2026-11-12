@@ -9,11 +9,12 @@ Every fact here comes from the official documentation
 [settings](https://antigravity.google/docs/settings?tab=cli),
 [install](https://antigravity.google/docs/install?tab=cli),
 [CLI reference](https://antigravity.google/docs/cli/reference)), read 2026-11-09; those
-pages state no version. **A preview host.** In the weekly `latest agents` job of
-2026-11-10 (run 42922045984), with agy 1.5.5 (the version the installer's manifest named
-that day), the fake API received tool results for both `run_command` calls of the turn,
-and neither OpenMoat's `PreToolUse` entry nor the job's own `PostToolUse` capture, both
-in `~/.gemini/config/hooks.json`, started; see "The first real run" below.
+pages state no version. In the weekly `latest agents` job of 2026-11-12
+([run 43254846914](https://github.com/crocodile-labs/openmoat/actions/runs/43254846914)),
+a real `agy` on Linux (`ubuntu-latest`) and macOS (`macos-15`) ran OpenMoat's
+`PreToolUse` hook and the call it denied was blocked, and with the hook binary missing
+and with it exiting 1 without output, the call was blocked both times; see "Real runs"
+below.
 Implementation: [`antigravity_cli.rs`](../antigravity_cli.rs) and [`doc.rs`](doc.rs); if
 they disagree, the code wins.
 
@@ -86,14 +87,30 @@ The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
 ## When the hook fails
 
-Not documented. What Antigravity CLI does when the hook cannot start, crashes, times out,
-exits non-zero or prints bad JSON is not stated, and no fail-closed setting is
-documented, so OpenMoat assumes the call runs and reports `hook only` with a limit line.
-Every error `openmoat guard` can catch answers a `deny` and exits 2 first. The timeout is
-written at 600 s so the guard's own 30 s budget always answers before the host's documented
-30 s default would.
+The documentation does not say what Antigravity CLI does when the hook cannot start,
+crashes, times out, exits non-zero or prints bad JSON, and documents no fail-closed
+setting. The weekly job tries two of these under a real `agy` on Linux and macOS: the
+hook binary gone, and a stand-in that exits 1 with nothing printed. In run 43254846914
+(2026-11-12) `agy` blocked the call both times on both systems, so OpenMoat records
+"cannot start, crashes or exits non-zero" as `blocks`, and the job fails if a later `agy`
+runs the call. A hook that times out is not tried there (waiting out the limit would
+outlast the job), and output that is not its JSON is not tried either: OpenMoat assumes
+the call runs in both cases, and `openmoat doctor` names the timeout. Every error `openmoat guard`
+can catch answers a `deny` and exits 2 first. The timeout is written at 600 s so the
+guard's own 30 s budget always answers before the host's documented 30 s default would.
 
-## The first real run
+## Real runs
+
+On 2026-11-12, in run 43254846914 of the weekly `latest agents` job, a headless
+`agy -p "run it" --dangerously-skip-permissions` turn against the fake Gemini API on
+`ubuntu-latest` and `macos-15` started OpenMoat's `PreToolUse` hook from
+`~/.gemini/config/hooks.json`: the audit log holds its `deny` (`secrets-paths`) of the
+job's `run_command` call, which reads a planted key, and the key's text is not in `agy`'s
+output. The probe entry beside OpenMoat's saw `SessionStart`, `PreInvocation`,
+`PreToolUse` and `PostToolUse`, and `agy` waited for the `PostToolUse` hook before its
+next model request. The runs before it, below, are kept for what they showed.
+
+### The first runs
 
 The weekly job installs `agy` with Google's installer
 (<https://antigravity.google/cli/install.sh>), which takes the version from its manifest
@@ -118,16 +135,19 @@ What is left: hooks are not run under `-p`, under `--dangerously-skip-permission
 in a `GEMINI_API_KEY` session (1.4.7 fixed "skills, rules, custom agents, plugins, plugin
 MCP servers, and hooks not loading" for Application Default Credentials sign-ins, so
 what `agy` loads has depended on the sign-in before); or `*` is compiled as a regular
-expression after all. None of these is documented. The job now records what tells them
+expression after all. None of these is documented. The job then recorded what tells them
 apart (`scripts/ci/latest-agents/agy_probe.py`, agy's `--log-file`, `agy -p /hooks`, the
-files `agy` opens, what each tool result said, and a second run without the flag), and
-`openmoat status`, `doctor` and the README show Antigravity CLI as a preview host until
-a run shows the hook deciding a call.
+files `agy` opens, what each tool result said, and a second run without the flag). Run
+43151268400 answered it: `agy` loaded the hook file (its `SessionStart` and
+`PreInvocation` hooks ran, and `/hooks` listed OpenMoat's entry as enabled), but refused
+the fake model's `run_command` call in its own tool validation (`missing properties
+'toolSummary', 'WaitMsBeforeAsync'`) before any `PreToolUse` hook could run. With those
+arguments sent, the hook decides the call (above).
 
 ## Known gaps
 
-- **Preview host.** Fixtures are documented shapes, not captures, and in the one real
-  run no hook started (above).
+- Fixtures are documented shapes, not captures: the weekly job copies the real payloads
+  into its artefact, but none is committed here yet.
 - MCP and subagent calls: whether hooks fire for them is not documented; the eager MCP
   tool name and the review of a subagent start are the safe reading of that silence.
 - Injected input (ADR-057, ADR-063): the documented `PostToolUse` payload has `toolCall`,

@@ -34,7 +34,7 @@ claim more than the tests show (ADR-079). `openmoat doctor --verbose` points her
 | Hermes Agent | hook: preview<br>own sandbox: none<br>`openmoat run`: Isolated | hook: preview<br>own sandbox: none<br>`openmoat run`: Lightweight | hook: preview<br>own sandbox: none<br>`openmoat run`: none |
 | Cline CLI | hook: protected<br>own sandbox: none<br>`openmoat run`: Isolated | hook: protected<br>own sandbox: none<br>`openmoat run`: Lightweight | hook: preview<br>own sandbox: none<br>`openmoat run`: none |
 | goose | hook: protected<br>own sandbox: none<br>`openmoat run`: Isolated | hook: protected<br>own sandbox: none<br>`openmoat run`: Lightweight | hook: preview<br>own sandbox: none<br>`openmoat run`: none |
-| Antigravity CLI | hook: preview<br>own sandbox: none<br>`openmoat run`: Isolated | hook: preview<br>own sandbox: none<br>`openmoat run`: Lightweight | hook: preview<br>own sandbox: none<br>`openmoat run`: none |
+| Antigravity CLI | hook: protected<br>own sandbox: none<br>`openmoat run`: Isolated | hook: protected<br>own sandbox: none<br>`openmoat run`: Lightweight | hook: preview<br>own sandbox: none<br>`openmoat run`: none |
 | Continue CLI | hook: none<br>own sandbox: none<br>`openmoat run`: none | hook: none<br>own sandbox: none<br>`openmoat run`: none | hook: none<br>own sandbox: none<br>`openmoat run`: none |
 <!-- /generated -->
 
@@ -83,9 +83,9 @@ for the variable list).
 | goose | Linux | protected | cannot start, crashes or exits non-zero: blocks the call; times out (after 60 s): blocks the call | none | Isolated (Lightweight where bubblewrap cannot run): `openmoat run --isolate --write ~/.local/share/goose --write ~/.local/state/goose -- goose` | pinned by `openmoat init`, which names its stdio servers and does not rewrite its file; a server not wrapped runs its command before any check | its own login (`~/.config/goose/secrets.yaml`), not another agent's; every inherited variable but a brokered secret, or under `require.run: full-boundary` only the base list and `GOOSE_PROVIDER`, `GOOSE_MODEL`, `GOOSE_PROVIDER__API_KEY`, `GOOSE_PATH_ROOT` | [evidence](#goose) |
 | goose | macOS | protected | cannot start, crashes or exits non-zero: blocks the call; times out (after 60 s): blocks the call | none | Lightweight (macOS 13 or later): `openmoat run --write ~/.local/share/goose --write ~/.local/state/goose -- goose` | pinned by `openmoat init`, which names its stdio servers and does not rewrite its file; a server not wrapped runs its command before any check | its own login (`~/.config/goose/secrets.yaml`), not another agent's; every inherited variable but a brokered secret, or under `require.run: full-boundary` only the base list and `GOOSE_PROVIDER`, `GOOSE_MODEL`, `GOOSE_PROVIDER__API_KEY`, `GOOSE_PATH_ROOT` | [evidence](#goose) |
 | goose | Windows | installed by `openmoat init`; no evidence yet | cannot start, crashes or exits non-zero: blocks the call; times out (after 60 s): blocks the call; no evidence yet | none | none: `openmoat run` refuses on Windows, where OpenMoat generates no OS sandbox | pinned by `openmoat init`, which names its stdio servers and does not rewrite its file; a server not wrapped runs its command before any check | — (no `openmoat run`) | [evidence](#goose) |
-| Antigravity CLI | Linux | installed by `openmoat init`; no evidence yet | cannot start, crashes or exits non-zero: not documented; assumed to run the call; times out (after 600 s): not documented; assumed to run the call; no evidence yet | none | Isolated (Lightweight where bubblewrap cannot run): `openmoat run --isolate --write ~/.gemini/antigravity-cli -- agy` | pinned by `openmoat init`, which offers to wrap its stdio servers: a wrapped one is checked before it starts, in the OS sandbox; a project's (`.agents/mcp_config.json`) are held until accepted, never wrapped; a server not wrapped runs its command before any check; no evidence yet | its own login (`~/.gemini/antigravity/mcp_oauth_tokens.json`), not another agent's; every inherited variable but a brokered secret, or under `require.run: full-boundary` only the base list and `HOME` | [evidence](#antigravity-cli) |
-| Antigravity CLI | macOS | installed by `openmoat init`; no evidence yet | cannot start, crashes or exits non-zero: not documented; assumed to run the call; times out (after 600 s): not documented; assumed to run the call; no evidence yet | none | Lightweight (macOS 13 or later): `openmoat run --write ~/.gemini/antigravity-cli -- agy` | pinned by `openmoat init`, which offers to wrap its stdio servers: a wrapped one is checked before it starts, in the OS sandbox; a project's (`.agents/mcp_config.json`) are held until accepted, never wrapped; a server not wrapped runs its command before any check; no evidence yet | its own login (`~/.gemini/antigravity/mcp_oauth_tokens.json`), not another agent's; every inherited variable but a brokered secret, or under `require.run: full-boundary` only the base list and `HOME` | [evidence](#antigravity-cli) |
-| Antigravity CLI | Windows | installed by `openmoat init`; no evidence yet | cannot start, crashes or exits non-zero: not documented; assumed to run the call; times out (after 600 s): not documented; assumed to run the call; no evidence yet | none | none: `openmoat run` refuses on Windows, where OpenMoat generates no OS sandbox | pinned by `openmoat init`, which offers to wrap its stdio servers: a wrapped one is checked before it starts, with your permissions; a project's (`.agents/mcp_config.json`) are held until accepted, never wrapped; a server not wrapped runs its command before any check; no evidence yet | — (no `openmoat run`) | [evidence](#antigravity-cli) |
+| Antigravity CLI | Linux | protected | cannot start, crashes or exits non-zero: blocks the call; times out (after 600 s): not documented; assumed to run the call | none | Isolated (Lightweight where bubblewrap cannot run): `openmoat run --isolate --write ~/.gemini/antigravity-cli -- agy` | pinned by `openmoat init`, which offers to wrap its stdio servers: a wrapped one is checked before it starts, in the OS sandbox; a project's (`.agents/mcp_config.json`) are held until accepted, never wrapped; a server not wrapped runs its command before any check; no evidence yet | its own login (`~/.gemini/antigravity/mcp_oauth_tokens.json`), not another agent's; every inherited variable but a brokered secret, or under `require.run: full-boundary` only the base list and `HOME` | [evidence](#antigravity-cli) |
+| Antigravity CLI | macOS | protected | cannot start, crashes or exits non-zero: blocks the call; times out (after 600 s): not documented; assumed to run the call | none | Lightweight (macOS 13 or later): `openmoat run --write ~/.gemini/antigravity-cli -- agy` | pinned by `openmoat init`, which offers to wrap its stdio servers: a wrapped one is checked before it starts, in the OS sandbox; a project's (`.agents/mcp_config.json`) are held until accepted, never wrapped; a server not wrapped runs its command before any check; no evidence yet | its own login (`~/.gemini/antigravity/mcp_oauth_tokens.json`), not another agent's; every inherited variable but a brokered secret, or under `require.run: full-boundary` only the base list and `HOME` | [evidence](#antigravity-cli) |
+| Antigravity CLI | Windows | installed by `openmoat init`; no evidence yet | cannot start, crashes or exits non-zero: blocks the call; times out (after 600 s): not documented; assumed to run the call; no evidence yet | none | none: `openmoat run` refuses on Windows, where OpenMoat generates no OS sandbox | pinned by `openmoat init`, which offers to wrap its stdio servers: a wrapped one is checked before it starts, with your permissions; a project's (`.agents/mcp_config.json`) are held until accepted, never wrapped; a server not wrapped runs its command before any check; no evidence yet | — (no `openmoat run`) | [evidence](#antigravity-cli) |
 | Continue CLI | Linux | none: OpenMoat installs no hook for it | — | none | none: which directories `cn` writes outside the project was not checked | OpenMoat reads none of its MCP servers | — (no `openmoat run`) | [evidence](#continue-cli) |
 | Continue CLI | macOS | none: OpenMoat installs no hook for it | — | none | none: which directories `cn` writes outside the project was not checked | OpenMoat reads none of its MCP servers | — (no `openmoat run`) | [evidence](#continue-cli) |
 | Continue CLI | Windows | none: OpenMoat installs no hook for it | — | none | none: `openmoat run` refuses on Windows, where OpenMoat generates no OS sandbox | OpenMoat reads none of its MCP servers | — (no `openmoat run`) | [evidence](#continue-cli) |
@@ -112,7 +112,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **mcp**: Linux: `differential::agents::scenarios::real_claude_changed_mcp_server_is_denied`, `mcp_startup::an_unaccepted_definition_never_starts_and_an_accepted_one_does`, the weekly `latest agents` job (`claude-code`); macOS: `differential::agents::scenarios::real_claude_changed_mcp_server_is_denied`, `mcp_startup::an_unaccepted_definition_never_starts_and_an_accepted_one_does`, the weekly `latest agents` job (`claude-code`); Windows: no evidence yet.
 - **credentials**: Linux: `run::agent_logins::the_running_agent_keeps_its_login_and_cannot_read_another_agents`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::agent_logins::the_running_agent_keeps_its_login_and_cannot_read_another_agents`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/claude_code/fixtures/bash.json`.
-- **hook-failure facts** come from the vendor: [1](https://code.claude.com/docs/en/hooks).
+- **hook-failure facts** come from: [1](https://code.claude.com/docs/en/hooks).
 
 ### Codex
 
@@ -124,7 +124,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **mcp**: Linux: no evidence yet; macOS: no evidence yet; Windows: no evidence yet.
 - **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/codex/fixtures/pretooluse-shell.json`.
-- **hook-failure facts** come from the vendor: [1](https://learn.chatgpt.com/docs/hooks) [2](https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/hooks/src/engine/command_runner.rs#L417).
+- **hook-failure facts** come from: [1](https://learn.chatgpt.com/docs/hooks) [2](https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/hooks/src/engine/command_runner.rs#L417).
 
 ### Cursor
 
@@ -136,7 +136,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **mcp**: Linux: no evidence yet; macOS: no evidence yet; Windows: no evidence yet.
 - **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/cursor/fixtures/beforeShellExecution.json`.
-- **hook-failure facts** come from the vendor: [1](https://cursor.com/docs/agent/hooks).
+- **hook-failure facts** come from: [1](https://cursor.com/docs/agent/hooks).
 - The weekly job's `cursor` run proves no hook call: every `cursor-agent` run needs a Cursor account, so the job never starts the agent.
 
 ### OpenClaw
@@ -146,7 +146,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **hook-failure**: Linux: the weekly `latest agents` job (`openclaw`); macOS: the weekly `latest agents` job (`openclaw`); Windows: no evidence yet.
 - **mcp**: Linux: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; macOS: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; Windows: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/openclaw/fixtures/exec.json`.
-- **hook-failure facts** come from the vendor: [1](https://docs.openclaw.ai/plugins/hooks/reference).
+- **hook-failure facts** come from: [1](https://docs.openclaw.ai/plugins/hooks/reference).
 
 ### GitHub Copilot CLI
 
@@ -157,7 +157,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **mcp**: Linux: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; macOS: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; Windows: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`.
 - **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/copilot_cli/fixtures/bash.json`.
-- **hook-failure facts** come from the vendor: [1](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference).
+- **hook-failure facts** come from: [1](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference).
 
 ### pi
 
@@ -168,7 +168,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **mcp**: Linux: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; macOS: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; Windows: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`.
 - **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/pi/fixtures/bash.json`.
-- **hook-failure facts** come from the vendor: [1](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md).
+- **hook-failure facts** come from: [1](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md).
 
 ### Gemini CLI
 
@@ -179,7 +179,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **mcp**: Linux: no evidence yet; macOS: no evidence yet; Windows: no evidence yet.
 - **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/gemini_cli/fixtures/run_shell_command.json`.
-- **hook-failure facts** come from the vendor: [1](https://geminicli.com/docs/hooks/reference/).
+- **hook-failure facts** come from: [1](https://geminicli.com/docs/hooks/reference/).
 
 ### OpenCode
 
@@ -190,7 +190,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **mcp**: Linux: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; macOS: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; Windows: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`.
 - **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/opencode/fixtures/bash.json`, `crates/openmoat-hosts/src/host/opencode/fixtures/v2-shell.json`.
-- **hook-failure facts** come from the vendor: [1](https://opencode.ai/docs/build/plugins/server).
+- **hook-failure facts** come from: [1](https://opencode.ai/docs/build/plugins/server).
 - The weekly job's `opencode-2` run proves no hook call: it checks only that OpenCode 2 reports OpenMoat's plugin active; no model call is driven through it yet.
 
 ### Hermes Agent
@@ -202,7 +202,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **mcp**: Linux: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; macOS: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; Windows: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`.
 - **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/hermes/fixtures/terminal.json`.
-- **hook-failure facts** come from the vendor: [1](https://github.com/NousResearch/hermes-agent/blob/v0.22.5/agent/shell_hooks.py).
+- **hook-failure facts** come from: [1](https://github.com/NousResearch/hermes-agent/blob/v0.22.5/agent/shell_hooks.py).
 - The weekly job's `hermes` run proves no hook call: `hermes hooks test` runs OpenMoat's hook through the code a session uses, but no model turn dispatches to it.
 
 ### Cline CLI
@@ -214,7 +214,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **mcp**: Linux: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; macOS: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; Windows: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`.
 - **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/cline/fixtures/run_commands.json`.
-- **hook-failure facts** come from the vendor: [1](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/hook-file-hooks.ts) [2](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/subprocess-runner.ts).
+- **hook-failure facts** come from: [1](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/hook-file-hooks.ts) [2](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/subprocess-runner.ts).
 
 ### goose
 
@@ -225,19 +225,18 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **mcp**: Linux: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; macOS: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; Windows: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`.
 - **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/goose/fixtures/shell.json`.
-- **hook-failure facts** come from the vendor: [1](https://github.com/aaif-goose/goose/blob/v1.57.0/crates/goose/src/hooks/mod.rs).
+- **hook-failure facts** come from: [1](https://github.com/aaif-goose/goose/blob/v1.57.0/crates/goose/src/hooks/mod.rs).
 
 ### Antigravity CLI
 
-- **hook**: Linux: no evidence yet; macOS: no evidence yet; Windows: no evidence yet.
+- **hook**: Linux: the weekly `latest agents` job (`antigravity-cli`); macOS: the weekly `latest agents` job (`antigravity-cli`); Windows: no evidence yet.
 - **payloads**: Linux: `host_failures::payloads_guard_cannot_read_are_denied_in_each_hosts_format`, `hosts::verdicts::a_secret_read_is_denied_in_the_hosts_format`; macOS: `host_failures::payloads_guard_cannot_read_are_denied_in_each_hosts_format`, `hosts::verdicts::a_secret_read_is_denied_in_the_hosts_format`; Windows: `host_failures::payloads_guard_cannot_read_are_denied_in_each_hosts_format`, `hosts::verdicts::a_secret_read_is_denied_in_the_hosts_format`.
-- **hook-failure**: Linux: no evidence yet; macOS: no evidence yet; Windows: no evidence yet.
+- **hook-failure**: Linux: the weekly `latest agents` job (`antigravity-cli`); macOS: the weekly `latest agents` job (`antigravity-cli`); Windows: no evidence yet.
 - **run**: Linux: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `differential::scripts::executing::hostile_scripts_meet_the_isolated_tier`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`, `hook_only::launch::each_hook_only_agent_holds_under_isolate`; macOS: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`.
 - **mcp**: Linux: no evidence yet; macOS: no evidence yet; Windows: no evidence yet.
 - **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/antigravity_cli/fixtures/run_command.json`.
-- **hook-failure facts** come from the vendor: [1](https://antigravity.google/docs/hooks?tab=cli).
-- The weekly job's `antigravity-cli` run proves no hook call: in its runs so far the agent ran its tools without starting OpenMoat's hook, so the job fails until that is understood and fixed.
+- **hook-failure facts** come from: [1](https://antigravity.google/docs/hooks?tab=cli) [2](https://github.com/crocodile-labs/openmoat/actions/runs/43254846914).
 
 ### Continue CLI
 

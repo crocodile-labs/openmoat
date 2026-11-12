@@ -3,7 +3,8 @@
 with no account and no traffic leaving the machine (scripts/ci/latest-agents.sh).
 It speaks `POST .../models/<model>:streamGenerateContent` (server-sent events) and
 `:generateContent`, the wire format of the `GOOGLE_GEMINI_BASE_URL` Antigravity CLI
-documents; this shape is unverified against a real `agy`.
+documents; a real `agy` has run turns against it in the weekly job since run
+43254846914 (2026-11-12).
 
 The first request that offers the `--call` tool gets that tool call; once the
 conversation holds a function response, the reply is a text that ends the turn.

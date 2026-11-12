@@ -155,8 +155,7 @@
     "config": [["{HOME}/.gemini/config/hooks.json", "json"]],
     "payload": {"fixture": "antigravity_cli/fixtures/run_command.json", "command": "/toolCall/args/CommandLine",
                 "verdict": "/decision"},
-    "proves": [],
-    "why": "in its runs so far the agent ran its tools without starting OpenMoat's hook, so the job fails until that is understood and fixed",
+    "proves": ["hook", "hook-failure"],
     "runners": ["ubuntu-latest", "macos-15"]
   },
   "cursor": {

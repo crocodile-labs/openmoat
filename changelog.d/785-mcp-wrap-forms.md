@@ -1,2 +1,0 @@
-### Added
-- `openmoat mcp wrap` reads each agent's own form of a server: OpenCode's single `command` list is wrapped and undone in place, and goose's `cmd` and `args` are read, so `openmoat status` and `openmoat doctor` report goose's extensions. A YAML file or an OpenCode file with comments is named with what to set by hand and no longer stops the other servers; a goose extension of inline Python is named as having no command to wrap ([#785](https://github.com/crocodile-labs/openmoat/pull/785)).

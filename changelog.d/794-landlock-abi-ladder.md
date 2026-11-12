@@ -1,2 +1,0 @@
-### Added
-- `openmoat doctor` on Linux names the kernel's Landlock ABI and what `openmoat run` applies from it (each ABI from 4 to 12 with `--verbose`: used, available but not used and why, or not available and what holds instead); `openmoat sandbox show` and `openmoat run --verbose` show the same, `sandbox show --format json` has it under `lightweight.landlock.abi`, and every Linux run writes it to the audit log (rule `run-landlock-abi`) before the agent starts (ADR-082) ([#794](https://github.com/crocodile-labs/openmoat/pull/794)).

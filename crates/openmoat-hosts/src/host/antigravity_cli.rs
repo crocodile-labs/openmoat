@@ -77,23 +77,31 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         }),
         ..Reviews::BASE
     },
-    on_hook_failure: "not documented: what Antigravity CLI does when the hook cannot start, \
-         crashes, times out, exits non-zero or prints something that is not its JSON is not \
-         stated, and no setting to block on failure is documented, so OpenMoat assumes the call \
-         runs (the guard itself answers a deny and exits 2 on every error it can catch)",
+    on_hook_failure: "blocks the call when the hook cannot start or exits non-zero without \
+         output, as \
+         the weekly real-agent run of 2026-11-12 observed on Linux and macOS (the \
+         documentation does not say); what a timed-out hook or output that is not its JSON \
+         does is not documented, so OpenMoat assumes the call runs then (the guard itself \
+         answers a deny and exits 2 on every error it can catch)",
     // The hooks page states a 30 s default timeout and `enabled: false`, and
-    // says nothing of what a failed or timed-out hook does to the call.
+    // says nothing of what a failed or timed-out hook does to the call. The
+    // weekly `latest agents` run 43254846914 (2026-11-12) made the hook binary
+    // missing and made it exit 1 with no output under a real `agy` on Linux
+    // and macOS: both times the call was blocked. A timeout is not tried there.
     hook_failure: crate::HookFailure {
-        fails: crate::FailureOutcome::NotDocumented,
+        fails: crate::FailureOutcome::Blocks,
         times_out: crate::FailureOutcome::NotDocumented,
         timeout_s: Some(600),
         turned_off_by: "`enabled: false` on the entry (a project's `.agents/hooks.json` \
                         included), or deleting it",
-        sources: &["https://antigravity.google/docs/hooks?tab=cli"],
+        sources: &[
+            "https://antigravity.google/docs/hooks?tab=cli",
+            "https://github.com/crocodile-labs/openmoat/actions/runs/43254846914",
+        ],
     },
     gaps: "hook only: no OS sandbox from OpenMoat (`enableTerminalSandbox` is the person's to \
-         set, or `openmoat run`); preview: OpenMoat's hook for Antigravity CLI is new; what \
-         the hook sees is taken from the documentation: whether MCP and subagent calls fire hooks, \
+         set, or `openmoat run`); what the hook sees is taken from the documentation: \
+         whether MCP and subagent calls fire hooks, \
          and the name a hook receives for an MCP tool, are not documented, so `invoke_subagent`, \
          `define_subagent` and `schedule` need review; a hook file or plugin of a project \
          can add hooks that rewrite a call's arguments (`overwrite`) after OpenMoat checked it, \
@@ -108,13 +116,11 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          plugins under `~/.gemini/config/plugins` are written only by a person (`kernel-self`) \
          but are not reported; the shell that runs hooks and `run_command` on Windows is not \
          documented",
-    // A preview host until the weekly check shows the hook deciding a real
-    // agy's call (`HOST.md`, "The first real run").
+    // The weekly check has shown the hook deciding a real agy's call
+    // (`HOST.md`, "Real runs"); what is left is what the documentation leaves.
     limit: Some(
-        "preview: OpenMoat's hook for Antigravity CLI is new; use `openmoat run` (`--isolate` \
-         on Linux) for an OS boundary until it leaves preview. Antigravity CLI does not \
-         document what happens when the hook fails, and `--dangerously-skip-permissions` \
-         approves requests unseen",
+        "Antigravity CLI does not document what happens when the hook times out, and \
+         `--dangerously-skip-permissions` approves requests unseen",
     ),
     install: Some(InstallSpec {
         // No variable moves its directory; `~` is the home directory.
