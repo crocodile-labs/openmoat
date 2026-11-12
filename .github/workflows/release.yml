@@ -58,8 +58,12 @@ jobs:
       # for (read every 60 s, up to 150 minutes). Every later job needs this
       # one, so a refusal publishes nothing. Re-run the failed jobs on main,
       # then this workflow's failed jobs.
+      # Switched off only by setting the repository variable
+      # RELEASE_NEEDS_GREEN_CI to `false` (Settings → Secrets and variables →
+      # Actions → Variables), for a release while CI itself is being repaired;
+      # unset, the gate holds.
       - name: main's ci run for this commit is green
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && vars.RELEASE_NEEDS_GREEN_CI != 'false'
         env:
           REPO: ${{ github.repository }}
         # The commit checked out, which an annotated tag points to as well.
