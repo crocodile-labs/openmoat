@@ -1,7 +1,7 @@
 //! The generated Codex profile, executed by Codex's own sandbox when a `codex`
 //! binary is available (`MOAT_CODEX_BIN`, else `codex` on `PATH`). Without one
-//! the test says so and passes; CI's `standard tier` job sets `MOAT_CODEX_BIN`
-//! to a pinned binary on macOS and Linux and fails it if the binary is missing.
+//! the test says so and passes; with `MOAT_REQUIRE_HOST_BINARIES` set a missing
+//! binary fails it (`scripts/ci/host-binaries.sh` fetches the pinned one).
 //!
 //! `moat init` runs with that binary's directory first on `PATH`, as after a
 //! user installs Codex: on Linux the profile then lets commands read Codex's

@@ -18,7 +18,7 @@ ignored = ["anyhow", "serde"]
 members = ["."]
 
 # A copy of the main workspace's lints (a separate workspace cannot inherit
-# them); CI's fuzz job runs clippy with these.
+# them); clippy in fuzz/ runs with these.
 [lints.rust]
 unsafe_code = "forbid"
 missing_debug_implementations = "warn"

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Tests of check.py's hook-failure commands (ADR-079), the part of the weekly
-job's hook-failure step that can be proved without an agent. Run by
-scripts/ci/quality-gate.sh.
+job's hook-failure step that can be proved without an agent. Run by hand:
 
     python3 -I scripts/ci/latest-agents/test_check.py
 """

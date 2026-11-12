@@ -1,8 +1,8 @@
 //! `openmoat run` on a stock Linux: Landlock and seccomp, no bubblewrap, so no
 //! network namespace and no masks inside the grants. This is what a person
 //! gets out of the box on Ubuntu, whose AppArmor restricts the unprivileged
-//! user namespaces bubblewrap needs. CI's `stock linux` job runs these with
-//! [`super::STOCK_LINUX`] set on a runner without bubblewrap; elsewhere they
+//! user namespaces bubblewrap needs. A stock-Linux run sets
+//! [`super::STOCK_LINUX`] on a machine without bubblewrap; elsewhere they
 //! say so and stop, since the other Linux jobs install it.
 
 use std::path::Path;
@@ -12,11 +12,11 @@ use super::confined::ran;
 use super::{installed_with_secret, run_sh};
 use crate::common::{OK, Sandbox, USAGE, output, stderr, text};
 
-/// False, saying so, outside CI's `stock linux` job.
+/// False, saying so, outside a stock-Linux run.
 fn stock() -> bool {
     let stock = super::stock_linux();
     if !stock {
-        eprintln!("skipped: only CI's `stock linux` job runs the port-only path on purpose");
+        eprintln!("skipped: only a stock-Linux run runs the port-only path on purpose");
     }
     stock
 }

@@ -9,7 +9,7 @@
 //! before anything is sent. Every other request to the host passes as it was.
 //! The setting only narrows: the host must still be allowed by the policy,
 //! and without a pinned CA that covers it `openmoat run` does not start.
-//! `scripts/ci/adr062-poc.py` measures it; ADR-062 step 1 onwards replaces it
+//! ADR-062 step 0 measured it; step 1 onwards replaces it
 //! with the `requests:` policy section.
 
 use std::ffi::OsStr;

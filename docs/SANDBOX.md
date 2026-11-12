@@ -250,8 +250,8 @@ so Cursor gets none. The hook denies the agent setting `GIT_*` (`env-poison`), b
 script it runs can unset them.
 
 [EVIDENCE.md](EVIDENCE.md) lists what each agent's sandbox, configured this way, does
-to hostile project scripts on macOS and Linux. CI runs them on every pull request with
-pinned Claude Code and Codex binaries and no account: Claude Code headless against a
+to hostile project scripts on macOS and Linux, run with pinned Claude Code and Codex
+binaries (`scripts/ci/host-binaries.sh`) and no account: Claude Code headless against a
 local fake API, Codex through `codex sandbox -P moat`.
 
 To undo, delete the `sandbox` key, `permissions.blockReadsOutsideWorkingDirectories`

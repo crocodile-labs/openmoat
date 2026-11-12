@@ -2,7 +2,7 @@
 //! tier where bubblewrap works, which closes what the Lightweight tier leaves
 //! open inside the project; `--no-isolate` starts the Lightweight tier and is
 //! recorded in the audit log. macOS has no Isolated tier yet, so there the
-//! flag changes nothing and writes nothing. The `stock linux` job's half is in
+//! flag changes nothing and writes nothing. The stock-Linux run's half is in
 //! `stock_linux.rs`, the policy's half in `strict.rs`.
 
 #[cfg(target_os = "linux")]
@@ -31,8 +31,8 @@ pub(super) fn tier_rows(sb: &Sandbox) -> Vec<String> {
 }
 
 /// False, saying so, where the default could not isolate (no bubblewrap):
-/// CI's Linux jobs install it, so there it must isolate, except the `stock
-/// linux` job, which `stock_linux.rs` covers.
+/// CI's Linux job installs it, so there it must isolate, except on a stock-Linux
+/// run (`MOAT_TEST_STOCK_LINUX`), which `stock_linux.rs` covers.
 #[cfg(target_os = "linux")]
 fn isolated_by_default(out: &Output) -> bool {
     let fell_back = stderr(out).contains("cannot start here");
@@ -54,7 +54,7 @@ fn isolated_by_default(out: &Output) -> bool {
 #[test]
 fn linux_starts_the_isolated_tier_by_default() {
     if stock_linux() {
-        eprintln!("skipped: the `stock linux` job has no bubblewrap (stock_linux.rs)");
+        eprintln!("skipped: a stock-Linux run has no bubblewrap (stock_linux.rs)");
         return;
     }
     let (sb, project) = installed_with_secret();

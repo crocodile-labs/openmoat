@@ -79,7 +79,6 @@ sandboxes.
 
 ## Quick start
 
-<!-- ci:quickstart run: the clean-install workflow runs the commands of each block so marked, as written -->
 ```bash
 brew install crocodile-labs/tap/openmoat     # macOS and Linux
 openmoat init                                # asks before it sets up each agent it finds
@@ -98,12 +97,10 @@ rules in a committed `.moat/policy.yaml`
 
 Check a verdict without running anything:
 
-<!-- ci:quickstart run -->
 ```bash
 openmoat policy check "cat ~/.ssh/id_rsa"
 ```
 
-<!-- ci:quickstart output: the output of the command before, with the home directory as /Users/you -->
 ```
 ✕ deny
    rules : secrets-paths
@@ -446,15 +443,13 @@ Contributions are welcome, small or large. Your first pull request in five steps
 3. **Prove it with a test.** A rule change comes with one attack that must be stopped and
    one everyday command that must stay allowed, in `tests/conformance/`; code changes
    come with unit tests beside the code.
-4. **Run the gate CI runs:** `scripts/ci/quality-gate.sh` (fmt, clippy, docs, tests,
-   policy lint).
+4. **Run the gate CI runs:** `scripts/ci/quality-gate.sh` (fmt, clippy, tests).
 5. **Open the pull request** with a changelog fragment in `changelog.d/` and the
    template's Testing and Security impact sections filled in
    ([CONTRIBUTING.md](CONTRIBUTING.md#changelog)).
 
-AI-assisted pull requests are welcome: each gets an automated first-pass review, and a
-maintainer makes the call. The repository's rules are in [AGENTS.md](AGENTS.md); everyone
-follows the [code of conduct](CODE_OF_CONDUCT.md).
+AI-assisted pull requests are welcome: a maintainer reviews each and makes the call.
+The repository's rules are in [AGENTS.md](AGENTS.md); everyone follows the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Security
 

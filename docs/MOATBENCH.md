@@ -135,8 +135,8 @@ hook failure (host behaviour from docs/THREAT_MODEL.md §5, not tested here):
 ```
 
 The end-to-end test `cargo test -p openmoat --test e2e moatbench` runs `openmoat bench`
-and fails on any mismatch or false positive of OpenMoat, so CI runs it on every
-platform through `scripts/ci/quality-gate.sh`.
+and fails on any mismatch or false positive of OpenMoat, so CI's `test` job runs it on every
+platform.
 
 ## Proof report: `openmoat bench --report`
 

@@ -13,8 +13,8 @@
 //! directory are skipped, and the test reports how many it checked.
 //!
 //! Lines: `tests/lexer_vs_bash/lines.txt` and every `shell:` action of the
-//! conformance fixtures. It needs bash, so it is ignored by default; CI runs
-//! it on Linux:
+//! conformance fixtures. It needs bash, so it is ignored by default; run it
+//! on Linux with:
 //!
 //! ```text
 //! cargo test -p openmoat-core --test lexer_vs_bash -- --ignored

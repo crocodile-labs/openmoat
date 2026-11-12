@@ -1,5 +1,5 @@
 {
-  "//": "Type-checks the JavaScript OpenMoat installs into OpenClaw, pi and OpenCode (scripts/ci/check-js.sh). Nothing is emitted; the plugins have no dependencies.",
+  "//": "Type-checks the JavaScript OpenMoat installs into OpenClaw, pi and OpenCode (tsc -p crates/openmoat-hosts/jsconfig.json --typeRoots <dir with @types/node>). Nothing is emitted; the plugins have no dependencies.",
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,

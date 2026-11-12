@@ -1,2 +1,0 @@
-### Added
-- A weekly long-session bench runs 3,000 hook decisions and their audit writes in one session, as separate hook processes and relayed through one long-lived `openmoat run`, and reports latency drift and memory growth per 500 calls, and what a change of working directory late in the session costs (`scripts/ci/guard-long-session.py`, ADR-080) ([#789](https://github.com/crocodile-labs/openmoat/pull/789)).

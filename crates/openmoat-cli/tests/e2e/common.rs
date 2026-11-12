@@ -421,9 +421,9 @@ pub fn bash_payload(session: &str, cwd: &Path, command: &str) -> String {
     .to_string()
 }
 
-/// Set by the CI job that fetches pinned host binaries (`standard tier`,
-/// `scripts/ci/host-binaries.sh`). The required gate fetches none on purpose: it
-/// must not run whatever `claude` or `codex` a developer has installed (#366).
+/// Set by a run that has fetched the pinned host binaries
+/// (`scripts/ci/host-binaries.sh`). CI fetches none on purpose: the tests must
+/// not run whatever `claude` or `codex` a developer has installed (#366).
 #[cfg(unix)] // the host-sandbox tests run on macOS and Linux only
 pub const REQUIRE_HOST_BINARIES: &str = "MOAT_REQUIRE_HOST_BINARIES";
 
@@ -435,5 +435,5 @@ pub fn skip_without_host_binary(what: &str) {
         std::env::var_os(REQUIRE_HOST_BINARIES).is_none(),
         "{REQUIRE_HOST_BINARIES} is set, so this run must have the host binary for {what}"
     );
-    eprintln!("skipped: {what} (no host binary; the CI standard tier job runs it)");
+    eprintln!("skipped: {what} (no host binary; see scripts/ci/host-binaries.sh)");
 }

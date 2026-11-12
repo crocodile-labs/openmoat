@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests of after_call.py, the one part of the weekly job that can be proved
-without an agent. Run by scripts/ci/quality-gate.sh.
+without an agent. Run by hand:
 
     python3 -I scripts/ci/latest-agents/test_after_call.py
 """

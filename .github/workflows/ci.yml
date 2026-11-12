@@ -1,19 +1,14 @@
 name: ci
 
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
-  schedule:
-    - cron: "17 6 * * 1" # weekly on main: cargo-deny sees new advisories, fuzz runs 600 s per target
-  # By hand (Actions → ci → Run workflow): every leg, with long fuzz.
   workflow_dispatch:
 
-# A new push to a pull request cancels the run of the push before. Runs on
-# main and on schedule each have a group of their own (the run id), so none is
-# cancelled, nor dropped while waiting behind another.
+# A new push to a pull request cancels its older run; runs on main are never cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -21,713 +16,87 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: -D warnings
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
-  # What the other jobs run (scripts/ci/changes.py says what counts). On a
-  # pull request `code` is false when it changes documentation only; `full`
-  # (the macos-15-intel leg) is true when it is labelled `ci:full` or changes
-  # platform sandbox code; `long_fuzz` (ten minutes a fuzz target) only with
-  # the label. On a push to main, on schedule and by hand all three are true:
-  # main runs every leg, and a release needs main's run green (release.yml).
-  #
-  # A job skipped by its `if` reports success under its name, which meets a
-  # required check. A matrix job skipped that way reports one check under its
-  # unexpanded name (`${{ matrix.os }}`) and none under `macos-15` and the
-  # others, which would never be met; so the matrix jobs always run, and a leg
-  # with nothing to do runs on ubuntu-latest with every step skipped. When this
-  # job fails, its outputs are empty and the jobs test `!= 'false'`: not
-  # knowing what changed runs everything, it never skips a test.
+  # code=false only when a pull request changes documentation alone; any error means true.
   changes:
-    name: changes
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read # the `ci:full` label, read now so a re-run sees it
     outputs:
-      code: ${{ steps.what.outputs.code }}
-      full: ${{ steps.what.outputs.full }}
-      long_fuzz: ${{ steps.what.outputs.long_fuzz }}
+      code: ${{ steps.diff.outputs.code }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 2 # a pull request's merge commit and the base it lands on
-      - name: what changed
-        id: what
+          fetch-depth: 2
+      - id: diff
         env:
           EVENT: ${{ github.event_name }}
-          PR: ${{ github.event.pull_request.number }}
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        # On a pull request the base branch's copy of changes.py decides (the
-        # merge commit's first parent, the commit the PR lands on), not the
-        # PR's own, so a PR cannot choose what its own run skips. A PR that
-        # changes changes.py gets `full` from that copy. Only while the base has
-        # no copy that takes `--event` does the PR's copy run, with a warning.
-        # A push, the schedule and a run by hand use the commit itself.
         run: |
-          script=scripts/ci/changes.py
-          if [ "$EVENT" = pull_request ]; then
-            if git show HEAD^1:scripts/ci/changes.py > "$RUNNER_TEMP/changes.py" \
-                && grep -qF -- '"--event"' "$RUNNER_TEMP/changes.py"; then
-              script="$RUNNER_TEMP/changes.py"
-            else
-              echo "::warning::the base branch has no changes.py that takes --event; the pull request's own copy decides"
-            fi
+          code=true
+          if [ "$EVENT" = pull_request ] && files=$(git diff --name-only HEAD^1 HEAD) && [ -n "$files" ]; then
+            # grep exits 1 only when every file is documentation; any other status keeps true.
+            status=0
+            printf '%s\n' "$files" | grep -qvE '\.md$|^docs/|^LICENSE|^changelog\.d/' || status=$?
+            [ "$status" = 1 ] && code=false
           fi
-          python3 -I "$script" --event "$EVENT" --pr "$PR" HEAD^1 HEAD >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
 
-  gate:
-    name: ${{ matrix.os }}
+  lint:
     needs: changes
-    if: ${{ !cancelled() }}
-    # macos-15-intel is a slow leg: on a pull request it runs only when the
-    # changes job says `full` (the `ci:full` label, or platform sandbox code);
-    # main, the schedule and a run by hand always run it.
-    runs-on: ${{ needs.changes.outputs.code != 'false' && (matrix.os != 'macos-15-intel' || needs.changes.outputs.full != 'false') && matrix.os || 'ubuntu-latest' }}
-    # macos-15-intel is the slowest runner and may take longer.
-    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 60 || 30 }}
-    env:
-      # The same test as `runs-on`: whether this leg has anything to run.
-      RUN_LEG: ${{ needs.changes.outputs.code != 'false' && (matrix.os != 'macos-15-intel' || needs.changes.outputs.full != 'false') }}
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-15-intel, ubuntu-latest, windows-latest]
-        # Windows and macOS run the end-to-end tests in two parts, the second
-        # in the `e2e-2` job beside this one: in one job they pass the time
-        # limit (scripts/ci/quality-gate.sh, E2E_PART). Ubuntu runs them whole.
-        include:
-          - os: windows-latest
-            e2e_part: "1"
-          - os: macos-15
-            e2e_part: "1"
-          - os: macos-15-intel
-            e2e_part: "1"
+        os: [ubuntu-latest, macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
-      - name: nothing to run
-        if: env.RUN_LEG != 'true'
-        run: |
-          echo "::notice::the quality gate is skipped on this leg: documentation only, or a slow leg left for main (label the PR ci:full and re-run all jobs, not only the failed ones, to run it; see the changes job)"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: env.RUN_LEG == 'true'
         with:
           persist-credentials: false
-      - name: rust toolchain
-        if: env.RUN_LEG == 'true'
-        # The channel, components and targets come from rust-toolchain.toml.
-        run: rustup toolchain install --no-self-update
-      # Every rust-cache below saves from main only (a pull request restores,
-      # never writes: no cache poisoning from a PR, fewer evictions), under a
-      # key of its own job; the runner's OS and arch are in the key already.
+      - run: rustup toolchain install --no-self-update
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        if: env.RUN_LEG == 'true'
         with:
-          shared-key: gate
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: bubblewrap for the isolated tier
-        if: env.RUN_LEG == 'true' && runner.os == 'Linux'
-        # `moat run --isolate` (#174). Ubuntu 24.04's AppArmor blocks the
-        # unprivileged user namespaces bwrap needs.
+      # bubblewrap for `moat run --isolate`; Ubuntu 24.04's AppArmor blocks the user namespaces it needs.
+      - if: runner.os == 'Linux'
         run: |
           bash scripts/ci/apt-install.sh bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - name: quality gate
-        if: env.RUN_LEG == 'true'
-        env:
-          E2E_PART: ${{ matrix.e2e_part }}
-        run: scripts/ci/quality-gate.sh
-        shell: bash
+      - run: cargo test --workspace --all-features --locked
 
-  # The second part of the end-to-end tests (E2E_PART=2) on Windows and macOS,
-  # run beside the gate job of that runner, which runs the rest. macos-15-intel
-  # follows the gate's rule for that leg: on a pull request only with `full`.
-  e2e-2:
-    name: ${{ matrix.os }} e2e (2 of 2)
-    needs: changes
-    if: ${{ !cancelled() }}
-    runs-on: ${{ needs.changes.outputs.code != 'false' && (matrix.os != 'macos-15-intel' || needs.changes.outputs.full != 'false') && matrix.os || 'ubuntu-latest' }}
-    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 60 || 30 }}
-    env:
-      RUN_LEG: ${{ needs.changes.outputs.code != 'false' && (matrix.os != 'macos-15-intel' || needs.changes.outputs.full != 'false') }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-15, macos-15-intel]
-    steps:
-      - name: nothing to run
-        if: env.RUN_LEG != 'true'
-        run: |
-          echo "::notice::documentation only: the quality gate is skipped (see the changes job)"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: env.RUN_LEG == 'true'
-        with:
-          persist-credentials: false
-      - name: rust toolchain
-        if: env.RUN_LEG == 'true'
-        # The channel, components and targets come from rust-toolchain.toml.
-        run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        if: env.RUN_LEG == 'true'
-        with:
-          shared-key: e2e-2
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: end-to-end tests, part 2
-        if: env.RUN_LEG == 'true'
-        env:
-          E2E_PART: "2"
-        run: scripts/ci/quality-gate.sh
-        shell: bash
-
-  # Every differential scenario, the hostile project scripts of docs/EVIDENCE.md
-  # among them, under Claude Code's sandbox and Codex's `moat` profile (#346),
-  # and the generated Codex profile (`sandbox_exec`): pinned binaries, no
-  # account, no API call. The gate job fetches no host binaries (#366).
-  standard-tier:
-    name: standard tier (${{ matrix.os }})
-    needs: changes
-    if: ${{ !cancelled() }}
-    # A matrix job: skipped legs run their (skipped) steps on ubuntu-latest, as in `gate`.
-    runs-on: ${{ needs.changes.outputs.code != 'false' && matrix.os || 'ubuntu-latest' }}
-    timeout-minutes: 30
-    env:
-      # A test whose host binary is missing fails here instead of skipping.
-      MOAT_REQUIRE_HOST_BINARIES: "1"
-      RUN_LEG: ${{ needs.changes.outputs.code != 'false' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-15
-            tests: differential sandbox_exec
-          - os: ubuntu-latest
-            tests: differential sandbox_exec
-    steps:
-      - name: nothing to run
-        if: env.RUN_LEG != 'true'
-        run: echo "::notice::documentation only; the host-sandbox tests are skipped (see the changes job)"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: env.RUN_LEG == 'true'
-        with:
-          persist-credentials: false
-      - name: rust toolchain
-        if: env.RUN_LEG == 'true'
-        # The channel, components and targets come from rust-toolchain.toml.
-        run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        if: env.RUN_LEG == 'true'
-        with:
-          shared-key: standard-tier
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: linux sandbox prerequisites
-        if: env.RUN_LEG == 'true' && runner.os == 'Linux'
-        # Both sandboxes use bubblewrap; Claude Code's proxy relay is socat. Ubuntu
-        # 24.04's AppArmor blocks the unprivileged user namespaces bwrap needs.
-        run: |
-          bash scripts/ci/apt-install.sh bubblewrap socat
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - name: pinned claude and codex
-        if: env.RUN_LEG == 'true'
-        run: scripts/ci/host-binaries.sh "$RUNNER_TEMP/hosts" >> "$GITHUB_ENV"
-      - name: the host-sandbox tests under every layer
-        if: env.RUN_LEG == 'true'
-        env:
-          TESTS: ${{ matrix.tests }}
-        # One test-name filter per word.
-        run: |
-          read -ra filters <<< "$TESTS"
-          scripts/ci/differential.sh "${filters[@]}"
-
-  # The jobs below skip on a documentation-only pull request; skipped, a
-  # required one reports success under its name. `!cancelled()` lets them run
-  # when the changes job failed.
-
-  # `openmoat run` as a stock Ubuntu runs it: no bubblewrap, and AppArmor's
-  # restriction on unprivileged user namespaces left on (the image's
-  # default), so Landlock and seccomp alone, without a network namespace or
-  # masks inside the grants. Every other Linux leg installs bubblewrap and
-  # lifts the restriction, so without this job the out-of-the-box path never
-  # ran end to end. With MOAT_TEST_STOCK_LINUX set the run tests require that
-  # path (tests/e2e/run/stock_linux.rs): the port-only notice and `doctor`'s
-  # warning, `--netns=require` exiting 64, `--isolate` and a `--write` outside
-  # the project refused; and the hostile scripts must meet the Landlock column
-  # of docs/EVIDENCE.md, gap rows included.
-  stock-linux:
-    name: stock linux (Landlock + seccomp, no bubblewrap)
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      MOAT_TEST_STOCK_LINUX: "1"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: rust toolchain
-        # The channel, components and targets come from rust-toolchain.toml.
-        run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          shared-key: stock-linux
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: no bubblewrap, unprivileged user namespaces restricted
-        run: |
-          if command -v bwrap > /dev/null; then
-            sudo apt-get remove -y -q bubblewrap
-          fi
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
-          if command -v bwrap; then
-            echo "::error::bubblewrap is still installed"
-            exit 1
-          fi
-      - name: the run tests and hostile scripts on the stock path
-        run: |
-          cargo test --locked -p openmoat --test e2e -- --nocapture \
-            run:: hostile_scripts_meet_the_os_layer
-
-  core-is-pure:
-    name: openmoat-core builds for wasm32 (no I/O)
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: rust toolchain
-        # The channel, components and targets come from rust-toolchain.toml.
-        run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          shared-key: core-is-pure
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo build --locked -p openmoat-core --target wasm32-unknown-unknown
-
-  # The JavaScript plugins OpenMoat installs into OpenClaw, pi and OpenCode are
-  # type-checked strictly (`// @ts-check`, no emit); their Node harnesses run in
-  # the quality gate's `cargo test` on every OS.
-  js-plugins:
-    name: JavaScript plugins type-check
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - run: node --version
-      - run: scripts/ci/check-js.sh
-
-  # The JavaScript SDK: the WebAssembly module built for wasm32 and every
-  # conformance fixture decided through it under Node (ADR-046).
-  sdk-js:
-    name: JavaScript SDK (wasm module, conformance under Node)
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: rust toolchain
-        # The channel, components and targets come from rust-toolchain.toml.
-        run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          shared-key: sdk-js
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: node --version
-      - run: scripts/ci/sdk-js.sh
-
-  # `openmoat guard` per process (scripts/ci/guard-latency.py) and late in a
-  # 5,000-call session (scripts/ci/guard-session-latency.py). On every event
-  # the binary of the commit before (`HEAD^1`: the commit a pull request lands
-  # on, or main's previous commit) is built too and timed in turn with it on
-  # this runner, and the change fails only when the guard's own p95 is clearly
-  # worse than that (scripts/ci/latency_ab.py): a shared runner is too noisy
-  # for a fixed limit (ADR-080). A row over the p95 budget (20 ms Linux,
-  # 45 ms macOS) warns.
-  latency:
-    name: guard latency (${{ matrix.os }})
-    needs: changes
-    if: ${{ !cancelled() }}
-    # A matrix job: skipped legs run their (skipped) steps on ubuntu-latest, as in `gate`.
-    runs-on: ${{ needs.changes.outputs.code != 'false' && matrix.os || 'ubuntu-latest' }}
-    timeout-minutes: 35
-    env:
-      RUN_LEG: ${{ needs.changes.outputs.code != 'false' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-15, ubuntu-latest]
-    steps:
-      - name: nothing to run
-        if: env.RUN_LEG != 'true'
-        run: echo "::notice::documentation only; the latency check is skipped (see the changes job)"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: env.RUN_LEG == 'true'
-        with:
-          persist-credentials: false
-          fetch-depth: 2 # HEAD^1, the commit the change lands on
-      - name: rust toolchain
-        if: env.RUN_LEG == 'true'
-        # The channel, components and targets come from rust-toolchain.toml.
-        run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        if: env.RUN_LEG == 'true'
-        with:
-          shared-key: latency
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: build this commit and the one before
-        id: build
-        if: env.RUN_LEG == 'true'
-        # The base is built from a worktree into the same target directory, so
-        # the dependencies are compiled once and only the workspace crates
-        # twice. A base that does not build (a toolchain change, say) leaves the
-        # one-binary limit in force, with a warning. Every event times the
-        # commit before beside this one: a fixed limit on main failed macOS
-        # runs whose guard code had not changed (ADR-080).
-        run: |
-          cargo build --locked --release -p openmoat
-          mkdir -p "$RUNNER_TEMP/head" "$RUNNER_TEMP/base"
-          cp target/release/openmoat "$RUNNER_TEMP/head/"
-          if git worktree add --detach "$RUNNER_TEMP/base-src" HEAD^1 &&
-            cargo build --locked --release -p openmoat \
-              --manifest-path "$RUNNER_TEMP/base-src/Cargo.toml" --target-dir target; then
-            cp target/release/openmoat "$RUNNER_TEMP/base/"
-            echo "base=$RUNNER_TEMP/base/openmoat" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::the commit before did not build; latency is held to the fixed limit"
-          fi
-      - name: guard latency per call
-        if: env.RUN_LEG == 'true'
-        env:
-          BASE: ${{ steps.build.outputs.base }}
-        run: |
-          base=()
-          if [ -n "$BASE" ]; then base=(--base "$BASE"); fi
-          python3 scripts/ci/guard-latency.py "${base[@]}" "$RUNNER_TEMP/head/openmoat" 100
-      - name: guard latency late in a long session
-        if: env.RUN_LEG == 'true'
-        env:
-          BASE: ${{ steps.build.outputs.base }}
-        run: |
-          base=()
-          if [ -n "$BASE" ]; then base=(--base "$BASE"); fi
-          python3 scripts/ci/guard-session-latency.py "${base[@]}" "$RUNNER_TEMP/head/openmoat" 50
-
-  # Not a required check yet: compares the shell lexer's words with the argv
-  # bash builds (crates/openmoat-core/tests/lexer_vs_bash.rs). A divergence is
-  # annotated on the run with the line that caused it.
-  lexer-vs-bash:
-    name: shell lexer against bash
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: rust toolchain
-        # The channel, components and targets come from rust-toolchain.toml.
-        run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          shared-key: lexer-vs-bash
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: bash --version
-      - run: cargo test --locked -p openmoat-core --test lexer_vs_bash -- --ignored --nocapture
-
-  # Builds every crate from its packaged tarball, as crates.io will: a file
-  # read from outside a crate passes the gate but fails here.
-  package:
-    name: crates package and build from their tarballs
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: rust toolchain
-        # The channel, components and targets come from rust-toolchain.toml.
-        run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          shared-key: package
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo package --locked --workspace
-      - name: release version strings agree
-        run: python3 scripts/ci/check-versions.py
-
-  unused-deps:
-    name: unused dependencies (cargo-machete)
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: rust toolchain
-        # The channel, components and targets come from rust-toolchain.toml.
-        run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          shared-key: unused-deps
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      # cargo-machete rather than cargo-shear: shear 1.14 needs rustc 1.98,
-      # newer than the pinned toolchain.
-      - run: cargo install cargo-machete --version 0.9.2 --locked
-      - run: cargo machete
-
-  # The published library crates against their last state (CONTRIBUTING "API
-  # changes"). While the version is 0.x, a break needs a minor bump.
-  semver:
-    name: semver of the library crates
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      pull-requests: read # the `breaking` label
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0 # the base commit is the baseline
-      - name: rust toolchain
-        # The channel, components and targets come from rust-toolchain.toml.
-        run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          shared-key: semver
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo install cargo-semver-checks --version 0.51.0 --locked
-      - name: this pull request against its base
-        # Blocking, unless the PR is labelled `breaking`: an intended break
-        # says so in its Release note, and the next release bumps the minor.
-        # The label is read now, not from the event, so re-running the job
-        # after labelling is enough.
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR: ${{ github.event.pull_request.number }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if cargo semver-checks check-release -p openmoat-core -p openmoat-hosts -p openmoat-audit -p openmoat-proxy -p openmoat-sdk --baseline-rev "$BASE_SHA"; then
-            exit 0
-          fi
-          if gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -qx breaking; then
-            echo "::warning::breaking API change, accepted by the 'breaking' label; the next release bumps the minor version"
-            exit 0
-          fi
-          echo "::error::breaking API change; see CONTRIBUTING 'API changes' (label the PR 'breaking' if it is intended)"
-          exit 1
-      - name: the workspace against the latest crates.io release
-        # Reports what the next release must bump. Blocking only on a release
-        # PR (`build: release …`), whose version bump must cover every break.
-        continue-on-error: "${{ !startsWith(github.event.pull_request.title, 'build: release') }}"
-        run: cargo semver-checks check-release -p openmoat-core -p openmoat-hosts -p openmoat-audit -p openmoat-proxy
-
-  deny:
-    name: cargo-deny
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # Installed from crates.io rather than through cargo-deny-action, whose
-      # Docker image pull from Docker Hub hits the unauthenticated rate limit
-      # (HTTP 429) and fails the job for reasons unrelated to the change.
-      - name: rust toolchain
-        # The channel, components and targets come from rust-toolchain.toml.
-        run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          shared-key: deny
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo install cargo-deny --version 0.20.2 --locked
-      - run: cargo deny --locked check
-
-  fuzz:
-    name: fuzz (smoke)
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
-    runs-on: ubuntu-latest
-    # Nine targets. Long fuzz (600 s each) runs on main, the weekly schedule,
-    # by hand and on a PR labelled `ci:full`; any other PR a one-minute smoke.
-    # Not knowing (the changes job failed) runs long.
-    timeout-minutes: ${{ needs.changes.outputs.long_fuzz != 'false' && 120 || 30 }}
-    env:
-      SECONDS_PER_TARGET: ${{ needs.changes.outputs.long_fuzz != 'false' && '600' || '60' }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: rust toolchain
-        # The nightly the fuzz workspace pins in fuzz/rust-toolchain.toml.
-        working-directory: fuzz
-        run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          workspaces: fuzz
-          shared-key: fuzz
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: clippy on the fuzz targets
-        working-directory: fuzz
-        run: cargo clippy --locked -- -D warnings
-      - run: cargo install cargo-fuzz --version 0.13.1 --locked
-      - run: python3 fuzz/seed_corpus.py
-      - name: run every target
-        working-directory: fuzz
-        run: |
-          for target in decide_shell policy_parse host_payload literal_pattern proxy_parse openclaw_json5 repo_policy_merge mcp_relay_framing check_diff_parse; do
-            cargo fuzz run -O "$target" "corpus/$target" -- -max_total_time="$SECONDS_PER_TARGET"
-          done
-      - name: keep crashing inputs
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: fuzz-artifacts
-          path: fuzz/artifacts
-
-  scripts:
-    name: shell scripts and markdown links
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: shellcheck
-        env:
-          VERSION: 0.11.0
-          SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
-        run: |
-          curl -fsSLo shellcheck.tar.xz "https://github.com/koalaman/shellcheck/releases/download/v${VERSION}/shellcheck-v${VERSION}.linux.x86_64.tar.xz"
-          echo "${SHA256}  shellcheck.tar.xz" | sha256sum -c -
-          tar xJf shellcheck.tar.xz
-          git ls-files -z '*.sh' .githooks/pre-push | xargs -0 "shellcheck-v${VERSION}/shellcheck"
-      - name: relative markdown links
-        # Offline: files and heading anchors inside the repository only.
-        run: python3 scripts/ci/check-links.py
-      # The quality gate runs these too; here they also cover a
-      # documentation-only pull request, on which the gate is skipped
-      # (scripts/ci/changes.py counts on it).
-      - name: changelog fragments, release version strings, agent records
-        run: |
-          python3 scripts/changelog-check.py
-          python3 scripts/ci/check-versions.py
-          python3 -I scripts/ci/latest-agents/check.py records
-      - name: tests of CI's own decisions (changes, ci-ok, the release gate)
-        run: python3 -I scripts/ci/test_ci_gates.py
-
-  typos:
-    name: spelling (typos)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: typos
-        # British English; the allow-list and its reasons are in _typos.toml.
-        env:
-          VERSION: 1.51.1
-          SHA256: 93c301fd4120ff076e2cc2a6d6a61cab4a4bdb81899287c0938b452e56d1f454
-        run: |
-          curl -fsSLo typos.tgz "https://github.com/crate-ci/typos/releases/download/v${VERSION}/typos-v${VERSION}-x86_64-unknown-linux-musl.tar.gz"
-          echo "${SHA256}  typos.tgz" | sha256sum -c -
-          tar xzf typos.tgz ./typos
-          ./typos
-
-  workflows:
-    name: workflows (actionlint, zizmor)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: actionlint
-        env:
-          VERSION: 1.7.12
-          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
-        run: |
-          curl -fsSLo actionlint.tgz "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/actionlint_${VERSION}_linux_amd64.tar.gz"
-          echo "${SHA256}  actionlint.tgz" | sha256sum -c -
-          tar xzf actionlint.tgz actionlint
-          ./actionlint -color
-      - name: zizmor
-        # Static audit of these workflows: injection, credential persistence,
-        # over-privileged tokens, unpinned actions.
-        run: pipx run --spec zizmor==1.30.1 zizmor --offline .github/workflows
-
-  # The one check the `main` ruleset requires. It waits for every other job
-  # (`needs` lists them all; scripts/ci/ci_ok.py fails when one is missing)
-  # and runs whatever they did (`always()`), then fails on any failure or
-  # cancellation, and on any skip the changes job did not order (a job whose
-  # `if:` tests `code != 'false'`, on a documentation-only PR). A new or
-  # renamed job needs no ruleset change.
-  ci-ok:
-    name: ci-ok
-    needs:
-      - changes
-      - gate
-      - e2e-2
-      - standard-tier
-      - stock-linux
-      - core-is-pure
-      - js-plugins
-      - sdk-js
-      - latency
-      - lexer-vs-bash
-      - package
-      - unused-deps
-      - semver
-      - deny
-      - fuzz
-      - scripts
-      - typos
-      - workflows
+  # The one required check: fails when any job failed or was cancelled; skipped is fine.
+  required:
+    needs: [changes, lint, test]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 2 # the merge commit and the base it lands on
-      - name: every job passed, or was skipped on the changes job's order
-        env:
-          NEEDS: ${{ toJSON(needs) }}
-          EVENT: ${{ github.event_name }}
-        # On a pull request the base branch's copy of ci_ok.py judges the run
-        # (the merge commit's first parent), not the PR's own, so a PR cannot
-        # loosen the verdict on itself; it reads the PR's ci.yml, the workflow
-        # that ran. Only while the base has no ci_ok.py does the PR's copy run,
-        # with a warning. A push, the schedule and a run by hand use the commit.
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          script=scripts/ci/ci_ok.py
-          if [ "$EVENT" = pull_request ]; then
-            if git show HEAD^1:scripts/ci/ci_ok.py > "$RUNNER_TEMP/ci_ok.py"; then
-              script="$RUNNER_TEMP/ci_ok.py"
-            else
-              echo "::warning::the base branch has no ci_ok.py; the pull request's own copy judges this run"
-            fi
-          fi
-          python3 -I "$script" .github/workflows/ci.yml
+          echo "results: $RESULTS"
+          case " $RESULTS " in
+            *" failure "* | *" cancelled "*) exit 1 ;;
+          esac

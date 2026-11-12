@@ -13,7 +13,7 @@ name: latest agents
 #   issue per failing agent, "latest <agent> <version> breaks OpenMoat".
 on:
   schedule:
-    - cron: "11 7 * * 1" # Mondays, after the weekly run
+    - cron: "11 7 * * 1" # Mondays
   workflow_dispatch:
     inputs:
       agent:

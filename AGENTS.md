@@ -37,8 +37,8 @@ The module-by-module map is in [`docs/ARCHITECTURE.md` §10](docs/ARCHITECTURE.m
 | `tests/fixtures/sandbox/` | generated host sandbox settings and Seatbelt profile for the default policy | golden outputs; `OPENMOAT_TEST_UPDATE_GOLDEN=1` rewrites them, review the diff |
 | `crates/*/tests/` | end-to-end tests of the binary in one target, `crates/openmoat-cli/tests/e2e/` (one module per area: `cli`, `alias`, `guard`, `cursor`, `cursor_sandbox`, `deliver`, `hosts` (one table-driven suite over every host), `copilot_cli`, `openclaw`, `pi`, `gemini_cli`, `opencode`, `hermes`, `cline`, `antigravity_cli`, `heartbeat`, `config_change`, `lock`, `lock_settings`, `install_path`, `binary_path`, `approvals`, `allow`, `allow_expiry`, `allow_files`, `anchor`, `blocks`, `edit`, `escapes`, `home_screen`, `human_only`, `listings`, `mcp`, `mcp_gateway`, `mcp_startup`, `mcp_status`, `packs`, `permission_mode`, `protection`, `required_level`, `provenance`, `provenance_notes`, `audit`, `export`, `team`, `paths`, `policy_upgrade`, `push`, `replay_report`, `moatbench`, `sandbox`, `sandbox_sync`, `sandbox_exec`, `run`, `run_guard`, `relay_token`, `uninstall`, `canary`, `check_diff`, `closed_pipe`, `codex`, `continue_cli`, `host_failures`, `proxy`, `proxy_ca`, `proxy_session`, `remote_approvals`, `repo_policy`, `secret`, `session_code`, `snapshot`, `taint`, `taint_answered`, `trust`, and `differential/` for the same scenarios against every enforcement layer, with `differential/agents` running the pinned real Claude Code against a scripted fake API; `common` is the shared helper module), conformance runner, the README and USAGE verdict tables checked against the default policy (`openmoat-core/tests/doc_tables.rs`), architecture invariants | isolated `HOME`/`MOAT_HOME`; no network |
 | `docs/` | INSTALL, USAGE, SANDBOX, POLICY, SDK, MERGE_CHECK, COMPLIANCE, ARCHITECTURE, THREAT_MODEL, LIMITS, ROADMAP, ADDING_AN_AGENT, MOATBENCH, DEMO, CHALLENGE, COVERAGE and EVIDENCE (generated), `adr/` | describe what the code does today; ADRs are not edited but superseded by new ADRs, except to rename a term a later ADR renames (ADR-053 §7) |
-| `scripts/ci/quality-gate.sh` | the one gate | CI and the pre-push hook run exactly this |
-| `scripts/ci/latest-agents.sh`, `scripts/ci/clean-install.sh` | CI's weekly checks of each agent's latest release and of the published install paths, each in a throwaway home it refuses to leave | CI only: they install unreviewed agent releases and run `openmoat init` and `uninstall`; never run them on a machine whose agents you use |
+| `scripts/ci/quality-gate.sh` | the local gate | the pre-push hook runs it: fmt, clippy and tests, as CI's `lint` and `test` jobs |
+| `scripts/ci/latest-agents.sh` | CI's weekly check of each agent's latest release, in a throwaway home it refuses to leave | CI only: it installs unreviewed agent releases and runs `openmoat init`; never run it on a machine whose agents you use |
 | `scripts/smoke-real-agents.sh` | a person's check of the protections with their own Claude Code, Codex, Gemini CLI, pi and GitHub Copilot CLI in a throwaway home (CONTRIBUTING "Testing with real agents") | refuses to run when a variable points at a real config directory; makes real, billed model calls; never in CI |
 
 ## 3. Invariants (never break; add a test if you touch one)
@@ -55,14 +55,14 @@ The module-by-module map is in [`docs/ARCHITECTURE.md` §10](docs/ARCHITECTURE.m
 
 ## 4. Engineering rules
 
-- **Errors:** `thiserror` enums in library crates; `anyhow` with `bail!`/`ensure!`/`.context()` in the CLI. `anyhow!` is banned by clippy. No `unwrap`, `expect`, `panic!` or `unreachable!` outside tests: the gate's second clippy run (`--lib --bins`) denies them. Restructure so the case cannot happen (a typed input, a total constructor) rather than asserting it.
+- **Errors:** `thiserror` enums in library crates; `anyhow` with `bail!`/`ensure!`/`.context()` in the CLI. `anyhow!` is banned by clippy. No `unwrap`, `expect`, `panic!` or `unreachable!` outside tests (`cargo clippy --workspace --lib --bins --all-features -- -D warnings -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic -D clippy::unreachable` finds them; CI does not run it). Restructure so the case cannot happen (a typed input, a total constructor) rather than asserting it.
 - **Size:** files ≤ 500 lines of code (architecture test; blank and comment lines, fixtures, goldens and generated files not counted; the cap only goes down), functions ≤ 200 lines, cognitive complexity ≤ 30 (clippy). Split by concern: `foo.rs` + a `foo/` directory with one file per responsibility + `tests.rs`; never `mod.rs`, never `#[path]` (architecture test).
 - **Comments** explain *why* and *what the host/OS does*; names and types explain *what the code does*. No commented-out code, no TODO/FIXME on `main` (open an issue).
 - **Platform code** lives in dedicated files/modules selected by `cfg` in one place (`#[cfg(unix)]` helpers in `home.rs`, `commands/run/{macos,linux,unsupported}.rs` chosen in `run.rs`); never scatter `cfg` through business logic. Paths are handled in slash-separated canonical form everywhere (`paths.rs`).
-- **Dependencies:** adding one needs a sentence in the PR on why std or an existing dep does not cover it; `cargo-deny` must stay green; `openmoat-core` additions need an ADR.
+- **Dependencies:** adding one needs a sentence in the PR on why std or an existing dep does not cover it; `cargo deny check` must stay green; `openmoat-core` additions need an ADR.
 - **Lints:** workspace `clippy::pedantic`, `unsafe_code = "forbid"`, rustdoc `-D warnings`. Every public item of a library crate has a doc comment (`missing_docs`, enforced in every library crate: `openmoat-core`, `openmoat-hosts`, `openmoat-audit`, `openmoat-proxy`, `openmoat-sdk`, `openmoat-wasm`). Do not `#[allow]` to get green; fix or justify in the PR. `clippy::allow_attributes` rejects `#[allow]` outright: a justified exception is `#[expect(lint, reason = "…")]`, which fails once it is no longer needed. `dbg!`, `todo!` and `unimplemented!` are lint errors. Library crates never print (`print_stdout`/`print_stderr` in each `lib.rs`); they return errors or report through a trait the CLI implements, as `openmoat-proxy::Recorder::unrecorded` does.
 - **Formatting:** `cargo fmt` (max width 100). `.editorconfig` for everything else.
-- **PR-only:** nothing is pushed to `main` directly. Branch `<type>/<topic>`, open a PR, let `pr-standards` label it (`type: …`, `area: …`, `size: …`, `risk: …`), keep it ≤ 500 lines, squash-merge. Conventional Commits title (`feat`, `fix`, `sec`, `policy`, `host(codex)`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`), lowercase subject. PR body sections **Testing** and **Security impact** are required (`pr-standards` fails without them); **Release note** is recommended and feeds `CHANGELOG.md`.
+- **PR-only:** nothing is pushed to `main` directly. Branch `<type>/<topic>`, open a PR, keep it ≤ 500 lines, squash-merge. Conventional Commits title (`feat`, `fix`, `sec`, `policy`, `host(codex)`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`), lowercase subject. PR body sections **Testing** and **Security impact** are required; **Release note** is recommended and feeds `CHANGELOG.md`.
 - **Docs are code:** behaviour change ⇒ same PR updates `docs/POLICY.md` / `ARCHITECTURE.md` / `THREAT_MODEL.md` / `CHANGELOG.md` as applicable.
 - **Test data:** made-up tokens are built so they never look real in the source: write the `-` after a vendor prefix as `\x2d`, and generate test credentials at run time. GitHub secret scanning and CodeQL reject literal ones. A deliberate misspelling in a test or doc (a near-miss package name) goes in `_typos.toml`.
 
@@ -70,12 +70,9 @@ The module-by-module map is in [`docs/ARCHITECTURE.md` §10](docs/ARCHITECTURE.m
 
 ### Run the gate
 ```bash
-scripts/ci/quality-gate.sh        # fmt, clippy -D warnings, doc, tests, policy lint
+scripts/ci/quality-gate.sh        # fmt, clippy -D warnings, tests
 ```
-It also runs the checks of CONTRIBUTING "Checks beyond the Rust gate" (shellcheck,
-Markdown links, typos in British English, unused dependencies) when their tools are
-installed.
-Claim "done" only after it passes locally. CI runs the same script on macOS (arm64, x64), Linux and Windows.
+Claim "done" only after it passes locally. CI runs the same commands, the tests on macOS, Linux and Windows (CONTRIBUTING "CI").
 
 ### Add or change a policy rule
 1. Edit `crates/openmoat-core/policies/default-v1.yaml` (keep rule ids stable; they appear in audit logs and user output).
@@ -122,7 +119,7 @@ Copy the shape of `docs/adr/ADR-004-exit-code-contract.md`: Context, Decision, C
 
 ## 6. Definition of done
 
-- Gate passes locally; CI green on all platforms.
+- Gate passes locally; CI's `required` check is green.
 - Tests exist at the level that proves the change (unit, fixture, e2e, architecture).
 - Docs and CHANGELOG updated in the same PR.
 - PR describes Testing and Security impact.
@@ -137,4 +134,3 @@ Copy the shape of `docs/adr/ADR-004-exit-code-contract.md`: Context, Decision, C
 - Never run `scripts/smoke-real-agents.sh` as an agent: it starts real agents with real model keys.
 - Never commit credentials, real host payloads with tokens, or personal absolute paths.
 - Prefer small PRs: one concern, one title, ≤ 500 lines. Never push to `main`; never merge your own PR while a required check is red.
-- `moat-reviewer` posts an automated first-pass review on every PR (inline `🔴/🟠/🟡/💡` comments and a summary). Resolve or answer each 🔴 and 🟠 item before asking a maintainer to review; it is advisory and does not replace that review.

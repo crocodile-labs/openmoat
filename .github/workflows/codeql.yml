@@ -21,7 +21,7 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: "17 4 * * 1" # Mondays, before the weekly run
+    - cron: "17 4 * * 1" # Mondays
   workflow_dispatch:
 
 # A new push to a pull request cancels the run before; a push to main or a
