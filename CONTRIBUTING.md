@@ -77,8 +77,9 @@ is pushed to `main` directly.
 | `required` | `ubuntu-latest` | fails when any job above failed or was cancelled; a skipped job is fine |
 
 A documentation-only pull request skips `lint` and `test`; every push to `main` runs
-them, so a document a test reads is still checked there. `required` is the one check the
-`main` ruleset requires: a new job goes in its `needs`, not in the ruleset. A new push cancels
+them, so a document a test reads is still checked there. The `main` ruleset requires
+`required`, `conventional` (the title, `pr-title.yml`) and `labels · size · risk · body`
+(`pr-standards.yml`): a new CI job goes in `required`'s `needs`, not in the ruleset. A new push cancels
 the pull request's older run; runs on `main` are never cancelled. Rust build caches are
 saved by runs on `main` only.
 
