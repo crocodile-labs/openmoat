@@ -181,6 +181,36 @@ fn the_digest_binds_the_whole_tool_input() {
     assert_ne!(digest(&unknown("a")), digest(&unknown("b")));
 }
 
+/// A line break in the call is shown as one, marked: `ls foo` and
+/// `rm -rf ~/work` read as two commands, never as `ls foo?rm -rf ~/work`.
+#[test]
+fn a_line_break_in_the_call_is_shown_and_marked() {
+    let s = setup();
+    gated(
+        &s,
+        &super::call("s1", "ls foo\nrm -rf ~/work"),
+        review(),
+        NOW,
+    );
+    let request = only_request(&s);
+    for buttons in [true, false] {
+        let capabilities = Capabilities {
+            buttons,
+            button_bytes: 64,
+            max_text: 4096,
+        };
+        let p = prompt(&s.key, &request, &capabilities);
+        assert!(p.text.contains("ls foo⏎\nrm -rf ~/work"), "{}", p.text);
+        assert!(!p.text.contains("foo?rm"), "{}", p.text);
+        // Shown whole, so both choices stay.
+        if buttons {
+            assert_eq!(p.choices.len(), 2);
+        } else {
+            assert!(p.text.contains(&approve_button(&s, &request)), "{}", p.text);
+        }
+    }
+}
+
 /// A valid, signed approval of `request` by the approver leaves `call` held
 /// for review, and is not used up.
 fn assert_not_approvable(s: &super::Setup, call: &openmoat_hosts::HookRequest, request: &Request) {

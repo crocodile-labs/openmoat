@@ -48,7 +48,7 @@ const DENY_ONLY: &str = "This channel cannot show all of the call, so it cannot 
 
 /// Whether `text` shows all of `request`'s call as kept for the approver.
 fn fits_whole(request: &Request, text: &str) -> bool {
-    text.contains(crate::render::clean(&request.shown).as_ref())
+    text.contains(&crate::render::clean_lines(&request.shown))
 }
 
 /// The prompt with both choices: buttons, or reply codes where buttons do not fit.
@@ -114,6 +114,10 @@ pub fn text(request: &Request, tail: &str, max: usize) -> String {
         )
     };
     let room = max.saturating_sub(frame("").chars().count());
-    let shown = crate::render::truncate(&cleaned(&request.shown), SHOWN_MAX.min(room));
+    // The call's line breaks stay, each marked ([`super::request::LINE_MARK`]).
+    let shown = crate::render::truncate(
+        &crate::render::clean_lines(&request.shown),
+        SHOWN_MAX.min(room),
+    );
     frame(&shown)
 }

@@ -111,7 +111,9 @@ the folder, the ids of the rules that held the call, the request code, the expir
 call itself under a label that says it came from the agent and may try to persuade.
 The call is passed through `openmoat_audit::redact` (token shapes and the policy's
 brokered values), control and bidirectional characters are shown escaped
-(`render::clean`), and it is cut to 1500 characters; a write's content is never sent,
+(`render::clean`), each line break is kept and marked with `⏎` at the end of its line
+(a newline shown as `?` would make `ls foo` and `rm -rf ~/work` read as one command),
+and it is cut to 1500 characters; a write's content is never sent,
 only its size and digest. A call that had to be cut is marked so in the signed request
 (`cut`): its prompt offers Deny only on every channel, and the guard refuses an approval
 for it even if one is made. The same holds when redaction changed any of the text shown
@@ -169,6 +171,7 @@ shown as the command it is.
 | A call too long for the channel to show, approved unread | Deny only: the approve code is never sent | `remote::tests::text::a_call_the_channel_cannot_show_whole_can_only_be_denied` |
 | A call longer than the 1500 characters kept, approved unread | the request carries a signed `cut` flag; every channel offers Deny only, and the guard uses no approval for a cut request | `remote::tests::text::a_call_too_long_to_keep_whole_can_only_be_denied` |
 | Redaction hides the part that runs (`X="$(curl … \| sh)"`, a URL's userinfo), approved unread | the request carries a signed `redacted` flag; Deny only, and the guard uses no approval for it | `remote::tests::text::a_call_redaction_changed_can_only_be_denied` |
+| A multi-line command read as one line | each line break shown as a break, marked `⏎` | `remote::tests::text::a_line_break_in_the_call_is_shown_and_marked` |
 | Agent reads a channel's credential under the per-channel layout | `kernel-self` read deny on `~/.moat/remote/**` | conformance `T9-read-remote-channel-credential`, `T9-cat-remote-channel-credential-glob`, `T9-read-moved-remote-channel-credential` |
 
 Limits, written in `docs/APPROVALS.md` and `docs/LIMITS.md`: an approver's Telegram

@@ -158,6 +158,20 @@ pub fn digest(request: &HookRequest, action: &Action, decision: &Decision) -> Re
     Ok(hex(&out.finalize()))
 }
 
+/// The mark at the end of each line of a call that goes on: `ls foo⏎` over
+/// `rm -rf ~/work` reads as the two commands it is, where a newline shown
+/// as `?` would read as one.
+pub const LINE_MARK: char = '⏎';
+
+/// `text` through [`crate::render::clean`] line by line, each line break
+/// kept and marked with [`LINE_MARK`].
+fn lines_marked(text: &str) -> String {
+    text.split('\n')
+        .map(crate::render::clean)
+        .collect::<Vec<_>>()
+        .join(&format!("{LINE_MARK}\n"))
+}
+
 /// What an approver is shown of a call, and whether part of it is hidden.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shown {
@@ -191,7 +205,7 @@ pub fn shown(request: &HookRequest, action: &Action, known: &KnownSecrets) -> Sh
     if !request.edits.is_empty() {
         let _ = write!(text, " ({} replacement(s), not shown)", request.edits.len());
     }
-    let text = crate::render::clean(&text);
+    let text = lines_marked(&text);
     Shown {
         redacted,
         cut: text.chars().count() > SHOWN_MAX,

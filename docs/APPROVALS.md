@@ -111,7 +111,8 @@ The agent's message names the same request code, for example
 
 What is sent: the agent's name, the session id, the folder, the rule ids and the call.
 The call passes through the audit log's redaction first (token shapes and your brokered
-secrets), invisible and control characters are shown as `?`, and it is cut to 1500
+secrets), invisible and control characters are shown as `?`, each line break stays a
+line break with `⏎` at the end of the line before it, and it is cut to 1500
 characters. The content of a file write is never sent, only its size.
 
 On a channel without buttons, the message ends with two reply codes instead; send one
