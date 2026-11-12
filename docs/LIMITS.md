@@ -134,8 +134,10 @@ Each agent's gaps and the reasons are in
   to the agent, not the write roots of an agent's own sandbox, so a deny rule inside one
   of those still counts there. A hook-only agent's writes
   through a program the hook cannot see are not stopped by those rules; only an OS
-  sandbox stops them. A program that leaves a child running past its time limit keeps
-  that child, and one waiting thread of the proxy, until the child ends.
+  sandbox stops them. On macOS and Linux everything left in the program's process group is
+  ended with it; a child that started a session of its own (`setsid`) is not. On Windows
+  only the program is ended, and a child it left holding its output keeps one waiting
+  thread of the proxy until the child ends.
 
 ## What the hook does not see
 

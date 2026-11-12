@@ -389,8 +389,8 @@ that an administrator installed.
   - `home: user`: your home. For a tool that keeps its login there (`~/.vault-token`,
     `~/.config/<tool>`). The program then reads files in your home, so keep the ones it
     reads from the agent with deny `fs.write` rules too.
-- **How it runs.** No input, no terminal (its own process group), a time limit of 30
-  seconds, at most 64 KiB of output, its error output dropped, and a bare environment:
+- **How it runs.** No input, no terminal (its own process group, which is ended with
+  everything in it when the run ends, on macOS and Linux), a time limit of 30 seconds, at most 64 KiB of output, its error output dropped, and a bare environment:
   `HOME` (above), `PATH` (`/usr/bin:/bin:/usr/sbin:/sbin` only, never the program's own folder), `USER`,
   `LOGNAME`, `LANG`, `LC_ALL`, `TMPDIR` and `TZ` (on Windows `SystemRoot`, the profile
   folders and `TEMP`). Pass anything else, such as a profile name, as an argument.

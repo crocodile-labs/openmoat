@@ -170,9 +170,12 @@ program, or name it, runs code as the person.
   configuration) are not checked or pinned; they need deny rules too (LIMITS.md). The
   default `secrets-paths` rule covers `~/.aws`, `~/.config/gcloud` and `~/.vault-token`.
   Tools made of many such files are poor sources.
-- A program that leaves a child running past its time limit keeps that child, and one
-  thread of the proxy waiting on its output, until the child ends: killing the process
-  group needs a call the CLI does not make without `unsafe`.
+- On macOS and Linux the program's whole process group is killed when the run ends,
+  at the time limit or after it answered, so a child it left behind does not outlive the
+  run; its output is read on the calling thread with a deadline (`poll`), so no thread
+  waits on a pipe such a child holds (`rustix`, no `unsafe`). A child that leaves the
+  group (`setsid`) is not ended. On Windows only the program is killed, and a child that
+  holds its output keeps one thread of the proxy waiting until it ends (LIMITS.md).
 - Updating the program means restarting `openmoat proxy` (or `openmoat run`).
 - Proof: unit tests run stand-in programs (an answer, a bare environment, a failure, a
   hang, a flood of output, a control character, a program changed after start, a program

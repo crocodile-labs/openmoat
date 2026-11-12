@@ -178,6 +178,35 @@ mod programs {
         assert!(!ran.exists());
     }
 
+    /// A program that leaves a child holding its output open: the run ends
+    /// at the time limit, not when the child does, and the child is ended
+    /// with the program's process group.
+    #[test]
+    fn a_child_left_holding_the_output_is_ended_at_the_limit() {
+        let stand = Stand::new();
+        let pid_file = format!("{}/child", stand.root);
+        let program = stand
+            .shell(&format!("sleep 30 &\necho $! > '{pid_file}'\necho {VALUE}"))
+            .with_time_limit(Duration::from_secs(2));
+        let started = std::time::Instant::now();
+        let error = format!("{:#}", program.fetch().err().unwrap());
+        let took = started.elapsed();
+        assert!(error.contains("did not finish within 2s"), "{error}");
+        assert!(took < Duration::from_secs(4), "{took:?}");
+        let pid: i32 = std::fs::read_to_string(&pid_file)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        let pid = rustix::process::Pid::from_raw(pid).unwrap();
+        // Ended at once; reaped by the system once its parent is gone.
+        let gone = (0..50).any(|_| {
+            std::thread::sleep(Duration::from_millis(20));
+            rustix::process::test_kill_process(pid).is_err()
+        });
+        assert!(gone, "the child is still running");
+    }
+
     #[test]
     fn a_program_the_agent_could_change_is_not_run() {
         let stand = Stand::new();

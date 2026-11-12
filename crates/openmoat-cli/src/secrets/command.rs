@@ -9,11 +9,9 @@
 //! and a cap on what it prints. Its error output is dropped, and no error
 //! names anything it printed: only exit codes and limits.
 
-use std::io::Read as _;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 use anyhow::{Context as _, Result, bail, ensure};
 use openmoat_core::{Policy, SecretCommand, SecretCommandHome};
@@ -22,6 +20,15 @@ use zeroize::Zeroizing;
 
 use super::copy::Copy;
 use super::{Place, program};
+
+#[cfg(not(unix))]
+mod other;
+#[cfg(unix)]
+mod unix;
+#[cfg(not(unix))]
+use other as platform;
+#[cfg(unix)]
+use unix as platform;
 
 /// How long the program may take.
 const TIME_LIMIT: Duration = Duration::from_secs(30);
@@ -160,7 +167,7 @@ impl Program {
         {
             use std::os::unix::process::CommandExt as _;
             // Its own process group: a read from the terminal stops it, and
-            // the time limit ends it.
+            // the end of the run ends it with everything it started.
             command.arg0(&self.written).process_group(0);
         }
         // A folder the agent cannot change, never the proxy's own (the
@@ -189,48 +196,32 @@ impl Program {
     fn run(&self) -> Result<Zeroizing<Vec<u8>>> {
         let shown = self.path.display();
         let mut child = spawn(&mut self.command()).with_context(|| format!("starting {shown}"))?;
-        let mut stdout = child.stdout.take().context("no output pipe")?;
-        let (send, receive) = mpsc::channel();
-        std::thread::spawn(move || {
-            let mut out = Zeroizing::new(Vec::new());
-            let read = (&mut stdout)
-                .take(MAX_OUTPUT as u64 + 1)
-                .read_to_end(&mut out);
-            let _ = send.send(read.map(|_| out));
-        });
-        let started = Instant::now();
-        let out = receive.recv_timeout(self.time_limit);
-        let too_much = matches!(&out, Ok(Ok(out)) if out.len() > MAX_OUTPUT);
-        let finished = loop {
-            match child.try_wait() {
-                Ok(Some(status)) => break Some(status),
-                Ok(None) if !too_much && started.elapsed() < self.time_limit => {
-                    std::thread::sleep(Duration::from_millis(20));
-                }
-                _ => break None,
+        match platform::collect(&mut child, self.time_limit) {
+            Outcome::Done(status, out) => {
+                ensure!(status.success(), "{shown} failed ({status})");
+                Ok(out)
             }
-        };
-        if finished.is_none() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-        ensure!(
-            !too_much,
-            "{shown} printed more than {} KiB",
-            MAX_OUTPUT / 1024
-        );
-        let Some(status) = finished else {
-            bail!(
-                "{shown} did not finish within {}s",
+            Outcome::TooMuch => bail!("{shown} printed more than {} KiB", MAX_OUTPUT / 1024),
+            Outcome::Late => bail!(
+                "{shown} did not finish within {}s, or something it started kept its output \
+                 open; it was ended",
                 self.time_limit.as_secs()
-            );
-        };
-        let Ok(Ok(out)) = out else {
-            bail!("{shown} did not close its output within the time limit");
-        };
-        ensure!(status.success(), "{shown} failed ({status})");
-        Ok(out)
+            ),
+            Outcome::Broken(error) => Err(error).with_context(|| format!("reading {shown}")),
+        }
     }
+}
+
+/// How a run ended.
+enum Outcome {
+    /// It exited and closed its output: its status and what it printed.
+    Done(std::process::ExitStatus, Zeroizing<Vec<u8>>),
+    /// It printed more than [`MAX_OUTPUT`].
+    TooMuch,
+    /// The time limit passed first.
+    Late,
+    /// Its output could not be read.
+    Broken(std::io::Error),
 }
 
 /// Start `command`. A file just written can be held open for writing for a
