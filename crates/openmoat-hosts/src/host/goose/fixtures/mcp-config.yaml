@@ -1,0 +1,21 @@
+# The two examples of goose's documentation/docs/getting-started/using-extensions.md
+# (v1.57.0): a stdio extension and a Streamable HTTP one.
+extensions:
+  github:
+    name: GitHub
+    cmd: npx
+    args: [-y @modelcontextprotocol/server-github]
+    enabled: true
+    envs: { "GITHUB_PERSONAL_ACCESS_TOKEN": "<YOUR_TOKEN>" }
+    type: stdio
+    timeout: 300
+  remote-example:
+    name: Remote Example
+    type: streamable_http
+    uri: https://example.com/mcp
+    client_id: <YOUR_REGISTERED_CLIENT_ID>
+    client_secret_key: REMOTE_EXAMPLE_OAUTH_SECRET
+    scopes:
+      - example.readonly
+    enabled: true
+    timeout: 300
