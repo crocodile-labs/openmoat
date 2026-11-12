@@ -90,10 +90,9 @@ PR): `ci-ok`, `conventional` (title), `labels · size · risk · body` (pr-stand
 for every other job there and fails when any failed or was cancelled, or was skipped
 without the `changes` job ordering it (`scripts/ci/ci_ok.py`), so a new or renamed CI job
 needs no ruleset change. Every job of `ci.yml` counts, `fuzz (smoke)`, the JavaScript jobs
-and the shell lexer against bash included. Until the ruleset has moved to `ci-ok`, it also
-names the jobs one by one: `macos-15`, `macos-15-intel`, `ubuntu-latest`,
-`windows-latest`, `windows-latest e2e (2 of 2)`, the `standard tier` and `guard latency`
-legs, and the lint jobs. CodeQL and `adr-062 poc` are not required.
+and the shell lexer against bash included. CodeQL and `adr-062 poc` are not required.
+Windows and macOS run the end-to-end tests in two parts (`<runner> e2e (2 of 2)` runs
+beside each gate leg) so that each job stays within its time limit.
 
 What a pull request runs (`.github/workflows/ci.yml`, the `changes` job,
 `scripts/ci/changes.py`):
