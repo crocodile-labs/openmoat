@@ -95,7 +95,7 @@ hook binary gone, and a stand-in that exits 1 with nothing printed. In run 43254
 "cannot start, crashes or exits non-zero" as `blocks`, and the job fails if a later `agy`
 runs the call. A hook that times out is not tried there (waiting out the limit would
 outlast the job), and output that is not its JSON is not tried either: OpenMoat assumes
-the call runs in both cases, and `openmoat doctor` says so. Every error `openmoat guard`
+the call runs in both cases, and `openmoat doctor` names the timeout. Every error `openmoat guard`
 can catch answers a `deny` and exits 2 first. The timeout is written at 600 s so the
 guard's own 30 s budget always answers before the host's documented 30 s default would.
 

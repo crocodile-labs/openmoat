@@ -1033,7 +1033,7 @@ these takes one command in your own terminal (agents are denied all of them):
   answer it. `"enabled": false` under that entry shows as not protected in
   `openmoat status` until `openmoat init` turns it back on. The weekly real-agent check
   runs `agy` on Linux and macOS with OpenMoat's hook and shows it deciding the call; with
-  the hook missing or crashing, `agy` blocked the call there. What `agy` does when the
+  the hook binary missing or exiting 1, `agy` blocked the call there. What `agy` does when the
   hook times out is not documented: treat that as letting the call run, and use
   `openmoat run` for an OS boundary that holds either way. Run `/hooks` in `agy` to see
   that it lists the `openmoat` entry.
