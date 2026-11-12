@@ -10,9 +10,11 @@ adr062-poc.yml) runs this and passes its output on. It prints four lines:
   JavaScript, fuzz and latency jobs then skip; the checks that read
   documentation (links, spelling, the changelog fragments, the release version
   strings) still run.
-- `full`: whether the slow legs run: the `macos-15-intel` quality gate and
-  ADR-062 step 0. A push to `main`, the weekly schedule and a run by hand
-  always run them. A pull request runs them when it is labelled `ci:full` or
+- `full`: whether the slow leg, ADR-062 step 0 (adr062-poc.yml, through
+  `proxy` below), runs. ci.yml no longer reads it: pull requests and main run
+  the same test jobs, and macOS Intel runs weekly (weekly.yml). A push to
+  `main`, the weekly schedule and a run by hand always set it. A pull request
+  sets it when it is labelled `ci:full` or
   changes platform code: a path in `SANDBOX` or `SANDBOX_WORDS` (the sandbox
   backends, `openmoat run`, the OS sandbox protection level, their end-to-end
   tests, the default policy, the toolchain, `Cargo.lock`, `.github/`, these CI
@@ -249,7 +251,7 @@ def decide(event, pr, base, head, list_changed=changed_paths, find_readers=reade
         notes.append(f"platform-specific Rust changed ({', '.join(platform[:5])}): "
                      "the slow legs run")
     else:
-        notes.append("the slow legs (macos-15-intel, ADR-062 step 0) and long fuzz wait for main")
+        notes.append("the slow leg (ADR-062 step 0) and long fuzz wait for main")
     full = labelled or bool(sandbox) or bool(platform)
     proxy = [p for p in changed if is_proxy_path(p)]
     if proxy and not full:

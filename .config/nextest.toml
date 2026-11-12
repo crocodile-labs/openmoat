@@ -1,0 +1,71 @@
+# cargo-nextest, the test runner of CI and of scripts/ci/quality-gate.sh when it
+# is installed (CONTRIBUTING "CI"); keys as documented for the pinned version
+# (scripts/ci/install-nextest.sh). Each test runs in its own process. Doc tests
+# are not nextest's: they run with `cargo test --doc`.
+#
+# Profiles:
+# - default: a person's run. No retries; a test still running after 60 s is
+#   named as slow.
+# - ci: the pull request and main jobs (NEXTEST_PROFILE=ci). One retry, and a
+#   test that passed only on its retry is reported as flaky on the run, never
+#   hidden (scripts/ci/junit_summary.py). Never a retry for a test of the
+#   sandbox, a deny or a bypass: a deny that holds only on the second try is a
+#   bypass. A test still running after 120 s is stopped and fails by name,
+#   instead of the whole job at its time limit; the known long ones get 6 min.
+# - ci-intel: the weekly macOS Intel job, about 2.5 times slower than macos-15:
+#   the same rules with 2.5 times the time.
+#
+# Tests listed in .config/nextest-quarantine.md are left out of both CI
+# profiles' runs (scripts/ci/quarantine.py) and run weekly on their own.
+
+[store]
+dir = "target/nextest"
+
+[profile.default]
+slow-timeout = { period = "60s" }
+
+[profile.ci]
+retries = 1
+fail-fast = false
+slow-timeout = { period = "60s", terminate-after = 2 }
+status-level = "slow"
+final-status-level = "flaky"
+failure-output = "immediate-final"
+
+[profile.ci.junit]
+# target/nextest/ci/junit.xml: per-test times, failures, flaky passes.
+path = "junit.xml"
+store-success-output = false
+store-failure-output = true
+
+# No retry: the sandbox, the hook's denies, the escape and bypass attacks.
+[[profile.ci.overrides]]
+filter = "binary_id(=openmoat-core::conformance) | binary_id(=openmoat-core::ir_never_widens) | (binary_id(=openmoat::bin/openmoat) & (test(/^sandbox::/) | test(/^commands::run::/))) | (binary_id(=openmoat::e2e) & (test(/^sandbox::/) | test(/^sandbox_exec::/) | test(/^cursor_sandbox::/) | test(/^run::/) | test(/^run_guard::/) | test(/^differential::/) | test(/^escapes::/) | test(/^relay_token::/) | test(/^hook_only::launch::/) | test(/^guard::/) | test(/^blocks::/) | test(/^secret::/) | test(/^lock::/) | test(/^injected::/)))"
+retries = 0
+
+# Agents run one after another, or a long chain of CLI calls, each a real
+# process start: up to six minutes before they are stopped.
+[[profile.ci.overrides]]
+filter = "binary_id(=openmoat::e2e) & (test(/^hosts::/) | test(/^differential::/) | test(/^hook_only::/) | test(/^relay_token::/) | test(/^run::/) | test(/^run_guard::/) | test(=allow::allow_dir_opens_the_directory_but_deny_rules_still_win) | test(=approvals::session_grants_expire_and_are_pruned_on_write) | test(=policy_upgrade::an_old_dir_grant_is_brought_up_to_date) | test(=trust::status_and_doctor_say_which_form_applies))"
+slow-timeout = { period = "120s", terminate-after = 3 }
+
+[profile.ci-intel]
+retries = 1
+fail-fast = false
+slow-timeout = { period = "150s", terminate-after = 2 }
+status-level = "slow"
+final-status-level = "flaky"
+failure-output = "immediate-final"
+
+[profile.ci-intel.junit]
+path = "junit.xml"
+store-success-output = false
+store-failure-output = true
+
+[[profile.ci-intel.overrides]]
+filter = "binary_id(=openmoat-core::conformance) | binary_id(=openmoat-core::ir_never_widens) | (binary_id(=openmoat::bin/openmoat) & (test(/^sandbox::/) | test(/^commands::run::/))) | (binary_id(=openmoat::e2e) & (test(/^sandbox::/) | test(/^sandbox_exec::/) | test(/^cursor_sandbox::/) | test(/^run::/) | test(/^run_guard::/) | test(/^differential::/) | test(/^escapes::/) | test(/^relay_token::/) | test(/^hook_only::launch::/) | test(/^guard::/) | test(/^blocks::/) | test(/^secret::/) | test(/^lock::/) | test(/^injected::/)))"
+retries = 0
+
+[[profile.ci-intel.overrides]]
+filter = "binary_id(=openmoat::e2e) & (test(/^hosts::/) | test(/^differential::/) | test(/^hook_only::/) | test(/^relay_token::/) | test(/^run::/) | test(/^run_guard::/) | test(=allow::allow_dir_opens_the_directory_but_deny_rules_still_win) | test(=approvals::session_grants_expire_and_are_pruned_on_write) | test(=policy_upgrade::an_old_dir_grant_is_brought_up_to_date) | test(=trust::status_and_doctor_say_which_form_applies))"
+slow-timeout = { period = "300s", terminate-after = 3 }

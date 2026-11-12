@@ -15,16 +15,21 @@ Usage: NEEDS='<toJSON(needs)>' ci_ok.py <workflow file>
   `needs.changes.outputs.code != 'false'`, on a run where `changes` succeeded
   and answered `code=false` (a documentation-only pull request).
 
+On a pull request (`EVENT=pull_request`), a job in `REPORTED_ON_PR` that did
+not succeed is a warning, not a failure: guard latency, timed on a shared
+runner, is reported there and never blocks a merge. On `main`, the schedule
+and a run by hand it counts like any other job.
+
 A matrix job reports one result for all its legs: `failure` if any leg
 failed. Legs with nothing to run (a documentation-only pull request, or the
-slow legs `changes` held back) run their skipped steps and report `success`.
+macOS latency leg of a pull request) run their skipped steps and report
+`success`.
 
 On a pull request, ci.yml runs the copy of this file on the branch the pull
 request lands on (the merge commit's first parent), not the pull request's
 own, so a pull request cannot change how its own run is judged; it checks
 the pull request's ci.yml, the workflow that actually ran. A change to this
-file sets `full` on that pull request (scripts/ci/changes.py) and judges runs
-from the next pull request after it merges. Only while the base branch has no
+file judges runs from the next pull request after it merges. Only while the base branch has no
 copy of this file does the pull request's copy run, with a warning.
 
 The workflow is read as text, not YAML (no YAML parser in the standard
@@ -38,6 +43,8 @@ import re
 import sys
 
 DOCS_ONLY_TEST = "needs.changes.outputs.code != 'false'"
+# Reported on a pull request, never blocking it (ci.yml's `latency` job).
+REPORTED_ON_PR = ("latency",)
 SELF = "ci-ok"
 JOB = re.compile(r"^  ([A-Za-z0-9_-]+):\s*(#.*)?$")
 JOB_IF = re.compile(r"^    if:\s*(.*)$")
@@ -68,9 +75,10 @@ def workflow_jobs(text):
     return jobs
 
 
-def verdict(needs, jobs):
-    """The list of problems; empty means the run passes."""
+def verdict(needs, jobs, event=""):
+    """(problems, warnings); no problem means the run passes."""
     problems = []
+    warnings = []
     expected = set(jobs) - {SELF}
     for job in sorted(expected - set(needs)):
         problems.append(f"{job}: not in ci-ok's needs, so its result is not checked")
@@ -86,13 +94,15 @@ def verdict(needs, jobs):
             continue
         if result == "skipped" and docs_only and DOCS_ONLY_TEST in jobs.get(job, ""):
             continue
-        if result == "skipped":
+        if event == "pull_request" and job in REPORTED_ON_PR:
+            warnings.append(f"{job}: {result} (reported on a pull request, not blocking)")
+        elif result == "skipped":
             problems.append(f"{job}: skipped, and the changes job did not order it")
         else:
             problems.append(f"{job}: {result}")
     if not needs:
         problems.append("no job results at all")
-    return problems
+    return problems, warnings
 
 
 def main(argv=None):
@@ -111,9 +121,11 @@ def main(argv=None):
     if SELF not in jobs:
         print(f"::error title=ci-ok::{argv[0]} has no `{SELF}` job; is this the right workflow?")
         return 1
-    problems = verdict(needs, jobs)
+    problems, warnings = verdict(needs, jobs, os.environ.get("EVENT", ""))
     for job in sorted(needs):
         print(f"{job}: {needs[job].get('result')}")
+    for warning in warnings:
+        print(f"::warning title=ci-ok::{warning}")
     for problem in problems:
         print(f"::error title=ci-ok::{problem}")
     if problems:

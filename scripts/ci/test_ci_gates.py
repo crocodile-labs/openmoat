@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 """Tests of CI's own decisions: what a run needs (changes.py), whether it
-passed (ci_ok.py), and whether a commit may be released (main_ci_green.py).
-Run by scripts/ci/quality-gate.sh and CI's `scripts` job.
+passed (ci_ok.py), whether a commit may be released (main_ci_green.py),
+which tests are quarantined (quarantine.py), what a test report says
+(junit_summary.py), whether a failure is re-run as infrastructure
+(infra_retry.py), which issues main's runs open (main_watch.py), the time
+budget (budget.sh), and the workflows themselves: ci-ok's `needs`, the time
+budgets against the time limits, the jobs and their parts.
+Run by scripts/ci/quality-gate.sh and CI's `lint` job.
 
     python3 -I scripts/ci/test_ci_gates.py
+
+CI_WORKFLOW_DIR names another directory of workflows to check (one written
+for a change, before it is in `.github/workflows`).
 """
 
 import contextlib
@@ -11,9 +19,12 @@ import importlib.util
 import io
 import json
 import os
+import re
+import shutil
 import subprocess
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from unittest import mock
 
@@ -30,6 +41,11 @@ def load(name, file):
 changes = load("changes", "changes.py")
 ci_ok = load("ci_ok", "ci_ok.py")
 main_ci_green = load("main_ci_green", "main_ci_green.py")
+quarantine = load("quarantine", "quarantine.py")
+junit_summary = load("junit_summary", "junit_summary.py")
+infra_retry = load("infra_retry", "infra_retry.py")
+main_watch = load("main_watch", "main_watch.py")
+ROOT = HERE.parents[1]
 
 
 def no_readers(_path):
@@ -309,9 +325,28 @@ def needs_of(code="true", **results):
     return base
 
 
+def problems_of(needs, jobs, event="push"):
+    return ci_ok.verdict(needs, jobs, event)[0]
+
+
 class CiOk(unittest.TestCase):
     def setUp(self):
         self.jobs = ci_ok.workflow_jobs(WORKFLOW)
+
+    def test_latency_is_reported_on_a_pull_request_and_blocks_elsewhere(self):
+        jobs = {**self.jobs, "latency": "${{ !cancelled() }}"}
+        for result in ("failure", "cancelled"):
+            needs = {**needs_of(), "latency": {"result": result, "outputs": {}}}
+            with self.subTest(result=result):
+                problems, warnings = ci_ok.verdict(needs, jobs, "pull_request")
+                self.assertEqual(problems, [])
+                self.assertEqual(len(warnings), 1)
+                for event in ("push", "schedule", "workflow_dispatch", ""):
+                    self.assertEqual(problems_of(needs, jobs, event), [f"latency: {result}"])
+
+    def test_only_latency_is_reported_on_a_pull_request(self):
+        self.assertEqual(problems_of(needs_of(gate="failure"), self.jobs, "pull_request"),
+                         ["gate: failure"])
 
     def test_reads_jobs_and_their_conditions(self):
         self.assertEqual(list(self.jobs), ["changes", "gate", "deny", "typos", "ci-ok"])
@@ -320,44 +355,44 @@ class CiOk(unittest.TestCase):
         self.assertEqual(self.jobs["gate"], "${{ !cancelled() }}", "a step's if is not the job's")
 
     def test_all_green_passes(self):
-        self.assertEqual(ci_ok.verdict(needs_of(), self.jobs), [])
+        self.assertEqual(problems_of(needs_of(), self.jobs), [])
 
     def test_failure_and_cancellation_fail(self):
         for result in ("failure", "cancelled"):
             with self.subTest(result=result):
-                self.assertEqual(ci_ok.verdict(needs_of(gate=result), self.jobs),
+                self.assertEqual(problems_of(needs_of(gate=result), self.jobs),
                                  [f"gate: {result}"])
 
     def test_failed_changes_job_fails(self):
-        self.assertTrue(ci_ok.verdict(needs_of(changes="failure"), self.jobs))
+        self.assertTrue(problems_of(needs_of(changes="failure"), self.jobs))
 
     def test_ordered_docs_only_skip_passes(self):
-        self.assertEqual(ci_ok.verdict(needs_of(code="false", deny="skipped"), self.jobs), [])
+        self.assertEqual(problems_of(needs_of(code="false", deny="skipped"), self.jobs), [])
 
     def test_skip_without_the_order_fails(self):
-        self.assertTrue(ci_ok.verdict(needs_of(code="true", deny="skipped"), self.jobs))
+        self.assertTrue(problems_of(needs_of(code="true", deny="skipped"), self.jobs))
 
     def test_skip_of_a_job_the_order_does_not_cover_fails(self):
         for job in ("gate", "typos"):
             with self.subTest(job=job):
-                self.assertTrue(ci_ok.verdict(needs_of(code="false", **{job: "skipped"}),
-                                              self.jobs))
+                self.assertTrue(problems_of(needs_of(code="false", **{job: "skipped"}),
+                                            self.jobs))
 
     def test_docs_only_answer_from_a_failed_changes_job_orders_nothing(self):
         needs = needs_of(code="false", deny="skipped", changes="failure")
         self.assertIn("deny: skipped, and the changes job did not order it",
-                      ci_ok.verdict(needs, self.jobs))
+                      problems_of(needs, self.jobs))
 
     def test_job_missing_from_needs_fails(self):
-        self.assertEqual(ci_ok.verdict(needs_of(typos=None), self.jobs),
+        self.assertEqual(problems_of(needs_of(typos=None), self.jobs),
                          ["typos: not in ci-ok's needs, so its result is not checked"])
 
     def test_unknown_need_fails(self):
         needs = {**needs_of(), "ghost": {"result": "success"}}
-        self.assertTrue(ci_ok.verdict(needs, self.jobs))
+        self.assertTrue(problems_of(needs, self.jobs))
 
     def test_empty_needs_fails(self):
-        self.assertTrue(ci_ok.verdict({}, {"ci-ok": "always()"}))
+        self.assertTrue(problems_of({}, {"ci-ok": "always()"}))
 
     def run_main(self, needs, workflow=WORKFLOW):
         with tempfile.TemporaryDirectory() as d:
@@ -506,6 +541,325 @@ class MainCiGreen(unittest.TestCase):
             self.assertEqual(main(), 1, "still running when the wait is over")
         with mock.patch.object(main_ci_green, "fetch_runs", return_value=[run()]):
             self.assertEqual(main(), 0)
+
+
+TABLE_HEAD = """\
+# Quarantined tests
+
+Rules in prose, with `profile.ci` and a | pipe | in a sentence is not a row.
+
+| binary id | test | failure signature | first red | owner | issue |
+|---|---|---|---|---|---|
+"""
+
+
+class Quarantine(unittest.TestCase):
+    TODAY = quarantine.datetime.date(2026, 11, 12)
+
+    def rows(self, *lines):
+        return quarantine.rows(TABLE_HEAD + "".join(f"{line}\n" for line in lines))
+
+    def test_the_repository_table_reads(self):
+        found = quarantine.rows((ROOT / ".config/nextest-quarantine.md").read_text("utf-8"))
+        quarantine.check(found, self.TODAY)
+
+    def test_an_empty_table_runs_everything(self):
+        self.assertEqual(quarantine.held(self.rows()), "")
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "q.md"
+            path.write_text(TABLE_HEAD, encoding="utf-8")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(quarantine.main(["--file", str(path), "exclude"]), 0)
+            self.assertEqual(out.getvalue().strip(), "all()")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(quarantine.main(["--file", str(path), "only"]), 0)
+            self.assertEqual(out.getvalue(), "")
+
+    def test_rows_become_an_exact_filter(self):
+        found = self.rows("| `openmoat::e2e` | `alias::a_test` | timeout | 2026-11-10 | me | #1 |",
+                          "| openmoat-audit | store::tests::b | panic | 2026-11-11 | me | #2 |")
+        self.assertEqual(quarantine.held(found),
+                         "(binary_id(=openmoat::e2e) & test(=alias::a_test)) | "
+                         "(binary_id(=openmoat-audit) & test(=store::tests::b))")
+        self.assertEqual(quarantine.check(found, self.TODAY), [])
+
+    def test_a_row_past_fourteen_days_warns(self):
+        found = self.rows("| openmoat::e2e | alias::a_test | timeout | 2026-10-01 | me | #1 |")
+        self.assertEqual(len(quarantine.check(found, self.TODAY)), 1)
+
+    def test_security_tests_are_never_quarantined(self):
+        for binary, test in (("openmoat::e2e", "sandbox::x"), ("openmoat::e2e", "run::y"),
+                             ("openmoat::e2e", "guard::z"), ("openmoat-core::conformance", "a"),
+                             ("openmoat::bin/openmoat", "sandbox::seatbelt::t")):
+            found = self.rows(f"| {binary} | {test} | flaky | 2026-11-10 | me | #1 |")
+            with self.subTest(test=test), self.assertRaises(quarantine.Problem):
+                quarantine.check(found, self.TODAY)
+
+    def test_malformed_rows_fail(self):
+        for line in ("| openmoat::e2e | a | x | 2026-11-10 | me |",
+                     "| openmoat::e2e | a | x | yesterday | me | #1 |",
+                     "| openmoat::e2e |  | x | 2026-11-10 | me | #1 |",
+                     "| openmoat::e2e | a) | test(b | x | 2026-11-10 | me | #1 |",
+                     "| openmoat::e2e | a | x | 2026-11-10 | me |  |"):
+            with self.subTest(line=line), self.assertRaises(quarantine.Problem):
+                self.rows(line)
+
+    def test_the_security_list_is_the_one_nextest_never_retries(self):
+        config = (ROOT / ".config/nextest.toml").read_text("utf-8")
+        for profile in ("ci", "ci-intel"):
+            no_retry = re.search(
+                rf'\[\[profile\.{re.escape(profile)}\.overrides\]\]\nfilter = "([^"]*)"\nretries = 0',
+                config)
+            self.assertIsNotNone(no_retry, profile)
+            text = no_retry.group(1)
+            for binary in quarantine.SECURITY_BINARIES:
+                self.assertIn(f"binary_id(={binary})", text)
+            for binary, prefixes in quarantine.SECURITY_PREFIXES.items():
+                self.assertIn(f"binary_id(={binary})", text)
+                for prefix in prefixes:
+                    self.assertIn(f"test(/^{prefix}/)", text, f"{profile}: {prefix}")
+
+
+def junit(*cases):
+    return ET.fromstring(f"<testsuites><testsuite name='s'>{''.join(cases)}</testsuite></testsuites>")
+
+
+PANIC = ("thread 'allow::x' panicked at crates/openmoat-cli/tests/e2e/allow.rs:12:5:\n"
+         "assertion `left == right` failed: outside the project needs review\n")
+
+
+class JunitSummary(unittest.TestCase):
+    def test_failed_flaky_and_passed(self):
+        root = junit(
+            "<testcase classname='openmoat::e2e' name='allow::x' time='3.5'>"
+            f"<failure type='test failure'/><system-err>{PANIC}</system-err></testcase>",
+            "<testcase classname='openmoat::e2e' name='run::y' time='2'>"
+            f"<flakyFailure type='test failure'><system-err>{PANIC}</system-err></flakyFailure>"
+            "</testcase>",
+            "<testcase classname='openmoat-core' name='z' time='0.1'/>",
+            "<testcase classname='openmoat::e2e' name='slow::t' time='130'>"
+            "<failure type='test timeout' message='test timed out'/></testcase>")
+        found = junit_summary.cases(root)
+        self.assertEqual([c[3] for c in found], ["failed", "flaky", "passed", "failed"])
+        self.assertEqual(found[0][4], "crates/openmoat-cli/tests/e2e/allow.rs:12:5: "
+                                      "assertion `left == right` failed: outside the project "
+                                      "needs review")
+        self.assertEqual(found[3][4], "test timed out")
+        markdown, notes = junit_summary.report(found)
+        self.assertIn("2 failed, 1 flaky", markdown)
+        self.assertIn("**Slowest 4**", markdown)
+        self.assertTrue(notes[0].startswith("::error title=test failed::openmoat::e2e allow::x: "))
+        self.assertTrue(notes[-1].startswith("::warning title=flaky test::openmoat::e2e run::y: "))
+
+    def test_a_failure_retried_keeps_the_first_panic(self):
+        root = junit("<testcase classname='b' name='t' time='1'><failure type='test failure'/>"
+                     f"<rerunFailure><system-err>{PANIC}</system-err></rerunFailure></testcase>")
+        self.assertIn("allow.rs:12:5", junit_summary.cases(root)[0][4])
+
+    def test_annotations_escape_newlines(self):
+        self.assertEqual(junit_summary.escape("a%b\nc\r"), "a%25b%0Ac%0D")
+
+    def test_balance(self):
+        self.assertIsNone(junit_summary.balance({"1": 100, "2": 120}))
+        self.assertIn("partition balance", junit_summary.balance({"1": 100, "2": 130}))
+        self.assertIsNone(junit_summary.balance({"1": 100}))
+
+    def test_an_unreadable_report_is_a_warning(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(junit_summary.main(["/nonexistent/junit.xml"]), 0)
+        self.assertIn("::warning", out.getvalue())
+
+
+def job(name, conclusion="failure", job_id=1):
+    return {"name": name, "conclusion": conclusion, "id": job_id}
+
+
+def note(message, title="", level="failure"):
+    return {"annotation_level": level, "title": title, "message": message}
+
+
+EXIT = note("Process completed with exit code 1.")
+NOT_ACQUIRED = note("The job was not acquired by Runner of type hosted even after multiple "
+                    "attempts")
+RESOLVING = note("apt could not install: bubblewrap socat (Temporary failure resolving "
+                 "'azure.archive.ubuntu.com')")
+GITHUB_503 = note("downloading https://github.com/nextest-rs/nextest/releases/download/x failed: "
+                  "curl: (22) The requested URL returned error: 503")
+
+
+class InfraRetry(unittest.TestCase):
+    def decide(self, jobs, notes, attempt=1):
+        return infra_retry.decide(attempt, jobs, lambda j: notes[j["name"]])[0]
+
+    def test_infrastructure_signatures_retry(self):
+        for signature in (NOT_ACQUIRED, RESOLVING, GITHUB_503,
+                          note("The hosted runner lost communication with the server."),
+                          note("Failed to download action 'https://api.github.com/repos/a/b/"
+                               "tarball/c'. Error: Response status code does not indicate "
+                               "success: 502 (Bad Gateway).")):
+            with self.subTest(signature=signature["message"][:40]):
+                jobs = [job("macos (1/2)"), job("ci-ok"), job("lint", "success")]
+                self.assertTrue(self.decide(jobs, {"macos (1/2)": [signature, EXIT],
+                                                   "ci-ok": [note("macos: failure")]}))
+
+    def test_never_a_second_attempt(self):
+        self.assertFalse(self.decide([job("linux (1/2)")], {"linux (1/2)": [RESOLVING]}, 2))
+
+    def test_a_test_failure_or_timeout_is_never_retried(self):
+        for notes in ([note("openmoat::e2e a::b: x", title="test failed"), RESOLVING],
+                      [note("The job running on runner X has exceeded the maximum execution "
+                            "time of 30 minutes."), NOT_ACQUIRED],
+                      [note("thread 'x' panicked at a.rs:1:1"), GITHUB_503],
+                      [EXIT],
+                      []):
+            with self.subTest(notes=notes):
+                self.assertFalse(self.decide([job("linux (2/2)")], {"linux (2/2)": notes}))
+        self.assertFalse(self.decide([job("linux (2/2)", "timed_out")],
+                                     {"linux (2/2)": [NOT_ACQUIRED]}))
+
+    def test_every_failed_job_must_be_infrastructure(self):
+        jobs = [job("macos (1/2)"), job("linux (1/2)")]
+        self.assertFalse(self.decide(jobs, {"macos (1/2)": [NOT_ACQUIRED],
+                                            "linux (1/2)": [note("error[E0425]: cannot find")]}))
+        self.assertTrue(self.decide(jobs, {"macos (1/2)": [NOT_ACQUIRED],
+                                           "linux (1/2)": [RESOLVING, EXIT]}))
+
+    def test_a_failed_verdict_alone_is_not_retried(self):
+        self.assertFalse(self.decide([job("ci-ok"), job("lint", "success")],
+                                     {"ci-ok": [NOT_ACQUIRED]}))
+
+    def test_warnings_do_not_count(self):
+        jobs = [job("windows (2/2)")]
+        self.assertTrue(self.decide(jobs, {"windows (2/2)": [
+            NOT_ACQUIRED, note("something odd", level="warning")]}))
+
+    def test_an_unreadable_run_is_not_retried(self):
+        out = io.StringIO()
+        with mock.patch.object(infra_retry, "gh_api", side_effect=OSError("no gh")), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(infra_retry.main(["1", "1"]), 0)
+        self.assertEqual(out.getvalue().strip(), "retry=false")
+
+
+class MainWatch(unittest.TestCase):
+    def test_tests_are_read_from_the_annotations(self):
+        failed, flaky = main_watch.tests_in([
+            note("openmoat::e2e allow::x: crates/a.rs:12:5: boom", title="test failed"),
+            note("openmoat::e2e run::y: passed only on retry; a.rs:1:1: x", title="flaky test",
+                 level="warning"),
+            note("ci-ok: gate failed", title="ci-ok")])
+        self.assertEqual(failed, {"openmoat::e2e allow::x"})
+        self.assertEqual(flaky, {"openmoat::e2e run::y"})
+
+    def test_plan(self):
+        now = ({"b a::x", "b a::new"}, {"b a::flaky"})
+        before = ({"b a::other"}, {"b a::x"})
+        titles = [t for t, _ in main_watch.plan("failure", "url", now, before)]
+        self.assertEqual(titles, ["ci: main is red", "flaky test: b a::flaky",
+                                  "test failing on main: b a::x"])
+        self.assertEqual([t for t, _ in main_watch.plan("success", "url", (set(), set()),
+                                                        before)], [])
+
+
+class Budget(unittest.TestCase):
+    def run_budget(self, limit, used):
+        bash = shutil.which("bash")
+        if not bash:
+            self.skipTest("no bash")
+        env = {"PATH": os.environ.get("PATH", ""), "JOB_STARTED": "1000",
+               "BUDGET_NOW": str(1000 + used)}
+        return subprocess.run([bash, str(HERE / "budget.sh"), str(limit)], env=env,
+                              capture_output=True, text=True)
+
+    def test_warns_past_sixty_percent_and_never_fails(self):
+        out = self.run_budget(30, 17 * 60)
+        self.assertEqual(out.returncode, 0)
+        self.assertIn("56%", out.stdout)
+        self.assertNotIn("::warning", out.stdout)
+        out = self.run_budget(30, 19 * 60)
+        self.assertEqual(out.returncode, 0)
+        self.assertIn("::warning title=time budget::", out.stdout)
+
+
+def workflow(name):
+    directory = Path(os.environ.get("CI_WORKFLOW_DIR") or ROOT / ".github/workflows")
+    return (directory / name).read_text(encoding="utf-8")
+
+
+def job_blocks(text):
+    """{job id: its lines} of a workflow, read as ci_ok.py reads it."""
+    blocks, current, in_jobs = {}, None, False
+    for line in text.splitlines():
+        if line and not line.startswith(" ") and not line.startswith("#"):
+            in_jobs = line.rstrip() == "jobs:"
+            current = None
+            continue
+        m = ci_ok.JOB.match(line)
+        if in_jobs and m:
+            current = m.group(1)
+            blocks[current] = []
+        elif current:
+            blocks[current].append(line)
+    return blocks
+
+
+class Workflows(unittest.TestCase):
+    """The workflows as written: checked here, so a wrong one fails before CI."""
+
+    def setUp(self):
+        self.ci = workflow("ci.yml")
+        if "install-nextest.sh" not in self.ci:
+            self.skipTest("this ci.yml predates the nextest design; set CI_WORKFLOW_DIR")
+
+    def test_ci_ok_needs_every_job(self):
+        jobs = set(ci_ok.workflow_jobs(self.ci)) - {"ci-ok"}
+        needs = re.search(r"  ci-ok:\n(?:    .*\n)*?    needs:\n((?:      - .*\n)+)", self.ci)
+        self.assertIsNotNone(needs)
+        listed = {line.strip()[2:] for line in needs.group(1).splitlines()}
+        self.assertEqual(listed, jobs)
+
+    def test_pull_requests_and_main_run_no_intel(self):
+        self.assertNotIn("macos-15-intel", self.ci)
+
+    def test_each_os_runs_the_tests_in_two_parts(self):
+        test = "\n".join(job_blocks(self.ci)["test"])
+        self.assertIn("os: [ubuntu-latest, macos-15, windows-latest]", test)
+        self.assertIn("part: [1, 2]", test)
+        self.assertIn("GATE_PARTITION: ${{ matrix.part }}/2", test)
+        self.assertIn("NEXTEST_PROFILE: ci", test)
+
+    def test_weekly_runs_intel_in_three_parts_with_its_profile(self):
+        weekly = workflow("weekly.yml")
+        intel = "\n".join(job_blocks(weekly)["intel"])
+        self.assertIn("runs-on: macos-15-intel", intel)
+        self.assertIn("part: [1, 2, 3]", intel)
+        self.assertIn("GATE_PARTITION: ${{ matrix.part }}/3", intel)
+        self.assertIn("NEXTEST_PROFILE: ci-intel", intel)
+        self.assertIn("GATE_STEPS: test", intel)
+        self.assertIn("timeout-minutes: 60", intel)
+
+    def test_every_time_budget_is_its_job_limit(self):
+        for name in ("ci.yml", "weekly.yml"):
+            for job_id, lines in job_blocks(workflow(name)).items():
+                text = "\n".join(lines)
+                limit = re.search(r"^    timeout-minutes: (.+)$", text, re.MULTILINE)
+                budgets = re.findall(r"budget\.sh", text)
+                if job_id in ("changes", "ci-ok") or not limit:
+                    continue
+                with self.subTest(workflow=name, job=job_id):
+                    self.assertTrue(budgets, "no time budget step")
+                    limits = re.findall(r"^          LIMIT: (.+)$", text, re.MULTILINE)
+                    self.assertEqual(limits, [limit.group(1)] * len(budgets))
+
+    def test_retry_workflow_is_narrow(self):
+        retry = workflow("ci-retry.yml")
+        self.assertIn("workflows: [ci]", retry)
+        self.assertIn("run_attempt == 1", retry)
+        self.assertIn("permissions: {}", retry)
+        self.assertEqual(retry.count("actions: write"), 1)
 
 
 if __name__ == "__main__":

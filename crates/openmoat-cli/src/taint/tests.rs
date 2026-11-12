@@ -187,68 +187,6 @@ fn a_call_without_a_directory_keeps_each_directory_to_its_own_row() {
     }
 }
 
-/// The cached fold answers what a fold of the whole session from its first
-/// event answers, in every directory, at every call: over a session whose
-/// calls ran in several directories, some recorded without one, read files by
-/// a path relative to their directory (a secret only from one of them) and
-/// fetched untrusted content, decided from directories in turn, with calls
-/// stopped by their deadline and `PostToolUse` catch-ups between them.
-#[test]
-fn the_cached_fold_is_a_full_fold_in_every_directory() {
-    const DIRS: [&str; 3] = ["/p/a", "/p/b", "/home/u/work"];
-    let store = Store::open_in_memory().unwrap();
-    let policy = Policy::parse(POLICY).unwrap();
-    // a fixed pseudo-random sequence, so a failure replays
-    let mut seed: u64 = 0x5eed;
-    let mut next = |n: usize| {
-        seed = seed
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1_442_695_040_888_963_407);
-        usize::try_from(seed >> 33).unwrap() % n
-    };
-    let mut differed = false;
-    // Each step folds the whole session again as the reference, so the cost
-    // grows with the square of the steps: 200 keep it to seconds on the
-    // slowest CI runner while still crossing many cache rows and deadlines.
-    for step in 0..200 {
-        let recorded = match next(5) {
-            4 => None,
-            d => Some(DIRS[d % DIRS.len()]),
-        };
-        let action = match next(20) {
-            0 => Action::Fetch {
-                url: format!("https://example.com/{step}"),
-            },
-            1..=3 => read("../.ssh/id_rsa".to_owned()),
-            4..=6 => read(format!("f{step}.rs")),
-            _ => read(format!("/p/a/f{step}.rs")),
-        };
-        // Untrusted content late, so most of the session is folded clean.
-        if step > 40 || !matches!(action, Action::Fetch { .. }) {
-            record_in(&store, recorded, &action);
-        }
-        let cwd = DIRS[next(DIRS.len())];
-        match next(6) {
-            0 => assert!(call(&store, cwd, Instant::now()).is_err(), "step {step}"),
-            1 => {
-                let compiled = CompiledPolicy::compile(&policy, &ctx(cwd)).unwrap();
-                catch_up(&store, Host::ClaudeCode, "s1", &compiled, cwd, far());
-            }
-            _ => {
-                let (taint, _) = call(&store, cwd, far()).unwrap();
-                assert_eq!(taint, reference(&store, cwd), "step {step} in {cwd}");
-            }
-        }
-        // Whether the directory changed the answer at all: three more full
-        // folds, so asked every 25 steps, not at each.
-        if step % 25 == 24 {
-            let folds: Vec<SessionTaint> = DIRS.iter().map(|d| reference(&store, d)).collect();
-            differed |= folds.iter().any(|f| f.taint != folds[0].taint);
-        }
-    }
-    assert!(differed, "no step's fold depended on the directory");
-}
-
 /// A session that read untrusted content in one directory is tainted for a
 /// protected write in another, with or without the cache, at every call.
 #[test]
@@ -558,4 +496,5 @@ fn the_behind_message_says_the_call_was_not_judged_and_to_run_it_again() {
 }
 
 mod approved_writes;
+mod cached_fold;
 mod long_session;

@@ -15,9 +15,8 @@ fn hook_only() -> impl Iterator<Item = Host> {
         .filter(|host| host.spec().sandbox.is_none())
 }
 
-/// `host`'s entry in `status --format json`.
-fn entry(sb: &Sandbox, host: Host) -> Value {
-    let status = json_of(&sb.moat(&["status", "--format", "json"]));
+/// `host`'s entry in a `status --format json` report.
+fn entry(status: &Value, host: Host) -> Value {
     status["agents"]
         .as_array()
         .into_iter()
@@ -27,11 +26,21 @@ fn entry(sb: &Sandbox, host: Host) -> Value {
         .clone()
 }
 
+/// One home with every hook-only agent installed, one `status` and one
+/// `doctor`: each agent's entry and line are its own, so a home per agent
+/// only started the binary three times as often.
 #[test]
 fn status_and_doctor_name_the_way_to_a_sandbox_or_why_there_is_none() {
+    let mut dirs: Vec<String> = hook_only().map(dir_of).collect();
+    dirs.sort();
+    dirs.dedup();
+    let dirs: Vec<&str> = dirs.iter().map(String::as_str).collect();
+    let sb = Sandbox::installed(&dirs);
+    let status = json_of(&sb.moat(&["status", "--format", "json"]));
+    let doctor = sb.moat(&["doctor"]);
+    let shown = stdout(&doctor);
     for host in hook_only() {
-        let sb = Sandbox::installed(&[&dir_of(host)]);
-        let agent = entry(&sb, host);
+        let agent = entry(&status, host);
         assert_eq!(agent["level"], "hook-only", "{host}: {agent}");
         let sandbox = &agent["os_sandbox"];
         let state = sandbox["state"].as_str().unwrap_or_default();
@@ -52,16 +61,19 @@ fn status_and_doctor_name_the_way_to_a_sandbox_or_why_there_is_none() {
                 assert!(sandbox["why"].is_string(), "{host}: {sandbox}");
             }
         }
-        let shown = stdout(&sb.moat(&["doctor"]));
-        let line = shown.split_whitespace().collect::<Vec<_>>().join(" ");
-        let said = [
-            "OS sandbox:",
-            "no OS sandbox on this system:",
-            "no `openmoat run`",
-        ]
-        .iter()
-        .any(|text| line.contains(text));
-        assert!(said, "{host}: {}", text(&sb.moat(&["doctor"])));
+        // `doctor` names the way to a sandbox, or why there is none, on a
+        // row of this agent's own.
+        let said = shown.lines().any(|line| {
+            line.contains(host.display_name())
+                && [
+                    "OS sandbox:",
+                    "no OS sandbox on this system:",
+                    "no `openmoat run`",
+                ]
+                .iter()
+                .any(|text| line.contains(text))
+        });
+        assert!(said, "{host}: {}", text(&doctor));
     }
 }
 
@@ -215,20 +227,28 @@ mod launch {
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
 
+    /// [`launch_holds`] for every hook-only agent, at once: each in a home
+    /// and project of its own, so they share nothing, and the test takes as
+    /// long as its slowest agent rather than all of them in turn. A panic in
+    /// any fails the test, naming its agent.
+    fn every_launch_holds(flags: &[&str]) {
+        std::thread::scope(|scope| {
+            for host in hook_only() {
+                scope.spawn(move || launch_holds(host, flags));
+            }
+        });
+    }
+
     #[test]
     fn each_hook_only_agent_holds_under_openmoat_run() {
-        for host in hook_only() {
-            // The Lightweight tier; the Isolated one, Linux's default, below.
-            launch_holds(host, &["--no-isolate"]);
-        }
+        // The Lightweight tier; the Isolated one, Linux's default, below.
+        every_launch_holds(&["--no-isolate"]);
     }
 
     /// The command `status` names on Linux.
     #[cfg(target_os = "linux")]
     #[test]
     fn each_hook_only_agent_holds_under_isolate() {
-        for host in hook_only() {
-            launch_holds(host, &["--isolate"]);
-        }
+        every_launch_holds(&["--isolate"]);
     }
 }

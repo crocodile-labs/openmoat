@@ -12,11 +12,17 @@
 set -euo pipefail
 [ "$#" -gt 0 ] || { echo "usage: $0 package..." >&2; exit 64; }
 
-opts=(-o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+
+# Every attempt's output, so the final error can name a resolution failure:
+# ci-retry.yml re-runs a job whose error says "Temporary failure resolving"
+# (scripts/ci/infra_retry.py).
+log=$(mktemp)
+trap 'rm -f "$log"' EXIT
 
 attempt() {
-    sudo apt-get "${opts[@]}" update -q &&
-        sudo apt-get "${opts[@]}" install -y -q --no-install-recommends "$@"
+    { sudo apt-get "${opts[@]}" update -q &&
+        sudo apt-get "${opts[@]}" install -y -q --no-install-recommends "$@"; } 2>&1 | tee -a "$log"
 }
 
 # Point every Ubuntu source at one mirror. Ubuntu 24.04 keeps them in deb822
@@ -43,5 +49,6 @@ for mirror in http://archive.ubuntu.com/ubuntu/ http://mirrors.edge.kernel.org/u
         exit 0
     fi
 done
-echo "::error::apt could not install: $*"
+resolving=$(grep -m1 -o "Temporary failure resolving '[^']*'" "$log" || true)
+echo "::error::apt could not install: $*${resolving:+ ($resolving)}"
 exit 1

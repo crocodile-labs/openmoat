@@ -128,25 +128,32 @@ fn tool(var: &str, command: &str) -> String {
 /// The relay variables a command sees, as one line each.
 const SHOW_RELAY: &str = "echo socket=${MOAT_GUARD_SOCKET-unset} token=${MOAT_GUARD_TOKEN-unset}";
 
+/// Every wrapped host at once, each in a home and project of its own: they
+/// share nothing, and the test takes as long as its slowest host rather than
+/// all of them in turn. A panic in any fails the test, naming its host.
 #[test]
 fn a_tool_command_has_neither_variable_for_every_wrapped_host() {
-    for (host, var) in wrapped() {
-        let (sb, project) = installed_with_secret();
-        let script = format!("{RECORD_TOKEN}{}", tool(var, SHOW_RELAY));
-        let agent = fake_agent(&project, host, &script);
-        let out = run_agent(&sb, &project, &agent, &[]);
-        if !ran(&out) {
-            return;
+    std::thread::scope(|scope| {
+        for (host, var) in wrapped() {
+            scope.spawn(move || {
+                let (sb, project) = installed_with_secret();
+                let script = format!("{RECORD_TOKEN}{}", tool(var, SHOW_RELAY));
+                let agent = fake_agent(&project, host, &script);
+                let out = run_agent(&sb, &project, &agent, &[]);
+                if !ran(&out) {
+                    return;
+                }
+                let token = token_of(&project, &out);
+                assert!(
+                    stdout(&out).contains("socket=unset token=unset"),
+                    "{}: {}",
+                    host.id(),
+                    text(&out)
+                );
+                assert!(!stdout(&out).contains(&token), "{}", host.id());
+            });
         }
-        let token = token_of(&project, &out);
-        assert!(
-            stdout(&out).contains("socket=unset token=unset"),
-            "{}: {}",
-            host.id(),
-            text(&out)
-        );
-        assert!(!stdout(&out).contains(&token), "{}", host.id());
-    }
+    });
 }
 
 #[test]

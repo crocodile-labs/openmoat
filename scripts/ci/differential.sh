@@ -31,7 +31,22 @@ echo "  claude: ${MOAT_CLAUDE_BIN:-<none; claude layer skipped>}"
 
 # Arguments (CI: `differential sandbox_exec`) choose the tests whose name
 # contains any of them; the default is the differential suite.
-if [ -z "${GITHUB_ACTIONS:-}" ]; then
+if cargo nextest --version > /dev/null 2>&1; then
+    # Under nextest (CI's test jobs, after their own run): the same build as
+    # the quality gate's (`--all-features`), so nothing is compiled again.
+    filter=""
+    for word in "${@:-differential}"; do
+        filter="${filter:+$filter | }test($word)"
+    done
+    status=0
+    cargo nextest run --locked -p openmoat --all-features --no-fail-fast --no-tests=fail \
+        --success-output final -E "binary_id(=openmoat::e2e) & ($filter)" || status=$?
+    junit="target/nextest/${NEXTEST_PROFILE:-default}/junit.xml"
+    if [ -n "${GITHUB_ACTIONS:-}" ] && [ -f "$junit" ]; then
+        python3 -I scripts/ci/junit_summary.py "$junit" || true
+    fi
+    [ "$status" -eq 0 ] || exit "$status"
+elif [ -z "${GITHUB_ACTIONS:-}" ]; then
     cargo test --locked -p openmoat --test e2e -- --nocapture "${@:-differential}"
 else
     # As in quality-gate.sh: the failing tests and their panic lines become

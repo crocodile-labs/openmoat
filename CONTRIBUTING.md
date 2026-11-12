@@ -89,53 +89,105 @@ PR): `ci-ok`, `conventional` (title), `labels · size · risk · body` (pr-stand
 `review threads answered`. `ci-ok` is the last job of `.github/workflows/ci.yml`: it waits
 for every other job there and fails when any failed or was cancelled, or was skipped
 without the `changes` job ordering it (`scripts/ci/ci_ok.py`), so a new or renamed CI job
-needs no ruleset change. Every job of `ci.yml` counts, `fuzz (smoke)`, the JavaScript jobs
-and the shell lexer against bash included. CodeQL and `adr-062 poc` are not required.
-Windows and macOS run the end-to-end tests in two parts (`<runner> e2e (2 of 2)` runs
-beside each gate leg) so that each job stays within its time limit.
+needs no ruleset change. Every job of `ci.yml` counts (below). CodeQL and `adr-062 poc`
+are not required.
 
-What a pull request runs (`.github/workflows/ci.yml`, the `changes` job,
-`scripts/ci/changes.py`):
+## CI
 
-- Every PR runs the quality gate on `ubuntu-latest`, `macos-15` and `windows-latest`
-  (the Windows end-to-end tests in two parts), the standard tier, guard latency, a
-  one-minute fuzz smoke per target and every lint job.
-- The slow legs, `macos-15-intel` and ADR-062 step 0 (`adr062-poc.yml`), run on a PR
-  only when it changes platform code or is labelled `ci:full`. Platform code is the
-  sandbox backends (`src/sandbox*`), `openmoat run` (`commands/run*`), the OS sandbox
-  protection level, their end-to-end tests (`tests/e2e/sandbox*`, `cursor_sandbox*`,
-  `run*`), the default policy, the toolchain, `Cargo.lock`, `.github/`, the CI decision
-  scripts and `quality-gate.sh`, and any changed `.rs` file that tests the platform
-  (`cfg(target_os`, `cfg(unix`, `cfg(windows`, `target_arch`). ADR-062 step 0 also runs
-  when a PR changes what it measures: the proxy crate, `openmoat proxy`, the proxy CA,
-  `commands/run.rs` and its two scripts. Ten minutes of fuzzing per target runs on a PR
-  only with `ci:full`. The label is read when the `changes` job runs: label the PR, then
-  **re-run all jobs**, not only the failed ones: a leg held back passed with every step
-  skipped, under its own name, and a re-run of the failed jobs leaves it so.
-- On a PR, the `changes` job and `ci-ok` run `changes.py` and `ci_ok.py` as they are on
-  the branch the PR lands on, not the PR's own copies, so a PR cannot decide what its own
-  run skips or how it is judged. A PR that changes them runs the slow legs, and its new
-  rules apply from the next PR after it merges. A push, the schedule and a run by hand
-  use the commit's own copies.
-- A PR that changes documentation only skips the Rust, JavaScript, fuzz and latency jobs;
-  links, spelling, changelog fragments and release version strings are still checked.
-  A document that any test, build or script names (the generated tables in `README.md`,
-  `docs/USAGE.md`, `docs/COVERAGE.md`, `docs/EVIDENCE.md`, …) counts as code, so
-  changing it runs everything.
-- When the `changes` job cannot tell (an error, an empty diff, a changed file or labels
-  it cannot read), everything runs.
-- Every push to `main`, the weekly schedule and a run by hand (Actions → ci → Run
-  workflow) run every leg, with long fuzz. A release tag publishes only when the `ci`
-  run of the push to `main` at that commit completed green
-  (`scripts/ci/main_ci_green.py`, the first step of `release.yml`); a run still going,
-  or not yet started on a commit that is on `main`, is waited for up to 150 minutes.
-- Rust build caches are saved by runs on `main` only, one per job; a PR restores them
-  and never writes one.
-- `guard latency` builds the commit the PR lands on as well and times both on the same
-  runner, in turn; it fails when the PR makes the guard's own p95 clearly slower (more
-  than 1.25 times and 5 ms over), or above 150 ms whatever the base measured
-  (`scripts/ci/latency_ab.py`).
+The rule: a check that can block a pull request depends on the pull request's code and
+nothing else. Timing, slow hardware, long fuzzing and real agents are reported and
+alerted on, and never block a merge. A runner that was not given, or a mirror that did
+not answer, is re-run by CI itself.
+
+### What a pull request runs
+
+`.github/workflows/ci.yml`; every job is behind `ci-ok`, the one required check.
+
+| Job | Runner | What it runs | Usual time | Limit |
+|---|---|---|---|---|
+| `changes` | ubuntu | what the PR changed (`scripts/ci/changes.py`) | < 1 min | 5 |
+| `lint` | ubuntu | shellcheck, links, spelling, changelog fragments, version strings, CI script tests, actionlint and zizmor; with code: fmt, rustdoc, policy lint, wasm32 purity, unused dependencies, cargo-deny | 3 (docs) to 12 min | 30 |
+| `crates (package, semver)` | ubuntu | each crate built from its tarball; the library API against the PR's base | 15 min | 30 |
+| `linux (1/2)`, `linux (2/2)` | ubuntu | half of the tests each; clippy in part 2; doc tests and the standard tier in part 1 | 12 to 14 min | 30 |
+| `macos (1/2)`, `macos (2/2)` | macos-15 | the same on macOS | 14 to 16 min | 30 |
+| `windows (1/2)`, `windows (2/2)` | windows | the same on Windows, without the standard tier | 15 to 17 min | 30 |
+| `stock linux` | ubuntu | `openmoat run` on Landlock and seccomp alone, no bubblewrap | 10 min | 30 |
+| `fuzz (smoke)` | ubuntu | one minute per fuzz target | 15 min | 30 |
+| `JavaScript plugins type-check`, `JavaScript SDK` | ubuntu | the plugins type-checked; the SDK's wasm module under Node | 1 and 8 min | 10, 20 |
+| `shell lexer against bash` | ubuntu | the lexer's words against the argv bash builds | 5 min | 15 |
+| `guard latency (ubuntu-latest)` | ubuntu | the guard timed against the PR's base: a warning, never a failure, on a PR | 12 min | 35 |
+
+A PR that changes documentation only runs `changes` and `lint`'s text checks; the other
+jobs skip (a document a test or script names counts as code, so changing it runs
+everything). When `changes` cannot tell, everything runs.
+
+### Tests
+
+Every Rust test runs under [cargo-nextest](https://nexte.st) (`.config/nextest.toml`,
+installed in CI by `scripts/ci/install-nextest.sh` from a pinned release, checksum
+verified):
+
+- **Parts.** Each OS runs the tests in two parts (`--partition slice:k/2`), so no
+  module list is kept by hand; a new test lands in one of them. A part that selects no
+  test fails.
+- **A time limit per test.** A test still running after 2 minutes is stopped and fails
+  by name (the known long end-to-end tests get 6). A slow test no longer sinks its job
+  at the job's limit.
+- **One retry, never hidden.** A test that failed and then passed is listed as *flaky*
+  on the run. Never retried: the sandbox, deny and bypass tests (a deny that holds only
+  on the second try is a bypass).
+- **Why it failed, on the run.** Each test job's summary lists the failed tests with
+  their first panic line, the flaky ones and the ten slowest (`scripts/ci/junit_summary.py`);
+  the JUnit report is kept as an artefact.
+- **Quarantine.** A test that fails at random on `main` may be held out of the runs in
+  `.config/nextest-quarantine.md` while it is fixed: a row with its failure, the date,
+  an owner and an issue; fixed or deleted within 14 days; never a sandbox, deny or
+  bypass test, never a PR's own new failure. The weekly workflow runs held tests on
+  their own.
+- **Locally**, `scripts/ci/quality-gate.sh` runs nextest when it is installed
+  (`cargo install cargo-nextest --locked`) and `cargo test` otherwise. `GATE_STEPS` and
+  `GATE_PARTITION` choose what CI's jobs run (see the script).
+
+### Main, weekly, and failures that are not the code
+
+- **A push to `main`** runs everything a PR runs, plus guard latency on macOS (blocking
+  on `main`), ten minutes of fuzzing per target and ADR-062 step 0 (`adr062-poc.yml`).
+  `ci-retry.yml` then opens or updates an issue when the run is red, for each test that
+  passed only on its retry, and for a test that failed in two runs in a row
+  (`scripts/ci/main_watch.py`). A release tag publishes only when the `ci` run of the
+  push to `main` at that commit completed green (`scripts/ci/main_ci_green.py`, the
+  first step of `release.yml`); a run not yet done is waited for up to 150 minutes.
+- **Weekly** (`weekly.yml`): the tests on macOS Intel (`macos-15-intel`, three parts,
+  tests only; no macOS code depends on the CPU, and those runners are about 2.5 times
+  slower), the quarantined tests, the toolchain canary, coverage and the long session.
+- **Infrastructure.** When a `ci` run fails only on infrastructure (a runner not
+  acquired or lost, `Temporary failure resolving`, an HTTP 5xx from GitHub),
+  `ci-retry.yml` re-runs its failed jobs once (`scripts/ci/infra_retry.py`). A test
+  failure, a job timeout or anything else is never re-run. Downloads retry on their own
+  first (`CARGO_NET_RETRY`, apt and curl retries).
+- **Time budget.** Each job's usual time is at most half its limit. Every job ends with
+  `scripts/ci/budget.sh`, which warns past 60%. Limits are not raised: a job that grows
+  is split or sped up.
+
+### The rest
+
+- **`ci:full`.** A PR labelled `ci:full` runs ten minutes of fuzzing per target, and
+  ADR-062 step 0, which also runs when a PR changes platform code or what it measures
+  (`scripts/ci/changes.py`). The label is read when the `changes` job runs: label the
+  PR, then **re-run all jobs**.
+- **Who judges.** On a PR, the `changes` job and `ci-ok` run `changes.py` and
+  `ci_ok.py` as they are on the branch the PR lands on, not the PR's own copies, so a
+  PR cannot decide what its own run skips or how it is judged; its new rules apply from
+  the next PR after it merges.
+- **Caches** are saved by runs on `main` only, one per job (and part); a PR restores
+  them and never writes one.
+- **Guard latency** builds the commit the PR lands on as well and times both on the
+  same runner, in turn; it fails when the guard's own p95 is clearly slower (more than
+  1.25 times and 5 ms over), or above 150 ms whatever the base measured
+  (`scripts/ci/latency_ab.py`). On a PR that failure is a warning on `ci-ok`.
 - A new push cancels the PR's previous run. Runs on `main` are never cancelled.
+
+## Merging
 
 Until the ruleset drops it, a PR must be up to date with `main` before it merges; after,
 two PRs that pass alone can still break `main` together, which `main`'s own run shows

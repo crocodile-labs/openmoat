@@ -1171,7 +1171,8 @@ What each module holds. The rules for each path are in `AGENTS.md` §2.
 | Latest agents | `scripts/ci/latest-agents.sh` per agent of `scripts/ci/latest-agents/agents.json`: the agent's latest release, `openmoat init`, `status` and `doctor`, the real agent loading the hook against a local fake model API where it runs without an account, and guard payloads in its format; a newer release than the adapter was checked against is reported, a failure opens one issue per agent | weekly and by hand, `latest agents` workflow (not required) |
 | Clean install | `scripts/ci/clean-install.sh`: the published release from Homebrew, the shell installer and crates.io; the README quick start as written; `init` with no agent and with Claude Code; `uninstall` giving every file back byte for byte; the README's links and images | weekly, after each release and by hand, `clean install` workflow (not required) |
 
-CI runs `scripts/ci/quality-gate.sh` on macOS (arm64, x64), Linux and Windows, plus
+CI runs `scripts/ci/quality-gate.sh` on macOS (arm64 on every change, x64 weekly), Linux
+and Windows, the tests under cargo-nextest in parts (CONTRIBUTING "CI"), plus
 `cargo-deny`, the crate packaging check, `actionlint`/`zizmor` on workflows and CodeQL
 (Actions, JavaScript, Python and Rust, pull requests from forks included).
 
