@@ -66,7 +66,8 @@ pub struct HookFailure {
     /// with no check: the case no host can block, said for each.
     pub turned_off_by: &'static str,
     /// Where each fact comes from: the vendor's documentation, else its source
-    /// at a named release. Empty only in [`Self::BASE`].
+    /// at a named release, or a weekly real-agent run that observed what the
+    /// vendor does not document. Empty only in [`Self::BASE`].
     pub sources: &'static [&'static str],
 }
 

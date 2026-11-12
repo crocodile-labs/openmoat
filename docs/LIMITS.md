@@ -215,15 +215,13 @@ Each agent's gaps and the reasons are in
   hooks. goose runs calls unchecked when it does not load OpenMoat's plugin
   (`disabledPlugins`, `enabled: false` under `plugins` in `config.yaml`, or a project
   plugin named `openmoat`); `openmoat status` and `doctor` report both, for the directory
-  they run in. The Antigravity CLI does not document what happens when a hook cannot start,
-  crashes, times out or prints bad JSON, and has no documented setting that blocks then, so
-  OpenMoat assumes the call runs there; `--dangerously-skip-permissions` approves its
-  requests unseen, which OpenMoat cannot see, and a `review` under a saved
-  `toolPermission: always-proceed` is a deny. Antigravity CLI is a preview host: its
-  support is built from the documentation, and in the weekly check of 2026-11-10 a
-  headless agy 1.5.5 turn started no hook from `~/.gemini/config/hooks.json` while the
-  fake API received tool results for both of its calls (the host's `HOST.md`, "The first
-  real run").
+  they run in. The Antigravity CLI does not document what happens when a hook fails and
+  has no documented setting that blocks then; the weekly real-agent check of 2026-11-12
+  saw it block the call when OpenMoat's hook was missing or exited 1 without output, on
+  Linux and macOS, but what it does when the hook times out or prints bad JSON is not
+  known, so OpenMoat assumes the call runs then; `--dangerously-skip-permissions`
+  approves its requests unseen, which OpenMoat cannot see, and a `review` under a saved
+  `toolPermission: always-proceed` is a deny.
 
 ### If the hook fails
 
@@ -254,7 +252,7 @@ rest of each agent's protection on each OS, with the runs that back them.
 | Hermes Agent | blocks the call | blocks the call | 30 s | the hook missing from `config.yaml` or from `shell-hooks-allowlist.json` (gateway, cron and ACP sessions), another profile, or `HERMES_SAFE_MODE=1` | no | [1](https://github.com/NousResearch/hermes-agent/blob/v0.22.5/agent/shell_hooks.py) |
 | Cline CLI | runs the call | runs the call | 120 s | `--yolo`, or `--config`, `--hooks-dir` or a moved `CLINE_DIR` OpenMoat did not install into | yes: cannot start, crashes or exits non-zero; times out | [1](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/hook-file-hooks.ts) [2](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/subprocess-runner.ts) |
 | goose | blocks the call | blocks the call | 60 s | `disabledPlugins` in a `settings.json`, `enabled: false` under `plugins` in `config.yaml`, a project plugin named `openmoat`, or a `hooks.json` goose cannot read | no | [1](https://github.com/aaif-goose/goose/blob/v1.57.0/crates/goose/src/hooks/mod.rs) |
-| Antigravity CLI | not documented; assumed to run the call | not documented; assumed to run the call | 600 s | `enabled: false` on the entry (a project's `.agents/hooks.json` included), or deleting it | yes: cannot start, crashes or exits non-zero; times out | [1](https://antigravity.google/docs/hooks?tab=cli) |
+| Antigravity CLI | blocks the call | not documented; assumed to run the call | 600 s | `enabled: false` on the entry (a project's `.agents/hooks.json` included), or deleting it | yes: times out | [1](https://antigravity.google/docs/hooks?tab=cli) [2](https://github.com/crocodile-labs/openmoat/actions/runs/43254846914) |
 | Continue CLI | runs the call | runs the call | 600 s | always: the released Continue CLI fires no hook | yes: cannot start, crashes or exits non-zero; times out | [1](https://github.com/continuedev/continue/blob/main/extensions/cli/src/hooks/hookRunner.ts) |
 <!-- /generated -->
 - **Agent settings can turn hooks off.** Codex runs a new or changed hook only once you

@@ -409,7 +409,7 @@ pub fn evidence(hosts: &[Host], ev: &Evidence<'_>) -> Vec<String> {
             ));
         }
         if spec.install.is_some() {
-            let vendor: Vec<String> = spec
+            let sources: Vec<String> = spec
                 .hook_failure
                 .sources
                 .iter()
@@ -417,8 +417,8 @@ pub fn evidence(hosts: &[Host], ev: &Evidence<'_>) -> Vec<String> {
                 .map(|(i, url)| format!("[{}]({url})", i + 1))
                 .collect();
             lines.push(format!(
-                "- **hook-failure facts** come from the vendor: {}.",
-                vendor.join(" ")
+                "- **hook-failure facts** come from: {}.",
+                sources.join(" ")
             ));
         }
         for record in ev.records_of(host) {
