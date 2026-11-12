@@ -48,7 +48,7 @@ protect) are on [openmoat.dev/docs](https://openmoat.dev/docs/).
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Where code lives and how a tool call becomes a decision, a hook response and an audit record |
 | [ADDING_AN_AGENT.md](ADDING_AN_AGENT.md) | Adding support for another AI coding agent: adapter, installer, fixtures, tests, docs |
 | [adr/](adr/README.md) | The decisions that constrain the code |
-| [CONTRIBUTING.md](../CONTRIBUTING.md) | Setup, the quality gate, pull request standards, releasing |
+| [CONTRIBUTING.md](../CONTRIBUTING.md) | Setup, the quality gate, CI, pull requests, releasing |
 | [AGENTS.md](../AGENTS.md) | The working contract for people and coding agents |
 | [SECURITY.md](../SECURITY.md) | How to report a bypass or vulnerability privately |
 | [CHALLENGE.md](CHALLENGE.md) | Break OpenMoat: the public bypass challenge, what counts, how you are credited |

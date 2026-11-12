@@ -61,12 +61,12 @@ itself, not the sandbox (the CI runner's kernel has `dev.tty.legacy_tiocsti` at 
 
 | Layer | Status |
 |---|---|
-| `openmoat run`, macOS (Seatbelt) | verified by the `macos-15` and `macos-15-intel` CI jobs |
-| `openmoat run --no-isolate`, Linux (Landlock + seccomp) | verified by the `stock linux` CI job (no bubblewrap, unprivileged user namespaces restricted, as on a stock Ubuntu, where a plain `openmoat run` starts this tier too) and, with a network namespace, by the `ubuntu-latest` CI job (Linux 6.7 or later) |
-| `openmoat run --isolate`, Linux (bubblewrap; the default where it works) | verified by the `ubuntu-latest` CI job (bubblewrap installed) |
+| `openmoat run`, macOS (Seatbelt) | verified by the `test (macos-15)` CI job |
+| `openmoat run --no-isolate`, Linux (Landlock + seccomp) | verified, with a network namespace, by the `test (ubuntu-latest)` CI job (Linux 6.7 or later); not run in CI as on a stock Ubuntu (no bubblewrap, unprivileged user namespaces restricted) |
+| `openmoat run --isolate`, Linux (bubblewrap; the default where it works) | verified by the `test (ubuntu-latest)` CI job (bubblewrap installed) |
 | `openmoat run --isolate`, macOS | not run: refused until the Isolated tier has a virtual machine there (#175) |
-| Claude Code sandbox and Codex profile, macOS | verified by the `standard tier (macos-15)` CI job |
-| Claude Code sandbox and Codex profile, Linux | verified by the `standard tier (ubuntu-latest)` CI job (bubblewrap and socat installed) |
+| Claude Code sandbox and Codex profile, macOS | verified with the pinned host binaries (`scripts/ci/host-binaries.sh`); CI does not fetch them |
+| Claude Code sandbox and Codex profile, Linux | verified with the pinned host binaries, bubblewrap and socat installed; CI does not fetch the binaries |
 | `openmoat run`, Windows | not run: `openmoat run` refuses on Windows, where OpenMoat generates no OS sandbox (#135) |
 | Claude Code sandbox, Windows | not run: Claude Code's sandbox does not run on native Windows, so `openmoat init` writes no sandbox settings there ([SANDBOX.md](SANDBOX.md)) |
 | Codex profile, Windows | not verified: the scripts and the project's `npm` shim are POSIX shell |
@@ -74,7 +74,7 @@ itself, not the sandbox (the CI runner's kernel has `dev.tty.legacy_tiocsti` at 
 The Standard tier columns cover the commands the agent runs and the processes they start.
 Not verified here: what the agent's own process does outside its sandbox (Claude Code's file
 tools and hooks), a real model choosing the command, and the opt-in `sandbox.proxy_port` mode
-for these scripts (the command-level scenarios of the differential suite use it, and the
-`standard tier` jobs run them under both host sandboxes). `scripts/ci/host-binaries.sh` fetches the
-pinned binaries, and `scripts/ci/differential.sh hostile_scripts` runs these rows under every layer
-the machine has.
+for these scripts (the command-level scenarios of the differential suite use it, under both host
+sandboxes). `scripts/ci/host-binaries.sh` fetches the pinned binaries; with `MOAT_CLAUDE_BIN` and
+`MOAT_CODEX_BIN` set, `cargo test -p openmoat --test e2e -- hostile_scripts` runs these rows
+under every layer the machine has.

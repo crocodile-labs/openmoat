@@ -120,7 +120,7 @@ agents, whose event a plugin or script of OpenMoat's would have to send.
   never came back, or it ran and the hook did not start). Everything asserted above still
   fails as before: the denied call is made first, so the capture cannot get in its way.
 
-`python3 -I scripts/ci/latest-agents/test_after_call.py` (in the quality gate) tests the
+`python3 -I scripts/ci/latest-agents/test_after_call.py` (run by hand) tests the
 redaction, the notice and each `NOT CAPTURED` reason; only a run of this job can show what
 an agent sends.
 
@@ -158,7 +158,7 @@ outcome is a line of `hook-failure.json` in the artefact.
 - **Not run:** Cursor (an account), Hermes Agent and OpenCode 2 (no model call is driven
   through them here).
 
-`python3 -I scripts/ci/latest-agents/test_check.py` (in the quality gate) tests how an
+`python3 -I scripts/ci/latest-agents/test_check.py` (run by hand) tests how an
 outcome is read and compared; only a run of this job shows what an agent does.
 
 ## When it fails
@@ -167,5 +167,5 @@ The `report` job opens or updates one issue per agent, `latest <agent> <version>
 OpenMoat`, with the failed step; the `latest-agent-<agent>-<OS>` artefact holds every
 log. Re-run one agent from Actions → latest agents → Run workflow. When an adapter is
 then checked against the new release, change the version in the file its record names
-and in `agents.json` in the same pull request (`check.py records` in the quality gate
-fails otherwise).
+and in `agents.json` in the same pull request (`python3 -I
+scripts/ci/latest-agents/check.py records` fails otherwise).

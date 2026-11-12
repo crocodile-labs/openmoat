@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # A throwaway home for scripts that install agents and run `openmoat init` in
-# CI (scripts/ci/latest-agents.sh, scripts/ci/clean-install.sh). Sourced, not
+# CI (scripts/ci/latest-agents.sh). Sourced, not
 # run. Nothing these scripts do may reach the runner's own home or any agent
 # configuration outside the temporary directory:
 #

@@ -12,7 +12,7 @@
 //!
 //! Unlike [`super::claude`], this runs without `--bare`, which skips hooks.
 //! The binary is `MOAT_CLAUDE_BIN` only; without it each test skips visibly,
-//! except in CI's `standard tier` job, which fails it.
+//! except when `MOAT_REQUIRE_HOST_BINARIES` is set, which fails it.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -45,7 +45,7 @@ pub struct Agent {
 }
 
 impl Agent {
-    /// Both, or `None` after a visible skip (a failure in CI's standard tier).
+    /// Both, or `None` after a visible skip (a failure with `MOAT_REQUIRE_HOST_BINARIES`).
     fn find(what: &str) -> Option<Self> {
         if let (Some(claude), Some(python)) = (claude_binary(), python()) {
             return Some(Self { claude, python });

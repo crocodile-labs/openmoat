@@ -8,6 +8,5 @@
 /tests/conformance/             @iamdotk
 /SECURITY.md                    @iamdotk
 /.github/workflows/             @iamdotk
-# What CI runs and whether it passed: the `changes` decision, `ci-ok`, the
-# release gate. A mistake here passes a red run.
+# The scripts the workflows run.
 /scripts/ci/                    @iamdotk

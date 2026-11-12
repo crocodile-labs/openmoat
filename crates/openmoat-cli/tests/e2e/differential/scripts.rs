@@ -249,12 +249,12 @@ fn evidence_table_is_current() {
     doc.push_str(&gaps);
     doc.push_str(
         "\n## Layers\n\n| Layer | Status |\n|---|---|\n\
-         | `openmoat run`, macOS (Seatbelt) | verified by the `macos-15` and `macos-15-intel` CI jobs |\n\
-         | `openmoat run --no-isolate`, Linux (Landlock + seccomp) | verified by the `stock linux` CI job (no bubblewrap, unprivileged user namespaces restricted, as on a stock Ubuntu, where a plain `openmoat run` starts this tier too) and, with a network namespace, by the `ubuntu-latest` CI job (Linux 6.7 or later) |\n\
-         | `openmoat run --isolate`, Linux (bubblewrap; the default where it works) | verified by the `ubuntu-latest` CI job (bubblewrap installed) |\n\
+         | `openmoat run`, macOS (Seatbelt) | verified by the `test (macos-15)` CI job |\n\
+         | `openmoat run --no-isolate`, Linux (Landlock + seccomp) | verified, with a network namespace, by the `test (ubuntu-latest)` CI job (Linux 6.7 or later); not run in CI as on a stock Ubuntu (no bubblewrap, unprivileged user namespaces restricted) |\n\
+         | `openmoat run --isolate`, Linux (bubblewrap; the default where it works) | verified by the `test (ubuntu-latest)` CI job (bubblewrap installed) |\n\
          | `openmoat run --isolate`, macOS | not run: refused until the Isolated tier has a virtual machine there (#175) |\n\
-         | Claude Code sandbox and Codex profile, macOS | verified by the `standard tier (macos-15)` CI job |\n\
-         | Claude Code sandbox and Codex profile, Linux | verified by the `standard tier (ubuntu-latest)` CI job (bubblewrap and socat installed) |\n\
+         | Claude Code sandbox and Codex profile, macOS | verified with the pinned host binaries (`scripts/ci/host-binaries.sh`); CI does not fetch them |\n\
+         | Claude Code sandbox and Codex profile, Linux | verified with the pinned host binaries, bubblewrap and socat installed; CI does not fetch the binaries |\n\
          | `openmoat run`, Windows | not run: `openmoat run` refuses on Windows, where OpenMoat generates no OS sandbox (#135) |\n\
          | Claude Code sandbox, Windows | not run: Claude Code's sandbox does not run on native Windows, so `openmoat init` writes no sandbox settings there ([SANDBOX.md](SANDBOX.md)) |\n\
          | Codex profile, Windows | not verified: the scripts and the project's `npm` shim are POSIX shell |\n\
@@ -262,10 +262,10 @@ fn evidence_table_is_current() {
          start.\nNot verified here: what the agent's own process does outside its sandbox (Claude \
          Code's file\ntools and hooks), a real model choosing the command, and the opt-in \
          `sandbox.proxy_port` mode\nfor these scripts (the command-level scenarios of the \
-         differential suite use it, and the\n`standard tier` jobs run them under both host \
-         sandboxes). `scripts/ci/host-binaries.sh` fetches the\npinned binaries, and \
-         `scripts/ci/differential.sh hostile_scripts` runs these rows under every layer\nthe \
-         machine has.\n",
+         differential suite use it, under both host\nsandboxes). \
+         `scripts/ci/host-binaries.sh` fetches the pinned binaries; with `MOAT_CLAUDE_BIN` \
+         and\n`MOAT_CODEX_BIN` set, `cargo test -p openmoat --test e2e -- hostile_scripts` \
+         runs these rows\nunder every layer the machine has.\n",
     );
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/EVIDENCE.md");
     if std::env::var_os("OPENMOAT_TEST_UPDATE_EVIDENCE").is_some() {

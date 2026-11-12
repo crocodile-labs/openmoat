@@ -43,27 +43,27 @@ mod temp_dirs;
 #[cfg(target_os = "linux")]
 mod unix_sockets;
 
-/// Set by CI's `stock linux` job, whose runner has no bubblewrap and keeps
+/// Set for a stock-Linux run, on a machine that has no bubblewrap and keeps
 /// unprivileged user namespaces restricted, as a stock Ubuntu does: there
 /// `openmoat run` must take the port-only path (Landlock and seccomp alone).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) const STOCK_LINUX: &str = "MOAT_TEST_STOCK_LINUX";
 
-/// Whether this is CI's `stock linux` job ([`STOCK_LINUX`]).
+/// Whether this is a stock-Linux run ([`STOCK_LINUX`]).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn stock_linux() -> bool {
     std::env::var_os(STOCK_LINUX).is_some()
 }
 
 /// Whether `openmoat run` must get a network namespace here: on CI, whose
-/// Linux jobs install bubblewrap, except the `stock linux` job.
+/// Linux job installs bubblewrap, except on a stock-Linux run.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn netns_required() -> bool {
     std::env::var_os("CI").is_some() && !stock_linux()
 }
 
 /// Fail when the run's network namespace is missing where it is required,
-/// or present on the `stock linux` job, which must test the path without
+/// or present on a stock-Linux run, which must test the path without
 /// one; `port_only` is whether `openmoat run` said it had none.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn check_netns(port_only: bool, shown: &str) {
@@ -73,7 +73,7 @@ pub(crate) fn check_netns(port_only: bool, shown: &str) {
     );
     assert!(
         port_only || !stock_linux(),
-        "the stock Linux job must run `openmoat run` without a network namespace: {shown}"
+        "a stock-Linux run must run `openmoat run` without a network namespace: {shown}"
     );
 }
 

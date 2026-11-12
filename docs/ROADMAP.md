@@ -101,7 +101,7 @@ What exists:
   `allow` rules name (ADR-043).
 - **Evidence.** A conformance suite tagged by threat ([COVERAGE.md](COVERAGE.md)), a
   differential suite across the hook and the host sandboxes ([EVIDENCE.md](EVIDENCE.md)),
-  MoatBench ([MOATBENCH.md](MOATBENCH.md)) and fuzz targets, all run in CI.
+  MoatBench ([MOATBENCH.md](MOATBENCH.md)) and fuzz targets.
 - **SDK.** `openmoat-sdk` for Rust and `@openmoat/sdk` for JavaScript (the engine as
   WebAssembly): the same decisions inside your own agent product, which enforces them
   (ADR-046, [SDK.md](SDK.md)). `openmoat-sdk` is on crates.io from 0.12.0; from

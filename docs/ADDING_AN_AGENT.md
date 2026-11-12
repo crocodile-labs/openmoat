@@ -116,7 +116,7 @@ The spec in `host/<module>.rs` holds every fact about the agent that is not code
     `OwnedFile` for an agent whose hook is a file of its own that it runs for every call
     (Cline's `hooks/PreToolUse`: a POSIX shell script, `Syntax::PosixShell`, that answers
     the agent's block itself when `openmoat` cannot, and needs no heartbeat).
-  - A plugin starts with `// @ts-check`, type-checks with `scripts/ci/check-js.sh` and
+  - A plugin starts with `// @ts-check` (`crates/openmoat-hosts/jsconfig.json`) and
     gets a Node harness in `crates/openmoat-hosts/tests/js_plugins/`: a `<module>.mjs`
     against the stand-ins for the host and the guard in `common.mjs`, which give the
     stand-in guard 5 s, and a `<module>.rs` module listed in its `main.rs`.
@@ -313,12 +313,10 @@ runs the hook. Test at least:
 
 ## The pull request
 
-- Link the issue. Keep each PR to one concern and under 500 changed lines (`size: L`);
+- Link the issue. Keep each PR to one concern and under 500 changed lines;
   split a large adapter into a stack, for example the adapter and its fixtures first,
   then the installer and e2e tests, then the docs.
-- Title `host(<id>): …` or `feat: …`; branch `<type>/<topic>`. `pr-standards` sets the
-  `type:`, `area: hosts`, `size:` and `risk:` labels (adapters and install are
-  `risk: medium`; the default policy is `risk: high`).
+- Title `host(<id>): …` or `feat: …`; branch `<type>/<topic>`.
 - The body needs **Testing** and **Security impact**. Security impact states which tools
   are governed, which are not, and what happens on a review and on a hook failure.
 - Run `scripts/ci/quality-gate.sh` before you push.

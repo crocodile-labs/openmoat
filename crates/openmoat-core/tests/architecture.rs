@@ -1,7 +1,7 @@
 //! Architecture invariants for the trusted core (`docs/ARCHITECTURE.md` §1).
 //!
 //! `openmoat-core` must stay pure: no internal crates, no I/O or runtime crates.
-//! The wasm32 build in CI catches most OS calls; `std::fs`/`std::env` still
+//! A wasm32 build catches most OS calls; `std::fs`/`std::env` still
 //! compile there, so the source scan below is what actually enforces purity.
 
 use std::fs;

@@ -1,6 +1,6 @@
 //! `require.run: full-boundary` (ADR-077): `openmoat run` starts only with its
-//! whole boundary, and no flag lowers that. CI's `stock linux` job has no
-//! network namespace, so there it refuses; every other job starts.
+//! whole boundary, and no flag lowers that. A stock-Linux run has no network
+//! namespace, so there it refuses; every other run starts.
 
 use std::path::Path;
 use std::process::Output;
@@ -85,7 +85,7 @@ fn it_starts_with_the_full_boundary_and_refuses_without_one() {
 #[test]
 fn no_flag_lowers_it() {
     if !stock_linux() {
-        eprintln!("skipped: only CI's `stock linux` job has no network namespace");
+        eprintln!("skipped: only a stock-Linux run has no network namespace");
         return;
     }
     let (sb, project) = installed_with_secret();
