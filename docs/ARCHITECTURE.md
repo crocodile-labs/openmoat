@@ -1115,7 +1115,10 @@ scripts/ci/guard-latency.py    times `openmoat guard` per process in CI (the `la
 scripts/ci/guard-session-latency.py
                                times it late in a long session (the same job)
 scripts/ci/latency_ab.py       their install and pass rule, alone or against a base binary
-scripts/ci/changes.py          whether a pull request changes documentation only
+scripts/ci/changes.py          what a CI run needs: documentation only, the slow legs, long fuzz, ADR-062 step 0
+scripts/ci/ci_ok.py            the `ci-ok` check: every job passed or was skipped on order
+scripts/ci/main_ci_green.py    the release gate: main's `ci` run for the tag's commit is green
+scripts/ci/test_ci_gates.py    unit tests of those three
 scripts/ci/sync-labels.sh      the repository's label set
 scripts/ci/sdk-js.sh           builds the WebAssembly module and runs the JS SDK's tests
 ```

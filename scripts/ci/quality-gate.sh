@@ -80,6 +80,8 @@ if command -v python3 >/dev/null; then
     run python3 -I scripts/ci/latest-agents/check.py records
     run python3 -I scripts/ci/latest-agents/test_after_call.py
     run python3 -I scripts/ci/latest-agents/test_check.py
+    # CI's own decisions: which jobs a run needs, ci-ok, the release gate.
+    run python3 -I scripts/ci/test_ci_gates.py
 else
     echo "▷ python3 not installed; Markdown link check skipped (CI runs it)"
 fi
