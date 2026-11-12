@@ -138,6 +138,10 @@ Each agent's gaps and the reasons are in
   ended with it; a child that started a session of its own (`setsid`) is not. On Windows
   only the program is ended, and a child it left holding its output keeps one waiting
   thread of the proxy until the child ends.
+- **`openmoat guard` does not mask a `command` source's value in its audit rows**
+  (preview, ADR-087 §6). Only the proxy has the value, and OpenMoat does not write it to
+  a file for the guard to read. A tool call carries the value only if the agent already
+  got hold of it; the proxy's own audit rows mask every value it gave.
 
 ## What the hook does not see
 

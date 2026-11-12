@@ -414,7 +414,8 @@ that an administrator installed.
   anything is sent, with rule `proxy-secret-expired` in the audit log. A stale value is
   never sent.
 - **Where it runs.** Only in `openmoat proxy` (and the proxy of `openmoat run`).
-  `openmoat guard` never runs it and does not mask its value; audit delivery refuses a
+  `openmoat guard` never runs it and does not mask its value (no file of values is
+  written for it to read; [LIMITS.md](LIMITS.md)); audit delivery refuses a
   `command` source; Claude Code's broker is never given it (`openmoat sandbox show`
   lists it as handled by `openmoat proxy`). A repository policy or a pack cannot add any
   secret.

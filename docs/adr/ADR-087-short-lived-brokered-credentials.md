@@ -129,6 +129,18 @@ program, or name it, runs code as the person.
    program it planted. `openmoat guard` never runs a `command` source and does
    not mask its value; audit delivery refuses one as a key source; Claude Code's broker is
    never given one (`sandbox show` and `doctor` list it as handled by `openmoat proxy`).
+6. **The guard's audit rows do not mask a `command` value, by choice.** The guard cannot
+   run the program (R1), so it could learn the values only from a file the proxy
+   writes. Masking finds a value by its text, so that file would have to hold the plain
+   values, or the guard would have to hash every window of every row it writes (a cost on
+   every tool call) to match digests; a masked form or a prefix is not enough to find the
+   value. A file of plain values on disk, even owner-only under the state directory, is a
+   copy of the very tokens this source exists to keep short-lived and out of reach, and
+   would outlive them. The guard's rows record tool calls, which carry only placeholders:
+   a value reaches one only after it already leaked to the agent, which the broker's leak
+   and echo checks are there to stop, and a leaked value is worth little once its short
+   lifetime ends. So no values file is written, and the gap is in LIMITS.md. The proxy's
+   own audit rows mask every value it gave.
 
 ## What this must never do
 
@@ -190,7 +202,11 @@ program, or name it, runs code as the person.
 - Updating the program means restarting `openmoat proxy` (or `openmoat run`).
 - Proof: unit tests run stand-in programs (an answer, a bare environment, a failure, a
   hang, a flood of output, a control character, a program changed after start, a program
-  the agent could change, a link to one), the broker's renewal and expiry, the masks, and
+  the agent could change, a link to one; after the security review: the start in `/`
+  with a private home, a planted tool beside the program, an open folder above it, an
+  `env` or unchecked interpreter, the private copy and a changed copy, a deny rule
+  inside a granted folder or from a repository, a child left holding the output, and the
+  renewal schedule for an expiry shorter than `refresh_before`), the broker's renewal and expiry, the masks, and
   the refusal of the source by a repository policy; attack fixtures cover the agent
   appending a source to the policy and changing a credential program or its
   configuration. The deadline refusal at a live proxy and a real cloud CLI are not run
