@@ -1,2 +1,0 @@
-### Security
-- The default policy's `kernel-self` rule denies agents reading `~/.moat/remote` (each approval channel's credential under `~/.moat/remote/<channel>/`, and the key that signs requests, answers and the approver list) and running any `openmoat approvals` command, by either name, by path and under the pseudo-terminal wrappers (ADR-078) ([#790](https://github.com/crocodile-labs/openmoat/pull/790)).

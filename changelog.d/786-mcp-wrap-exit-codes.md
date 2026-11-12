@@ -1,2 +1,0 @@
-### Fixed
-- `openmoat mcp wrap <server>` and `unwrap <server>` exit 64 when a server asked for by name is left as it is (one OpenMoat cannot put behind the proxy, or one with a change nobody accepted) instead of printing "no stdio MCP server to wrap" and succeeding, and a file that cannot be read or parsed, or no longer holds the server, fails the command again rather than being named as one to set by hand ([#786](https://github.com/crocodile-labs/openmoat/pull/786)).

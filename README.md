@@ -406,7 +406,7 @@ The two attacks not stopped, `rm -rf .` and an MCP tool deleting a repository, a
 
 ## Status
 
-**Usable daily.** The latest release is `0.19.0`. The policy format and the commands can
+**Usable daily.** The latest release is `0.20.0`. The policy format and the commands can
 still change before 1.0; every such change has a CHANGELOG line. What comes next:
 [docs/ROADMAP.md](docs/ROADMAP.md).
 
