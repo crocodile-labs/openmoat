@@ -103,17 +103,27 @@ impl Service {
 
     /// Read one call from `stream` and answer it. An error means no answer:
     /// the sandboxed guard then denies.
-    pub fn answer(&self, mut stream: impl Stream) -> Result<()> {
+    pub fn answer(&self, stream: impl Stream) -> Result<()> {
+        self.answer_at(stream, Instant::now)
+    }
+
+    /// [`Self::answer`] with the time read from `now`, which is when the
+    /// wrong tokens' rows fall due; the tests give it a clock of their own.
+    pub(super) fn answer_at(
+        &self,
+        mut stream: impl Stream,
+        now: impl Fn() -> Instant,
+    ) -> Result<()> {
         stream.set_timeouts(Duration::from_secs(GUARD_BUDGET_S))?;
         // Wrong tokens counted since their last row, once that row is old enough.
-        for (_, count) in self.wrong_tokens.due(Instant::now()) {
+        for (_, count) in self.wrong_tokens.due(now()) {
             self.record_wrong_tokens(count)?;
         }
         let request = Request::read_from(&mut stream)?;
         if !constant_time_eq(&request.token, &self.token) {
             // Any local process can send these: a row for the first, then
             // one per interval with the count (`openmoat_proxy::coalesce`).
-            if let Some(count) = self.wrong_tokens.refused(0, Instant::now()) {
+            if let Some(count) = self.wrong_tokens.refused(0, now()) {
                 self.record_refused(&request.host, count)?;
             }
             bail!("a hook call with a wrong token");

@@ -1,8 +1,9 @@
 //! `openmoat allow --for` and `--prune`: standing grants that end, end to end.
 //!
-//! The binary reads the real clock, so a grant that must end is given `--for 1s`
-//! and the test waits a little over two seconds (the end is rounded up to the
-//! second); nothing here waits more than about six seconds.
+//! The binary reads the real clock. A grant is shown in force while it is given
+//! for an hour, so no check races its end on a slow runner; it is then given
+//! again `--for 1s`, which replaces the end, and the test waits a little over
+//! two seconds (the end is rounded up to the second).
 
 use std::time::Duration;
 
@@ -20,12 +21,6 @@ fn check(sb: &Sandbox, kind: &str, action: &str) -> Option<i32> {
 /// Long enough for a `--for 1s` grant to have ended.
 fn wait_past_one_second() {
     std::thread::sleep(Duration::from_millis(2_200));
-}
-
-/// Long enough for a `--for 5s` grant to have ended: five seconds leave a slow
-/// runner time to give two grants and run the hook while they hold.
-fn wait_past_five_seconds() {
-    std::thread::sleep(Duration::from_millis(6_200));
 }
 
 #[test]
@@ -115,14 +110,29 @@ fn a_directory_and_a_command_allowed_for_a_while_end_too() {
     let notes = shared.join("notes.md").to_str().unwrap().to_owned();
     assert_eq!(check(&sb, "fs-write", &notes), Some(3));
 
-    let out = sb.moat_as_person(&["allow", "--dir", shared.to_str().unwrap(), "--for", "5s"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    let out = sb.moat_as_person(&["allow", "npm install left-pad", "--always", "--for", "5s"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    // Given for an hour, so they hold however slow the runner is; then given
+    // again for a second, which replaces the end, and waited out.
+    let dir = shared.to_str().unwrap();
+    let grants = |span: &str| {
+        for args in [
+            vec!["allow", "--dir", dir, "--for", span],
+            vec!["allow", "npm install left-pad", "--always", "--for", span],
+        ] {
+            let out = sb.moat_as_person(&args);
+            assert_eq!(out.status.code(), Some(OK), "{args:?}: {}", text(&out));
+        }
+    };
+    grants("1h");
+    assert_eq!(
+        check(&sb, "fs-write", &notes),
+        Some(OK),
+        "the directory is in force"
+    );
     let (verdict, _) = sb.guard_bash("s1", &sb.project(), "npm install left-pad");
-    assert_eq!(verdict, "allow", "in force right after it is given");
+    assert_eq!(verdict, "allow", "the command is in force");
 
-    wait_past_five_seconds();
+    grants("1s");
+    wait_past_one_second();
     assert_eq!(check(&sb, "fs-write", &notes), Some(3), "back to review");
     let (verdict, _) = sb.guard_bash("s1", &sb.project(), "npm install left-pad");
     assert_eq!(verdict, "ask", "the hook's decision is back to review");
