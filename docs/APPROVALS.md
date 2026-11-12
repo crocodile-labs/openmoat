@@ -135,6 +135,7 @@ reading any of it and writing anywhere under `~/.moat`.
 | `<channel>/credential` | the channel's secrets, one JSON object (for Telegram, the bot token) |
 | `<channel>/settings.json` | the channel's account (the bot's name) and its other settings, signed |
 | `requests/`, `answers/`, `used/` | calls waiting, answers given, approvals used |
+| `refused/` | approvals used for a call refused after all (its audit row could not be written), for `listen` to tell the approver |
 
 ## Limits
 

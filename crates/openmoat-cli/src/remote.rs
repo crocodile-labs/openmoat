@@ -1,7 +1,7 @@
 //! Approving a `review` from another device (ADR-078).
 //!
 //! The guard sends a call it holds for review to a channel only as a signed
-//! request file ([`gate()`]); `openmoat approvals listen`, run by the person,
+//! request file ([`gate::gate_used`]); `openmoat approvals listen`, run by the person,
 //! sends it to the approvers and turns an approver's button press into a
 //! signed answer ([`Listener`]); the guard uses an approval once, for the
 //! exact call it was made for. Every failure leaves the `review` as it was.
@@ -19,6 +19,7 @@ mod gate;
 mod https;
 mod listen;
 mod prompt;
+mod refused;
 mod request;
 mod settings;
 mod store;
@@ -35,8 +36,10 @@ use openmoat_core::Decision;
 pub use channel::{Credential, Options, Secrets, Spec};
 pub use channels::REGISTRY;
 pub use connect::{account, connect, credential_problem, disconnect, open};
+#[cfg(test)]
 pub use gate::gate;
 pub use listen::{Listener, Records, Row};
+pub use refused::Approved;
 pub use settings::{DEFAULT_EXPIRY_S, MAX_EXPIRY_S, MIN_EXPIRY_S, Settings};
 pub use store::Store;
 
@@ -55,22 +58,24 @@ pub const EXPIRED_RULE: &str = "remote-expired";
 /// The tool name of the listener's rows.
 pub const ROW_TOOL: &str = "approval";
 
-/// [`gate()`] in this guard's state directory, now; without a state directory
-/// there is no channel, and `decision` stays.
+/// [`gate::gate_used`] in this guard's state directory, now; without a state
+/// directory there is no channel, and `decision` stays. With it, the
+/// approval the call used, if one was: a call refused after that (its row
+/// could not be written) goes to [`Approved::refused`].
 pub fn gated(
     request: &openmoat_hosts::HookRequest,
     decision: Decision,
     known: &openmoat_audit::KnownSecrets,
-) -> Decision {
+) -> (Decision, Option<Approved>) {
     match Home::locate() {
-        Ok(home) => gate(
+        Ok(home) => gate::gate_used(
             &Store::of(&home),
             request,
             decision,
             known,
             crate::time::now_ms(),
         ),
-        Err(_) => decision,
+        Err(_) => (decision, None),
     }
 }
 

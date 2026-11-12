@@ -8,7 +8,9 @@
 //!   [`ChannelSettings`](super::settings::ChannelSettings);
 //! - `requests/<id>.json`: calls waiting for an answer, written by the guard;
 //! - `answers/<id>.json`: answers, written by `openmoat approvals listen`;
-//! - `used/<id>`: the replay store, one empty file per approval used.
+//! - `used/<id>`: the replay store, one empty file per approval used;
+//! - `refused/<id>.json`: an approval used for a call the guard then refused,
+//!   signed, for the listener to tell the approver ([`Refused`]).
 //!
 //! A channel's folder is named by its registered [`Spec`], never by text
 //! read from a file, so no setting can point a path elsewhere.
@@ -22,6 +24,7 @@ use super::answer::Answer;
 use zeroize::Zeroizing;
 
 use super::channel::{Credential, Secrets, Spec};
+use super::refused::Refused;
 use super::request::Request;
 use crate::home::{Home, write_private, write_private_new};
 
@@ -33,6 +36,7 @@ const CREDENTIAL_FILE: &str = "credential";
 const REQUESTS: &str = "requests";
 const ANSWERS: &str = "answers";
 const USED: &str = "used";
+const REFUSED: &str = "refused";
 /// How long a used marker is kept: far longer than any request lives.
 const USED_KEPT_MS: i64 = 24 * 60 * 60 * 1000;
 
@@ -240,6 +244,43 @@ impl Store {
     pub fn forget(&self, id: &str) {
         let _ = fs::remove_file(self.request_path(id));
         let _ = fs::remove_file(self.answer_path(id));
+    }
+
+    fn refused_path(&self, id: &str) -> PathBuf {
+        self.dir.join(REFUSED).join(format!("{id}.json"))
+    }
+
+    pub fn put_refused(&self, note: &Refused) -> Result<()> {
+        let text = serde_json::to_vec(note).context("encoding a refusal")?;
+        write_private(&self.refused_path(&note.request.id), &text)
+    }
+
+    /// Every refusal on file by its request id, `None` where the file does
+    /// not read as one.
+    pub fn refused(&self) -> Vec<(String, Option<Refused>)> {
+        let Ok(entries) = fs::read_dir(self.dir.join(REFUSED)) else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(id) = name.to_str().and_then(|n| n.strip_suffix(".json")) else {
+                continue;
+            };
+            if !plain_id(id) {
+                continue;
+            }
+            let note = fs::read_to_string(entry.path())
+                .ok()
+                .and_then(|text| serde_json::from_str::<Refused>(&text).ok())
+                .filter(|n| n.request.id == id);
+            out.push((id.to_owned(), note));
+        }
+        out
+    }
+
+    pub fn forget_refused(&self, id: &str) {
+        let _ = fs::remove_file(self.refused_path(id));
     }
 
     /// Remove used markers older than a day, whose requests expired long ago.

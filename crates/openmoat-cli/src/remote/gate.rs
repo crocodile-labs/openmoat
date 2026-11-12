@@ -9,6 +9,7 @@ use openmoat_core::{Action, Decision, Verdict};
 use openmoat_hosts::{HookEvent, HookRequest};
 
 use super::answer::{self, Answer};
+use super::refused::Approved;
 use super::request::{self, Request};
 use super::settings::Settings;
 use super::store::Store;
@@ -19,7 +20,8 @@ use crate::proxy_session::Key;
 /// an agent that keeps trying new calls cannot flood the approver's phone.
 pub const MAX_WAITING: usize = 20;
 
-/// `decision` for `request` once remote approval has had its say, at `now_ms`.
+/// [`gate_used`]'s decision alone, as most tests read it.
+#[cfg(test)]
 pub fn gate(
     store: &Store,
     request: &HookRequest,
@@ -27,6 +29,19 @@ pub fn gate(
     known: &KnownSecrets,
     now_ms: i64,
 ) -> Decision {
+    gate_used(store, request, decision, known, now_ms).0
+}
+
+/// `decision` for `request` once remote approval has had its say, at
+/// `now_ms`, with the approval this call used, if one was: should the call
+/// be refused after all, [`Approved::refused`] tells the approver.
+pub fn gate_used(
+    store: &Store,
+    request: &HookRequest,
+    decision: Decision,
+    known: &KnownSecrets,
+    now_ms: i64,
+) -> (Decision, Option<Approved>) {
     if decision.verdict != Verdict::Review
         || !matches!(
             request.event,
@@ -34,14 +49,17 @@ pub fn gate(
         )
         || !store.connected()
     {
-        return decision;
+        return (decision, None);
     }
     let Some(action) = &request.action else {
-        return decision;
+        return (decision, None);
     };
     match decide(store, request, action, &decision, (known, now_ms)) {
-        Ok(answered) => answered,
-        Err(error) => with_reason(decision, format!("not sent for remote approval: {error:#}")),
+        Ok((answered, used)) => (answered, used.map(|r| Approved::new(store, r))),
+        Err(error) => (
+            with_reason(decision, format!("not sent for remote approval: {error:#}")),
+            None,
+        ),
     }
 }
 
@@ -52,14 +70,15 @@ fn with_reason(mut decision: Decision, reason: String) -> Decision {
 
 /// The decision once remote approval had its say: an approval used, an
 /// approver's deny, or the `review` with a reason naming the request sent or
-/// waiting. An error keeps the `review` ([`gate()`] adds why).
+/// waiting. An error keeps the `review` ([`gate_used`] adds why). With the
+/// decision, the request whose approval this call used, if one was.
 fn decide(
     store: &Store,
     request: &HookRequest,
     action: &Action,
     decision: &Decision,
     (known, now_ms): (&KnownSecrets, i64),
-) -> Result<Decision> {
+) -> Result<(Decision, Option<Request>)> {
     let key = Key::load(&store.key_path())?;
     let settings = Settings::load(&store.settings_path(), &key)?;
     let digest = request::digest(request, action, decision)?;
@@ -80,9 +99,11 @@ fn decide(
             && answer.channel == settings.channel
             && settings.approver(&answer.approver)
         {
-            return used(store, &open, &answer, decision);
+            let decided = used(store, &open, &answer, decision)?;
+            let approved = decided.rules.iter().any(|r| r == APPROVED_RULE);
+            return Ok((decided, approved.then_some(open)));
         }
-        return Ok(with_reason(
+        let waiting = with_reason(
             decision.clone(),
             format!(
                 "waiting for approval over {} as request {} until {}; once approved, the same \
@@ -91,7 +112,8 @@ fn decide(
                 open.code(),
                 crate::time::clock(open.expires_ms)
             ),
-        ));
+        );
+        return Ok((waiting, None));
     }
     if waiting >= MAX_WAITING {
         bail!("{MAX_WAITING} requests are already waiting");
@@ -118,7 +140,7 @@ fn decide(
     };
     new.sign(&key)?;
     store.put_request(&new)?;
-    Ok(with_reason(
+    let sent = with_reason(
         decision.clone(),
         format!(
             "sent for approval over {} as request {}, until {}; once approved, the same call \
@@ -127,7 +149,8 @@ fn decide(
             new.code(),
             crate::time::clock(new.expires_ms)
         ),
-    ))
+    );
+    Ok((sent, None))
 }
 
 /// The decision a valid `answer` to `open` gives this call: an approval used

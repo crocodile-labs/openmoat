@@ -5,13 +5,15 @@ use std::time::Duration;
 use anyhow::Result;
 use openmoat_core::Verdict;
 
+use super::super::REFUSED_RULE;
 use super::super::channel::Reply;
-use super::super::gate::MAX_WAITING;
+use super::super::gate::{MAX_WAITING, gate_used};
 use super::super::listen::{Listener, Records, Row};
 use super::{
     APPROVER, FAKE, Fake, NOW, Rows, approve_button, call, gated, only_request, press, review,
     setup,
 };
+use openmoat_audit::KnownSecrets;
 
 #[test]
 fn a_channel_that_cannot_send_leaves_the_request_waiting() {
@@ -98,4 +100,69 @@ fn an_answer_that_cannot_be_recorded_does_not_stand() {
             .is_err()
     );
     assert!(s.store.answer(&request.id).is_none());
+}
+
+/// An approval the guard used for a call it then refused (its row could not
+/// be written): the call stays denied, and the approver is told why and the
+/// refusal recorded, once, instead of the approval vanishing without a word.
+#[test]
+fn an_approved_call_refused_after_all_is_told_to_the_approver() {
+    let s = setup();
+    let req = call("s1", "npm publish");
+    gated(&s, &req, review(), NOW);
+    let request = only_request(&s);
+    let mut fake = Fake::default();
+    let mut rows = Rows::default();
+    let mut listener = Listener::new(&s.store, &s.key, &FAKE, s.settings.clone());
+    listener
+        .step(&mut fake, &mut rows, Duration::ZERO, &|| NOW + 1)
+        .unwrap();
+    fake.queued
+        .push_back(press(APPROVER, &approve_button(&s, &request)));
+    listener
+        .step(&mut fake, &mut rows, Duration::ZERO, &|| NOW + 1)
+        .unwrap();
+    let (decision, approved) =
+        gate_used(&s.store, &req, review(), &KnownSecrets::default(), NOW + 2);
+    assert_eq!(decision.verdict, Verdict::Allow, "{decision:?}");
+    let line = approved
+        .expect("the approval was used")
+        .refused("audit log unavailable: disk full");
+    assert!(
+        line.contains("was approved, but the call was refused: audit log unavailable: disk full"),
+        "{line}"
+    );
+    assert!(line.contains("the approver is told"), "{line}");
+    rows.0.clear();
+    listener
+        .step(&mut fake, &mut rows, Duration::ZERO, &|| NOW + 3)
+        .unwrap();
+    let told: Vec<&String> = fake
+        .notes
+        .iter()
+        .filter(|(to, _)| to == APPROVER)
+        .map(|(_, text)| text)
+        .collect();
+    assert_eq!(told.len(), 1, "{:?}", fake.notes);
+    assert!(
+        told[0].contains("approved, but the call was refused: audit log unavailable"),
+        "{told:?}"
+    );
+    assert_eq!(rows.0.len(), 1, "{:?}", rows.0);
+    assert_eq!(rows.0[0].rule, REFUSED_RULE);
+    assert_eq!(s.store.refused().len(), 0);
+    // Once only.
+    listener
+        .step(&mut fake, &mut rows, Duration::ZERO, &|| NOW + 4)
+        .unwrap();
+    assert_eq!(fake.notes.len(), 1);
+    // A call that used no approval has none to report.
+    let (_, none) = gate_used(
+        &s.store,
+        &call("s1", "ls"),
+        review(),
+        &KnownSecrets::default(),
+        NOW + 5,
+    );
+    assert!(none.is_none());
 }

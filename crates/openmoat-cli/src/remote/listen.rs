@@ -105,6 +105,7 @@ impl<'a> Listener<'a> {
         now_ms: i64,
     ) -> Result<()> {
         self.store.sweep_used(now_ms);
+        self.tell_refused(channel, records);
         for found in self.store.requests()? {
             let request = match found {
                 Ok(request) if request.verified(self.key) => request,
@@ -135,6 +136,33 @@ impl<'a> Listener<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Tell the approvers of every approval the guard used for a call it then
+    /// refused ([`super::refused`]), and record it; each note once.
+    fn tell_refused(&mut self, channel: &mut dyn Channel, records: &mut dyn Records) {
+        for (id, note) in self.store.refused() {
+            self.store.forget_refused(&id);
+            let Some(note) = note.filter(|n| n.verified(self.key)) else {
+                self.log
+                    .push(format!("removed refusal note {id}: bad signature"));
+                continue;
+            };
+            let what = format!(
+                "request {} was approved, but the call was refused: {}",
+                note.request.code(),
+                note.reason
+            );
+            let row = row(&note.request, REFUSED_RULE, Verdict::Deny, what.clone());
+            if let Err(error) = records.record(row) {
+                self.log
+                    .push(format!("could not record that {what}: {error:#}"));
+            }
+            for approver in self.locals() {
+                let _ = channel.notify(&approver, &format!("OpenMoat: {what}. Nothing ran."));
+            }
+            self.log.push(what);
+        }
     }
 
     /// The approvers of this channel, by their id on it.

@@ -29,6 +29,30 @@ pub(super) struct Recorded<'a> {
     pub(super) relayed: bool,
 }
 
+/// [`record`] the call, then write the session's environment file: `None`
+/// when both hold, else the deny that replaces the decision, since a call
+/// that cannot be recorded is not allowed. A remote approval the call used is
+/// gone then; its approver is told why (ADR-078 Decision 4).
+pub(super) fn refusal(
+    host: Host,
+    recorded: Recorded<'_>,
+    pending: Option<&super::session_start::Pending>,
+    approved: Option<crate::remote::Approved>,
+) -> Option<Decision> {
+    let error = match record(host, recorded) {
+        Err(error) => error.context("audit log unavailable"),
+        Ok(()) => pending?
+            .write()
+            .err()?
+            .context("writing the session's environment file"),
+    };
+    let mut deny = super::kernel_error(&error);
+    if let Some(approved) = approved {
+        deny.reasons.push(approved.refused(&format!("{error:#}")));
+    }
+    Some(deny)
+}
+
 /// Record the decision, after the session cache on the same handle. The cache
 /// write never waits for the lock and its result is ignored; it is a separate
 /// statement before the record's own transaction, so it cannot touch the

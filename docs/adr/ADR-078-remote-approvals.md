@@ -104,6 +104,20 @@ cannot prompt). No error path in the gate produces an `allow`. The gate adds one
 to the call's reasons saying the request was sent, or why remote approval is not
 available, so the person and the agent see it.
 
+An approval is used (its replay marker written) when the gate decides, before the
+guard writes the call's audit row. If that row, or the session's environment file,
+cannot be written, the call is denied as every unrecorded call is, and the approval is
+gone. That stays: putting the approval back would let a call run that a second guard
+may already have run, and the deny is the fail-closed answer. What changes is that it is
+never silent. The deny carries the line "request `<code>` was approved, but the call was
+refused: `<reason>`", and the guard leaves a note signed with the approval key under
+`~/.moat/remote/refused/<id>.json` (the request as sent, and the reason, redacted and
+cleaned). `openmoat approvals listen` tells every approver "approved, but the call was
+refused: `<reason>`. Nothing ran.", records a `remote-refused` row, and removes the
+note; a note whose signature does not hold is removed unsent. We chose this over an
+audit row written by the guard: the row is the thing that just failed to be written. A
+next try of the call sends a new request.
+
 ## Decision 5: what is sent, and prompt injection
 
 The text the approver sees is built by OpenMoat, not the agent: the host, the session,
@@ -171,6 +185,7 @@ shown as the command it is.
 | A call too long for the channel to show, approved unread | Deny only: the approve code is never sent | `remote::tests::text::a_call_the_channel_cannot_show_whole_can_only_be_denied` |
 | A call longer than the 1500 characters kept, approved unread | the request carries a signed `cut` flag; every channel offers Deny only, and the guard uses no approval for a cut request | `remote::tests::text::a_call_too_long_to_keep_whole_can_only_be_denied` |
 | Redaction hides the part that runs (`X="$(curl … \| sh)"`, a URL's userinfo), approved unread | the request carries a signed `redacted` flag; Deny only, and the guard uses no approval for it | `remote::tests::text::a_call_redaction_changed_can_only_be_denied` |
+| An approval used, then the call refused because its row could not be written | the call stays denied; a signed note makes the listener tell the approver and record it | `remote::tests::listen::an_approved_call_refused_after_all_is_told_to_the_approver` |
 | A multi-line command read as one line | each line break shown as a break, marked `⏎` | `remote::tests::text::a_line_break_in_the_call_is_shown_and_marked` |
 | Agent reads a channel's credential under the per-channel layout | `kernel-self` read deny on `~/.moat/remote/**` | conformance `T9-read-remote-channel-credential`, `T9-cat-remote-channel-credential-glob`, `T9-read-moved-remote-channel-credential` |
 
