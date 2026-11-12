@@ -96,11 +96,15 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-15, macos-15-intel, ubuntu-latest, windows-latest]
-        # Windows runs the end-to-end tests in two parts, the second in the
-        # `windows-e2e-2` job beside this one: in one job they pass its time
-        # limit (scripts/ci/quality-gate.sh, E2E_PART).
+        # Windows and macOS run the end-to-end tests in two parts, the second
+        # in the `e2e-2` job beside this one: in one job they pass the time
+        # limit (scripts/ci/quality-gate.sh, E2E_PART). Ubuntu runs them whole.
         include:
           - os: windows-latest
+            e2e_part: "1"
+          - os: macos-15
+            e2e_part: "1"
+          - os: macos-15-intel
             e2e_part: "1"
     steps:
       - name: nothing to run
@@ -137,16 +141,21 @@ jobs:
         run: scripts/ci/quality-gate.sh
         shell: bash
 
-  # The second part of the Windows end-to-end tests (E2E_PART=2), run beside
-  # the `windows-latest` gate job, which runs the rest.
-  windows-e2e-2:
-    name: windows-latest e2e (2 of 2)
+  # The second part of the end-to-end tests (E2E_PART=2) on Windows and macOS,
+  # run beside the gate job of that runner, which runs the rest. macos-15-intel
+  # follows the gate's rule for that leg: on a pull request only with `full`.
+  e2e-2:
+    name: ${{ matrix.os }} e2e (2 of 2)
     needs: changes
     if: ${{ !cancelled() }}
-    runs-on: ${{ needs.changes.outputs.code != 'false' && 'windows-latest' || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    runs-on: ${{ needs.changes.outputs.code != 'false' && (matrix.os != 'macos-15-intel' || needs.changes.outputs.full != 'false') && matrix.os || 'ubuntu-latest' }}
+    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 60 || 30 }}
     env:
-      RUN_LEG: ${{ needs.changes.outputs.code != 'false' }}
+      RUN_LEG: ${{ needs.changes.outputs.code != 'false' && (matrix.os != 'macos-15-intel' || needs.changes.outputs.full != 'false') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15, macos-15-intel]
     steps:
       - name: nothing to run
         if: env.RUN_LEG != 'true'
@@ -163,7 +172,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         if: env.RUN_LEG == 'true'
         with:
-          shared-key: windows-e2e-2
+          shared-key: e2e-2
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: end-to-end tests, part 2
         if: env.RUN_LEG == 'true'
@@ -679,7 +688,7 @@ jobs:
     needs:
       - changes
       - gate
-      - windows-e2e-2
+      - e2e-2
       - standard-tier
       - stock-linux
       - core-is-pure
