@@ -6,6 +6,8 @@ on:
   pull_request:
   schedule:
     - cron: "17 6 * * 1" # weekly on main: cargo-deny sees new advisories, fuzz runs 600 s per target
+  # By hand (Actions → ci → Run workflow): every leg, with long fuzz.
+  workflow_dispatch:
 
 # A new push to a pull request cancels the run of the push before. Runs on
 # main and on schedule each have a group of their own (the run id), so none is
@@ -59,7 +61,23 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: python3 scripts/ci/changes.py --event "$EVENT" --pr "$PR" HEAD^1 HEAD >> "$GITHUB_OUTPUT"
+        # On a pull request the base branch's copy of changes.py decides (the
+        # merge commit's first parent, the commit the PR lands on), not the
+        # PR's own, so a PR cannot choose what its own run skips. A PR that
+        # changes changes.py gets `full` from that copy. Only while the base has
+        # no copy that takes `--event` does the PR's copy run, with a warning.
+        # A push, the schedule and a run by hand use the commit itself.
+        run: |
+          script=scripts/ci/changes.py
+          if [ "$EVENT" = pull_request ]; then
+            if git show HEAD^1:scripts/ci/changes.py > "$RUNNER_TEMP/changes.py" \
+                && grep -qF -- '"--event"' "$RUNNER_TEMP/changes.py"; then
+              script="$RUNNER_TEMP/changes.py"
+            else
+              echo "::warning::the base branch has no changes.py that takes --event; the pull request's own copy decides"
+            fi
+          fi
+          python3 -I "$script" --event "$EVENT" --pr "$PR" HEAD^1 HEAD >> "$GITHUB_OUTPUT"
 
   gate:
     name: ${{ matrix.os }}
@@ -88,7 +106,7 @@ jobs:
       - name: nothing to run
         if: env.RUN_LEG != 'true'
         run: |
-          echo "::notice::the quality gate is skipped on this leg: documentation only, or a slow leg left for main (label the PR ci:full and re-run to run it; see the changes job)"
+          echo "::notice::the quality gate is skipped on this leg: documentation only, or a slow leg left for main (label the PR ci:full and re-run all jobs, not only the failed ones, to run it; see the changes job)"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.RUN_LEG == 'true'
         with:
@@ -684,7 +702,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 2 # the merge commit and the base it lands on
       - name: every job passed, or was skipped on the changes job's order
         env:
           NEEDS: ${{ toJSON(needs) }}
-        run: python3 -I scripts/ci/ci_ok.py .github/workflows/ci.yml
+          EVENT: ${{ github.event_name }}
+        # On a pull request the base branch's copy of ci_ok.py judges the run
+        # (the merge commit's first parent), not the PR's own, so a PR cannot
+        # loosen the verdict on itself; it reads the PR's ci.yml, the workflow
+        # that ran. Only while the base has no ci_ok.py does the PR's copy run,
+        # with a warning. A push, the schedule and a run by hand use the commit.
+        run: |
+          script=scripts/ci/ci_ok.py
+          if [ "$EVENT" = pull_request ]; then
+            if git show HEAD^1:scripts/ci/ci_ok.py > "$RUNNER_TEMP/ci_ok.py"; then
+              script="$RUNNER_TEMP/ci_ok.py"
+            else
+              echo "::warning::the base branch has no ci_ok.py; the pull request's own copy judges this run"
+            fi
+          fi
+          python3 -I "$script" .github/workflows/ci.yml

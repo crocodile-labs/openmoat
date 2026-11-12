@@ -2,9 +2,11 @@
 # in `openmoat run`) measured on real clients against the real api.github.com.
 # It reaches the network, so it never gates a pull request. It is a slow leg:
 # it runs on every push to main, weekly and by hand; on a pull request only
-# when the changes job says `full` (the `ci:full` label, or platform sandbox
-# code; scripts/ci/changes.py). Its job summary is the table that goes into
-# ADR-062 "Step 0 results". No token or secret is given to it.
+# when the changes job says `proxy`: the `ci:full` label, platform sandbox
+# code, or what it measures (the proxy crate, `openmoat proxy`, the proxy CA,
+# `commands/run.rs`, adr062-poc.py, latency_ab.py; scripts/ci/changes.py).
+# Its job summary is the table that goes into ADR-062 "Step 0 results". No
+# token or secret is given to it.
 name: adr-062 poc
 
 on:
@@ -26,8 +28,9 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # The same decision as ci.yml's changes job; only `full` is used here. When
+  # The same script as ci.yml's changes job; only `proxy` is used here. When
   # it fails, its outputs are empty and `!= 'false'` runs the measurement.
+  # This workflow is not a required check, so it runs the PR's own copy.
   changes:
     name: adr-062 changes
     runs-on: ubuntu-latest
@@ -36,7 +39,7 @@ jobs:
       contents: read
       pull-requests: read # the `ci:full` label, read now so a re-run sees it
     outputs:
-      full: ${{ steps.what.outputs.full }}
+      proxy: ${{ steps.what.outputs.proxy }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,7 +57,7 @@ jobs:
   measure:
     name: adr-062 step 0 (${{ matrix.os }})
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.full != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.proxy != 'false' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
