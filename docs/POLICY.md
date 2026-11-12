@@ -308,45 +308,65 @@ macOS a `file` source is denied rather than masked. `openmoat sandbox show` and
 A token that lives for minutes is worth little once its time is up. A `command` source
 names a program you chose that prints such a token; `openmoat proxy` runs it, uses the
 value for at most `lifetime`, and runs it again `refresh_before` the end
-([ADR-087](adr/ADR-087-short-lived-brokered-credentials.md)). This example is for
-Google Cloud's CLI, whose `gcloud auth print-access-token` prints an access token; it is
-an example only, so check your tool's own command and the header its API expects:
+([ADR-087](adr/ADR-087-short-lived-brokered-credentials.md)). This example uses
+HashiCorp Vault's CLI, one program file, to make a child token that lives 15 minutes; it
+is an example only, so check your tool's own command and the header its API expects:
 
 ```yaml
 secrets:
-  - id: gcloud
-    host: storage.googleapis.com
-    header: Authorization
+  - id: vault
+    host: vault.example.com
+    header: X-Vault-Token
     tls: terminate
     source:
       command:
-        run: ["/opt/homebrew/bin/gcloud", "auth", "print-access-token"]
-        lifetime: 30m          # 1m to 12h: the longest one value is used
-        refresh_before: 5m     # optional; a fifth of lifetime when unset (at least 10s)
-        home: user             # its login is in ~/.config/gcloud
-deny:
-  - id: credential-programs     # the agent must not be able to change the program
-    # the link in `run`, and where it leads (`realpath /opt/homebrew/bin/gcloud`)
-    fs.write: ["/opt/homebrew/bin/gcloud", "/opt/homebrew/Caskroom/**"]
+        run: ["/usr/local/bin/vault", "token", "create", "-address=https://vault.example.com",
+              "-ttl=15m", "-field=token"]
+        lifetime: 15m          # 1m to 12h: the longest one value is used
+        refresh_before: 3m     # optional; a fifth of lifetime when unset (at least 10s)
+        home: user             # its own login is in ~/.vault-token
 ```
 
-The agent sends `Authorization: Bearer moat-secret:gcloud:placeholder`; the proxy puts the
-token in place of the placeholder.
+The agent sends `X-Vault-Token: moat-secret:vault:placeholder`; the proxy puts the token
+in place of the placeholder. Installed by an administrator (`sudo install vault
+/usr/local/bin/`), `/usr/local/bin/vault` and every folder above it belong to root, so
+no rule is needed. Installed with Homebrew under `/opt/homebrew`, which is yours, it needs
+a deny rule for that whole folder (`realpath` shows where the link in `/opt/homebrew/bin`
+leads), which also stops the agent installing with Homebrew:
+
+```yaml
+deny:
+  - id: credential-programs     # the agent must not be able to change the program
+    fs.write: ["/opt/homebrew/**"]
+```
+
+**Why not `gcloud`.** Google Cloud's `gcloud` is a shell script that starts Python, and
+Python then loads the SDK's modules, and with `CLOUDSDK_PYTHON` an interpreter, from
+folders you can write. Only the script and its interpreter are pinned, so the agent could
+change the code that runs; and under Homebrew the SDK's folders sit in `/opt/homebrew`,
+which is yours. Use a tool that is one program file, or point `run` at such a program
+that an administrator installed.
 
 - **`run`** is the program and its arguments, run without a shell. The program is an
   absolute path or starts with `~/`; a bare name, a path with `.` or `..`, and a path
   under `/tmp`, `/var/tmp` or `/dev/shm` do not load.
 - **Who can change the program.** It runs as you, outside every sandbox, so the agent must
-  not be able to change it. `openmoat proxy` runs it only when both the path in `run` and
-  the file it resolves to are covered by a deny `fs.write` rule, or are files only an
-  administrator can change (on macOS and Linux: they and every folder above them belong to
-  root and no group or other user may write them, as `/usr/bin/…` does). Otherwise it
-  refuses to start and says which rule to add; `openmoat policy lint` warns the same. The
-  default policy only asks before writes to `/opt/homebrew/bin` and `~/.local/bin`
-  (`persistence`), which is not enough: add the deny rule, and cover the folder the tool
-  is installed in, since a script loads its own files too. Files the program reads (its
-  configuration, such as `~/.aws/config`, `~/.config/gcloud`) must be kept from the agent
-  as well; the default `secrets-paths` rule denies writes to those two.
+  not be able to change it. `openmoat proxy` runs it only when the path in `run`, the file
+  it resolves to, and every folder above that file up to your home are each covered by a
+  deny `fs.write` rule (a folder with everything in it, as `/opt/homebrew/**` covers), or
+  only an administrator can change them (on macOS and Linux: they belong to root and no
+  group or other user may write them, as `/usr/bin` does). Otherwise it refuses to start
+  and names the rule to add; `openmoat policy lint` warns when no rule covers the program.
+  The default policy only asks before writes to `/opt/homebrew/bin` and `~/.local/bin`
+  (`persistence`), which is not enough.
+- **Scripts.** A program whose first line is `#!` is a script: the interpreter that line
+  names must pass the same check, must not be a script itself, and is pinned too.
+  `#!/usr/bin/env …` is refused, since `env` looks the interpreter up in a search path.
+- **Not pinned: what the program loads.** Only the program file and a script's
+  interpreter are checked and pinned. Libraries, modules and plug-ins it loads, and files
+  it reads (its configuration, such as `~/.aws/config`, `~/.config/gcloud`), are not: keep
+  them from the agent with deny `fs.write` rules, or choose a program that is one file.
+  The default `secrets-paths` rule denies writes to those two folders and `~/.vault-token`.
 - **Pinned.** The proxy takes the program's SHA-256 at start and checks it before every
   run: a program changed since is not run, and the value is not renewed. After you
   update the tool, restart `openmoat proxy` (or `openmoat run`).
@@ -363,7 +383,7 @@ token in place of the placeholder.
     reads from the agent with deny `fs.write` rules too.
 - **How it runs.** No input, no terminal (its own process group), a time limit of 30
   seconds, at most 64 KiB of output, its error output dropped, and a bare environment:
-  `HOME` (above), `PATH` (the program's folder, then `/usr/bin:/bin:/usr/sbin:/sbin`), `USER`,
+  `HOME` (above), `PATH` (`/usr/bin:/bin:/usr/sbin:/sbin` only, never the program's own folder), `USER`,
   `LOGNAME`, `LANG`, `LC_ALL`, `TMPDIR` and `TZ` (on Windows `SystemRoot`, the profile
   folders and `TEMP`). Pass anything else, such as a profile name, as an argument.
 - **What it prints.** The value alone (one line), or JSON:

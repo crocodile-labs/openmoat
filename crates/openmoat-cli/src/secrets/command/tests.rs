@@ -131,6 +131,26 @@ mod programs {
         assert_eq!(answer.value.as_str(), format!("/|{}|0", stand.root));
     }
 
+    /// Attack: a tool the program runs by name is planted beside it. The
+    /// search path holds the system's folders only, so it is never found.
+    #[test]
+    fn a_planted_tool_beside_the_program_is_never_used() {
+        let stand = Stand::new();
+        let marker = format!("{}/planted-ran", stand.root);
+        stand.script("python3", &format!("touch '{marker}'"));
+        let path = stand.script(
+            "token",
+            &format!("python3 -c 'print(1)' >/dev/null 2>&1\necho {VALUE}"),
+        );
+        let answer = stand
+            .program(&path, &stand.policy)
+            .unwrap()
+            .fetch()
+            .unwrap();
+        assert_eq!(answer.value.as_str(), VALUE);
+        assert!(!Path::new(&marker).exists(), "the planted python3 ran");
+    }
+
     #[test]
     fn a_program_the_agent_could_change_is_not_run() {
         let stand = Stand::new();

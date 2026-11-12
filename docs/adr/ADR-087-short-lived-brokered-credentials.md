@@ -31,15 +31,16 @@ program, or name it, runs code as the person.
 
    ```yaml
    secrets:
-     - id: gcloud
-       host: storage.googleapis.com
-       header: Authorization
+     - id: vault
+       host: vault.example.com
+       header: X-Vault-Token
        tls: terminate
        source:
          command:
-           run: ["/opt/homebrew/bin/gcloud", "auth", "print-access-token"]
-           lifetime: 30m          # the longest one value is used, 1m to 12h
-           refresh_before: 5m     # optional: a fifth of lifetime, at least 10s
+           run: ["/usr/local/bin/vault", "token", "create",
+                 "-address=https://vault.example.com", "-ttl=15m", "-field=token"]
+           lifetime: 15m          # the longest one value is used, 1m to 12h
+           refresh_before: 3m     # optional: a fifth of lifetime, at least 10s
            home: user             # optional: the person's HOME, not an empty one
    ```
 
@@ -47,13 +48,25 @@ program, or name it, runs code as the person.
      name (looked up in a search path the agent may change), `.` or `..`, and the shared
      temp folders (`/tmp`, `/var/tmp`, `/dev/shm` and their `/private` forms) do not load.
    - **The agent must not be able to change the program.** `openmoat proxy` runs it only
-     when both the path in `run` and the file it resolves to are covered by a deny
-     `fs.write` rule of the person's policy, or are files only an administrator can change
-     (Unix: the file and every folder above it owned by root, writable by no group or other
-     user). `openmoat policy lint` warns when no deny rule covers the program.
-   - **Pinned by digest.** The proxy takes the program's SHA-256 at start and compares it
-     before every run; a changed program is not run and the value is not renewed. It runs
-     the resolved file, so re-pointing a link does nothing.
+     when the path in `run`, the file it resolves to and every folder above that file, up
+     to the person's home (on Windows, up to the drive's root), are each covered by a deny
+     `fs.write` rule of the person's policy (a folder together with anything put in it),
+     or only an administrator can change them (Unix: owned by root, writable by no group
+     or other user). The folders count because the agent could put a file beside the
+     program, or rename a folder and put another in its place. `openmoat policy lint`
+     warns when no deny rule covers the program.
+   - **Scripts.** A file that starts with `#!` names its interpreter, which must pass the
+     same check, must not be a script itself, and is pinned with the program; an
+     interpreter that is not an absolute path, or is `env` (which searches `PATH`), is
+     refused.
+   - **What is not pinned.** Files the program loads or reads once it runs: a script's
+     modules, a program's libraries and plug-ins, its configuration. A tool made of many
+     files the person can write (Google Cloud's `gcloud`, a shell script that starts
+     Python, which loads the SDK's modules) is outside what this check can hold, so the
+     example is a tool that is one program file.
+   - **Pinned by digest.** The proxy takes the program's SHA-256 (and its interpreter's)
+     at start and compares them before every run; a changed program is not run and the
+     value is not renewed. It runs the resolved file, so re-pointing a link does nothing.
    - **Where it starts.** In `/` (Windows: `%SystemRoot%`), not in the proxy's working
      folder, which is the agent's project: Git, tool shims and per-folder configuration
      there would let the agent run code through the program.
@@ -63,7 +76,8 @@ program, or name it, runs code as the person.
      its login there; it then reads files the agent may be able to change unless deny
      rules cover them.
    - **How it runs.** As the person's user, with that `HOME`, a
-     fixed `PATH` (the program's folder, then the system's) and a short list of variables
+     fixed `PATH` (the system's folders only: the program's own folder would find a
+     `python3` planted beside it before the system's) and a short list of variables
      (`USER`, `LOGNAME`, `LANG`, `LC_ALL`, `TMPDIR`, `TZ`; the profile and system folders on
      Windows), no input, error output dropped, in its own process group on Unix (no
      terminal), a 30-second limit and at most 64 KiB of output.
@@ -109,8 +123,11 @@ program, or name it, runs code as the person.
   under `command:` with the argument list as `run`.
 - **The example.** The draft's AWS example could not work: a secret's host is one exact
   name (`*.amazonaws.com` does not load), and AWS signs each request (Signature Version 4)
-  rather than sending a bearer token, so a value in one header is not enough. The example
-  is a bearer token from `gcloud auth print-access-token`, marked as an example.
+  rather than sending a bearer token, so a value in one header is not enough. A first
+  revision used `gcloud auth print-access-token`; a security review found that `gcloud`
+  is a script whose Python and modules load from folders the person can write, which the
+  pin does not hold, so the example is now Vault's CLI, one program file, making a child
+  token with a 15-minute lifetime.
 - **Pinning.** ADR-008 pins programs by path, not content, and `policy.lock` pins files the
   guard checks on every call; a changed cloud CLI there would deny every call until
   re-pinned. The proxy pins the digest itself, for its own life, and the rule that the
@@ -135,11 +152,13 @@ program, or name it, runs code as the person.
 - A token from a cloud CLI can be brokered with a lifetime of minutes. When the CLI fails,
   requests that need the token are refused once it expires, and the audit log says so.
 - The person must add a deny `fs.write` rule for a program they installed themselves
-  (Homebrew, a home folder); the default policy only asks before writes there
-  (`persistence`). The proxy's refusal names the rule to add.
-- Files the program reads or loads (a script's libraries, its configuration) are not
-  checked; they need deny rules too (LIMITS.md). The default `secrets-paths` rule covers
-  `~/.aws` and `~/.config/gcloud`.
+  (Homebrew, a home folder), covering its folders up to their home (`/opt/homebrew/**`,
+  which also stops the agent installing with Homebrew); the default policy only asks
+  before writes there (`persistence`). The proxy's refusal names the rule to add.
+- Files the program reads or loads (a script's modules, a program's libraries, its
+  configuration) are not checked or pinned; they need deny rules too (LIMITS.md). The
+  default `secrets-paths` rule covers `~/.aws`, `~/.config/gcloud` and `~/.vault-token`.
+  Tools made of many such files are poor sources.
 - A program that leaves a child running past its time limit keeps that child, and one
   thread of the proxy waiting on its output, until the child ends: killing the process
   group needs a call the CLI does not make without `unsafe`.

@@ -2,26 +2,63 @@
 //!
 //! The program runs as the person, outside every sandbox, and its answer goes
 //! into requests: a program the agent can replace is the agent's code. So it is
-//! run only when both the path the policy names and the file it resolves to
-//! are either
+//! run only when the path the policy names, the file it resolves to and every
+//! folder above that file (up to the person's home) are each
 //!
-//! - kept from the agent by the policy: a deny `fs.write` rule covers them
-//!   (`openmoat_core::lint::write_denied`), or
-//! - kept from every user but an administrator by the system: on Unix the
-//!   file and every folder above it are owned by root and writable by no group
-//!   or other user.
+//! - kept from the agent by the policy: a deny `fs.write` rule covers them,
+//!   a folder together with everything in it (`openmoat_core::lint::write_denied`), or
+//! - kept from every user but an administrator by the system: on Unix owned
+//!   by root and writable by no group or other user.
 //!
-//! Neither path may lie in a folder every user can write (`/tmp` and the like).
+//! A script (a file starting with `#!`) names its interpreter, which must pass
+//! the same check and must not be a script itself; `/usr/bin/env` is refused
+//! there, since it looks the interpreter up in a search path. Neither path may
+//! lie in a folder every user can write (`/tmp` and the like). Files the
+//! program loads or reads once it runs are not checked.
 
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail, ensure};
 use openmoat_core::{Policy, SecretCommand};
 
+/// How much of a file is read for a `#!` line.
+const SHEBANG_MAX: u64 = 512;
+
+/// A program the agent cannot change, and its interpreter when it is a script.
+pub struct Checked {
+    /// The resolved program file.
+    pub path: PathBuf,
+    /// The resolved interpreter its `#!` line names.
+    pub interpreter: Option<PathBuf>,
+}
+
 /// The resolved program file of `written` (absolute, home already expanded),
-/// once it is a program the agent cannot change. `home` is the person's home
-/// in slash form.
-pub fn check(written: &str, policy: &Policy, home: &str) -> Result<PathBuf> {
+/// once it, and the interpreter it names if it is a script, are programs the
+/// agent cannot change. `home` is the person's home in slash form.
+pub fn check(written: &str, policy: &Policy, home: &str) -> Result<Checked> {
+    let path = check_file(written, policy, home)?;
+    let Some(named) = interpreter_of(&path)? else {
+        return Ok(Checked {
+            path,
+            interpreter: None,
+        });
+    };
+    let interpreter = check_file(&named, policy, home)
+        .with_context(|| format!("checking {named}, the interpreter of {written}"))?;
+    ensure!(
+        interpreter_of(&interpreter)?.is_none(),
+        "source command {written} is run by {named}, which is a script itself: name a program \
+         that is not a script on its first line"
+    );
+    Ok(Checked {
+        path,
+        interpreter: Some(interpreter),
+    })
+}
+
+/// The resolved file of `written`, once it is a file the agent cannot change.
+fn check_file(written: &str, policy: &Policy, home: &str) -> Result<PathBuf> {
     let real = std::fs::canonicalize(written)
         .with_context(|| format!("source command {written} cannot be found"))?;
     let meta = std::fs::metadata(&real).with_context(|| format!("reading {}", real.display()))?;
@@ -40,21 +77,84 @@ pub fn check(written: &str, policy: &Policy, home: &str) -> Result<PathBuf> {
             bail!("source command {path} is under {dir}, where any user can put a file");
         }
     }
-    // A rule may name a file under the home as `~/…` or by its full path.
-    let by_policy = [written, shown.as_str()].iter().all(|p| {
-        [policy_form(p, home), p.replace('\\', "/")]
-            .iter()
-            .any(|form| openmoat_core::lint::write_denied(policy, form))
-    });
-    if by_policy || (admin_only(Path::new(written)) && admin_only(&real)) {
+    let as_written = denied(policy, home, written, false) || admin_only(Path::new(written));
+    let open = open_folder(&real, policy, home);
+    if as_written && open.is_none() {
         return Ok(real);
     }
+    let rule = match open {
+        Some(dir) => format!("{}/**", policy_form(&slashed(&dir), home)),
+        None => policy_form(&written.replace('\\', "/"), home),
+    };
     bail!(
         "source command {written} could be changed by the agent: add a deny rule with \
-         `fs.write: [\"{}\"]` (and the folder it is installed in) to your policy, or use a \
-         program only an administrator can change",
-        policy_form(&shown, home)
+         `fs.write: [\"{rule}\"]` to your policy, covering the file, the folder it is installed \
+         in and every folder above it below your home, or use a program only an administrator \
+         can change"
     )
+}
+
+/// The highest folder above `real` (or `real` itself) that neither the policy
+/// nor the system keeps from the agent, up to and without the person's home
+/// and a Windows drive's root; none when all are kept.
+fn open_folder(real: &Path, policy: &Policy, home: &str) -> Option<PathBuf> {
+    let home = home.trim_end_matches('/');
+    let mut open = None;
+    for (i, p) in real.ancestors().enumerate() {
+        let text = slashed(p);
+        if text == home || text.is_empty() || (p.parent().is_none() && !cfg!(unix)) {
+            break;
+        }
+        if !(admin_one(p) || denied(policy, home, &text, i > 0)) {
+            open = Some(p.to_path_buf());
+        }
+    }
+    open
+}
+
+/// Whether a deny `fs.write` rule covers `path` and, for a folder, anything
+/// put in it. A rule may name a file under the home as `~/…` or by its full
+/// path.
+fn denied(policy: &Policy, home: &str, path: &str, folder: bool) -> bool {
+    let path = path.replace('\\', "/");
+    let covers = |p: &str| {
+        [policy_form(p, home), p.to_owned()]
+            .iter()
+            .any(|form| openmoat_core::lint::write_denied(policy, form))
+    };
+    covers(&path) && (!folder || covers(&format!("{path}/.openmoat-new-file")))
+}
+
+/// The interpreter a `#!` line at the start of `path` names; none when the
+/// file is not a script. Refused when it is not an absolute path or is `env`,
+/// which would look the real interpreter up in a search path.
+fn interpreter_of(path: &Path) -> Result<Option<String>> {
+    let mut head = Vec::new();
+    std::fs::File::open(path)
+        .and_then(|f| f.take(SHEBANG_MAX).read_to_end(&mut head))
+        .with_context(|| format!("reading {}", path.display()))?;
+    let Some(line) = head.strip_prefix(b"#!") else {
+        return Ok(None);
+    };
+    let line = line.split(|b| *b == b'\n').next().unwrap_or_default();
+    let line = String::from_utf8_lossy(line);
+    let named = line
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .to_owned();
+    let shown = path.display();
+    ensure!(
+        named.starts_with('/'),
+        "{shown} is a script whose first line does not name its interpreter by its full path"
+    );
+    ensure!(
+        Path::new(&named).file_name().is_none_or(|n| n != "env"),
+        "{shown} is a script started through {named}, which looks its interpreter up in a search \
+         path: name the interpreter's full path on its first line, or use a program that is not \
+         a script"
+    );
+    Ok(Some(named))
 }
 
 /// SHA-256 of the program file.
@@ -83,45 +183,25 @@ fn slashed(path: &Path) -> String {
 /// Whether only an administrator can change `path`: it (a link is not
 /// followed) and every folder above it belong to root and no group or other
 /// user may write them.
+fn admin_only(path: &Path) -> bool {
+    path.ancestors()
+        .all(|p| p.as_os_str().is_empty() || admin_one(p))
+}
+
+/// Whether only an administrator can change `path` itself (a link is not
+/// followed): it belongs to root and no group or other user may write it.
 #[cfg(unix)]
-pub(super) fn admin_only(path: &Path) -> bool {
+fn admin_one(path: &Path) -> bool {
     use std::os::unix::fs::MetadataExt as _;
-    path.ancestors().all(|p| {
-        p.as_os_str().is_empty()
-            || std::fs::symlink_metadata(p).is_ok_and(|m| {
-                m.uid() == 0 && (m.file_type().is_symlink() || m.mode() & 0o022 == 0)
-            })
-    })
+    std::fs::symlink_metadata(path)
+        .is_ok_and(|m| m.uid() == 0 && (m.file_type().is_symlink() || m.mode() & 0o022 == 0))
 }
 
 /// No such check is made here: the policy must keep the program from the agent.
 #[cfg(not(unix))]
-pub(super) fn admin_only(_path: &Path) -> bool {
+fn admin_one(_path: &Path) -> bool {
     false
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn paths_under_the_home_are_written_as_policy_rules_name_them() {
-        assert_eq!(
-            policy_form("/Users/me/sdk/bin/x", "/Users/me"),
-            "~/sdk/bin/x"
-        );
-        assert_eq!(policy_form("/Users/me2/x", "/Users/me"), "/Users/me2/x");
-        assert_eq!(policy_form("/usr/bin/x", "/Users/me/"), "/usr/bin/x");
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn a_system_program_is_kept_by_the_system_and_a_users_file_is_not() {
-        // `/bin/sh` and every folder above it belong to root on macOS and Linux.
-        assert!(admin_only(Path::new("/bin/sh")));
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("x");
-        std::fs::write(&file, "").unwrap();
-        assert!(!admin_only(&file));
-    }
-}
+mod tests;

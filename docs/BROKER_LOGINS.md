@@ -68,8 +68,8 @@ proxy replaces only the placeholder, so the file holds the bare key.
 
 ## Tokens that expire (preview)
 
-A cloud CLI that prints a short-lived token (an example: `gcloud auth print-access-token`)
-can be the source itself: `openmoat proxy` runs it, uses the token for at most the
+A CLI that prints a short-lived token (an example: `vault token create -ttl=15m
+-field=token`) can be the source itself: `openmoat proxy` runs it, uses the token for at most the
 lifetime you set and runs it again before it ends, and refuses a request rather than send
 an expired token. The policy entry, and the deny rule that keeps the agent from changing
 the program, are in [POLICY.md §2.2](POLICY.md#22-short-lived-values-from-a-program-source-command-preview).

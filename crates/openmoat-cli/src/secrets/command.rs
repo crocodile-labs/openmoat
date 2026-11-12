@@ -62,6 +62,8 @@ pub struct Program {
     args: Vec<String>,
     /// SHA-256 of the program when the proxy started.
     digest: String,
+    /// A script's interpreter and its SHA-256 when the proxy started.
+    interpreter: Option<(PathBuf, String)>,
     /// The `HOME` it gets: a private empty folder, or the person's home.
     home: PathBuf,
     lifetime: Duration,
@@ -89,14 +91,19 @@ impl Program {
             Some(rest) => format!("{home}/{rest}"),
             None => source.program().to_owned(),
         };
-        let path = program::check(&written, policy, home)?;
-        let digest = program::digest(&path)?;
+        let checked = program::check(&written, policy, home)?;
+        let digest = program::digest(&checked.path)?;
+        let interpreter = checked
+            .interpreter
+            .map(|path| program::digest(&path).map(|digest| (path, digest)))
+            .transpose()?;
         Ok(Self {
             id: id.to_owned(),
-            path,
+            path: checked.path,
             written,
             args: source.run.iter().skip(1).cloned().collect(),
             digest,
+            interpreter,
             home: program_home(id, source.home, place)?,
             lifetime: Duration::from_secs(source.lifetime_secs()),
             refresh_before: Duration::from_secs(source.refresh_before_secs()),
@@ -127,12 +134,15 @@ impl Program {
     /// Run the program and read its answer. Refused when the program file
     /// changed since the proxy started.
     pub fn fetch(&self) -> Result<Answer> {
-        let now = program::digest(&self.path)?;
-        ensure!(
-            now == self.digest,
-            "{} changed since the proxy started; restart `openmoat proxy` to use the new one",
-            self.path.display()
-        );
+        let pinned = std::iter::once((&self.path, &self.digest))
+            .chain(self.interpreter.iter().map(|(path, digest)| (path, digest)));
+        for (path, digest) in pinned {
+            ensure!(
+                program::digest(path)? == *digest,
+                "{} changed since the proxy started; restart `openmoat proxy` to use the new one",
+                path.display()
+            );
+        }
         let out = self.run()?;
         let unix_now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -157,7 +167,7 @@ impl Program {
             .args(&self.args)
             .env_clear()
             .env("HOME", &self.home)
-            .env("PATH", search_path(&self.path))
+            .env("PATH", search_path())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
@@ -174,10 +184,7 @@ impl Program {
     /// The program's output, within the time and size limits.
     fn run(&self) -> Result<Zeroizing<Vec<u8>>> {
         let shown = self.path.display();
-        let mut child = self
-            .command()
-            .spawn()
-            .with_context(|| format!("starting {shown}"))?;
+        let mut child = spawn(&mut self.command()).with_context(|| format!("starting {shown}"))?;
         let mut stdout = child.stdout.take().context("no output pipe")?;
         let (send, receive) = mpsc::channel();
         std::thread::spawn(move || {
@@ -222,6 +229,22 @@ impl Program {
     }
 }
 
+/// Start `command`. A file just written can be held open for writing for a
+/// moment by a process another thread is starting (Linux then refuses to run
+/// it, "text file busy"), so that is tried a few times.
+fn spawn(command: &mut Command) -> std::io::Result<std::process::Child> {
+    let mut tries = 0;
+    loop {
+        match command.spawn() {
+            Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy && tries < 10 => {
+                tries += 1;
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            other => return other,
+        }
+    }
+}
+
 /// The `HOME` of `id`'s program: the person's with `home: user`, else an
 /// empty owner-only folder of its own under OpenMoat's state directory, which
 /// the agent cannot write (`kernel-self`), so no dotfile it planted is read.
@@ -244,10 +267,10 @@ fn fixed_dir() -> PathBuf {
     PathBuf::from("/")
 }
 
-/// The program's own folder, then the system's: a script finds its
-/// interpreter, and nothing from the proxy's search path is used.
-fn search_path(program: &std::path::Path) -> std::ffi::OsString {
-    let mut dirs: Vec<PathBuf> = program.parent().map(PathBuf::from).into_iter().collect();
+/// The system's folders only: never the program's own, where a planted
+/// `python3` would be found before the system's, nor the proxy's search path.
+fn search_path() -> std::ffi::OsString {
+    let mut dirs: Vec<PathBuf> = Vec::new();
     #[cfg(unix)]
     dirs.extend(["/usr/bin", "/bin", "/usr/sbin", "/sbin"].map(PathBuf::from));
     #[cfg(windows)]
