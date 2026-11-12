@@ -20,12 +20,20 @@ use zeroize::Zeroizing;
 
 pub use refresh::{Masks, Refresher};
 
+/// Where the proxy reads secrets from and runs `command` sources (ADR-087).
+pub struct Place<'a> {
+    /// The person's home directory in slash form, for `~/` sources.
+    pub home: &'a str,
+    /// OpenMoat's state directory: the programs' private homes are made there.
+    pub state: &'a std::path::Path,
+}
+
 /// A broker holding the value of every secret of `policy`, and what renews
 /// those from `command` sources (ADR-087), which also holds every value for
-/// the audit log to mask. `home` is the user's home directory in slash form,
-/// for `~/` sources. Any secret that cannot be read stops the proxy from
-/// starting.
-pub fn broker(policy: &Policy, home: &str) -> Result<(Broker, Refresher)> {
+/// the audit log to mask. Any secret that cannot be read stops the proxy
+/// from starting.
+pub fn broker(policy: &Policy, place: &Place<'_>) -> Result<(Broker, Refresher)> {
+    let home = place.home;
     let mut held = Vec::with_capacity(policy.secrets.len());
     let mut fixed = Vec::new();
     let mut started = Vec::new();
@@ -33,7 +41,7 @@ pub fn broker(policy: &Policy, home: &str) -> Result<(Broker, Refresher)> {
         let reading = || format!("reading secret `{}`", secret.id);
         let value = match &secret.source {
             SecretSource::Command(source) => {
-                let program = command::Program::prepare(&secret.id, source, policy, home)
+                let program = command::Program::prepare(&secret.id, source, policy, place)
                     .with_context(reading)?;
                 let answer = program.fetch().with_context(reading)?;
                 let until = std::time::Instant::now() + answer.lifetime;

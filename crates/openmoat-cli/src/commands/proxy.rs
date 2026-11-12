@@ -381,7 +381,11 @@ impl Exit {
             policy
         };
         CompiledPolicy::compile(&policy, &ctx)?;
-        let (broker, refresher) = secrets::broker(&policy, &ctx.home)?;
+        let place = secrets::Place {
+            home: &ctx.home,
+            state: home.root(),
+        };
+        let (broker, refresher) = secrets::broker(&policy, &place)?;
         let audit_path = home.audit_path();
         let store = Store::open_existing(&audit_path)
             .with_context(|| format!("opening {}", audit_path.display()))?

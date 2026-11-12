@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use openmoat_core::{Policy, SecretCommand};
 
+use super::Place;
 use super::command::Program;
 
 /// A folder beside the test binary: the system's temp folder is `/tmp` on
@@ -21,8 +22,10 @@ pub fn scratch() -> tempfile::TempDir {
 
 pub struct Stand {
     _dir: tempfile::TempDir,
-    /// The folder, resolved; also the home the programs get.
+    /// The folder, resolved; also the person's home.
     pub root: String,
+    /// OpenMoat's state directory, beside it.
+    state: tempfile::TempDir,
     /// A policy that denies writes to the folder.
     pub policy: Policy,
 }
@@ -41,8 +44,22 @@ impl Stand {
         Self {
             _dir: dir,
             root,
+            state: scratch(),
             policy,
         }
+    }
+
+    /// Where the proxy would run the programs from.
+    pub fn place(&self) -> Place<'_> {
+        Place {
+            home: &self.root,
+            state: self.state.path(),
+        }
+    }
+
+    /// The state directory.
+    pub fn state(&self) -> &Path {
+        self.state.path()
     }
 
     /// An executable `name` running `body`.
@@ -59,14 +76,20 @@ impl Stand {
             run: run.iter().map(|w| (*w).to_owned()).collect(),
             lifetime: "15m".into(),
             refresh_before: None,
+            home: openmoat_core::SecretCommandHome::Private,
         }
     }
 
     /// `path --print` made ready under `policy`, with a two-second time limit.
     pub fn program(&self, path: &Path, policy: &Policy) -> anyhow::Result<Program> {
         let path = path.to_string_lossy();
-        Program::prepare("t", &Self::source(&[&path, "--print"]), policy, &self.root)
-            .map(|p| p.with_time_limit(Duration::from_secs(2)))
+        Program::prepare(
+            "t",
+            &Self::source(&[&path, "--print"]),
+            policy,
+            &self.place(),
+        )
+        .map(|p| p.with_time_limit(Duration::from_secs(2)))
     }
 
     /// `/bin/sh -c body --print`: a program only an administrator can change,
@@ -74,9 +97,13 @@ impl Stand {
     /// file just written can still be open in a process another test started
     /// meanwhile, and starting it then stalls.
     pub fn shell(&self, body: &str) -> Program {
-        let source = Self::source(&["/bin/sh", "-c", body, "sh", "--print"]);
+        self.shell_with(&Self::source(&["/bin/sh", "-c", body, "sh", "--print"]))
+    }
+
+    /// [`Stand::shell`] of a source the test shaped.
+    pub fn shell_with(&self, source: &SecretCommand) -> Program {
         let open = Policy::parse("version: 1\n").unwrap();
-        Program::prepare("t", &source, &open, &self.root)
+        Program::prepare("t", source, &open, &self.place())
             .unwrap()
             .with_time_limit(Duration::from_secs(2))
     }

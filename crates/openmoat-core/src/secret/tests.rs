@@ -266,6 +266,14 @@ fn a_command_source_parses_with_its_lifetime() {
     };
     // A fifth of the lifetime when unset.
     assert_eq!(c.refresh_before_secs(), 720);
+    // An empty home of its own unless the policy says `home: user`.
+    assert_eq!(c.home, super::CommandHome::Private);
+    let user = command("{ run: [/usr/bin/cloud], lifetime: 1h, home: user }").unwrap();
+    let Source::Command(c) = &user.secrets[0].source else {
+        panic!("not a command source");
+    };
+    assert_eq!(c.home, super::CommandHome::User);
+    assert!(command("{ run: [/usr/bin/cloud], lifetime: 1h, home: project }").is_err());
 }
 
 #[test]

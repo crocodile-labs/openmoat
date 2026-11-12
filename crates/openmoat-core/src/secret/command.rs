@@ -42,6 +42,31 @@ pub struct CommandSource {
     /// of `lifetime` when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refresh_before: Option<String>,
+    /// The `HOME` the program gets: an empty folder of its own unless set to
+    /// `user`.
+    #[serde(default, skip_serializing_if = "CommandHome::is_private")]
+    pub home: CommandHome,
+}
+
+/// `home:` of a command source: what the program finds in `HOME`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CommandHome {
+    /// An empty folder of its own under OpenMoat's state directory: the
+    /// program reads no dotfile of the person's, nor one the agent planted.
+    #[default]
+    Private,
+    /// The person's home: for a tool that keeps its login there (`~/.vault-token`).
+    /// The program then reads files there the agent may be able to change.
+    User,
+}
+
+impl CommandHome {
+    /// Whether this is the default, [`CommandHome::Private`].
+    #[must_use]
+    pub fn is_private(&self) -> bool {
+        *self == Self::Private
+    }
 }
 
 impl std::fmt::Debug for CommandSource {

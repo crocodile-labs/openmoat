@@ -92,16 +92,43 @@ mod programs {
     fn a_program_answers_with_its_arguments_and_a_bare_environment() {
         let stand = Stand::new();
         // `CARGO_PKG_NAME` is set for this test process; the program must not
-        // see it, and gets the person's home.
+        // see it.
         let program = stand.shell(&format!(
-            "[ \"$1\" = --print ] || exit 3\n[ \"$HOME\" = '{}' ] || exit 4\n\
-             printf '{VALUE}-%s\\n' \"${{CARGO_PKG_NAME:-none}}\"",
-            stand.root
+            "[ \"$1\" = --print ] || exit 3\n\
+             printf '{VALUE}-%s\\n' \"${{CARGO_PKG_NAME:-none}}\""
         ));
         assert_eq!(program.id(), "t");
         let answer = program.fetch().unwrap();
         assert_eq!(answer.value.as_str(), format!("{VALUE}-none"));
         assert_eq!(answer.lifetime, Duration::from_mins(15));
+    }
+
+    /// Attack: the proxy runs in the agent's project, where the agent wrote
+    /// `.git`, tool shims and per-folder configuration that a tool reads from
+    /// its working folder, or dotfiles in the home. The program runs in `/`
+    /// with an empty home of its own unless the policy says `home: user`.
+    #[test]
+    fn a_program_runs_in_the_root_with_a_private_home_unless_told_otherwise() {
+        let stand = Stand::new();
+        let body =
+            "printf '%s|%s|%s' \"$(pwd -P)\" \"$HOME\" \"$(ls -A \"$HOME\" | wc -l | tr -d ' ')\"";
+        let answer = stand.shell(body).fetch().unwrap();
+        let private = std::fs::canonicalize(stand.state())
+            .unwrap()
+            .join("secret-homes/t");
+        let mut seen = answer.value.split('|');
+        assert_eq!(seen.next(), Some("/"));
+        let home = std::fs::canonicalize(seen.next().unwrap()).unwrap();
+        assert_eq!(home, private);
+        assert_eq!(seen.next(), Some("0"), "the private home is empty");
+        let mode = std::os::unix::fs::PermissionsExt::mode(
+            &std::fs::metadata(&private).unwrap().permissions(),
+        );
+        assert_eq!(mode & 0o777, 0o700);
+        let mut source = Stand::source(&["/bin/sh", "-c", body]);
+        source.home = openmoat_core::SecretCommandHome::User;
+        let answer = stand.shell_with(&source).fetch().unwrap();
+        assert_eq!(answer.value.as_str(), format!("/|{}|0", stand.root));
     }
 
     #[test]

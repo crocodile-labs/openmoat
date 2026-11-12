@@ -5,6 +5,14 @@ use super::*;
 /// Generated for the test; no real secret is used.
 const VALUE: &str = "fake-file-secret-5d0c1b";
 
+/// The place of a proxy with no `command` source: no state is written.
+fn at(home: &str) -> Place<'_> {
+    Place {
+        home,
+        state: std::path::Path::new(home),
+    }
+}
+
 fn policy(source: &str) -> Policy {
     Policy::parse(&format!(
         "version: 1\nsecrets:\n  - id: t\n    host: a.test\n    header: X-Key\n    \
@@ -21,7 +29,7 @@ fn a_home_file_is_read_without_its_trailing_newline() {
     let home = dir.path().to_str().unwrap().replace('\\', "/");
     let p = policy("{ file: ~/.config/t }");
     // Kept, the `\r\n` would have been refused as control characters.
-    let (b, refresher) = broker(&p, &home).unwrap();
+    let (b, refresher) = broker(&p, &at(&home)).unwrap();
     assert!(b.leak("b.test", VALUE.as_bytes()).is_some());
     let known = refresher.known().unwrap();
     assert_eq!(known.redact(&format!("x{VALUE}x")), "x[redacted]x");
@@ -36,16 +44,16 @@ fn a_home_file_is_read_without_its_trailing_newline() {
 fn a_missing_or_unusable_source_names_the_secret_not_a_value() {
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path().to_str().unwrap().replace('\\', "/");
-    let missing = broker(&policy("{ file: ~/nope }"), &home).unwrap_err();
+    let missing = broker(&policy("{ file: ~/nope }"), &at(&home)).unwrap_err();
     assert!(
         format!("{missing:#}").contains("reading secret `t`"),
         "{missing:#}"
     );
     std::fs::write(dir.path().join("bad"), "a\0b").unwrap();
-    let bad = broker(&policy("{ file: ~/bad }"), &home).unwrap_err();
+    let bad = broker(&policy("{ file: ~/bad }"), &at(&home)).unwrap_err();
     assert!(format!("{bad:#}").contains("control character"), "{bad:#}");
     assert!(!format!("{bad:#}").contains("a\0b"));
-    let env = broker(&policy("{ env: MOAT_TEST_UNSET_9F3A }"), &home).unwrap_err();
+    let env = broker(&policy("{ env: MOAT_TEST_UNSET_9F3A }"), &at(&home)).unwrap_err();
     assert!(
         format!("{env:#}").contains("MOAT_TEST_UNSET_9F3A is not set"),
         "{env:#}"
@@ -77,7 +85,7 @@ fn a_command_source_is_run_by_the_proxy_alone() {
     let error = format!("{:#}", read(&p.secrets[0].source, &stand.root).unwrap_err());
     assert!(error.contains("run by `openmoat proxy` only"), "{error}");
     assert!(!std::path::Path::new(&marker).exists());
-    let (b, refresher) = broker(&p, &stand.root).unwrap();
+    let (b, refresher) = broker(&p, &stand.place()).unwrap();
     assert!(std::path::Path::new(&marker).exists());
     let left = b.rotation("t").unwrap().remaining().unwrap();
     assert!(
@@ -94,7 +102,7 @@ fn a_command_source_is_run_by_the_proxy_alone() {
         "\n      command: {{ run: ['{}'], lifetime: 10m }}",
         path.display()
     ));
-    let error = format!("{:#}", broker(&open, &stand.root).unwrap_err());
+    let error = format!("{:#}", broker(&open, &stand.place()).unwrap_err());
     assert!(error.contains("reading secret `t`"), "{error}");
     assert!(error.contains("could be changed by the agent"), "{error}");
     assert!(!std::path::Path::new(&format!("{marker}-2")).exists());

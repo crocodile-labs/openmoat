@@ -323,6 +323,7 @@ secrets:
         run: ["/opt/homebrew/bin/gcloud", "auth", "print-access-token"]
         lifetime: 30m          # 1m to 12h: the longest one value is used
         refresh_before: 5m     # optional; a fifth of lifetime when unset (at least 10s)
+        home: user             # its login is in ~/.config/gcloud
 deny:
   - id: credential-programs     # the agent must not be able to change the program
     # the link in `run`, and where it leads (`realpath /opt/homebrew/bin/gcloud`)
@@ -349,9 +350,20 @@ token in place of the placeholder.
 - **Pinned.** The proxy takes the program's SHA-256 at start and checks it before every
   run: a program changed since is not run, and the value is not renewed. After you
   update the tool, restart `openmoat proxy` (or `openmoat run`).
+- **Where it starts.** In `/` (on Windows the Windows folder), never in the proxy's own
+  folder: that is your project, where the agent writes, and a tool reads `.git`, tool
+  shims and per-folder configuration from the folder it runs in.
+- **`home`** (optional) is the `HOME` the program gets:
+  - unset (`private`): an empty folder of its own, `secret-homes/<id>` in OpenMoat's state
+    folder, which only you can open and the agent cannot write. The program reads none of
+    your dotfiles, and none the agent planted in your home. Use this when the program
+    takes everything it needs as arguments.
+  - `home: user`: your home. For a tool that keeps its login there (`~/.vault-token`,
+    `~/.config/<tool>`). The program then reads files in your home, so keep the ones it
+    reads from the agent with deny `fs.write` rules too.
 - **How it runs.** No input, no terminal (its own process group), a time limit of 30
   seconds, at most 64 KiB of output, its error output dropped, and a bare environment:
-  `HOME`, `PATH` (the program's folder, then `/usr/bin:/bin:/usr/sbin:/sbin`), `USER`,
+  `HOME` (above), `PATH` (the program's folder, then `/usr/bin:/bin:/usr/sbin:/sbin`), `USER`,
   `LOGNAME`, `LANG`, `LC_ALL`, `TMPDIR` and `TZ` (on Windows `SystemRoot`, the profile
   folders and `TEMP`). Pass anything else, such as a profile name, as an argument.
 - **What it prints.** The value alone (one line), or JSON:

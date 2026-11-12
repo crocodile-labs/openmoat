@@ -14,7 +14,7 @@ pub use crate::route::{MAX_ROUTES, METHOD_OVERRIDE_HEADERS, PathRefusal, Request
 
 mod command;
 
-pub use command::CommandSource;
+pub use command::{CommandHome, CommandSource};
 
 /// What a brokered secret's id is prefixed with where it stands for a rule id
 /// (`secrets.<id>`): lint warnings, policy errors and sandbox losses.

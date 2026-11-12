@@ -16,11 +16,11 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{Context as _, Result, bail, ensure};
-use openmoat_core::{Policy, SecretCommand};
+use openmoat_core::{Policy, SecretCommand, SecretCommandHome};
 use serde::Deserialize;
 use zeroize::Zeroizing;
 
-use super::program;
+use super::{Place, program};
 
 /// How long the program may take.
 const TIME_LIMIT: Duration = Duration::from_secs(30);
@@ -62,7 +62,8 @@ pub struct Program {
     args: Vec<String>,
     /// SHA-256 of the program when the proxy started.
     digest: String,
-    home: String,
+    /// The `HOME` it gets: a private empty folder, or the person's home.
+    home: PathBuf,
     lifetime: Duration,
     refresh_before: Duration,
     time_limit: Duration,
@@ -77,7 +78,13 @@ pub struct Answer {
 impl Program {
     /// Check `source`'s program against `policy` (`program.rs`) and pin it.
     /// `home` is the person's home directory in slash form.
-    pub fn prepare(id: &str, source: &SecretCommand, policy: &Policy, home: &str) -> Result<Self> {
+    pub fn prepare(
+        id: &str,
+        source: &SecretCommand,
+        policy: &Policy,
+        place: &Place<'_>,
+    ) -> Result<Self> {
+        let home = place.home;
         let written = match source.program().strip_prefix("~/") {
             Some(rest) => format!("{home}/{rest}"),
             None => source.program().to_owned(),
@@ -90,7 +97,7 @@ impl Program {
             written,
             args: source.run.iter().skip(1).cloned().collect(),
             digest,
-            home: home.to_owned(),
+            home: program_home(id, source.home, place)?,
             lifetime: Duration::from_secs(source.lifetime_secs()),
             refresh_before: Duration::from_secs(source.refresh_before_secs()),
             time_limit: TIME_LIMIT,
@@ -142,7 +149,11 @@ impl Program {
             // the time limit ends it.
             command.arg0(&self.written).process_group(0);
         }
+        // A folder the agent cannot change, never the proxy's own (the
+        // agent's project): a tool there would read the project's `.git`,
+        // tool shims and per-folder configuration, which the agent wrote.
         command
+            .current_dir(fixed_dir())
             .args(&self.args)
             .env_clear()
             .env("HOME", &self.home)
@@ -209,6 +220,28 @@ impl Program {
         ensure!(status.success(), "{shown} failed ({status})");
         Ok(out)
     }
+}
+
+/// The `HOME` of `id`'s program: the person's with `home: user`, else an
+/// empty owner-only folder of its own under OpenMoat's state directory, which
+/// the agent cannot write (`kernel-self`), so no dotfile it planted is read.
+fn program_home(id: &str, home: SecretCommandHome, place: &Place<'_>) -> Result<PathBuf> {
+    if home == SecretCommandHome::User {
+        return Ok(PathBuf::from(place.home));
+    }
+    let dir = place.state.join("secret-homes").join(id);
+    crate::home::create_private_dir(&dir)?;
+    Ok(dir)
+}
+
+/// The folder the program runs in: the file system's root, which the agent
+/// cannot change.
+fn fixed_dir() -> PathBuf {
+    #[cfg(windows)]
+    if let Some(root) = std::env::var_os("SystemRoot") {
+        return PathBuf::from(root);
+    }
+    PathBuf::from("/")
 }
 
 /// The program's own folder, then the system's: a script finds its

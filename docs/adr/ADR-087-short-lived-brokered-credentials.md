@@ -40,6 +40,7 @@ program, or name it, runs code as the person.
            run: ["/opt/homebrew/bin/gcloud", "auth", "print-access-token"]
            lifetime: 30m          # the longest one value is used, 1m to 12h
            refresh_before: 5m     # optional: a fifth of lifetime, at least 10s
+           home: user             # optional: the person's HOME, not an empty one
    ```
 
    - `run` is the program, absolute or under `~/`, then its arguments; no shell. A bare
@@ -53,7 +54,15 @@ program, or name it, runs code as the person.
    - **Pinned by digest.** The proxy takes the program's SHA-256 at start and compares it
      before every run; a changed program is not run and the value is not renewed. It runs
      the resolved file, so re-pointing a link does nothing.
-   - **How it runs.** In the proxy's process context (the person's user), with `HOME`, a
+   - **Where it starts.** In `/` (Windows: `%SystemRoot%`), not in the proxy's working
+     folder, which is the agent's project: Git, tool shims and per-folder configuration
+     there would let the agent run code through the program.
+   - **Its home.** `HOME` is an empty owner-only folder of its own under OpenMoat's state
+     directory (`secret-homes/<id>`), which `kernel-self` keeps from the agent, so no
+     dotfile is read. `home: user` gives it the person's home instead, for a tool that keeps
+     its login there; it then reads files the agent may be able to change unless deny
+     rules cover them.
+   - **How it runs.** As the person's user, with that `HOME`, a
      fixed `PATH` (the program's folder, then the system's) and a short list of variables
      (`USER`, `LOGNAME`, `LANG`, `LC_ALL`, `TMPDIR`, `TZ`; the profile and system folders on
      Windows), no input, error output dropped, in its own process group on Unix (no
