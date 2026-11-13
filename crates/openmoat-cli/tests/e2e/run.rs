@@ -7,6 +7,9 @@ use std::process::Output;
 
 use crate::common::{OK, Sandbox, USAGE, output, stderr, text};
 
+/// Files open in the launcher stay out of the sandbox (ADR-088).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod inherited_fds;
 /// Linux: the network reaches only the proxy on loopback.
 #[cfg(target_os = "linux")]
 mod network;

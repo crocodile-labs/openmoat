@@ -173,6 +173,55 @@ fn modules_use_one_file_style() {
     );
 }
 
+/// The only files of the workspace that may lift the `unsafe_code` lint, which
+/// is `forbid` everywhere else. Shrink only: a new entry needs an ADR.
+/// `openmoat-wasm`'s exports need a fixed symbol name (ADR-046); `openmoat run`
+/// marks the descriptors it inherited close-on-exec by number (ADR-088).
+const UNSAFE_ALLOWED: &[&str] = &[
+    "openmoat-wasm/src/lib.rs",
+    "openmoat-cli/src/commands/run/inherited.rs",
+];
+
+/// No file outside [`UNSAFE_ALLOWED`] names the lint or opens an `unsafe`
+/// block, in sources or tests. A crate whose `unsafe_code` is `deny` needs an
+/// `#[expect(unsafe_code)]` for each use, so the lint's name finds them all.
+#[test]
+fn unsafe_stays_in_the_listed_files() {
+    const THIS: &str = "openmoat-core/tests/architecture.rs";
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut offenders = Vec::new();
+    for entry in fs::read_dir(&crates).unwrap() {
+        let krate = entry.unwrap().path();
+        let name = krate.file_name().unwrap().to_string_lossy().into_owned();
+        for dir in ["src", "tests"] {
+            let root = krate.join(dir);
+            if !root.is_dir() {
+                continue;
+            }
+            visit(&root, &mut |path| {
+                let rel = path.strip_prefix(&krate).unwrap().components();
+                let rel: Vec<_> = rel.map(|c| c.as_os_str().to_string_lossy()).collect();
+                let key = format!("{name}/{}", rel.join("/"));
+                // This file names the lint in its own checks.
+                if key == THIS || UNSAFE_ALLOWED.contains(&key.as_str()) {
+                    return;
+                }
+                for (n, line) in fs::read_to_string(path).unwrap().lines().enumerate() {
+                    let code = line.split("//").next().unwrap_or("");
+                    if code.contains("unsafe_code") || code.contains("unsafe {") {
+                        offenders.push(format!("{key}:{}", n + 1));
+                    }
+                }
+            });
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "`unsafe` outside the listed files:\n{}",
+        offenders.join("\n")
+    );
+}
+
 const FORBIDDEN_IN_CORE: &[&str] = &[
     "std::fs",
     "std::env",

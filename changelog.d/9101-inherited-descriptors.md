@@ -1,0 +1,2 @@
+### Security
+- `openmoat run` no longer passes files, sockets or directories its launcher left open to the agent: before the sandboxed program starts (each tier, and inside bubblewrap again), every descriptor from 3 up is marked close-on-exec, and the run refuses to start where that cannot be done; Landlock and Seatbelt do not check a descriptor opened before they apply ([#9101](https://github.com/crocodile-labs/openmoat/pull/9101)).

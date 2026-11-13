@@ -182,6 +182,8 @@ impl Confined {
     }
 
     pub fn status(mut self) -> Result<ExitStatus> {
+        // Seatbelt does not check a file opened before the profile applies.
+        super::inherited::close_on_exec()?;
         Ok(self.command.status()?)
     }
 }

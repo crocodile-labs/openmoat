@@ -20,7 +20,11 @@
 // bubblewrap starts in its sandbox; `port_only_network()` is `moat doctor`'s
 // warning for the same; `terminals()` lists the terminal devices this
 // process's standard streams are on, the only ones the sandbox opens.
+// Each `status()` first marks the descriptors this process inherited
+// close-on-exec (`inherited.rs`, ADR-088).
 mod env;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod inherited;
 mod isolation;
 #[cfg(target_os = "linux")]
 mod linux;
