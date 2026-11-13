@@ -29,27 +29,16 @@ use std::sync::{Mutex, PoisonError};
 
 use openmoat_hosts::{Host, Paths, Protect};
 
+mod policy_blocks {
+    include!("common/policy_blocks.rs");
+}
+use policy_blocks::{
+    BLOCKS, CREDENTIALS_AFTER, CREDENTIALS_BEFORE, POLICY, POLICY_AFTER, POLICY_BEFORE,
+    PROJECT_FS_AFTER, PROJECT_FS_BEFORE, RUNS_LATER_AFTER, RUNS_LATER_BEFORE,
+};
+
 const UPDATE: &str = "OPENMOAT_TEST_UPDATE_PROTECT";
 
-const POLICY: &str = "crates/openmoat-core/policies/default-v1.yaml";
-/// The `kernel-self` lines just before and just after the generated block.
-const POLICY_BEFORE: &str = "      - \"**/.codex/hooks.json\"\n";
-const POLICY_AFTER: &str = "      - \"**/.moat/**\"\n";
-/// The `agent-credentials` lines just before and just after its paths.
-const CREDENTIALS_BEFORE: &str = "    fs.read: &agent-credentials\n";
-const CREDENTIALS_AFTER: &str = "    fs.write: *agent-credentials\n";
-
-/// The `runs-later` rule's comment line just before the hosts' paths, and the
-/// comment of the rule's own paths that follow them.
-const RUNS_LATER_BEFORE: &str =
-    "      # each agent's files that run later, generated from its spec\n";
-const RUNS_LATER_AFTER: &str =
-    "      # a virtual environment's interpreter and scripts, which the editor's\n";
-/// `project-fs`'s comment line just before the hosts' project paths, and the
-/// comment of the exceptions that follow them.
-const PROJECT_FS_BEFORE: &str = "      # each agent's files in a project that run later (`runs-later` needs review), from its spec\n";
-const PROJECT_FS_AFTER: &str =
-    "      # a virtual environment's interpreter and a dev container's host command\n";
 /// The widest a generated line of quoted globs gets, as `cargo fmt` keeps code.
 const WIDTH: usize = 100;
 
@@ -399,4 +388,18 @@ fn splice_replaces_only_the_lines_between() {
     );
     assert!(splice("start\nstart\nend\n", "start", "end\n", "").is_err());
     assert!(splice("start\nx\n", "start", "end\n", "").is_err());
+}
+
+/// Each generated block of the default policy lies between its two lines,
+/// each found once: the architecture test leaves exactly these blocks out.
+#[test]
+fn every_policy_block_has_its_two_lines_once() {
+    let text = fs::read_to_string(repo_root().join(POLICY))
+        .unwrap()
+        .replace("\r\n", "\n");
+    for (before, after) in BLOCKS {
+        assert_eq!(text.matches(before).count(), 1, "{before:?}");
+        let at = text.find(before).unwrap();
+        assert!(text[at..].contains(after), "{after:?} after {before:?}");
+    }
 }
