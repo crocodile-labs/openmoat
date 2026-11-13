@@ -89,7 +89,9 @@ output named makes a later call that uses it need review (`injected-input`). A f
 Gemini CLI does not trust runs neither entry, and an install from before the entry links
 nothing until `openmoat init` runs once; only session taint applies there. On Windows
 Gemini CLI runs shell commands in PowerShell, which OpenMoat does not parse
-(`ForeignShell`), so a later shell command there is not linked to what a call returned.
+(`ForeignShell`): a later shell command there is linked by the hosts and paths its text
+names, not by its commands, and a host or path it builds at run time is not seen
+([POLICY.md §4.1.2](../../../../../docs/POLICY.md#412-injected-input)).
 
 No OS sandbox from OpenMoat; in a folder Gemini CLI does not trust it runs no settings
 hooks at all and asks the person before every tool instead; a project's

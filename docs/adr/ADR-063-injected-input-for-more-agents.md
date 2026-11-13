@@ -109,6 +109,18 @@ exactly as today (session taint still applies).
 - MCP output is linked for every agent whose servers are wrapped, before any per-host work.
 - A subdomain of a planted host, a numeric IP of it, and a planted command run through
   `sh -c` or with an environment prefix are linked.
+- A PowerShell command (`ForeignShell`: Gemini CLI's shell on Windows, the PowerShell
+  tools of Claude Code and the Cline CLI) is never parsed, so it has no atoms to compare.
+  Its text is scanned instead, with the scanner that reads untrusted output: every host
+  it names counts as one the call may reach and every path outside the project as one it
+  may write, each with the spellings and parent domains above, and a match needs review
+  unless the policy allows that host or path on its own. PowerShell's escape character
+  (`` ` ``) is taken out and `-Name:value` is read as `-Name value`. Its output is kept
+  when its text names a host the policy does not allow, or it starts with `gh`, `glab` or
+  `tea`. Its commands are not compared, and a host or path it builds at run time
+  (`"ev" + "il.example"`, `$env:USERPROFILE`) is not seen. Only tightens: an unparsed
+  command was `unparseable` (a defer under the default policy) before and stays so when
+  nothing matches.
 - Each host adds a process start after each matched call. The guard's p95 budget applies
   (150 ms, `scripts/ci/latency_ab.py`), and the matchers keep it to calls whose output can
   be untrusted.

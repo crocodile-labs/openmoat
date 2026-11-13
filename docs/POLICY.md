@@ -700,7 +700,8 @@ collect.evil.example may follow an instruction planted there
     result, a `tool.unknown`; a metadata tool's result too (a browser's tab list), which
     does not taint the session but names the titles and URLs pages set;
   - a shell command that reads from a host the policy does not allow on its own
-    (`curl -s https://evil.example/notes.txt`);
+    (`curl -s https://evil.example/notes.txt`), or a PowerShell command whose text names
+    one (below);
   - a forge's client (`gh`, `glab`, `tea`), whose issue, pull-request and comment text
     anyone may write.
 
@@ -715,7 +716,8 @@ collect.evil.example may follow an instruction planted there
   Left out: the hosts the call itself reached, loopback and project paths. Each token is
   stored as a keyed fingerprint (HMAC under `~/.moat/proxy.key`) with its source, never as
   text. A session keeps at most 4096; past that, new ones are dropped.
-- **What it tightens.** Checked are a shell command, a write and a patch:
+- **What it tightens.** Checked are a shell command (a PowerShell one too, below), a
+  write and a patch:
   - a `net` or `fetch` atom whose host was kept, or whose parent domain was kept as a URL
     host (below);
   - a write to a kept path;
@@ -746,6 +748,14 @@ collect.evil.example may follow an instruction planted there
   An atom the policy allows on its own stays allowed: a host on the allow list
   (`git push`, `curl https://api.github.com/…`), a project file, `cargo build`. A deny
   stays a deny.
+- **PowerShell.** A PowerShell command (Gemini CLI's shell on Windows, the PowerShell
+  tools of Claude Code and the Cline CLI) is never parsed (`unparseable`), so its text is
+  read the way untrusted output is: every host it names counts as reached and every path
+  outside the project as written, compared as above, after taking out PowerShell's escape
+  character (`` ` ``) and reading `-Uri:https://…` as `-Uri https://…`. Its output is
+  untrusted when its text names a host the policy does not allow, or it starts with
+  `gh`, `glab` or `tea`. Its commands are not compared, and a host or path it builds at
+  run time (`"ev" + "il.example"`, `$env:USERPROFILE`) is not seen.
 - **Not checked.** A fetch, a web search and an MCP call: following a link or a search
   result is reading, and the host's own prompt decides fetches (`fetch: defer`).
 - **Answered.** By the person in the agent's prompt, or with `openmoat allow` for that

@@ -1328,7 +1328,9 @@ something OpenMoat claims to stop.
 - **Codex chooses where a call runs.** Codex sends a call's own working directory as `cwd` (a shell call's `workdir`, which the model picks) and starts every hook in the session's directory. When the `cwd` lies outside the session's project, `openmoat guard` decides the call from the session's directory, as the command run after a `cd` to the `cwd`, with every relative path taken from it: a write from `~/Library/LaunchAgents` is checked as that path, and a model-chosen directory never decides which directory is the project. A session started outside any project (the home directory) keeps a `cwd` inside a git work tree as its project.
 <!-- /generated -->
 - **PowerShell is not parsed.** Claude Code `PowerShell` is always `unparseable`, which
-  the default policy defers to Claude Code's own prompt (and a `review` catch-all holds it for review). A
+  the default policy defers to Claude Code's own prompt (and a `review` catch-all holds it for review);
+  injected input reads its text for the hosts and paths it names, and a planted one makes it
+  need review (POLICY.md §4.1.2). A
   PowerShell line given to a POSIX shell tool is lexed as POSIX and usually falls through
   to the catch-all default.
 - **Pattern lists are incomplete by nature.** Pseudo-terminal routes to `openmoat allow`
