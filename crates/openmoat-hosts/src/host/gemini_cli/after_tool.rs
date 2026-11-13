@@ -12,9 +12,10 @@
 //! three fields. OpenMoat reads every string in `tool_response` as the output.
 //!
 //! The reference says an `AfterTool` answer can hide the result
-//! (`decision: "deny"`, or exit 2 with stderr as the replacement) or add to it,
-//! so Gemini CLI holds the result until the hook is done. OpenMoat answers it
-//! with nothing ([`super::Adapter`]'s `render`). Only a failure of the guard
+//! (`decision: "deny"`, or exit 2 with stderr as the replacement) or add to
+//! it; whether Gemini CLI waits for the hook was not observed in run
+//! 42853181916 (its model there is the agent's own test double, so there is
+//! no model request to time). OpenMoat answers it with nothing ([`super::Adapter`]'s `render`). Only a failure of the guard
 //! exits 2, and then Gemini CLI hands the model OpenMoat's reason in place of
 //! the output; any other non-zero exit, and a timeout, is a warning.
 

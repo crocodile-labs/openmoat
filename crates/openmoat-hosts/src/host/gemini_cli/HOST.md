@@ -21,8 +21,8 @@ exit 2 blocks; no output, or `"allow"`, leaves the call to Gemini CLI's own poli
 `error`), what the call returned: the weekly latest-agents run 42853181916 (2026-11-10)
 recorded `llmContent` and `returnDisplay` as strings for a shell call from a real Gemini
 CLI, and the [hooks reference](https://geminicli.com/docs/hooks/reference/) names all
-three. Its answer can hide or add to the result, so Gemini CLI holds the result for it;
-the run could not time how long. OpenMoat answers it with nothing; only a failure of
+three. The reference says its answer can hide or add to the result; whether Gemini CLI
+waits for the hook was not observed in that run. OpenMoat answers it with nothing; only a failure of
 `openmoat guard` (a broken lock, an audit log it cannot write) exits 2, and then Gemini
 CLI gives the model OpenMoat's reason in place of the call's output. The call itself is
 not undone.
