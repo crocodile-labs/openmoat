@@ -230,7 +230,8 @@ fn a_hook_whose_binary_is_gone_is_not_protected() {
 
 /// What each agent does with a call when the hook fails comes from its host
 /// facts (ADR-079), for every host in `Host::ALL`: `status --format json`
-/// carries them, each case reads `runs` or `blocks` with its sources, and
+/// carries them, each case reads `runs`, `blocks` or `not-documented` with
+/// its sources, and
 /// `doctor` notes exactly the agents that run a call in some case, naming
 /// those cases. The facts themselves are checked against each host's spec in
 /// the unit tests of `protection::hook_failure`.
@@ -248,26 +249,6 @@ fn doctor_names_an_agent_that_runs_the_call_when_the_hook_fails() {
             panic!("{host}: no status entry: {status}");
         };
         let facts = &agent["hook_failure"];
-        for case in ["cannot_start", "fails", "times_out"] {
-            assert!(
-                matches!(facts[case].as_str(), Some("runs" | "blocks")),
-                "{host} {case}: {facts}"
-            );
-        }
-        let sources = facts["sources"].as_array().cloned().unwrap_or_default();
-        assert!(!sources.is_empty(), "{host}: {facts}");
-        let open: Vec<&str> = facts["fails_open"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .collect();
-        let runs_somewhere = ["cannot_start", "fails", "times_out"]
-            .iter()
-            .any(|case| facts[*case] == "runs");
-        assert_eq!(!open.is_empty(), runs_somewhere, "{host}: {facts}");
-
-        // A note, not a problem: the footer does not count it.
         let doctor = json(&sb.moat(&["doctor", "--format", "json"]));
         let noted: Vec<&Value> = doctor["checks"]
             .as_array()
@@ -279,6 +260,36 @@ fn doctor_names_an_agent_that_runs_the_call_when_the_hook_fails() {
                     .is_some_and(|d| d.starts_with("fails open"))
             })
             .collect();
+        // The facts are given only for an agent whose hook is in place.
+        if facts.is_null() {
+            assert!(noted.is_empty(), "{host}: {doctor}");
+            continue;
+        }
+        for case in ["cannot_start", "fails", "times_out"] {
+            assert!(
+                matches!(
+                    facts[case].as_str(),
+                    Some("runs" | "blocks" | "not-documented")
+                ),
+                "{host} {case}: {facts}"
+            );
+        }
+        let sources = facts["sources"].as_array().cloned().unwrap_or_default();
+        assert!(!sources.is_empty(), "{host}: {facts}");
+        let open: Vec<&str> = facts["fails_open"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect();
+        // Only a case the host blocks is closed; one it runs, or does not
+        // document, leaves the call unchecked.
+        let runs_somewhere = ["cannot_start", "fails", "times_out"]
+            .iter()
+            .any(|case| facts[*case] != "blocks");
+        assert_eq!(!open.is_empty(), runs_somewhere, "{host}: {facts}");
+
+        // A note, not a problem: the footer does not count it.
         if open.is_empty() {
             assert!(noted.is_empty(), "{host}: {doctor}");
             continue;
