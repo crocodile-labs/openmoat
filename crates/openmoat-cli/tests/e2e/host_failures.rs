@@ -10,9 +10,11 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
+use openmoat_hosts::Host;
+
 use crate::common::{DENY, Sandbox, USAGE, fixture, json, stderr, text};
 use crate::hosts::rows::{Row, rows};
-use crate::hosts::{assert_reason, guard, verdict};
+use crate::hosts::{assert_reason, dir_of, guard, verdict};
 
 /// `moat guard` for `row`'s hook, its input not yet written.
 fn command(row: &Row, sb: &Sandbox) -> Command {
@@ -226,69 +228,76 @@ fn a_hook_whose_binary_is_gone_is_not_protected() {
     }
 }
 
-/// What each agent does with a call when the hook fails, from its host facts
-/// (ADR-079): `status --format json` carries them for each agent whose hook is
-/// in place, and `doctor` names the one that runs the call then (Codex), with
-/// what to do; an agent that blocks (Cursor's `failClosed`, Claude Code's
-/// `onFailure` at the version the tests report) gets no such row. Gemini CLI
-/// blocks a hook that cannot start and runs the call when it crashes.
+/// What each agent does with a call when the hook fails comes from its host
+/// facts (ADR-079), for every host in `Host::ALL`: `status --format json`
+/// carries them, each case reads `runs` or `blocks` with its sources, and
+/// `doctor` notes exactly the agents that run a call in some case, naming
+/// those cases. The facts themselves are checked against each host's spec in
+/// the unit tests of `protection::hook_failure`.
 #[test]
 fn doctor_names_an_agent_that_runs_the_call_when_the_hook_fails() {
-    let sb = Sandbox::installed(&[".claude", ".codex", ".cursor", ".gemini"]);
-    let status = json(&sb.moat(&["status", "--format", "json"]));
-    let agents = status["agents"].as_array().cloned().unwrap_or_default();
-    let of = |id: &str| {
-        agents
+    for host in Host::ALL {
+        let sb = Sandbox::installed(&[&dir_of(host)]);
+        let status = json(&sb.moat(&["status", "--format", "json"]));
+        let Some(agent) = status["agents"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|a| a["host"] == host.id())
+        else {
+            panic!("{host}: no status entry: {status}");
+        };
+        let facts = &agent["hook_failure"];
+        for case in ["cannot_start", "fails", "times_out"] {
+            assert!(
+                matches!(facts[case].as_str(), Some("runs" | "blocks")),
+                "{host} {case}: {facts}"
+            );
+        }
+        let sources = facts["sources"].as_array().cloned().unwrap_or_default();
+        assert!(!sources.is_empty(), "{host}: {facts}");
+        let open: Vec<&str> = facts["fails_open"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect();
+        let runs_somewhere = ["cannot_start", "fails", "times_out"]
             .iter()
-            .find(|a| a["host"] == id)
-            .map(|a| a["hook_failure"].clone())
-            .unwrap_or_default()
-    };
-    let open = |id: &str| of(id)["fails_open"].as_array().map_or(0, Vec::len);
-    assert_eq!(of("codex")["fails"], "runs", "{status}");
-    assert_eq!(of("codex")["times_out"], "runs", "{status}");
-    assert_eq!(open("codex"), 2, "{status}");
-    assert_eq!(of("codex")["cannot_start"], "runs", "{status}");
-    assert_eq!(of("gemini-cli")["cannot_start"], "blocks", "{status}");
-    assert_eq!(of("gemini-cli")["fails"], "runs", "{status}");
-    for blocking in ["claude-code", "cursor"] {
-        assert_eq!(of(blocking)["fails"], "blocks", "{blocking}: {status}");
-        assert_eq!(of(blocking)["times_out"], "blocks", "{blocking}: {status}");
-        assert_eq!(open(blocking), 0, "{blocking}: {status}");
-    }
-    for id in ["claude-code", "codex", "cursor"] {
-        let sources = of(id)["sources"].as_array().cloned().unwrap_or_default();
-        assert!(!sources.is_empty(), "{id}: {status}");
-    }
+            .any(|case| facts[*case] == "runs");
+        assert_eq!(!open.is_empty(), runs_somewhere, "{host}: {facts}");
 
-    let doctor = crate::common::squash(&text(&sb.moat(&["doctor"])));
-    let row = "Codex fails open: runs the call when the hook cannot start, crashes or exits \
-               non-zero or times out; start it with `openmoat run`";
-    assert!(doctor.contains(row), "{doctor}");
-    let gemini = "Gemini CLI fails open: runs the call when the hook crashes or exits non-zero \
-                  or times out;";
-    assert!(doctor.contains(gemini), "{doctor}");
-    assert!(doctor.contains("require.run: full-boundary"), "{doctor}");
-    for blocking in ["Claude Code fails open", "Cursor fails open"] {
-        assert!(!doctor.contains(blocking), "{doctor}");
+        // A note, not a problem: the footer does not count it.
+        let doctor = json(&sb.moat(&["doctor", "--format", "json"]));
+        let noted: Vec<&Value> = doctor["checks"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|c| {
+                c["detail"]
+                    .as_str()
+                    .is_some_and(|d| d.starts_with("fails open"))
+            })
+            .collect();
+        if open.is_empty() {
+            assert!(noted.is_empty(), "{host}: {doctor}");
+            continue;
+        }
+        assert_eq!(noted.len(), 1, "{host}: {doctor}");
+        let note = noted[0];
+        assert_eq!(note["name"], host.spec().display_name, "{host}: {doctor}");
+        assert_eq!(note["status"], "note", "{host}: {doctor}");
+        let cases = format!(
+            "fails open: runs the call when the hook {};",
+            open.join(" or ")
+        );
+        let detail = note["detail"].as_str().unwrap_or_default();
+        assert!(detail.starts_with(&cases), "{host}: {detail}");
+        assert!(
+            detail.contains("require.run: full-boundary"),
+            "{host}: {detail}"
+        );
     }
-    // Information, not a problem: the footer does not count it.
-    let json_doctor = json(&sb.moat(&["doctor", "--format", "json"]));
-    let checks = json_doctor["checks"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
-    let noted: Vec<_> = checks
-        .iter()
-        .filter(|c| {
-            c["detail"]
-                .as_str()
-                .is_some_and(|d| d.starts_with("fails open"))
-        })
-        .collect();
-    assert_eq!(noted.len(), 1, "{json_doctor}");
-    assert_eq!(noted[0]["name"], "Codex", "{json_doctor}");
-    assert_eq!(noted[0]["status"], "note", "{json_doctor}");
 }
 
 /// An install from before a tool joined the matcher: the hook is out of date
