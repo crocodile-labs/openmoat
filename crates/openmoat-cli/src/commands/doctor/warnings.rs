@@ -80,7 +80,7 @@ pub(super) fn state_in_grant(home: &Home, policy: &Policy, linux: bool) -> Optio
 
 /// On Linux where `moat run` would get no network namespace, a warning that
 /// it grants this directory's project entry by entry, naming the paths the
-/// policy denies there that would still be open to commands (ADR-089).
+/// policy denies there that would still be open to commands (ADR-090).
 pub(super) fn project_open(home: &Home, policy: &Policy) -> Option<String> {
     let ctx = crate::context::eval_context(home, None, None).ok()?;
     crate::commands::run::project_open(policy, &ctx)

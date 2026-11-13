@@ -1,4 +1,4 @@
-//! The Lightweight tier on Linux without a network namespace (ADR-089).
+//! The Lightweight tier on Linux without a network namespace (ADR-090).
 //!
 //! A Landlock rule grants a directory with everything below it, created later
 //! included, and nothing granted can be taken away again. Granting the project
@@ -54,11 +54,17 @@ pub fn split_project(
     let Some(real) = project.first() else {
         return Ok(());
     };
-    let spelling = |p: &String| project.contains(p);
+    // Landlock follows every link of a rule's path, so each grant is compared
+    // where it resolves: a read root `~/go` linked to the project's parent
+    // holds the project as surely as the parent itself does.
+    let spelling = |p: &String| project.contains(p) || resolved(p) == *real;
     let writable = rules.write.iter().any(spelling);
     let granted = writable || rules.read.iter().any(spelling);
-    let around = |list: &[String]| -> Vec<String> {
-        list.iter().filter(|g| is_below(real, g)).cloned().collect()
+    let around = |list: &[String]| -> Vec<(String, String)> {
+        list.iter()
+            .map(|g| (g.clone(), resolved(g)))
+            .filter(|(_, r)| is_below(real, r))
+            .collect()
     };
     let (read_above, write_above) = (around(&rules.read), around(&rules.write));
     if !granted && read_above.is_empty() && write_above.is_empty() {
@@ -66,12 +72,13 @@ pub fn split_project(
     }
     let ir = without_runs_later(ir);
     let checker = ir.checker()?;
+    let above = |p: &String, list: &[(String, String)]| list.iter().any(|(g, _)| g == p);
     rules
         .read
-        .retain(|p| !spelling(p) && !read_above.contains(p));
+        .retain(|p| !spelling(p) && !above(p, &read_above));
     rules
         .write
-        .retain(|p| !spelling(p) && !write_above.contains(p));
+        .retain(|p| !spelling(p) && !above(p, &write_above));
     let mut split = Split {
         checker: &checker,
         holders: holders(&ir, project),
@@ -79,8 +86,9 @@ pub fn split_project(
         rules,
         count: 0,
     };
+    // Each from where it resolves, as Landlock would grant it.
     for (trees, writable) in [(&read_above, false), (&write_above, true)] {
-        for tree in trees {
+        for (_, tree) in trees {
             split.around(tree, writable)?;
         }
     }
@@ -213,6 +221,16 @@ impl Split<'_> {
     }
 }
 
+/// `path` with every link resolved, as a Landlock rule on it opens it; as
+/// written when it cannot be resolved (it does not exist, and no rule on it
+/// can be made either).
+pub fn resolved(path: &str) -> String {
+    std::fs::canonicalize(path).map_or_else(
+        |_| path.to_owned(),
+        |real| crate::context::path_string(&real),
+    )
+}
+
 /// `name` in the directory `dir`, which may be `/`.
 fn join(dir: &str, name: &str) -> String {
     format!("{}/{name}", dir.trim_end_matches('/'))
@@ -241,16 +259,19 @@ fn entries(dir: &str) -> Result<Vec<(String, bool)>> {
 /// a read-only one some rule lets them write, and a folder pinned against
 /// renaming whose parent some rule lets them change. Each as `masks` names it.
 pub fn open(masks: &[Mount], rules: &Rules) -> Vec<String> {
+    // The masks are resolved paths, and a rule grants where it resolves.
+    let resolve = |list: &[String]| list.iter().map(|g| resolved(g)).collect::<Vec<_>>();
+    let (read, write) = (resolve(&rules.read), resolve(&rules.write));
     let covers = |list: &[String], path: &str| list.iter().any(|g| g == path || is_below(path, g));
-    let readable = |p: &str| covers(&rules.read, p) || covers(&rules.write, p);
+    let readable = |p: &str| covers(&read, p) || covers(&write, p);
     let mut found = Vec::new();
     for mask in masks {
         let open = match mask {
             Mount::Hide { path, .. } => readable(path).then_some(path),
-            Mount::ReadOnly(path) => covers(&rules.write, path).then_some(path),
+            Mount::ReadOnly(path) => covers(&write, path).then_some(path),
             Mount::ReadWrite(path) => {
                 let parent = path.rsplit_once('/').map_or("/", |(p, _)| p);
-                covers(&rules.write, parent).then_some(path)
+                covers(&write, parent).then_some(path)
             }
             Mount::Tmpfs(_) => None,
         };

@@ -203,7 +203,7 @@ pub fn landlock_rules(
 
 /// The Landlock rules `moat run` applies on Linux where no mount can cover
 /// paths inside the project (no network namespace): the project granted entry
-/// by entry ([`landlock::entries`], ADR-089). With them, the paths the policy
+/// by entry ([`landlock::entries`], ADR-090). With them, the paths the policy
 /// denies in the project that stay open to commands, or why they could not be
 /// listed.
 #[cfg(target_os = "linux")]
@@ -253,7 +253,7 @@ pub fn netns_masks(
 
 /// The masks `moat run`'s network namespace on Linux adds over the project of
 /// `ctx`, as the Isolated tier's, with the placeholders it creates
-/// ([`bwrap::project_masks`], ADR-089).
+/// ([`bwrap::project_masks`], ADR-090).
 #[cfg(target_os = "linux")]
 pub fn netns_project_masks(
     policy: &Policy,
@@ -261,6 +261,17 @@ pub fn netns_project_masks(
 ) -> anyhow::Result<bwrap::ProjectMasks> {
     let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
     bwrap::project_masks(&ir, &project_spellings(ctx))
+}
+
+/// [`netns_project_masks`] for the project's top and the folders directly in
+/// it only, where the whole walk failed ([`bwrap::project_masks_near_top`]).
+#[cfg(target_os = "linux")]
+pub fn netns_project_masks_near_top(
+    policy: &Policy,
+    ctx: &EvalContext,
+) -> anyhow::Result<bwrap::ProjectMasks> {
+    let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
+    bwrap::project_masks_near_top(&ir, &project_spellings(ctx))
 }
 
 /// The agents' hook settings missing in the project of `ctx`, which `moat

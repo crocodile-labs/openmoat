@@ -56,7 +56,7 @@ pub struct Rules {
     pub write: Vec<String>,
     /// List the entries of these directories and of every directory below
     /// them, and nothing else: the project and the folders above it where
-    /// they are granted entry by entry ([`entries`], ADR-089).
+    /// they are granted entry by entry ([`entries`], ADR-090).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub list: Vec<String>,
     /// The only TCP port connections may go to.

@@ -86,7 +86,7 @@ Each agent's gaps and the reasons are in
 - **On Linux without bubblewrap, nothing can be created at the top of the project, and
   deeper denied paths stay open.** Landlock grants a folder with everything in it, so
   where `openmoat run` gets no network namespace (bubblewrap missing or blocked) it grants
-  the project entry by entry (ADR-089): `.env` there is unreadable and `.git` and `.moat`
+  the project entry by entry (ADR-090): `.env` there is unreadable and `.git` and `.moat`
   read-only, but commands cannot create, rename or remove anything directly at the
   project's top (a new file, a `target/` that does not exist yet), and a `.env` or nested
   `.git` in a subfolder stays readable and writable; `openmoat run` names each such path

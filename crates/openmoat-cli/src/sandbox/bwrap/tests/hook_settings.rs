@@ -170,7 +170,7 @@ fn the_network_namespace_plans_the_missing_hook_settings_of_a_project() {
 
 /// A folder of an agent's configuration missing where its holder exists, or
 /// is made for the hook settings, is planned as an empty read-only folder
-/// (ADR-089): a mount over a folder covers a hook written in it after the
+/// (ADR-090): a mount over a folder covers a hook written in it after the
 /// start. None where the policy lets commands write below it, where it
 /// exists, or where its holder is missing and not made anyway.
 #[test]
@@ -217,4 +217,33 @@ fn missing_agent_configuration_folders_become_read_only_folders() {
     }
     let each = |p: &str| folders.iter().filter(|x| **x == p).count();
     assert_eq!(each("/p/.copilot/hooks"), 1, "once: {folders:?}");
+}
+
+/// Where the whole walk fails, the network namespace looks at the project's
+/// top and the folders directly in it only: what lies there is masked as
+/// before, what lies deeper is not looked at.
+#[test]
+fn the_near_top_fallback_masks_the_top_two_levels_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let real = std::fs::canonicalize(dir.path()).unwrap();
+    let project = real.display().to_string();
+    for d in [".claude", "a/b/.claude"] {
+        std::fs::create_dir_all(real.join(d)).unwrap();
+    }
+    std::fs::write(real.join(".claude/settings.json"), "{}").unwrap();
+    std::fs::write(real.join("a/b/.claude/settings.json"), "{}").unwrap();
+    let ir = session_ir(&project);
+    let near = super::super::project_masks_near_top(&ir, std::slice::from_ref(&project)).unwrap();
+    let top = format!("{project}/.claude/settings.json");
+    let deep = format!("{project}/a/b/.claude/settings.json");
+    assert!(
+        near.mounts.contains(&Mount::ReadOnly(top.clone())),
+        "{near:?}"
+    );
+    assert!(
+        !near.mounts.contains(&Mount::ReadOnly(deep.clone())),
+        "{near:?}"
+    );
+    let all = project_masks(&ir, std::slice::from_ref(&project)).unwrap();
+    assert!(all.mounts.contains(&Mount::ReadOnly(deep)), "{all:?}");
 }

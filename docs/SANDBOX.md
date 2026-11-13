@@ -415,7 +415,7 @@ bubblewrap.
   Process substitution is a descriptor too: `openmoat run -- tool <(cmd)` gives `tool`
   `/dev/fd/63`, which it can no longer open. Write the output to a file in the project
   first, or pipe it on standard input (`cmd | openmoat run -- tool -`).
-- **Paths the policy denies inside the project (Linux, ADR-089).** Landlock can only
+- **Paths the policy denies inside the project (Linux, ADR-090).** Landlock can only
   grant access to whole directory trees, so a deny rule inside a granted tree needs
   something besides Landlock:
   - **With a network namespace** (bubblewrap installed and allowed), the namespace
@@ -485,10 +485,14 @@ bubblewrap.
   each folder holding them directly in the project is bound onto itself so it cannot
   be renamed; `--isolate` does the same. A folder of an agent's configuration
   (`.claude/hooks/`, `.github/hooks/`, `.pi/extensions/`, `.openclaw/extensions/`,
-  `.opencode/plugins/`, …) missing where the folder that holds it exists is created
-  empty for the session and bound read-only, so a hook written into it later is
-  refused (`EROFS`); it is removed when the agent exits if it is still empty
-  (ADR-089). Without a namespace the project is granted entry by entry (above): none
+  `.opencode/plugins/`, …) missing where the folder that holds it exists, or is made
+  for the hook settings below (`.claude`, `.github`), is created empty for the session
+  and bound read-only, so a hook written into it later is refused (`EROFS`); it is
+  removed when the last session in the project exits if it is still empty (ADR-090).
+  Where that folder is missing (`.pi`, `.opencode`, `.openclaw`, `.hermes`), a command
+  can still create it and write there. If the project is too large to walk (more than a
+  million entries) or holds a name that is not UTF-8, the namespace covers only the
+  project's top and the folders directly in it, and `openmoat run` says so. Without a namespace the project is granted entry by entry (above): none
   of these can be created at its top or in `.claude`, `.github` and the other folders
   that hold them. A hook settings file that does not exist yet
   (`.claude/settings.local.json`, `.gemini/settings.json`,
@@ -666,9 +670,12 @@ openmoat run --isolate --write ~/.claude --write ~/.claude.json -- claude
   they are missing: OpenMoat creates an empty placeholder file there for the session
   and removes it afterwards, and a `.env` the person writes there during the session
   stays unreadable to commands. So are the folders of an agent's configuration
-  (`.claude/hooks/`, `.github/hooks/`, …) missing where their holder exists: each is
-  created empty and bound read-only, so a hook written there later is refused, and
-  removed afterwards while still empty (ADR-089).
+  (`.claude/hooks/`, `.github/hooks/`, …) missing where their holder exists or is made
+  for the hook settings (`.claude`, `.github`): each is created empty and bound
+  read-only, so a hook written there later is refused, and removed afterwards while
+  still empty and no other session in the project still runs (ADR-090). Where the
+  holder is missing (`.pi`, `.opencode`, `.openclaw`, `.hermes`), a command can still
+  `mkdir -p .pi/extensions` and write an extension there.
 - **Writes** go only to the project, the temp directory (in memory, gone when the
   session ends) and the `--write` paths.
 - **Network** goes only to OpenMoat's proxy: the agent has its own network namespace
@@ -708,7 +715,7 @@ Limits:
   read-only folder stood (`.env.local` written during the session, a `.env` in a new
   subdirectory, an agent configuration folder in a holder folder created during the
   session) is not hidden; the hook still decides the agent's own tool calls on it.
-  ADR-089 designs, without building it yet, a copy workspace for unattended runs that
+  ADR-090 designs, without building it yet, a copy workspace for unattended runs that
   would close this: the agent works in a copy or overlay of the project without the
   denied paths, and its changes come back only through a person, as `openmoat restore`
   brings back a snapshot (ADR-085).

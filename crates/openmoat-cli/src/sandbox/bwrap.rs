@@ -17,7 +17,7 @@
 //! gets an empty placeholder file there for the session, so it cannot be
 //! created, and a folder of an agent's configuration (`.claude/hooks`) missing
 //! in a folder that holds one gets an empty placeholder folder, bound
-//! read-only, so nothing can be created in it (ADR-089). A match created later
+//! read-only, so nothing can be created in it (ADR-090). A match created later
 //! anywhere else stays open, as listed. `moat run`'s network namespace puts the
 //! same masks over the project ([`project_masks`]).
 
@@ -38,6 +38,8 @@ mod globs;
 /// Agents' hook settings in the project that do not exist yet.
 mod hook_settings;
 pub use hook_settings::Placeholder;
+/// Placeholders sessions in one project share, removed by the last to end.
+pub mod shared;
 
 /// A name below a directory that only a rule for the whole subtree (`dir/**`)
 /// matches: no policy names it.
@@ -118,7 +120,7 @@ pub fn generate(ir: &Enforcement, grants: &Grants, project: &[String]) -> Result
     trees.sort_by_key(|m| depth(path_of(m)));
     let real = project.first().map(String::as_str);
     let (mut masks, placeholders) = match real {
-        Some(real) => project_view(ir, &checker, real)?,
+        Some(real) => project_view(ir, &checker, real, None)?,
         None => (Vec::new(), Vec::new()),
     };
     masks.extend(literal_masks(ir, &trees, real));
@@ -166,7 +168,7 @@ pub fn grant_masks(ir: &Enforcement, rules: &Rules, project: &[String]) -> Resul
 /// its resolved spelling first): the Isolated tier's ([`project_view`]), so
 /// commands cannot read the project's `.env` files nor write its `.git`, its
 /// `.moat` or an agent's configuration and hook settings, wherever they are
-/// when the session starts (ADR-089). Files a build or an install writes
+/// when the session starts (ADR-090). Files a build or an install writes
 /// ([`without_runs_later`]) stay writable, as Seatbelt leaves them. A match
 /// created later where no placeholder stands stays open; Landlock grants the
 /// project whole.
@@ -176,31 +178,58 @@ pub fn project_masks(ir: &Enforcement, project: &[String]) -> Result<ProjectMask
     };
     let ir = without_runs_later(ir);
     let checker = ir.checker()?;
-    let (mounts, placeholders) = project_view(&ir, &checker, real)?;
+    let (mounts, placeholders) = project_view(&ir, &checker, real, None)?;
     Ok(ProjectMasks {
         mounts: respelled(&mounts, project),
         placeholders,
     })
 }
 
+/// [`project_masks`] looking only at the project's top and the folders
+/// directly in it, skipping names that are not UTF-8: what the network
+/// namespace falls back to when the whole walk fails (more than
+/// [`MAX_ENTRIES`] entries, a name it cannot mount over), so a run that started
+/// before still starts, with `.env`, `.git`, `.moat` and the agents'
+/// configuration at the top covered and what lies deeper left open, as
+/// `openmoat run` says (ADR-090).
+pub fn project_masks_near_top(ir: &Enforcement, project: &[String]) -> Result<ProjectMasks> {
+    let Some(real) = project.first() else {
+        return Ok(ProjectMasks::default());
+    };
+    let ir = without_runs_later(ir);
+    let checker = ir.checker()?;
+    let (mounts, placeholders) = project_view(&ir, &checker, real, Some(NEAR_TOP))?;
+    Ok(ProjectMasks {
+        mounts: respelled(&mounts, project),
+        placeholders,
+    })
+}
+
+/// How deep [`project_masks_near_top`] looks: the project's top and the
+/// folders directly in it (`.claude/settings.json`, `.github/hooks`).
+const NEAR_TOP: usize = 2;
+
 /// The masks over the project `real` (resolved) and the placeholders they
 /// need, outermost first: every path in it the policy denies, walked
 /// ([`Masks::walk`]); an empty file for each name a `**/` rule denies that is
 /// missing directly in it (`.env`, `.envrc`, `.moat`), so it cannot be
 /// created; and the agents' hook settings and configuration folders missing
-/// there ([`hook_settings`]).
+/// there ([`hook_settings`]). With `depth`, only that many levels are walked
+/// and a name that is not UTF-8 is passed by rather than refused.
 fn project_view(
     ir: &Enforcement,
     checker: &Checker,
     real: &str,
+    depth: Option<usize>,
 ) -> Result<(Vec<Mount>, Vec<Placeholder>)> {
     let mut masks = Masks {
         checker,
         project: Some(real),
         mounts: Vec::new(),
         entries: 0,
+        depth,
     };
-    masks.walk(real, false)?;
+    masks.walk(real, false, 1)?;
     let mut placeholders = Vec::new();
     for name in denied_names(ir) {
         let path = format!("{real}/{name}");
@@ -437,6 +466,9 @@ struct Masks<'a> {
     project: Option<&'a str>,
     mounts: Vec<Mount>,
     entries: usize,
+    /// How many levels to walk, and pass by names that are not UTF-8; `None`:
+    /// all of them, refusing such a name.
+    depth: Option<usize>,
 }
 
 impl Masks<'_> {
@@ -502,7 +534,7 @@ impl Masks<'_> {
     }
 
     /// Classify every entry below `dir`, symlinks not followed.
-    fn walk(&mut self, dir: &str, read_only: bool) -> Result<()> {
+    fn walk(&mut self, dir: &str, read_only: bool, level: usize) -> Result<()> {
         let mut entries: Vec<_> = std::fs::read_dir(dir)?.collect::<Result<_, _>>()?;
         entries.sort_by_key(std::fs::DirEntry::file_name);
         for entry in entries {
@@ -515,14 +547,18 @@ impl Masks<'_> {
             }
             let is_dir = entry.file_type()?.is_dir();
             let Ok(name) = entry.file_name().into_string() else {
+                if self.depth.is_some() {
+                    continue;
+                }
                 bail!(
                     "{dir} holds a name that is not UTF-8, which `openmoat run --isolate` cannot mount over"
                 );
             };
             let path = format!("{dir}/{name}");
             let read_only_here = read_only || (is_dir && self.denied_below(&path));
-            if self.classify(&path, is_dir, read_only) {
-                self.walk(&path, read_only_here)?;
+            let deeper = self.depth.is_none_or(|depth| level < depth);
+            if self.classify(&path, is_dir, read_only) && deeper {
+                self.walk(&path, read_only_here, level + 1)?;
             }
         }
         Ok(())

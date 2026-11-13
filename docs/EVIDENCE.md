@@ -51,7 +51,7 @@ itself, not the sandbox (the CI runner's kernel has `dev.tty.legacy_tiocsti` at 
 
 ## Known gaps
 
-- `script-benign-work` under `openmoat run --no-isolate`, Linux without bubblewrap (Landlock + seccomp) (#174): without a network namespace Landlock grants the project entry by entry, and any right to create at its top would reach into .git/hooks too, so a command cannot create out.txt there (ADR-089); folders that exist stay writable, and with bubblewrap installed nothing changes
+- `script-benign-work` under `openmoat run --no-isolate`, Linux without bubblewrap (Landlock + seccomp) (#174): without a network namespace Landlock grants the project entry by entry, and any right to create at its top would reach into .git/hooks too, so a command cannot create out.txt there (ADR-090); folders that exist stay writable, and with bubblewrap installed nothing changes
 
 ## Layers
 

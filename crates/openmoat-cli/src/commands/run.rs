@@ -418,7 +418,7 @@ pub fn bubblewrap() -> Option<bool> {
 
 /// On Linux without a network namespace, which paths the policy denies in the
 /// project of `ctx` `moat run` would leave open to commands, for `moat doctor`
-/// (ADR-089); `None` elsewhere.
+/// (ADR-090); `None` elsewhere.
 pub fn project_open(policy: &Policy, ctx: &openmoat_core::EvalContext) -> Option<String> {
     platform::project_open(policy, ctx)
 }

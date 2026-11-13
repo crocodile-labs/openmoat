@@ -33,7 +33,7 @@ mod isolate_path;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod mcp_boundary;
 /// Linux: the project's denied paths hold in every tier, late ones included
-/// (ADR-089).
+/// (ADR-090).
 #[cfg(target_os = "linux")]
 mod project_paths;
 /// Linux without bubblewrap: the port-only path a stock system takes.
@@ -186,7 +186,7 @@ fn isolate_is_refused_on_macos() {
 
 /// The Lightweight tier on Linux says, before the agent starts, how it covers
 /// the paths the policy denies inside the project and what stays open there
-/// (ADR-089); macOS's Seatbelt denies those paths, so it says nothing of the kind.
+/// (ADR-090); macOS's Seatbelt denies those paths, so it says nothing of the kind.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
 fn the_lightweight_tier_names_what_it_leaves_open_inside_the_project_on_linux() {
@@ -205,7 +205,7 @@ fn the_lightweight_tier_names_what_it_leaves_open_inside_the_project_on_linux() 
 }
 
 /// Whether `moat run` said how the Lightweight tier on Linux covers the
-/// project: with a network namespace or entry by entry (ADR-089).
+/// project: with a network namespace or entry by entry (ADR-090).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn lightweight_notice(out: &Output) -> bool {
     let said = stderr(out);
@@ -342,7 +342,7 @@ pub mod confined {
             .status();
         assert!(git_init.is_ok_and(|s| s.success()));
         // In a folder that exists: without a network namespace on Linux nothing
-        // new can be made at the project's top (ADR-089, `project_paths.rs`).
+        // new can be made at the project's top (ADR-090, `project_paths.rs`).
         std::fs::create_dir_all(project.join("work")).unwrap();
         let out = run_sh(
             &sb,

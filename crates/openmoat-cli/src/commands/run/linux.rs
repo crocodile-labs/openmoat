@@ -7,7 +7,7 @@
 //! namespace of its own (`linux/netns.rs`), whose mounts cover in the project
 //! what the policy denies, and `moat` inside it applies the rules and filter;
 //! elsewhere `moat run` says the network is restricted by port only, and grants
-//! the project entry by entry (`crate::sandbox::landlock::entries`, ADR-089).
+//! the project entry by entry (`crate::sandbox::landlock::entries`, ADR-090).
 //! In the Isolated tier (`linux/isolate.rs`), the default where
 //! bubblewrap works (ADR-080), the agent starts in bubblewrap's own view of the
 //! machine, and `moat` inside it applies the same rules and filter.
@@ -27,11 +27,13 @@ use seccompiler::{
 };
 
 use super::isolation::Offered;
+use crate::sandbox::bwrap::shared::Shared;
 use crate::sandbox::landlock::Rules;
 use crate::sandbox::seccomp::{SOCKET_ARGS, SOCKETPAIR_TYPES};
 use crate::sandbox::{
     Grants, Report, exposure, kernel_self_in_writes, landlock_entries, landlock_rules,
-    missing_hook_settings, netns_masks, netns_project_masks, session_tmpdir,
+    missing_hook_settings, netns_masks, netns_project_masks, netns_project_masks_near_top,
+    session_tmpdir,
 };
 
 /// The kernel's Landlock ABI, read without restricting anything (ADR-082).
@@ -156,7 +158,7 @@ pub struct Confined {
     /// the agent starts.
     warning: Option<String>,
     /// What the Lightweight tier covers inside the project and what it leaves
-    /// open there (`tier.rs`, ADR-089): printed before the agent starts.
+    /// open there (`tier.rs`, ADR-090): printed before the agent starts.
     project: Option<String>,
     /// Hook settings missing in the project when the agent starts, which
     /// nothing covers without a network namespace: each that exists when the
@@ -193,19 +195,29 @@ pub fn confine(
             // paths, which Landlock grants whole, and in the project the
             // Isolated tier's masks, with the placeholders they need.
             let mut masks = netns_masks(policy, ctx, &generated.rules)?;
-            let project = netns_project_masks(policy, ctx)?;
+            // Held before the project is looked at (`isolate::Session`).
+            let shared = Shared::take(state, isolate::project_of(ctx))?;
+            // A project too large to walk, or with a name no mount can take,
+            // still starts as before, covered near its top and saying so.
+            let (project, notice) = match netns_project_masks(policy, ctx) {
+                Ok(project) => (project, super::tier::NAMESPACED.to_owned()),
+                Err(error) => (
+                    netns_project_masks_near_top(policy, ctx)?,
+                    super::tier::namespaced_near_top(&format!("{error:#}")),
+                ),
+            };
             masks.extend(project.mounts);
             let mut agent = netns::namespaced(
                 &bwrap,
                 &generated.rules,
                 &masks,
-                &project.placeholders,
+                (&project.placeholders, shared),
                 agent.report,
                 program,
                 &ctx.cwd,
                 port,
             )?;
-            agent.project = Some(super::tier::NAMESPACED.to_owned());
+            agent.project = Some(notice);
             Ok(agent)
         }
         Err(port_only) => {
@@ -218,7 +230,7 @@ pub fn confine(
                 }
             }
             // No mount can cover inside the project: it is granted entry by
-            // entry instead (ADR-089).
+            // entry instead (ADR-090).
             let (split, open) = landlock_entries(policy, ctx, entries)?;
             refuse_exposed(state, &split.rules, false)?;
             let mut agent = restricted(&split.rules, split.report, Command::new(program))?;
@@ -284,14 +296,16 @@ pub fn bubblewrap() -> Option<bool> {
 
 /// What `moat doctor` says where `moat run --no-isolate`, or a plain `moat run`
 /// that cannot isolate, would grant the project of `ctx` entry by entry (no
-/// network namespace, ADR-089): the paths the policy denies there that would
+/// network namespace, ADR-090): the paths the policy denies there that would
 /// stay open to commands. `None` where the namespace's mounts cover them.
 pub fn project_open(policy: &Policy, ctx: &EvalContext) -> Option<String> {
     let netns::Network::PortOnly(_) = netns::network() else {
         return None;
     };
-    let (_, open) = landlock_entries(policy, ctx, Grants::default()).ok()?;
-    Some(super::tier::doctor_line(&open))
+    Some(match landlock_entries(policy, ctx, Grants::default()) {
+        Ok((_, open)) => super::tier::doctor_line(&open),
+        Err(error) => super::tier::doctor_refusal(&format!("{error:#}")),
+    })
 }
 
 pub use isolate::{inside, isolate};
@@ -385,7 +399,7 @@ fn restricted(rules: &Rules, report: Report, command: Command) -> Result<Confine
                 AccessFs::from_all(ABI_REQUIRED),
             ))?
             // Listing only: no file is read and nothing is made or removed
-            // directly in these (ADR-089).
+            // directly in these (ADR-090).
             .add_rules(path_beneath_rules(&rules.list, AccessFs::ReadDir))?
             .add_rules(ports)
     };

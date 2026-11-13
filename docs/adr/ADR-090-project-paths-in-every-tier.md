@@ -1,4 +1,4 @@
-# ADR-089: What the policy denies inside the project holds in every Linux tier
+# ADR-090: What the policy denies inside the project holds in every Linux tier
 
 Status: accepted · Date: 2026-11-12 · Builds on ADR-018 (OS sandbox tiers), ADR-080
 (the Isolated tier by default on Linux), ADR-082 (Landlock ABI ladder), ADR-085
@@ -52,7 +52,11 @@ common one.
      `**/.moat/policy.lock`) is split the same way one level further down.
    - A granted tree that holds the project (a read root such as `/tmp`, where a test
      or a scratch project may live) is granted around it: each folder on the way down
-     for listing only, every other entry as the tree was.
+     for listing only, every other entry as the tree was. Each grant is compared
+     where it resolves, as Landlock opens it: a read root `~/go` that is a link to the
+     folder holding the project holds it as surely as that folder does, and is granted
+     around it from where it resolves. A grant that resolves to the project or above
+     it and cannot be split (a folder that cannot be listed) refuses the run.
    - Symbolic links get no rule: a Landlock rule follows a link, so a rule on a link
      to `/etc` would grant `/etc`. What a link names is decided where it points, as
      before.
@@ -64,7 +68,13 @@ common one.
    `.git`, `.moat` and every agent configuration read-only wherever they are at the
    start, and placeholders for the missing names. Files a build writes stay writable,
    as above. The project is still granted whole by Landlock, so nothing at its top is
-   lost.
+   lost. Where the walk fails (more than a million entries, a name that is not UTF-8,
+   which no mount can take), the run still starts, as it did before: the namespace
+   then covers the project's top and the folders directly in it only (`.env` there
+   hidden, `.git`, `.moat` and `.claude/settings.json` read-only), skips names that
+   are not UTF-8, and the start notice gives the reason and says that what lies deeper
+   stays open. Refusing instead would stop runs that started before this change, for
+   a cover the namespace never had.
 3. **Missing agent configuration folders become read-only folders for the session.**
    In both tiers that mount (the Isolated tier and the namespace), a folder of an
    agent's configuration (`.claude/hooks`, `.github/hooks`, `.pi/extensions`,
@@ -72,16 +82,31 @@ common one.
    folder exists is created empty and bound read-only, so a file created in it later is
    refused (`EROFS`). A mount over a folder covers files made in it after the start;
    one over a file cannot. `.git` and an existing `.moat` are bound read-only as whole
-   folders already. The folder is removed when the session ends if it is still empty.
-   A holder folder is not created for this alone: a project that has no `.pi` gets no
-   `.pi` from OpenMoat.
+   folders already. A holder folder is not created for this alone: a project that has
+   no `.pi` gets no `.pi` from OpenMoat, so where the holder is missing at the start
+   (`.pi`, `.opencode`, `.openclaw`, `.hermes`) a command can still `mkdir -p
+   .pi/extensions` and write an extension there. (`.claude`, `.github` and the other
+   folders above an agent's hook settings are created anyway when those settings are
+   missing, so `.claude/hooks` and `.github/hooks` are covered.)
+   **Placeholders two sessions share.** A second session in the same project finds
+   the first one's placeholders and covers them with mounts of its own, which rest on
+   them; removing an emptied folder under such a mount detaches it, and the second
+   session's agent could then create the folder and plant a hook. So each session
+   holds a lock file for its project under the state directory (`run-projects/`,
+   named by the project path's SHA-256), shared, from before it looks at the project
+   until it ends, and appends each placeholder it made to that file. A placeholder is
+   removed only by a session that then takes the lock alone, the last one in the
+   project, which removes every recorded placeholder still as it was made
+   (`bwrap/shared.rs`).
 4. **Every start says what stays open, and `doctor` says it before.** Without a
    namespace `openmoat run` names, before the agent starts, each path the policy
    denies in the project that a rule still leaves open: it computes the Isolated
    tier's masks for the project and lists those a Landlock rule still covers
    (`sub/.env`, a `.git` below the top), up to eight and a count. With a namespace it
-   says that a match created after the start stays open. `openmoat doctor` on Linux
-   without a namespace prints the same list for the current directory.
+   says that a match created after the start stays open, or, where the walk failed,
+   that only the top is covered and why. `openmoat doctor` on Linux without a
+   namespace prints the same list for the current directory, or, where the project
+   cannot be granted entry by entry, that `openmoat run` would refuse to start and why.
 5. **A test-only switch.** Debug builds start `openmoat run` without a namespace when
    `MOAT_TEST_NO_NETNS` is set, so CI, which installs bubblewrap, runs the hostile
    scripts against case 1 too (`landlock-port-only` in `tests/differential/
@@ -112,9 +137,14 @@ common one.
   started with something other than the policy. Landlock looks up the rules of each path
   component on access, so access cost does not grow with the number of rules on
   siblings.
-- **The walk.** Naming what stays open walks the project, as the Isolated tier does
-  already (up to a million entries; past that the notice says the paths could not be
-  listed, and the run still starts with the rules above).
+- **The walk.** Naming what stays open (case 1) and the namespace's masks (case 2)
+  walk the whole project, as the Isolated tier does already: every entry of
+  `node_modules`, `target` and the like is looked at once at start, which on a large
+  JavaScript project is hundreds of thousands of entries. Past a million, case 1's
+  notice says the paths could not be listed and the run starts with the rules above;
+  case 2 falls back to the project's top (above). The walk cannot skip a folder
+  because nothing it names is denied: `**/.env` and `**/.git` match at any depth, and
+  a dependency can carry either.
 - **Races at start.** The rules are built from a listing just before the agent starts.
   An entry replaced by a link to elsewhere between the listing and the rule (only by a
   process outside the sandbox) would be followed; that process already has the
@@ -158,6 +188,9 @@ and the project root must stay writable. The complete answer for unattended runs
   `git commit` inside `openmoat run --no-isolate` fails there as it does under
   `--isolate` and on macOS; commit outside the run.
 - The Isolated tier and the namespace refuse a hook written into a new
-  `.claude/hooks/` (or another agent configuration folder) during the session.
+  `.claude/hooks/` (or another agent configuration folder) during the session, where
+  the folder holding it exists at the start or is made for the hook settings
+  (`.claude`, `.github`); where it is missing (`.pi`, `.opencode`, `.openclaw`,
+  `.hermes`), a command can still create it and write a hook below it, as before.
 - `docs/SANDBOX.md`, `docs/THREAT_MODEL.md` and `docs/LIMITS.md` describe each case
   as above.

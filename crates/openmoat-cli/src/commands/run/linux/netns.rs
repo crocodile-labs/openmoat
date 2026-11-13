@@ -24,6 +24,7 @@ use super::isolate::{Session, relay_to_proxy, system_bwrap};
 use super::{Confined, Rules};
 use crate::context::path_string;
 use crate::sandbox::Report;
+use crate::sandbox::bwrap::shared::Shared;
 use crate::sandbox::bwrap::{self, Mount, Placeholder};
 use crate::sandbox::landlock::TCP_PORT_ALLOWANCE;
 
@@ -63,7 +64,7 @@ pub fn network() -> Network {
 /// Debug builds start `moat run` without a network namespace where this
 /// variable is set, so the end-to-end tests can assert on a machine with
 /// bubblewrap what a machine without it does (the project granted entry by
-/// entry, ADR-089). Release builds do not read it.
+/// entry, ADR-090). Release builds do not read it.
 #[cfg(debug_assertions)]
 const NO_NETNS_ENV: &str = "MOAT_TEST_NO_NETNS";
 #[cfg(not(debug_assertions))]
@@ -182,7 +183,7 @@ pub fn missing() -> Option<String> {
 /// `program` under `bwrap` in its own network namespace, `moat isolated`
 /// applying `rules` inside, in `cwd`, with the proxy on `port` relayed in,
 /// `masks` over the denied paths inside the grants and `placeholders` created
-/// in the project for the session.
+/// in the project for the session, recorded in the project's lock `shared`.
 #[expect(
     clippy::too_many_arguments,
     reason = "one call site, which hands over what `confine` generated"
@@ -191,14 +192,14 @@ pub fn namespaced(
     bwrap: &Path,
     rules: &Rules,
     masks: &[Mount],
-    placeholders: &[Placeholder],
+    (placeholders, shared): (&[Placeholder], Shared),
     mut report: Report,
     program: &Path,
     cwd: &str,
     port: u16,
 ) -> Result<Confined> {
     report.allowances.retain(|a| a.rule != TCP_PORT_ALLOWANCE);
-    let session = Session::create(placeholders)?;
+    let session = Session::create(placeholders, shared)?;
     relay_to_proxy(&session.socket, port)?;
     let moat = std::env::current_exe()
         .and_then(std::fs::canonicalize)

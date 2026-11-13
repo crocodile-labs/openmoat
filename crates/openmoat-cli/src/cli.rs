@@ -537,7 +537,7 @@ pub struct TierArgs {
 
     /// The Lightweight tier on Linux instead of the default Isolated tier: commands see
     /// the rest of the machine the policy's read roots allow, and inside the project
-    /// `openmoat run` says on start what stays open (ADR-089). Recorded in the
+    /// `openmoat run` says on start what stays open (ADR-090). Recorded in the
     /// audit log; refused when a policy has `require.run: full-boundary`. Changes
     /// nothing on macOS, which has no Isolated tier yet.
     #[arg(long, conflicts_with = "isolate")]

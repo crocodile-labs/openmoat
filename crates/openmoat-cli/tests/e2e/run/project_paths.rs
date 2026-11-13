@@ -1,5 +1,5 @@
 //! What the policy denies inside the project holds in every Linux tier
-//! (ADR-089): without a network namespace the project is granted entry by
+//! (ADR-090): without a network namespace the project is granted entry by
 //! entry, and in the Isolated tier a folder of an agent's configuration
 //! missing at the start is a read-only folder, so a hook written into it after
 //! the start is refused. Each case asserts the effect on disk, not the verdict.
@@ -28,7 +28,7 @@ fn bytes(path: &Path) -> Vec<u8> {
 /// machine without bubblewrap. Commands cannot read the project's `.env`,
 /// write its `.git` or `.moat`, create `.envrc` or a new git hook, or move an
 /// entry at its top aside; inside a folder that exists they work as before.
-/// Creating a new entry at the top is refused too: the cost ADR-089 names.
+/// Creating a new entry at the top is refused too: the cost ADR-090 names.
 #[test]
 fn without_a_namespace_the_project_is_granted_entry_by_entry() {
     let (sb, project) = installed_with_secret();
@@ -144,5 +144,40 @@ fn files_created_after_the_start_stay_covered_in_the_isolated_tier() {
     for gone in [".claude/hooks", ".github/hooks"] {
         assert!(!project.join(gone).exists(), "{gone}: {shown}");
     }
+    assert_eq!(bytes(&project.join(".env")), SECRET.as_bytes());
+}
+
+/// The default read root `~/go` is a link to the folder holding the project:
+/// Landlock resolves a rule's path, so that root reached the project whole,
+/// `.env` included. It is granted around the project from where it resolves,
+/// and the project's `.env` stays unreadable (a test build without the
+/// network namespace, as on a machine without bubblewrap).
+#[test]
+fn a_read_root_linked_above_the_project_does_not_grant_it_whole() {
+    let (sb, _) = installed_with_secret();
+    let parent = sb.home.join("work/src");
+    let project = parent.join("app");
+    for dir in [".git/hooks", "src"] {
+        std::fs::create_dir_all(project.join(dir)).unwrap();
+    }
+    std::fs::create_dir_all(parent.join("other")).unwrap();
+    std::fs::write(parent.join("other/notes.txt"), "beside").unwrap();
+    std::fs::write(project.join(".env"), SECRET).unwrap();
+    std::os::unix::fs::symlink(sb.home.join("work"), sb.home.join("go")).unwrap();
+    let script = "cat .env; echo \"env=$?\"
+         cat \"$HOME/go/src/app/.env\"; echo \"linked=$?\"
+         cat \"$HOME/go/src/other/notes.txt\"; echo \"beside=$?\"";
+    let out = run_sh_with(&sb, &project, script, &[("MOAT_TEST_NO_NETNS", "1")]);
+    if !ran(&out) {
+        return;
+    }
+    let shown = text(&out);
+    assert!(stderr(&out).contains("granted entry by entry"), "{shown}");
+    for refused in ["env", "linked"] {
+        assert!(!succeeded(&out, refused), "{refused}: {shown}");
+    }
+    // The read root still reads what lies beside the project.
+    assert!(succeeded(&out, "beside"), "{shown}");
+    assert!(!shown.contains(SECRET), "{shown}");
     assert_eq!(bytes(&project.join(".env")), SECRET.as_bytes());
 }

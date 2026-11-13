@@ -95,7 +95,7 @@ pub struct Script {
     /// namespace (bubblewrap installed).
     pub landlock: Outcome,
     /// The outcome under `moat run --no-isolate` on Linux without a network
-    /// namespace, where the project is granted entry by entry (ADR-089).
+    /// namespace, where the project is granted entry by entry (ADR-090).
     #[serde(rename = "landlock-port-only")]
     pub landlock_port_only: Outcome,
     /// The outcome under `moat run --isolate` on Linux.
@@ -483,7 +483,7 @@ pub mod executing {
     }
 
     /// The Lightweight tier on Linux without a network namespace, where the
-    /// project is granted entry by entry (ADR-089): a test build turns the
+    /// project is granted entry by entry (ADR-090): a test build turns the
     /// namespace off on a machine that has bubblewrap.
     // protection: run every linux
     #[cfg(target_os = "linux")]

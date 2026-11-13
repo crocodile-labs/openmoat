@@ -188,3 +188,44 @@ fn open_names_masks_a_rule_still_covers() {
         ["/p/sub/.env", "/p/src/.git", "/p/src/.claude"]
     );
 }
+
+/// A read root that reaches the project's parent through a link (`~/go`
+/// linked to `/data/go`, the project in `/data/go/src/app`) holds the project
+/// as Landlock resolves it: it is granted around the project from where it
+/// resolves, never whole, and its own spelling gets no rule.
+#[test]
+fn a_linked_tree_holding_the_project_is_compared_where_it_resolves() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = std::fs::canonicalize(dir.path()).unwrap();
+    let parent = root.join("data/go/src");
+    std::fs::create_dir_all(parent.join("app/src")).unwrap();
+    std::fs::create_dir_all(parent.join("other")).unwrap();
+    std::fs::write(parent.join("app/top.txt"), "x").unwrap();
+    std::os::unix::fs::symlink(root.join("data/go"), root.join("go")).unwrap();
+    let link = root.join("go").display().to_string();
+    let real = parent.join("app").display().to_string();
+    let src = parent.display().to_string();
+    assert_eq!(resolved(&format!("{link}/src")), src);
+    let ir = session_ir(&real);
+    let mut rules = rules_with(&[&link], &[&real]);
+    let mut report = Report::default();
+    split_project(&ir, &mut rules, &mut report, std::slice::from_ref(&real)).unwrap();
+    assert!(
+        !rules.read.contains(&link),
+        "the link's whole grant is gone: {rules:?}"
+    );
+    let data = root.join("data/go").display().to_string();
+    for listed in [&data, &src, &real] {
+        assert!(rules.list.contains(listed), "{listed}: {rules:?}");
+    }
+    assert!(rules.read.contains(&format!("{src}/other")), "{rules:?}");
+    assert!(rules.read.contains(&format!("{real}/top.txt")), "{rules:?}");
+    assert!(!rules.read.contains(&real), "{rules:?}");
+    // What stays open is judged from the resolved grants too.
+    let masks = [Mount::Hide {
+        path: format!("{src}/other/.env"),
+        dir: false,
+    }];
+    let whole = rules_with(&[&link], &[]);
+    assert_eq!(open(&masks, &whole), [format!("{src}/other/.env")]);
+}

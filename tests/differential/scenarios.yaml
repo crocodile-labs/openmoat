@@ -274,7 +274,7 @@ scripts:
     gaps:
       - layer: landlock-port-only
         issue: 174
-        why: "without a network namespace Landlock grants the project entry by entry, and any right to create at its top would reach into .git/hooks too, so a command cannot create out.txt there (ADR-089); folders that exist stay writable, and with bubblewrap installed nothing changes"
+        why: "without a network namespace Landlock grants the project entry by entry, and any right to create at its top would reach into .git/hooks too, so a command cannot create out.txt there (ADR-090); folders that exist stay writable, and with bubblewrap installed nothing changes"
 
   - id: script-reads-ssh-key
     threat: T1

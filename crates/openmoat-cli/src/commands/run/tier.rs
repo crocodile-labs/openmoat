@@ -1,6 +1,6 @@
 //! What the Lightweight tier covers inside the project on Linux, and what it
 //! leaves open there, as `moat run` says before the agent starts and `moat
-//! doctor` says beforehand (ADR-089). Landlock only grants, so a deny rule for
+//! doctor` says beforehand (ADR-090). Landlock only grants, so a deny rule for
 //! a path inside a tree it grants cannot be enforced by Landlock alone:
 //! - with a network namespace (bubblewrap installed and allowed), its mounts
 //!   cover the project as under `--isolate` ([`NAMESPACED`]);
@@ -25,6 +25,43 @@ pub const NAMESPACED: &str = "moat run: in the project, the paths the policy den
      agents' configuration read-only), but a match created after the start where nothing \
      stood (`.env.local`, a `.env` in a new folder) stays open; the hook still checks the \
      agent's own tool calls. `openmoat run --isolate` also hides the rest of the machine";
+
+/// What `moat run` prints when the agent gets a network namespace but the
+/// project could not be walked (`why`): only its top and the folders directly
+/// in it are covered.
+#[cfg_attr(
+    not(any(target_os = "linux", test)),
+    expect(
+        dead_code,
+        reason = "only Linux has a Lightweight tier with a gap to name"
+    )
+)]
+pub fn namespaced_near_top(why: &str) -> String {
+    format!(
+        "moat run: the project could not be walked ({why}), so only its top and the folders \
+         directly in it are covered for the session (`.env` files there hidden, `.git`, `.moat` \
+         and agents' configuration there read-only); what the policy denies deeper stays open \
+         to commands; the hook still checks the agent's own tool calls"
+    )
+}
+
+/// `moat doctor`'s row where `moat run` without a network namespace would
+/// refuse to start, because the project could not be granted entry by entry
+/// (`why`).
+#[cfg_attr(
+    not(any(target_os = "linux", test)),
+    expect(
+        dead_code,
+        reason = "only Linux has a Lightweight tier with a gap to name"
+    )
+)]
+pub fn doctor_refusal(why: &str) -> String {
+    format!(
+        "openmoat run     without a network namespace it would refuse to start here: the \
+         project cannot be granted entry by entry ({why}). Install bubblewrap \
+         (`apt install bubblewrap`)"
+    )
+}
 
 /// What `moat run` prints when the project is granted entry by entry, with
 /// `open`, the paths the policy denies there that stay open (or why they could
@@ -154,6 +191,16 @@ mod tests {
     fn the_namespace_names_what_stays_open_after_the_start() {
         assert!(NAMESPACED.contains("as under `--isolate`"));
         assert!(NAMESPACED.contains("created after the start"));
+        let near = namespaced_near_top("more than 1000000 files");
+        assert!(
+            near.contains("could not be walked (more than 1000000 files)"),
+            "{near}"
+        );
+        assert!(near.contains("deeper stays open"), "{near}");
+        let refused = doctor_refusal("permission denied");
+        assert!(refused.starts_with("openmoat run     "), "{refused}");
+        assert!(refused.contains("would refuse to start here"), "{refused}");
+        assert!(refused.contains("(permission denied)"), "{refused}");
     }
 
     #[test]

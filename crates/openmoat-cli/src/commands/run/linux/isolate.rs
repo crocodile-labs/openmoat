@@ -30,6 +30,7 @@ use crate::cli::IsolatedArgs;
 use crate::context::path_string;
 use crate::exit::Code;
 use crate::sandbox::bwrap::Placeholder;
+use crate::sandbox::bwrap::shared::Shared;
 use crate::sandbox::{Grants, Report, bwrap, bwrap_mounts};
 
 /// Where bubblewrap is taken from. Not `PATH`: `bwrap` starts unconfined and
@@ -98,10 +99,13 @@ pub fn isolate(
     // The tool-shell wrapper, in a directory of its own outside the empty temp
     // directory (ADR-075).
     let wrapper = grants.tool_shell.as_ref().map(|w| w.dir.clone());
+    // Held before the project is looked at, so a session ending meanwhile
+    // does not remove a placeholder this one finds and covers.
+    let shared = Shared::take(state, project_of(ctx))?;
     let generated = bwrap_mounts(policy, ctx, grants)?;
     // The mounts hide the state directory only under the empty temp directory.
     refuse_exposed(state, &generated.rules, true)?;
-    let session = Session::create(&generated.placeholders)?;
+    let session = Session::create(&generated.placeholders, shared)?;
     relay_to_proxy(&session.socket, port)?;
     let moat = std::env::current_exe().and_then(std::fs::canonicalize)?;
     let (moat, dir) = (path_string(&moat), path_string(&session.dir));
@@ -138,6 +142,15 @@ pub fn isolate(
         project: None,
         watch: Vec::new(),
     })
+}
+
+/// The project of `ctx`, resolved, which keys its placeholders' lock
+/// ([`Shared`]); the working directory where there is no project.
+pub(super) fn project_of(ctx: &EvalContext) -> &str {
+    ctx.real_project
+        .as_deref()
+        .or(ctx.project.as_deref())
+        .unwrap_or(&ctx.cwd)
 }
 
 /// Outside the sandbox: relay each connection to `socket` on to the proxy's
@@ -261,11 +274,13 @@ const SOCKET: &str = "proxy.sock";
 pub struct Session {
     dir: PathBuf,
     pub(super) socket: PathBuf,
-    placeholders: Vec<Placeholder>,
+    /// The project's lock, which records the placeholders made here and
+    /// removes them when the last session in the project ends ([`Shared`]).
+    shared: Option<Shared>,
 }
 
 impl Session {
-    pub(super) fn create(placeholders: &[Placeholder]) -> Result<Self> {
+    pub(super) fn create(placeholders: &[Placeholder], shared: Shared) -> Result<Self> {
         let name = format!("moat-run-{}", std::process::id());
         let dir = socket_parent(&std::env::temp_dir(), &name, SOCKET).join(name);
         DirBuilder::new()
@@ -275,14 +290,15 @@ impl Session {
         let mut session = Self {
             socket: dir.join(SOCKET),
             dir,
-            placeholders: Vec::new(),
+            shared: Some(shared),
         };
         File::create_new(session.dir.join("file"))?
             .set_permissions(Permissions::from_mode(0o000))?;
         std::fs::create_dir(session.dir.join("dir"))?;
         std::fs::set_permissions(session.dir.join("dir"), Permissions::from_mode(0o000))?;
         // Outermost first; each is recorded once made, so a failure part way
-        // removes what was made.
+        // removes what was made. One that another session in the project made
+        // meanwhile is covered all the same, and is that session's to record.
         for placeholder in placeholders {
             let path = &placeholder.path;
             let made = if placeholder.dir {
@@ -292,8 +308,17 @@ impl Session {
                     io::Write::write_all(&mut file, placeholder.contents.as_bytes())
                 })
             };
-            made.with_context(|| format!("creating a placeholder at {path}"))?;
-            session.placeholders.push(placeholder.clone());
+            match made {
+                Ok(()) => {
+                    if let Some(shared) = &mut session.shared {
+                        shared.record(placeholder)?;
+                    }
+                }
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(error) => {
+                    return Err(error).with_context(|| format!("creating a placeholder at {path}"));
+                }
+            }
         }
         Ok(session)
     }
@@ -310,9 +335,10 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        // Innermost first, each only while it is still as this session made it.
-        for placeholder in self.placeholders.iter().rev() {
-            remove_placeholder(placeholder);
+        // Innermost first, each only while it is still as it was made, and
+        // only by the last session in the project ([`Shared::finish`]).
+        if let Some(shared) = self.shared.take() {
+            shared.finish(remove_placeholder);
         }
         let _ = std::fs::remove_file(&self.socket);
         let _ = std::fs::remove_file(self.dir.join("file"));

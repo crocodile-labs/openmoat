@@ -128,7 +128,7 @@ pub fn plan(
 /// Add to `out` the folders of an agent's configuration ([`AGENT_CONFIG`]:
 /// `.claude/hooks`, `.github/hooks`, `.pi/extensions`) missing in the project
 /// `real` below which `dir_below` says writing is denied, each made an empty
-/// folder for the session and bound read-only (ADR-089): a hook written there
+/// folder for the session and bound read-only (ADR-090): a hook written there
 /// after the start would be loaded by the agent's next session, outside any
 /// sandbox, and a mount over a folder covers files created in it later, where
 /// one over a file cannot. Only where every folder above it is there already or
