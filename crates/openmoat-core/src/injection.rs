@@ -122,7 +122,8 @@ pub(crate) struct Candidates {
     pub(crate) url_hosts: Vec<String>,
     /// Words that look like host names, lowercase.
     pub(crate) word_hosts: Vec<String>,
-    /// Words that start with `/` or `~/`, as written.
+    /// Absolute and home paths ([`path_word`]), `~` in place of a home
+    /// variable, otherwise as written.
     pub(crate) paths: Vec<String>,
     /// Lines of code spans: fenced blocks, inline backticks, `$ ` prompts.
     pub(crate) commands: Vec<String>,
@@ -137,8 +138,8 @@ pub(crate) fn candidates(text: &str) -> Candidates {
         if word.is_empty() || word.len() > MAX_WORD_LEN {
             continue;
         }
-        if word.starts_with('/') || word.starts_with("~/") {
-            out.paths.push(word.to_owned());
+        if let Some(path) = path_word(word) {
+            out.paths.push(path);
         } else if word.contains("://") {
             if crate::host::file_url_path(word).is_none()
                 && let Some(host) = crate::host::of_word(word)
@@ -151,6 +152,38 @@ pub(crate) fn candidates(text: &str) -> Candidates {
     }
     out.commands = code_lines(text);
     out
+}
+
+/// The home directory as PowerShell and `cmd` write it before a separator;
+/// matched without regard to case, as both read variable names.
+const HOME_VARIABLES: [&str; 3] = ["$env:userprofile", "%userprofile%", "$home"];
+
+/// `word` as a path [`crate::paths::resolve`] can place, when it is one: a
+/// POSIX absolute path (`/etc/x`), a Windows drive path (`C:\x`, `C:/x`), a
+/// home path (`~/x`, `~\x`), and a home variable before a separator
+/// (`$env:USERPROFILE\x`, `%USERPROFILE%\x`, `$HOME/x`), given as `~/x`.
+/// Not a bare drive (`C:`), a URL (`c://x`), a PowerShell drive of a longer
+/// name (`HKLM:\…`, `Env:\…`), a UNC path (`\\server\share`), a braced
+/// variable (`${env:USERPROFILE}`, split at its braces) or another variable.
+fn path_word(word: &str) -> Option<String> {
+    let separator = |c: Option<char>| matches!(c, Some('/' | '\\'));
+    if word.starts_with('/') || word.starts_with("~/") || word.starts_with("~\\") {
+        return Some(word.to_owned());
+    }
+    let mut chars = word.chars();
+    let drive = chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.next() == Some(':')
+        && separator(chars.next())
+        && !word[2..].starts_with("//");
+    if drive {
+        return Some(word.to_owned());
+    }
+    HOME_VARIABLES.iter().find_map(|var| {
+        let head = word.get(..var.len())?;
+        let rest = &word[var.len()..];
+        (head.eq_ignore_ascii_case(var) && separator(rest.chars().next()))
+            .then(|| format!("~{rest}"))
+    })
 }
 
 /// `text` cut at a character boundary at or before `max` bytes.
@@ -279,6 +312,34 @@ mod tests {
                 "bash /tmp/x.sh --yes --now"
             ]
         );
+    }
+
+    #[test]
+    fn windows_and_home_paths_are_paths() {
+        let found = candidates(
+            "Save it to C:\\Users\\me\\AppData\\x.ps1, d:/tools/run.cmd, ~\\.ssh\\id_rsa, \
+             $env:USERPROFILE\\.aws\\credentials, %USERPROFILE%\\notes.txt and $HOME/.netrc.",
+        );
+        assert_eq!(
+            found.paths,
+            [
+                "C:\\Users\\me\\AppData\\x.ps1",
+                "d:/tools/run.cmd",
+                "~\\.ssh\\id_rsa",
+                "~\\.aws\\credentials",
+                "~\\notes.txt",
+                "~/.netrc"
+            ]
+        );
+    }
+
+    #[test]
+    fn drives_alone_urls_and_other_drives_are_not_paths() {
+        let found = candidates(
+            "Open C: or C:x, see c://example.com/x, HKLM:\\Software\\X, Env:\\PATH, \
+             \\\\server\\share\\x, $env:TEMP\\x, %APPDATA%\\x, $homework/x and 12:30/x.",
+        );
+        assert!(found.paths.is_empty(), "{found:?}");
     }
 
     #[test]

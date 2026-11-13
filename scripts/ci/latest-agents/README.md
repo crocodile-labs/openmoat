@@ -146,7 +146,7 @@ the binary back:
 | Case | The stand-in | Compared with |
 |---|---|---|
 | `crash` | exits 1 with nothing printed | `hook_failure.fails` |
-| `missing` | none: the hook names a file that is gone | `hook_failure.fails` |
+| `missing` | none: the hook names a file that is gone | `hook_failure.cannot_start` |
 
 A hook that hangs is not tried: waiting out each agent's time limit (30 s to 600 s) would
 make the job outlast its own time limit, so `hook_failure.times_out` rests on the vendors'

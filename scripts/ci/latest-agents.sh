@@ -1150,7 +1150,11 @@ hook_fails() {
     local mode=$1 fact limit=180
     local calls="$out/hook-failure-$mode-calls.log"
     begin "hook fails: $mode"
-    fact=$(check hook-failure-fact "$host" "$out/status.json" fails)
+    # A hook that cannot start is its own fact: a host may block only that.
+    case "$mode" in
+    missing) fact=$(check hook-failure-fact "$host" "$out/status.json" cannot_start) ;;
+    *) fact=$(check hook-failure-fact "$host" "$out/status.json" fails) ;;
+    esac
     mv "$moat" "$moat.real"
     : >"$calls"
     # shellcheck disable=SC2016 # `$$` and `$*` are the stand-in's own, at run time

@@ -129,6 +129,14 @@ pub trait McpReader: Sync + Debug {
     fn command_form(&self) -> McpCommandForm {
         McpCommandForm::CommandArgs
     }
+    /// Whether the host runs definition `entry` inside its own process (goose's
+    /// `builtin` and `platform` extensions): no server process starts for it,
+    /// so there is nothing for `openmoat mcp wrap` to put behind the proxy,
+    /// and only the hook checks its tools.
+    fn runs_in_host(&self, entry: &Value) -> bool {
+        let _ = entry;
+        false
+    }
 }
 
 /// How a host's MCP server definition names the program it starts, which is

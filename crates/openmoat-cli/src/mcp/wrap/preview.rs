@@ -91,6 +91,7 @@ mod tests {
                 name: "docs".to_owned(),
                 entry: json!({}),
                 form: source.reader.command_form(),
+                runs_in_host: false,
             },
             entry: wrapped(
                 &json!({"command": "docs"}),

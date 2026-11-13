@@ -22,6 +22,17 @@ impl McpReader for Extensions {
         McpCommandForm::CmdArgs
     }
 
+    /// A `builtin` extension is served over in-memory streams inside goose
+    /// (`extension_manager/builtin.rs`, v1.57.0; `goose mcp <name>` runs only
+    /// in a container goose is told to use), and a `platform` one runs in the
+    /// agent's process (`ExtensionConfig::Platform`).
+    fn runs_in_host(&self, entry: &Value) -> bool {
+        matches!(
+            entry.get("type").and_then(Value::as_str),
+            Some("builtin" | "platform")
+        )
+    }
+
     fn servers(&self, doc: &Value) -> Result<Vec<McpServer>, String> {
         match doc.get("extensions") {
             None | Some(Value::Null) => Ok(Vec::new()),
@@ -85,6 +96,21 @@ mod tests {
         assert_eq!(servers[0].entry, json!({ "type": "stdio", "name": "GitHub", "cmd": "npx" }));
         assert_eq!(Extensions.servers(&json!({})).unwrap(), Vec::<McpServer>::new());
         assert!(Extensions.servers(&json!({ "extensions": [1] })).is_err());
+    }
+
+    #[test]
+    fn builtin_and_platform_extensions_run_inside_goose() {
+        for kind in ["builtin", "platform"] {
+            assert!(Extensions.runs_in_host(&json!({"type": kind, "name": "developer"})));
+        }
+        for entry in [
+            json!({"type": "stdio", "cmd": "npx"}),
+            json!({"type": "inline_python", "code": "print(1)"}),
+            json!({"type": "streamable_http", "uri": "https://example.test/mcp"}),
+            json!({"name": "no type"}),
+        ] {
+            assert!(!Extensions.runs_in_host(&entry), "{entry}");
+        }
     }
 
     #[test]

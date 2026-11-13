@@ -256,7 +256,7 @@ rest of each agent's protection on each OS, with the runs that back them.
 | OpenClaw | blocks the call | blocks the call | 45 s | a Gateway that does not load the plugin (disabled in `openclaw.json`, or a load error, which leaves the Gateway running) | no | [1](https://docs.openclaw.ai/plugins/hooks/reference) |
 | GitHub Copilot CLI | blocks the call | runs the call | 600 s | `disableAllHooks: true` in a hook file or in a repository's `settings.json`, or deleting the hook file | yes: times out | [1](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference) |
 | pi | blocks the call | blocks the call | 45 s | `pi --no-extensions`, or an `extensions` entry in pi's or a trusted project's settings that turns the extension off | no | [1](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md) |
-| Gemini CLI | runs the call | runs the call | 600 s | `hooks` turned off in the user's or a project's `settings.json`, or a folder Gemini CLI does not trust (which runs no settings hooks) | yes: cannot start, crashes or exits non-zero; times out | [1](https://geminicli.com/docs/hooks/reference/) |
+| Gemini CLI | blocks the call when the hook cannot start (`openmoat` missing); runs it when the hook crashes or exits non-zero | runs the call | 600 s | `hooks` turned off in the user's or a project's `settings.json`, or a folder Gemini CLI does not trust (which runs no settings hooks) | yes: crashes or exits non-zero; times out | [1](https://geminicli.com/docs/hooks/reference/) [2](https://github.com/google-gemini/gemini-cli/blob/v0.65.0/packages/core/src/hooks/hookRunner.ts) |
 | OpenCode | blocks the call | blocks the call | 45 s | OpenCode 1's `--pure` or `OPENCODE_PURE`, OpenCode 2's `-openmoat` in `plugins` (a project's included), or an error loading the plugin | no | [1](https://opencode.ai/docs/build/plugins/server) |
 | Hermes Agent | blocks the call | blocks the call | 30 s | the hook missing from `config.yaml` or from `shell-hooks-allowlist.json` (gateway, cron and ACP sessions), another profile, or `HERMES_SAFE_MODE=1` | no | [1](https://github.com/NousResearch/hermes-agent/blob/v0.22.5/agent/shell_hooks.py) |
 | Cline CLI | runs the call | runs the call | 120 s | `--yolo`, or `--config`, `--hooks-dir` or a moved `CLINE_DIR` OpenMoat did not install into | yes: cannot start, crashes or exits non-zero; times out | [1](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/hook-file-hooks.ts) [2](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/subprocess-runner.ts) |
@@ -319,9 +319,13 @@ rest of each agent's protection on each OS, with the runs that back them.
   GitHub Copilot CLI, the Cline CLI and wrapped MCP servers, and only for the same
   request.** Other
   agents report no call output (their
-  wrapped MCP servers' results are read by the gateway). A PowerShell command is not
-  parsed, so it is not linked either: on Windows this covers every Gemini CLI shell
-  command and the PowerShell tools of Claude Code and the Cline CLI. Another spelling of a planted
+  wrapped MCP servers' results are read by the gateway). A PowerShell command (every
+  Gemini CLI shell command on Windows, the PowerShell tools of Claude Code and the Cline
+  CLI) is not parsed, so it is linked by the hosts and paths its text names, not by its
+  commands. Paths are read in the forms POLICY.md §4.1.2 lists (drive, `~\`,
+  `$env:USERPROFILE\`, `%USERPROFILE%\`, `$HOME\`); a UNC path, `${env:USERPROFILE}`,
+  another variable, and a host or path built at run time (`"ev" + "il.example"`) are not
+  seen. Another spelling of a planted
   address, a subdomain of a planted URL host and a planted command run through a wrapper
   are linked; a host by another name, a reworded command or a relative path is not
   ([POLICY.md §4.1.2](POLICY.md#412-injected-input)). Only the output of the shell,

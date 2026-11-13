@@ -5,6 +5,7 @@ use super::*;
 use crate::injection::{INJECTED_RULE, InjectedMap};
 use crate::policy::Policy;
 
+mod foreign;
 mod normalised;
 
 fn ctx() -> EvalContext {

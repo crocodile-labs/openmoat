@@ -18,6 +18,12 @@ pub enum FailureOutcome {
     /// or later ([`HookSpec::block_on_failure`](crate::HookSpec)). Otherwise
     /// the call runs.
     BlocksFrom(Version),
+    /// The host blocks the call when the hook cannot start (its binary is
+    /// gone), and runs it when the hook crashes or exits without a decision:
+    /// a host that blocks on an exit code with a message, which a shell that
+    /// cannot find the program gives (Gemini CLI). Only [`HookFailure::fails`]
+    /// takes it.
+    BlocksWhenMissing,
     /// The host runs the call unchecked.
     Runs,
     /// The host's documentation does not say; OpenMoat assumes the call runs.
@@ -34,17 +40,24 @@ impl FailureOutcome {
                 "blocks the call from {major}.{minor}.{patch} (`openmoat init` asks for it); \
                  runs it before"
             ),
+            Self::BlocksWhenMissing => "blocks the call when the hook cannot start (`openmoat` \
+                                        missing); runs it when the hook crashes or exits \
+                                        non-zero"
+                .to_owned(),
             Self::Runs => "runs the call".to_owned(),
             Self::NotDocumented => "not documented; assumed to run the call".to_owned(),
         }
     }
 
-    /// Whether the call may run with no decision: [`Self::Runs`] and
-    /// [`Self::NotDocumented`]. [`Self::BlocksFrom`] depends on the version
+    /// Whether the call may run with no decision: [`Self::Runs`],
+    /// [`Self::NotDocumented`], and [`Self::BlocksWhenMissing`] for a crash. [`Self::BlocksFrom`] depends on the version
     /// found, which only the CLI can ask, so it is not counted here.
     #[must_use]
     pub fn runs(self) -> bool {
-        matches!(self, Self::Runs | Self::NotDocumented)
+        matches!(
+            self,
+            Self::Runs | Self::NotDocumented | Self::BlocksWhenMissing
+        )
     }
 }
 
@@ -93,7 +106,9 @@ impl HookFailure {
             other => other.runs(),
         };
         let mut cases = Vec::new();
-        if open(self.fails) {
+        if self.fails == FailureOutcome::BlocksWhenMissing {
+            cases.push("crashes or exits non-zero");
+        } else if open(self.fails) {
             cases.push("cannot start, crashes or exits non-zero");
         }
         if open(self.times_out) {
@@ -125,6 +140,27 @@ mod tests {
         );
         assert!(FailureOutcome::NotDocumented.runs());
         assert!(!FailureOutcome::BlocksFrom((2, 1, 295)).runs());
+    }
+
+    /// A host that blocks only a hook that cannot start fails open on a crash,
+    /// and says which case is which.
+    #[test]
+    fn blocks_when_missing_is_open_for_a_crash_only() {
+        let gemini_like = HookFailure {
+            fails: FailureOutcome::BlocksWhenMissing,
+            times_out: FailureOutcome::Runs,
+            ..HookFailure::BASE
+        };
+        assert_eq!(
+            gemini_like.open_cases(true),
+            ["crashes or exits non-zero", "times out"]
+        );
+        assert!(FailureOutcome::BlocksWhenMissing.runs());
+        assert!(
+            FailureOutcome::BlocksWhenMissing
+                .words()
+                .starts_with("blocks the call when the hook cannot start")
+        );
     }
 
     #[test]

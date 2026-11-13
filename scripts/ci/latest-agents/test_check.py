@@ -96,12 +96,13 @@ class HookFailure(unittest.TestCase):
 
     def test_a_fact_is_read_from_status_json(self):
         status = {"agents": [{"host": "codex", "hook_failure": {
-            "fails": "runs", "times_out": "runs", "timeout_s": 600}},
+            "fails": "runs", "cannot_start": "blocks", "times_out": "runs", "timeout_s": 600}},
             {"host": "x", "hook_failure": {"fails": "blocks", "times_out": "blocks",
                                            "timeout_s": None}}]}
         path = self.root / "status.json"
         path.write_text(json.dumps(status), encoding="utf-8")
-        for host, key, want in (("codex", "fails", "runs"), ("codex", "timeout_s", "600"),
+        for host, key, want in (("codex", "fails", "runs"), ("codex", "cannot_start", "blocks"),
+                                ("codex", "timeout_s", "600"),
                                 ("x", "timeout_s", "none")):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):

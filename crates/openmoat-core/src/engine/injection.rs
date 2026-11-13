@@ -22,9 +22,6 @@ use crate::verdict::{Decision, Verdict};
 /// (`registries`), so they are named here.
 const REMOTE_TEXT_PROGRAMS: [&str; 3] = ["gh", "glab", "tea"];
 
-/// The longest source description kept with a token.
-const MAX_SOURCE_LEN: usize = 200;
-
 impl CompiledPolicy<'_> {
     /// What the output of `action`, run in `cwd`, is, when it is content an
     /// attacker may control (`fetch https://docs.example/page`): what session
@@ -33,7 +30,9 @@ impl CompiledPolicy<'_> {
     /// page sets the title and URL a tab list shows), and a shell command that
     /// reads from a network host the policy does not allow or from a forge's
     /// command-line client (`gh issue view`). `None` for everything else: a
-    /// read of a file, a local command.
+    /// read of a file, a local command. Never cut: a caller that keeps it
+    /// redacts the whole of it first, then shortens it (the audit store), so
+    /// a credential in the command is never split where no pattern sees it.
     #[must_use]
     pub fn output_source(
         &self,
@@ -55,10 +54,16 @@ impl CompiledPolicy<'_> {
                 Action::Shell { command } => format!("the output of `{command}`"),
                 _ => exposed.describe(),
             };
-            return Some(cut(source));
+            return Some(source);
         }
-        let Action::Shell { command } = action.shown() else {
-            return None;
+        let command = match action.shown() {
+            Action::Shell { command } => command,
+            Action::ForeignShell { command, .. } => {
+                return self
+                    .foreign_reads_remote(command)
+                    .then(|| format!("the output of `{command}`"));
+            }
+            _ => return None,
         };
         let reads_remote = atoms.iter().any(|atom| match atom {
             AtomicAction::Net { host } | AtomicAction::Fetch { host } => {
@@ -69,7 +74,7 @@ impl CompiledPolicy<'_> {
                 .is_some_and(|p| REMOTE_TEXT_PROGRAMS.contains(&program_name(p))),
             _ => false,
         });
-        reads_remote.then(|| cut(format!("the output of `{command}`")))
+        reads_remote.then(|| format!("the output of `{command}`"))
     }
 
     /// The tokens of `output`, the output of `source` (an action
@@ -90,9 +95,14 @@ impl CompiledPolicy<'_> {
         let (source_atoms, _) = checked_atoms(source, &ctx, self.opens_as(), &NoResolver);
         // Never kept, so never a parent a later call links to (ADR-063 §4):
         // `docs.github.com` named by a page on `github.com` links nothing new.
+        let foreign_hosts = match source.shown() {
+            Action::ForeignShell { command, .. } => foreign::named(command).remote,
+            _ => Vec::new(),
+        };
         let own_hosts: Vec<String> = source_atoms
             .iter()
             .filter_map(host_of)
+            .chain(foreign_hosts.iter().map(String::as_str))
             .map(crate::host::canonical)
             .collect();
         let host_token = |kind: TokenKind| {
@@ -143,7 +153,9 @@ impl CompiledPolicy<'_> {
     /// reaches, a file it writes or a command it runs came from that content,
     /// and the policy does not allow that atom. A command counts only when the
     /// call also reaches a host or a file outside the project that the policy
-    /// does not allow. Never loosens; a deny stays.
+    /// does not allow. A command of a shell the classifier cannot read
+    /// (PowerShell) is checked on its text: a host or a path outside the
+    /// project it names ([`foreign`]). Never loosens; a deny stays.
     #[must_use]
     pub fn with_injected(
         &self,
@@ -154,10 +166,16 @@ impl CompiledPolicy<'_> {
     ) -> Decision {
         let checked = matches!(
             action.shown(),
-            Action::Shell { .. } | Action::FsWrite { .. } | Action::Patch { .. }
+            Action::Shell { .. }
+                | Action::ForeignShell { .. }
+                | Action::FsWrite { .. }
+                | Action::Patch { .. }
         );
         if !checked || decision.verdict == Verdict::Deny {
             return decision;
+        }
+        if let Action::ForeignShell { command, .. } = action.shown() {
+            return planted(decision, self.foreign_injected(command, seen));
         }
         let (atoms, _) = self.atoms(action, paths);
         // A command copied from the content counts only when it reaches past
@@ -175,10 +193,7 @@ impl CompiledPolicy<'_> {
             .filter(|atom| reaches_outside || !matches!(atom, AtomicAction::Shell { .. }))
             .filter_map(|atom| self.injected(atom, seen))
             .collect();
-        planted(found).into_iter().fold(decision, |mut acc, next| {
-            acc.merge(next);
-            acc
-        })
+        planted(decision, found)
     }
 
     /// The part of `atom` that came from untrusted content, unless the policy
@@ -315,11 +330,12 @@ struct Found {
     source: String,
 }
 
-/// One review per source of `found`, naming each part once: "the command `x`,
+/// `decision` with one review per source of `found` merged in, naming each
+/// part once: "the command `x`,
 /// the host `h` and the path `p` came from …". A planted command makes several
 /// atoms (the command, the host it reaches, the file it writes), and the
 /// person reads one sentence for them, not one per atom.
-fn planted(found: Vec<Found>) -> Vec<Decision> {
+fn planted(decision: Decision, found: Vec<Found>) -> Decision {
     let mut sources: Vec<(String, Vec<String>)> = Vec::new();
     for Found { part, source } in found {
         match sources.iter_mut().find(|(known, _)| *known == source) {
@@ -341,7 +357,10 @@ fn planted(found: Vec<Found>) -> Vec<Decision> {
                 ),
             )
         })
-        .collect()
+        .fold(decision, |mut acc, next| {
+            acc.merge(next);
+            acc
+        })
 }
 
 /// `a`, `a and b`, `a, b and c`.
@@ -411,15 +430,6 @@ fn program_name(word: &str) -> &str {
     word.rsplit(['/', '\\']).next().unwrap_or(word)
 }
 
-/// `text`, cut to [`MAX_SOURCE_LEN`] characters.
-fn cut(text: String) -> String {
-    if text.chars().count() <= MAX_SOURCE_LEN {
-        return text;
-    }
-    let mut short: String = text.chars().take(MAX_SOURCE_LEN).collect();
-    short.push('…');
-    short
-}
-
+mod foreign;
 #[cfg(test)]
 mod tests;

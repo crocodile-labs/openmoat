@@ -7,7 +7,7 @@
 
 use std::fmt::Write as _;
 
-use openmoat_hosts::{Host, HostSpec, McpSyntax, RunFacts, RunWrite};
+use openmoat_hosts::{FailureOutcome, Host, HostSpec, McpSyntax, RunFacts, RunWrite};
 
 use crate::cfg::Os;
 use crate::marks::{Claim, Mark};
@@ -128,12 +128,13 @@ pub fn hook_failure(host: Host, os: Os, ev: &Evidence<'_>) -> Cell {
     let limit = facts
         .timeout_s
         .map_or_else(String::new, |s| format!(" (after {s} s)"));
+    // An outcome that differs by case names the cases itself.
+    let fails = match facts.fails {
+        FailureOutcome::BlocksWhenMissing => facts.fails.words(),
+        other => format!("cannot start, crashes or exits non-zero: {}", other.words()),
+    };
     claimed(
-        format!(
-            "cannot start, crashes or exits non-zero: {}; times out{limit}: {}",
-            facts.fails.words(),
-            facts.times_out.words()
-        ),
+        format!("{fails}; times out{limit}: {}", facts.times_out.words()),
         ev.has(Claim::HookFailure, host, os),
     )
 }
