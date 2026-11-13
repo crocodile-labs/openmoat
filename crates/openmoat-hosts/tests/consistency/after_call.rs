@@ -3,7 +3,9 @@
 //! the output's text as `HookEvent::PostToolUse`, and answers the report with
 //! nothing, whatever was decided. A report without its result is an error on
 //! the hosts ADR-063 added, so `guard` fails it; none is ever answered as a
-//! call that may run.
+//! call that may run. Where the payload names no event (GitHub Copilot CLI),
+//! the entry names it (`guard --event`), and a pre-call entry's payload is a
+//! call whatever it carries.
 
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::{HookEvent, Host};
@@ -34,6 +36,16 @@ fn claude_shaped(host: Host, pre_event: &str, post_event: &str, response: Value)
         pre,
         post,
         without_result,
+    }
+}
+
+/// The events the pre-call and the after-call entry of `host` name on their
+/// command line (`guard --event`); `None` where the payload names its own.
+fn entries(host: Host) -> (Option<&'static str>, Option<&'static str>) {
+    if host == Host::CopilotCli {
+        (Some("preToolUse"), Some("postToolUse"))
+    } else {
+        (None, None)
     }
 }
 
@@ -79,8 +91,13 @@ fn reports() -> Vec<Reports> {
 fn every_after_call_report_is_its_call_with_the_output_and_no_answer() {
     for r in reports() {
         let host = r.host;
-        let pre = host.parse_request(&r.pre.to_string()).unwrap();
-        let post = host.parse_request(&r.post.to_string()).unwrap();
+        let (pre_entry, post_entry) = entries(host);
+        let pre = host
+            .parse_request_as(&r.pre.to_string(), pre_entry)
+            .unwrap();
+        let post = host
+            .parse_request_as(&r.post.to_string(), post_entry)
+            .unwrap();
         assert_eq!(pre.event, HookEvent::PreToolUse, "{host:?}");
         assert!(pre.action.is_some(), "{host:?}");
         assert_eq!(post.action, pre.action, "{host:?}: the same call");
@@ -91,7 +108,7 @@ fn every_after_call_report_is_its_call_with_the_output_and_no_answer() {
             output.contains("https://collect.evil.example/x"),
             "{host:?}: {output}"
         );
-        let event = host.event_of(&r.post.to_string());
+        let event = host.event_of_as(&r.post.to_string(), post_entry);
         assert!(
             matches!(event, HookEvent::PostToolUse { .. }),
             "{host:?}: {event:?}"
@@ -119,10 +136,39 @@ fn a_report_without_its_result_is_an_error() {
     for r in reports().into_iter().filter(|r| r.host != Host::ClaudeCode) {
         let host = r.host;
         let text = r.without_result.to_string();
-        assert!(host.parse_request(&text).is_err(), "{host:?}: {text}");
+        let (_, post_entry) = entries(host);
         assert!(
-            matches!(host.event_of(&text), HookEvent::PostToolUse { .. }),
+            host.parse_request_as(&text, post_entry).is_err(),
+            "{host:?}: {text}"
+        );
+        assert!(
+            matches!(
+                host.event_of_as(&text, post_entry),
+                HookEvent::PostToolUse { .. }
+            ),
             "{host:?}: answered as a report, never as a call"
+        );
+    }
+}
+
+/// A pre-call entry's payload is a call even with a well-formed result in it:
+/// only the after-call entry, or the event the payload names where the host
+/// names it there, makes a report.
+#[test]
+fn a_result_in_a_pre_call_payload_is_still_a_call() {
+    for r in reports() {
+        let host = r.host;
+        let (pre_entry, _) = entries(host);
+        let mut pre = r.post.clone();
+        for (key, value) in r.pre.as_object().unwrap() {
+            pre[key] = value.clone();
+        }
+        let request = host.parse_request_as(&pre.to_string(), pre_entry).unwrap();
+        assert_eq!(request.event, HookEvent::PreToolUse, "{host:?}");
+        assert_eq!(
+            host.event_of_as(&pre.to_string(), pre_entry),
+            HookEvent::PreToolUse,
+            "{host:?}"
         );
     }
 }

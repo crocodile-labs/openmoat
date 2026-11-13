@@ -73,12 +73,6 @@ pub(crate) trait HostAdapter: Sync {
         HookEvent::PreToolUse
     }
 
-    /// The event a payload that names none is answered for (GitHub Copilot
-    /// CLI's camelCase payloads), even when it fails [`HostAdapter::parse`].
-    fn unnamed_event(&self, _payload: &str) -> HookEvent {
-        HookEvent::PreToolUse
-    }
-
     /// The response document the host expects on stdout.
     fn render(&self, event: &HookEvent, decision: &Decision) -> String;
 
@@ -505,6 +499,11 @@ pub struct HookSpec {
     /// fails to run, crashes or times out (Claude Code `onFailure`), where the
     /// host's version knows the key (the CLI asks the `claude` on `PATH`).
     pub block_on_failure: bool,
+    /// Whether the entry's command names its event (`guard --event <event>`),
+    /// for a host whose payload names none: the guard then reads the payload
+    /// as that event's, and never takes the event from the payload
+    /// ([`crate::Host::parse_request_as`]).
+    pub names_event: bool,
 }
 
 impl HookSpec {
@@ -521,6 +520,16 @@ impl HookSpec {
             matcher,
             timeout,
             block_on_failure,
+            names_event: false,
+        }
+    }
+
+    /// This entry, its command naming its event ([`Self::names_event`]).
+    #[must_use]
+    pub const fn naming_event(self) -> Self {
+        Self {
+            names_event: true,
+            ..self
         }
     }
 }

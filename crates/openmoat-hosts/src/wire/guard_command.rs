@@ -18,6 +18,12 @@ use std::fmt::Write as _;
 /// The guard's flag that names the state directory.
 pub const HOME_FLAG: &str = "--home";
 
+/// The guard's flag that names the hook event its entry is installed for,
+/// for a host whose payload names none (GitHub Copilot CLI's camelCase
+/// hooks): the entry, not the payload, says which event a payload answers
+/// ([`crate::HookSpec::names_event`]).
+pub const EVENT_FLAG: &str = "--event";
+
 /// The guard command of a hook entry: the binary and the state directory.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GuardCommand {
@@ -26,6 +32,9 @@ pub struct GuardCommand {
     /// The state directory, with `/` separators; `None` writes the form of
     /// releases before ADR-071, whose guard reads `MOAT_HOME`.
     pub home: Option<String>,
+    /// The hook event the entry is for ([`EVENT_FLAG`]); `None` for an entry
+    /// whose payload names its own event.
+    pub event: Option<&'static str>,
 }
 
 impl GuardCommand {
@@ -35,6 +44,17 @@ impl GuardCommand {
         Self {
             binary: binary.into(),
             home: None,
+            event: None,
+        }
+    }
+
+    /// This command for the entry `spec`: naming its event when the entry
+    /// must ([`crate::HookSpec::names_event`]).
+    #[must_use]
+    pub fn for_entry(&self, spec: &crate::HookSpec) -> Self {
+        Self {
+            event: spec.names_event.then_some(spec.event),
+            ..self.clone()
         }
     }
 
@@ -48,12 +68,16 @@ impl GuardCommand {
     }
 
     /// What follows the binary in a shell string: ` guard --host <id>`, then
-    /// ` --home <state directory>` ([`encode_home`]) when it names one.
+    /// ` --home <state directory>` ([`encode_home`]) when it names one, then
+    /// ` --event <event>` when it names one.
     #[must_use]
     pub fn shell_args(&self, id: &str) -> String {
         let mut args = format!(" guard --host {id}");
         if let Some(home) = &self.home {
             let _ = write!(args, " {HOME_FLAG} {}", encode_home(home));
+        }
+        if let Some(event) = self.event {
+            let _ = write!(args, " {EVENT_FLAG} {event}");
         }
         args
     }
@@ -67,8 +91,18 @@ impl GuardCommand {
             args.push(HOME_FLAG.to_owned());
             args.push(encode_home(home));
         }
+        if let Some(event) = self.event {
+            args.push(EVENT_FLAG.to_owned());
+            args.push(event.to_owned());
+        }
         args
     }
+}
+
+/// Whether `word` can be an event name after [`EVENT_FLAG`]: ASCII letters
+/// and `_` only, so no shell reads anything into it.
+fn is_event_word(word: &str) -> bool {
+    !word.is_empty() && word.bytes().all(|b| b.is_ascii_alphabetic() || b == b'_')
 }
 
 /// A byte [`encode_home`] writes as it is.
@@ -115,10 +149,16 @@ pub fn decode_home(word: &str) -> Option<String> {
 
 /// A shell-string command of OpenMoat's guard for host `id`, split: what
 /// comes before ` guard --host <id>` (the quoted binary, trimmed) and the
-/// state directory's word after `--home`, if any. `None` when the command is
-/// no guard command for `id`, or carries anything else after it.
+/// state directory's word after `--home`, if any. A trailing
+/// ` --event <event>` ([`EVENT_FLAG`]) belongs to the command. `None` when the
+/// command is no guard command for `id`, or carries anything else after it.
 pub(crate) fn split_guard<'c>(command: &'c str, id: &str) -> Option<(&'c str, Option<&'c str>)> {
     let command = command.trim_end();
+    let command = match command.rsplit_once(&format!(" {EVENT_FLAG} ")) {
+        Some((before, event)) if is_event_word(event) => before,
+        Some(_) => return None,
+        None => command,
+    };
     let marker = format!(" guard --host {id}");
     let at = command.rfind(&marker)?;
     let (program, rest) = (&command[..at], &command[at + marker.len()..]);
@@ -138,6 +178,10 @@ pub(crate) fn split_guard<'c>(command: &'c str, id: &str) -> Option<(&'c str, Op
 /// Whether an exec-form argument list runs OpenMoat's guard for `id`, with or
 /// without the state directory.
 pub(crate) fn is_guard_list(args: &[&str], id: &str) -> bool {
+    let args = match args {
+        [rest @ .., flag, event] if *flag == EVENT_FLAG && is_event_word(event) => rest,
+        _ => args,
+    };
     match args {
         ["guard", "--host", host] => *host == id,
         ["guard", "--host", host, flag, word] => {
@@ -214,6 +258,38 @@ mod tests {
             "'/b/om' guard --host codex",
         ] {
             assert_eq!(split_guard(other, "cursor"), None, "{other}");
+        }
+    }
+
+    /// An entry that names its event (`--event`) is still ours, with the
+    /// same binary and state directory; anything but a plain event name
+    /// after the flag is not.
+    #[test]
+    fn an_entry_naming_its_event_is_ours_and_nothing_else_after_it() {
+        let spec = crate::HookSpec::new("postToolUse", "", 60, false).naming_event();
+        let guard = GuardCommand::new("/b/om")
+            .with_home("/h/.moat")
+            .for_entry(&spec);
+        let args = guard.shell_args("copilot-cli");
+        assert_eq!(
+            args,
+            " guard --host copilot-cli --home /h/.moat --event postToolUse"
+        );
+        assert_eq!(
+            split_guard(&format!("'/b/om'{args}"), "copilot-cli"),
+            Some(("'/b/om'", Some("/h/.moat")))
+        );
+        let list = guard.arg_list("copilot-cli");
+        let list: Vec<&str> = list.iter().map(String::as_str).collect();
+        assert!(is_guard_list(&list, "copilot-cli"));
+        let plain = crate::HookSpec::new("preToolUse", "", 60, false);
+        assert_eq!(GuardCommand::new("/b/om").for_entry(&plain).event, None);
+        for other in [
+            "'/b/om' guard --host copilot-cli --home /h/.moat --event post;rm",
+            "'/b/om' guard --host copilot-cli --home /h/.moat --event ",
+            "'/b/om' guard --host copilot-cli --event postToolUse && true",
+        ] {
+            assert_eq!(split_guard(other, "copilot-cli"), None, "{other}");
         }
     }
 

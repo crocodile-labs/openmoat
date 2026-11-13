@@ -145,8 +145,9 @@ impl dyn HookFile {
     ) -> Result<HookOutcome, HookFileError> {
         let mut outcome = HookOutcome::Unchanged;
         for spec in hooks {
+            let guard = guard.for_entry(spec);
             outcome =
-                outcome.max(self.upsert_one(root, file, id, spec, guard, blocks_on_failure)?);
+                outcome.max(self.upsert_one(root, file, id, spec, &guard, blocks_on_failure)?);
         }
         Ok(outcome)
     }
@@ -240,7 +241,7 @@ impl dyn HookFile {
                         == self.entry(
                             spec,
                             id,
-                            guard,
+                            &guard.for_entry(spec),
                             self.block(spec, entry, blocks_on_failure),
                         ) =>
                 {

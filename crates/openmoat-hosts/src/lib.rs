@@ -31,7 +31,7 @@ pub use contract::{
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::claude_code::project_settings::findings as claude_code_settings_findings;
-pub use wire::guard_command::{GuardCommand, HOME_FLAG, decode_home, encode_home};
+pub use wire::guard_command::{EVENT_FLAG, GuardCommand, HOME_FLAG, decode_home, encode_home};
 pub use wire::hook_file::yaml as yaml_hooks;
 pub use wire::hook_file::{HookFile, HookFileError, HookFileState, HookOutcome};
 pub use wire::mcp_call::{
@@ -194,13 +194,68 @@ impl Host {
     /// Parse a hook payload read from the host. The event name selects the format;
     /// Claude Code and Codex may omit it on `PreToolUse`.
     pub fn parse_request(self, payload: &str) -> Result<HookRequest, HostError> {
+        self.parse_request_as(payload, None)
+    }
+
+    /// [`Host::parse_request`] for the hook entry that ran with `guard --event
+    /// <entry_event>` ([`HookSpec::names_event`]). For a host whose entries
+    /// name their event, that event alone selects the format: a payload that
+    /// names one itself is refused, and without `entry_event` (an entry from
+    /// before the flag) the payload is a call (`PreToolUse`), whatever it
+    /// carries. For any other host, `entry_event` is refused.
+    pub fn parse_request_as(
+        self,
+        payload: &str,
+        entry_event: Option<&str>,
+    ) -> Result<HookRequest, HostError> {
+        let event = self.event_name(payload, entry_event)?;
+        registry::adapter(self).parse(self, event.as_deref(), payload)
+    }
+
+    /// The event name [`Host::parse_request_as`] hands the adapter.
+    fn event_name(
+        self,
+        payload: &str,
+        entry_event: Option<&str>,
+    ) -> Result<Option<String>, HostError> {
         #[derive(serde::Deserialize)]
         struct Envelope {
             #[serde(default)]
             hook_event_name: Option<String>,
         }
         let envelope: Envelope = serde_json::from_str(payload)?;
-        registry::adapter(self).parse(self, envelope.hook_event_name.as_deref(), payload)
+        if !self.entries_name_event() {
+            return match entry_event {
+                Some(event) => Err(HostError::WrongEvent(event.to_owned())),
+                None => Ok(envelope.hook_event_name),
+            };
+        }
+        if let Some(named) = envelope.hook_event_name {
+            return Err(HostError::WrongEvent(named));
+        }
+        match entry_event {
+            Some(event) if !self.names_event(event) => Err(HostError::WrongEvent(event.to_owned())),
+            other => Ok(other.map(str::to_owned)),
+        }
+    }
+
+    /// Whether this host's hook entries name their event
+    /// ([`HookSpec::names_event`]): its payloads name none.
+    fn entries_name_event(self) -> bool {
+        self.spec()
+            .install
+            .as_ref()
+            .is_some_and(|install| install.hooks.iter().any(|hook| hook.names_event))
+    }
+
+    /// Whether one of this host's entries names `event`.
+    fn names_event(self, event: &str) -> bool {
+        self.spec().install.as_ref().is_some_and(|install| {
+            install
+                .hooks
+                .iter()
+                .any(|hook| hook.names_event && hook.event == event)
+        })
     }
 
     /// The event a payload claims to be for, read as leniently as possible, so a
@@ -208,6 +263,14 @@ impl Host {
     /// response format.
     #[must_use]
     pub fn event_of(self, payload: &str) -> HookEvent {
+        self.event_of_as(payload, None)
+    }
+
+    /// [`Host::event_of`] for the entry that ran with `guard --event
+    /// <entry_event>`: for a host whose entries name their event, that event
+    /// (`PreToolUse` without one), never the payload's.
+    #[must_use]
+    pub fn event_of_as(self, payload: &str, entry_event: Option<&str>) -> HookEvent {
         #[derive(serde::Deserialize)]
         struct Envelope {
             hook_event_name: Option<String>,
@@ -215,10 +278,17 @@ impl Host {
             #[serde(rename = "hookName")]
             hook_name: Option<String>,
         }
+        if self.entries_name_event() {
+            return entry_event
+                .filter(|event| self.names_event(event))
+                .map_or(HookEvent::PreToolUse, |event| {
+                    registry::adapter(self).event_of(event)
+                });
+        }
         match serde_json::from_str::<Envelope>(payload) {
             Ok(e) => match e.hook_event_name.or(e.hook_name) {
                 Some(event) => registry::adapter(self).event_of(&event),
-                None => registry::adapter(self).unnamed_event(payload),
+                None => HookEvent::PreToolUse,
             },
             Err(_) => HookEvent::PreToolUse,
         }

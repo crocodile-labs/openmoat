@@ -232,7 +232,9 @@ matcher, timeout) of the spec's `install.hooks` to the agent's hook file, in the
 layout `install.hook_file` names. It must stay idempotent (invariant 8):
 
 - Our entries are recognised by their command, `guard --host <id>` and then
-  `--home <state directory>` (ADR-071); re-running `init` updates them in place and
+  `--home <state directory>` (ADR-071), and `--event <event>` for an entry whose
+  `HookSpec` is `naming_event()` (an agent whose payloads name no event, so the entry
+  says which event a payload is for); re-running `init` updates them in place and
   never adds a second one. Build the command from `GuardCommand`
   (`wire/guard_command.rs`) and recognise it with its functions, never by hand: the
   guard trusts the state directory on its command line, not its environment.

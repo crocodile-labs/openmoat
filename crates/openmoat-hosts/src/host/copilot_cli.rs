@@ -51,10 +51,12 @@ pub(crate) const EVENT: &str = "preToolUse";
 /// `postToolUse` reports what a call returned (ADR-063), for every tool for
 /// the same reason; the guard keeps fingerprints only of output from outside
 /// (`CompiledPolicy::output_source`). It runs after the call and has nothing
-/// to block.
+/// to block. The camelCase payloads name no event, so each entry names its
+/// own (`guard --event <event>`): the entry, never the payload, says whether
+/// a payload is a call to decide.
 const HOOKS: &[HookSpec] = &[
-    HookSpec::new(EVENT, "", TOOL_HOOK_TIMEOUT_S, false),
-    HookSpec::new(post_tool_use::EVENT, "", CONFIG_HOOK_TIMEOUT_S, false),
+    HookSpec::new(EVENT, "", TOOL_HOOK_TIMEOUT_S, false).naming_event(),
+    HookSpec::new(post_tool_use::EVENT, "", CONFIG_HOOK_TIMEOUT_S, false).naming_event(),
 ];
 
 pub(crate) static SPEC: HostSpec = HostSpec {
@@ -156,9 +158,9 @@ impl HostAdapter for Adapter {
         &SPEC
     }
 
-    /// The camelCase payload names no event; a payload that names one other
-    /// than `preToolUse` is not this hook's. One with a `toolResult` is a
-    /// `postToolUse` ([`post_tool_use`]).
+    /// The camelCase payload names no event: `event` is the one the entry
+    /// named (`guard --event`, [`crate::Host::parse_request_as`]). Without one
+    /// (an entry from before the flag) the payload is a call.
     fn parse(
         &self,
         host: Host,
@@ -166,19 +168,19 @@ impl HostAdapter for Adapter {
         payload: &str,
     ) -> Result<HookRequest, HostError> {
         match event {
-            None if post_tool_use::is_after_call(payload) => post_tool_use::parse(host, payload),
             None | Some(EVENT) => parse(host, payload),
+            Some(post_tool_use::EVENT) => post_tool_use::parse(host, payload),
             other => Err(wrong_event(other)),
         }
     }
 
-    fn unnamed_event(&self, payload: &str) -> HookEvent {
-        if post_tool_use::is_after_call(payload) {
-            HookEvent::PostToolUse {
+    /// `postToolUse` is what a call returned (ADR-057).
+    fn event_of(&self, event: &str) -> HookEvent {
+        match event {
+            post_tool_use::EVENT => HookEvent::PostToolUse {
                 output: String::new(),
-            }
-        } else {
-            HookEvent::PreToolUse
+            },
+            _ => HookEvent::PreToolUse,
         }
     }
 

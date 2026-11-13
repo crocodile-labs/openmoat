@@ -38,12 +38,13 @@ fn writes_a_hook_file_of_its_own_with_a_command_per_shell() {
         Outcome::Installed
     );
     assert!(cfg.settings_path.ends_with("hooks/openmoat.json"));
-    // `postToolUse` reports what a call returned (ADR-063).
-    let entry = |timeout: u64| {
+    // `postToolUse` reports what a call returned (ADR-063). The payloads name
+    // no event, so each entry names its own.
+    let entry = |event: &str, timeout: u64| {
         json!([{
             "type": "command",
-            "bash": r"'/Users/o'\''neil/bin/openmoat' guard --host copilot-cli --home /h/.moat",
-            "powershell": "& '/Users/o''neil/bin/openmoat' guard --host copilot-cli --home /h/.moat",
+            "bash": format!(r"'/Users/o'\''neil/bin/openmoat' guard --host copilot-cli --home /h/.moat --event {event}"),
+            "powershell": format!("& '/Users/o''neil/bin/openmoat' guard --host copilot-cli --home /h/.moat --event {event}"),
             "timeoutSec": timeout,
         }])
     };
@@ -51,7 +52,10 @@ fn writes_a_hook_file_of_its_own_with_a_command_per_shell() {
         root(&cfg),
         json!({
             "version": 1,
-            "hooks": {"preToolUse": entry(600), "postToolUse": entry(60)},
+            "hooks": {
+                "preToolUse": entry("preToolUse", 600),
+                "postToolUse": entry("postToolUse", 60),
+            },
         })
     );
     assert_eq!(state(&cfg, binary), HookState::Installed);
@@ -97,4 +101,33 @@ fn removing_leaves_nothing_of_ours_and_keeps_other_hooks() {
         json!({"version": 1, "hooks": {"preToolUse": [{"type": "command", "bash": "./audit.sh"}]}})
     );
     assert!(!remove(&mut shared, &cfg));
+}
+
+/// An entry from before `--event` is still OpenMoat's (its payloads are decided
+/// as calls), and stale until `init` rewrites it with the flag.
+#[test]
+fn an_entry_without_its_event_is_stale_until_init_names_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = config(dir.path());
+    let home = Home::at(dir.path().join("state"));
+    let binary = Path::new("/x/openmoat");
+    install(&home, &cfg, binary, false).unwrap();
+    let mut doc = root(&cfg);
+    for shell in ["bash", "powershell"] {
+        let command = doc["hooks"]["preToolUse"][0][shell].as_str().unwrap();
+        let old = command.replace(" --event preToolUse", "");
+        doc["hooks"]["preToolUse"][0][shell] = old.into();
+    }
+    doc["hooks"].as_object_mut().unwrap().remove("postToolUse");
+    fs::write(&cfg.settings_path, doc.to_string()).unwrap();
+    assert!(matches!(state(&cfg, binary), HookState::Stale { .. }));
+    assert_eq!(
+        install(&home, &cfg, binary, false).unwrap(),
+        Outcome::Installed
+    );
+    assert_eq!(state(&cfg, binary), HookState::Installed);
+    let hooks = &root(&cfg)["hooks"];
+    assert_eq!(hooks["preToolUse"].as_array().unwrap().len(), 1, "{hooks}");
+    let bash = hooks["preToolUse"][0]["bash"].as_str().unwrap();
+    assert!(bash.ends_with(" --event preToolUse"), "{bash}");
 }

@@ -61,6 +61,11 @@ once per tool call and exits. There is no daemon. The state directory comes from
 `--home` that `openmoat init` wrote into the hook and the lock pins, never from the
 hook's environment; a `MOAT_HOME` that names another directory is a deny (ADR-071,
 `home/pinned.rs`). A hook written before ADR-071 has no `--home` and reads `MOAT_HOME`.
+For an agent whose payloads name no event (GitHub Copilot CLI), each entry also names its
+event, `--event <event>` (`HookSpec::names_event`): the guard reads the payload as that
+event's (`Host::parse_request_as`), refuses a payload that names one itself, and reads an
+entry's payload without the flag as a call. `openmoat run` relays the event with the
+payload (`guard_relay/wire.rs`).
 
 1. **Read.** At most 1 MiB of UTF-8 from stdin. An empty or unreadable payload is a
    `kernel-error` deny.

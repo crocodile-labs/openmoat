@@ -41,3 +41,9 @@ CLI hooks reference names the same `toolResult` fields ("Payload fields",
 `postToolUse`). The values are made up: the run's call was a harmless `echo`, and
 these carry a fetched page that names a host and a command.
 `post-malformed.json` has no `textResultForLlm`, so the adapter refuses it.
+
+`pre-with-tool-result.json` is an attack, not a capture: a call that uploads a key,
+with a well-formed `toolResult` added. The payload never says which event it is for;
+the entry does (`guard --event preToolUse` or `--event postToolUse`, written by
+`openmoat init`), so this payload reaching the `preToolUse` entry, or an entry from
+before `--event`, is decided as a call and denied.

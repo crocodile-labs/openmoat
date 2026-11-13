@@ -10,6 +10,7 @@
 
 use std::fs;
 use std::path::Path;
+use std::process::Output;
 
 use serde_json::{Value, json};
 
@@ -33,6 +34,9 @@ struct Agent {
     answer: fn(&Value) -> (String, String),
     /// What the agent receives for a `review`.
     review: &'static str,
+    /// The events its pre-call and after-call entries name (`guard --event`),
+    /// where its payloads name none.
+    events: (Option<&'static str>, Option<&'static str>),
 }
 
 fn codex_call(cwd: &Path, command: &str, output: Option<&str>) -> Value {
@@ -112,6 +116,7 @@ const AGENTS: [Agent; 3] = [
         answer: pre_tool_use_answer,
         // Codex cannot prompt.
         review: "deny",
+        events: (None, None),
     },
     Agent {
         id: "gemini-cli",
@@ -121,6 +126,7 @@ const AGENTS: [Agent; 3] = [
         call: gemini_call,
         answer: decision_answer,
         review: "ask",
+        events: (None, None),
     },
     Agent {
         id: "copilot-cli",
@@ -130,12 +136,21 @@ const AGENTS: [Agent; 3] = [
         call: copilot_call,
         answer: copilot_answer,
         review: "ask",
+        events: (Some("preToolUse"), Some("postToolUse")),
     },
 ];
 
-/// The verdict and reason `agent` receives for `payload`.
+/// `guard` as `agent`'s entry for `event` runs it: `--event` where the entry
+/// names it.
+fn guard(sb: &Sandbox, agent: &Agent, event: Option<&str>, payload: &Value) -> Output {
+    let mut args = vec!["guard", "--host", agent.id];
+    args.extend(event.iter().flat_map(|event| ["--event", *event]));
+    sb.moat_stdin(&args, &payload.to_string())
+}
+
+/// The verdict and reason `agent` receives for `payload`, a call.
 fn decide(sb: &Sandbox, agent: &Agent, payload: &Value) -> (String, String) {
-    let out = sb.guard(agent.id, &payload.to_string());
+    let out = guard(sb, agent, agent.events.0, payload);
     let reply: Value = serde_json::from_str(stdout(&out).trim()).unwrap_or(Value::Null);
     let (verdict, reason) = (agent.answer)(&reply);
     (verdict, format!("{reason} {}", stderr(&out)))
@@ -157,7 +172,8 @@ fn a_host_a_fetched_page_named_makes_a_later_curl_to_it_need_review_on_each_agen
         );
         let proj = sb.project();
         decide(&sb, agent, &(agent.call)(&proj, FETCH, None));
-        let out = sb.guard(id, &(agent.call)(&proj, FETCH, Some(PAGE)).to_string());
+        let report = (agent.call)(&proj, FETCH, Some(PAGE));
+        let out = guard(&sb, agent, agent.events.1, &report);
         assert_eq!(out.status.code(), Some(OK), "{id}: {}", text(&out));
         assert_eq!(stdout(&out), "", "{id}: nothing is for the model");
 
@@ -192,7 +208,7 @@ fn a_report_without_its_result_fails_the_hook_and_keeps_nothing() {
             // one; a `toolResult` without its text is the malformed report.
             fields.insert("toolResult".into(), json!({"resultType": "success"}));
         }
-        let out = sb.guard(id, &report.to_string());
+        let out = guard(&sb, agent, agent.events.1, &report);
         assert_eq!(out.status.code(), Some(DENY), "{id}: {}", text(&out));
         assert!(
             stderr(&out).contains("kernel-error"),

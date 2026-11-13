@@ -47,6 +47,7 @@ fn request(token: &str, payload: &str) -> Request {
         cwd: "/p".to_owned(),
         caller_set: true,
         payload: payload.to_owned(),
+        event: None,
     }
 }
 
@@ -76,6 +77,18 @@ fn a_request_and_a_reply_read_back_as_written() {
     assert!(wire.starts_with(REPLY_MAGIC));
     let read = Reply::read_from(&mut Cursor::new(&wire), &sent.nonce).unwrap();
     assert_eq!(read, answer);
+}
+
+/// The event a hook's entry named (`guard --event`) reaches the run with the
+/// payload, so the run reads the payload as that event's.
+#[test]
+fn the_entry_s_event_reads_back_and_a_request_without_one_has_none() {
+    let mut sent = request(token(), "{\"toolName\":\"bash\"}");
+    sent.event = Some("postToolUse".to_owned());
+    let wire = bytes_of(|out| sent.write_to(out).unwrap());
+    assert_eq!(Request::read_from(&mut Cursor::new(&wire)).unwrap(), sent);
+    sent.event = Some("x".repeat(65));
+    assert!(sent.write_to(&mut Vec::new()).is_err());
 }
 
 #[test]

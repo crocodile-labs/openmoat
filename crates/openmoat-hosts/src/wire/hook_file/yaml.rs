@@ -103,7 +103,7 @@ pub fn upsert(
     };
     let mut doc = Lines::of(text);
     for spec in hooks {
-        let entry = layout.entry(spec, id, guard, false);
+        let entry = layout.entry(spec, id, &guard.for_entry(spec), false);
         doc.upsert(spec.event, &entry, layout, id)
             .map_err(layout_error)?;
     }
@@ -185,7 +185,9 @@ fn entries_text(
         out.push_str("  ");
         out.push_str(spec.event);
         out.push_str(":\n");
-        for line in item_lines(&layout.entry(spec, id, guard, false), 4).unwrap_or_default() {
+        for line in item_lines(&layout.entry(spec, id, &guard.for_entry(spec), false), 4)
+            .unwrap_or_default()
+        {
             out.push_str(&line);
             out.push('\n');
         }

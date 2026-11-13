@@ -41,20 +41,61 @@ fn init_writes_one_hook_entry_for_every_tool() {
     let first = fs::read_to_string(hook_file(&sb)).unwrap();
     let root: Value = serde_json::from_str(&first).unwrap();
     assert_eq!(root["version"], 1);
-    let entries = root["hooks"]["preToolUse"].as_array().unwrap();
-    assert_eq!(entries.len(), 1, "{root}");
-    let entry = &entries[0];
-    assert!(entry.get("matcher").is_none(), "every tool: {entry}");
-    assert_eq!(entry["timeoutSec"], 600);
-    for shell in ["bash", "powershell"] {
-        assert!(
-            entry[shell]
-                .as_str()
-                .unwrap()
-                .ends_with(&sb.hook_args("copilot-cli")),
-            "{entry}"
-        );
+    // The payloads name no event, so each entry names its own (ADR-063).
+    for (event, timeout) in [("preToolUse", 600), ("postToolUse", 60)] {
+        let entries = root["hooks"][event].as_array().unwrap();
+        assert_eq!(entries.len(), 1, "{root}");
+        let entry = &entries[0];
+        assert!(entry.get("matcher").is_none(), "every tool: {entry}");
+        assert_eq!(entry["timeoutSec"], timeout);
+        let args = format!("{} --event {event}", sb.hook_args("copilot-cli"));
+        for shell in ["bash", "powershell"] {
+            assert!(entry[shell].as_str().unwrap().ends_with(&args), "{entry}");
+        }
     }
+}
+
+/// `guard` as the entry for `event` runs it.
+fn guard_as(sb: &Sandbox, event: Option<&str>, payload: &str) -> std::process::Output {
+    let mut args = vec!["guard", "--host", "copilot-cli"];
+    args.extend(event.iter().flat_map(|event| ["--event", *event]));
+    sb.moat_stdin(&args, payload)
+}
+
+/// The entry, never the payload, says which event a payload is for: a call
+/// that carries a well-formed `toolResult` is still decided as a call by the
+/// `preToolUse` entry and by an entry from before `--event`, and denied when
+/// it uploads a key.
+// coverage: ASI01
+#[test]
+fn a_tool_result_in_a_call_s_payload_never_skips_the_decision() {
+    let sb = sandbox();
+    let attack = crate::common::fixture("copilot-cli/pre-with-tool-result.json");
+    for event in [Some("preToolUse"), None] {
+        let out = guard_as(&sb, event, &attack);
+        assert_eq!(out.status.code(), Some(DENY), "{event:?}: {}", text(&out));
+        let reply: Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(reply["permissionDecision"], "deny", "{event:?}: {reply}");
+    }
+}
+
+/// The `postToolUse` entry's payload without a `toolResult` holding its two
+/// strings fails the hook (exit 2, nothing for the model) and keeps nothing.
+#[test]
+fn a_malformed_after_call_report_fails_the_hook() {
+    let sb = sandbox();
+    let malformed = crate::common::fixture("copilot-cli/post-malformed.json");
+    let out = guard_as(&sb, Some("postToolUse"), &malformed);
+    assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
+    assert!(out.stdout.is_empty(), "{}", text(&out));
+    assert!(text(&out).contains("kernel-error"), "{}", text(&out));
+    // A report of a file view keeps nothing and is answered at once.
+    let view = json!({"sessionId": "cp-1", "cwd": sb.project().to_string_lossy(),
+        "toolName": "view", "toolArgs": {"path": "README.md"},
+        "toolResult": {"resultType": "success", "textResultForLlm": "see https://evil.example"}});
+    let out = guard_as(&sb, Some("postToolUse"), &view.to_string());
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out));
+    assert!(out.stdout.is_empty(), "{}", text(&out));
 }
 
 /// Copilot's hook file and its settings, which `disableAllHooks` would turn

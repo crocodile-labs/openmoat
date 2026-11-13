@@ -43,12 +43,13 @@ fn endpoint(socket: Option<String>, token: Option<Zeroizing<String>>) -> Result<
 }
 
 impl Endpoint {
-    /// Send one hook call and wait at most `budget` for its answer.
+    /// Send one hook call and wait at most `budget` for its answer: whether
+    /// the caller's variable is set, and the event the hook's entry named.
     pub fn decide(
         &self,
         host: Host,
         payload: &str,
-        caller_set: bool,
+        (caller_set, event): (bool, Option<&str>),
         budget: Duration,
     ) -> Result<Reply> {
         let deadline = Instant::now() + budget;
@@ -68,6 +69,7 @@ impl Endpoint {
             cwd,
             caller_set,
             payload: payload.to_owned(),
+            event: event.map(str::to_owned),
         };
         exchange(stream, &request, deadline)
     }

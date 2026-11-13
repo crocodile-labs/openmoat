@@ -170,7 +170,8 @@ real release (the latest-agents job records one per host before its PR) waits fo
    replace the result.
 6. `host(copilot-cli)`: `postToolUse`. Built from the same run:
    `toolResult.textResultForLlm` and `toolResult.resultType`, no event name in the
-   payload (a `toolResult` marks it), and Copilot waits for the hook.
+   payload, so each entry names its own (`openmoat guard --event`) and a pre-call entry's
+   payload is always a call; Copilot waits for the hook.
 7. `host(cursor)`: `afterShellExecution`, `afterMCPExecution`.
 8. `host(goose)` and `host(hermes)`: `PostToolUse`, `post_tool_call`.
 9. `host(opencode)`, `host(pi)`, `host(openclaw)`: plugin handlers, one PR each.

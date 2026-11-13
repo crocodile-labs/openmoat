@@ -19,9 +19,15 @@ Empty output leaves the call to Copilot's own permission flow (`defer`).
 the model gets), with `toolArgs` as an object: the weekly latest-agents run 42853181916
 (2026-11-10) recorded these fields from a real Copilot CLI, and the
 [CLI hooks reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference)
-lists `toolResult` for `postToolUse` only. Neither payload names its event, so a
-`toolResult` is what makes it an after-call report; a `toolResult` without its text is an
-error (exit 2), and a payload without one is decided as a call. Copilot waits for the
+lists `toolResult` for `postToolUse` only. Neither payload names its event, so each entry
+names its own on the guard's command line (`openmoat guard --host copilot-cli --event
+preToolUse` or `--event postToolUse`): the entry, never the payload, says whether a
+payload is a call. A `preToolUse` payload is decided as a call whatever it carries, a
+`toolResult` included; a `postToolUse` payload without a `toolResult` holding the strings
+`resultType` and `textResultForLlm` is an error (exit 2). An entry from before `--event`
+is decided as a call, and `openmoat status` and `doctor` report the hook as needing
+`openmoat init`. A report of a tool whose output never comes from outside (a file view or
+edit, a search over files, an ungoverned tool) is answered at once, with no other work. Copilot waits for the
 hook before its next model request (the same run). OpenMoat answers it with nothing; a
 non-zero exit or a timeout is logged and the run goes on. It fires only after a call that
 succeeded: `postToolUseFailure`, for a failed one, is not installed.
