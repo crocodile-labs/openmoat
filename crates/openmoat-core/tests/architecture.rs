@@ -173,6 +173,134 @@ fn modules_use_one_file_style() {
     );
 }
 
+/// The only files of the workspace that may lift the `unsafe_code` lint, which
+/// is `forbid` everywhere else. Shrink only: a new entry needs an ADR, and an
+/// entry whose file no longer names the lint fails, so it must be removed.
+/// `openmoat-wasm`'s exports need a fixed symbol name (ADR-046); `openmoat run`
+/// marks the descriptors it inherited close-on-exec by number (ADR-088).
+const UNSAFE_ALLOWED: &[&str] = &[
+    "openmoat-wasm/src/lib.rs",
+    "openmoat-cli/src/commands/run/inherited.rs",
+];
+
+/// Where a crate's Rust code lives: every `.rs` file below these, and `build.rs`.
+const CODE_DIRS: &[&str] = &["src", "tests", "benches", "examples"];
+
+/// `unsafe` is held in three places:
+/// - the workspace's `unsafe_code` is `forbid`, and every crate either takes
+///   the workspace's lints or sets `unsafe_code` itself: `forbid`, or `deny`
+///   only in a crate that owns a file of [`UNSAFE_ALLOWED`];
+/// - no other file names the lint or opens an `unsafe` block (under `deny`,
+///   each use needs an `#[expect(unsafe_code)]`, so the name finds them all;
+///   under `forbid` nothing compiles);
+/// - each listed file still names it.
+#[test]
+fn unsafe_stays_in_the_listed_files() {
+    // This file names the lint in its checks; its crate is `forbid`, held below.
+    const THIS: &str = "openmoat-core/tests/architecture.rs";
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml");
+    let workspace = entries(&fs::read_to_string(root).unwrap(), "[workspace.lints.rust]");
+    let mut offenders = Vec::new();
+    if lint_level(&workspace) != Some("forbid") {
+        offenders.push("the workspace's `unsafe_code` is not `forbid`".to_owned());
+    }
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut named = Vec::new();
+    for entry in fs::read_dir(&crates).unwrap() {
+        let krate = entry.unwrap().path();
+        let manifest = krate.join("Cargo.toml");
+        if !manifest.is_file() {
+            continue;
+        }
+        let name = krate.file_name().unwrap().to_string_lossy().into_owned();
+        let prefix = format!("{name}/");
+        let owns_listed = UNSAFE_ALLOWED.iter().any(|f| f.starts_with(&prefix));
+        let toml = fs::read_to_string(&manifest).unwrap();
+        let inherits = entries(&toml, "[lints]")
+            .iter()
+            .any(|(key, value)| key == "workspace" && value == "true");
+        let own = entries(&toml, "[lints.rust]");
+        let level = if inherits {
+            Some("forbid")
+        } else {
+            lint_level(&own)
+        };
+        match level {
+            Some("forbid") => {}
+            Some("deny") if owns_listed => {}
+            other => offenders.push(format!("{name}: `unsafe_code` is {other:?}")),
+        }
+        let mut files = Vec::new();
+        for dir in CODE_DIRS {
+            let dir = krate.join(dir);
+            if dir.is_dir() {
+                visit(&dir, &mut |path| files.push(path.to_path_buf()));
+            }
+        }
+        files.extend(Some(krate.join("build.rs")).filter(|p| p.is_file()));
+        for path in files {
+            let rel = path.strip_prefix(&krate).unwrap().components();
+            let rel: Vec<_> = rel.map(|c| c.as_os_str().to_string_lossy()).collect();
+            let key = format!("{name}/{}", rel.join("/"));
+            let hits = unsafe_lines(&fs::read_to_string(&path).unwrap());
+            if UNSAFE_ALLOWED.contains(&key.as_str()) {
+                if !hits.is_empty() {
+                    named.push(key);
+                }
+            } else if key != THIS {
+                offenders.extend(hits.iter().map(|n| format!("{key}:{n}")));
+            }
+        }
+    }
+    for listed in UNSAFE_ALLOWED {
+        if !named.iter().any(|k| k == listed) {
+            offenders.push(format!(
+                "{listed} is listed but no longer names `unsafe_code`: remove it"
+            ));
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "`unsafe` outside what is listed:\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// The numbers of the lines of `text` whose code (before any `//`) names the
+/// lint or opens an `unsafe` block.
+fn unsafe_lines(text: &str) -> Vec<usize> {
+    text.lines()
+        .enumerate()
+        .filter(|(_, line)| {
+            let code = line.split("//").next().unwrap_or("");
+            code.contains("unsafe_code") || code.contains("unsafe {")
+        })
+        .map(|(n, _)| n + 1)
+        .collect()
+}
+
+/// The `unsafe_code` level among `entries`, unquoted.
+fn lint_level(entries: &[(String, String)]) -> Option<&str> {
+    entries
+        .iter()
+        .find(|(key, _)| key == "unsafe_code")
+        .map(|(_, value)| value.trim_matches('"'))
+}
+
+/// The `key = value` lines of the TOML table `header`, comments dropped.
+fn entries(toml: &str, header: &str) -> Vec<(String, String)> {
+    toml.lines()
+        .skip_while(|l| l.trim() != header)
+        .skip(1)
+        .take_while(|l| !l.trim_start().starts_with('['))
+        .filter_map(|l| {
+            let line = l.split('#').next()?;
+            let (key, value) = line.split_once('=')?;
+            Some((key.trim().to_owned(), value.trim().to_owned()))
+        })
+        .collect()
+}
+
 const FORBIDDEN_IN_CORE: &[&str] = &[
     "std::fs",
     "std::env",

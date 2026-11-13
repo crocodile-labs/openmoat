@@ -110,7 +110,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **sandbox**: Linux: `differential::claude::hostile_scripts_meet_the_claude_code_sandbox`; macOS: `differential::claude::hostile_scripts_meet_the_claude_code_sandbox`.
 - **run**: Linux: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `differential::scripts::executing::hostile_scripts_meet_the_isolated_tier`; macOS: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`.
 - **mcp**: Linux: `differential::agents::scenarios::real_claude_changed_mcp_server_is_denied`, `mcp_startup::an_unaccepted_definition_never_starts_and_an_accepted_one_does`, the weekly `latest agents` job (`claude-code`); macOS: `differential::agents::scenarios::real_claude_changed_mcp_server_is_denied`, `mcp_startup::an_unaccepted_definition_never_starts_and_an_accepted_one_does`, the weekly `latest agents` job (`claude-code`); Windows: no evidence yet.
-- **credentials**: Linux: `run::agent_logins::the_running_agent_keeps_its_login_and_cannot_read_another_agents`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::agent_logins::the_running_agent_keeps_its_login_and_cannot_read_another_agents`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
+- **credentials**: Linux: `run::agent_logins::the_running_agent_keeps_its_login_and_cannot_read_another_agents`, `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::agent_logins::the_running_agent_keeps_its_login_and_cannot_read_another_agents`, `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/claude_code/fixtures/bash.json`.
 - **hook-failure facts** come from: [1](https://code.claude.com/docs/en/hooks).
 
@@ -122,7 +122,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **sandbox**: Linux: `differential::codex::hostile_scripts_meet_the_codex_profile`; macOS: `differential::codex::hostile_scripts_meet_the_codex_profile`; Windows: no evidence yet.
 - **run**: Linux: `differential::agents::in_run::real_codex_starts_inside_moat_run_and_its_hook_is_decided_outside`, `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `differential::scripts::executing::hostile_scripts_meet_the_isolated_tier`; macOS: `differential::agents::in_run::real_codex_starts_inside_moat_run_and_its_hook_is_decided_outside`, `differential::scripts::executing::hostile_scripts_meet_the_os_layer`.
 - **mcp**: Linux: no evidence yet; macOS: no evidence yet; Windows: no evidence yet.
-- **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
+- **credentials**: Linux: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/codex/fixtures/pretooluse-shell.json`.
 - **hook-failure facts** come from: [1](https://learn.chatgpt.com/docs/hooks) [2](https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/hooks/src/engine/command_runner.rs#L417).
 
@@ -134,7 +134,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **sandbox**: Linux: no evidence yet; macOS: no evidence yet.
 - **run**: Linux: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `differential::scripts::executing::hostile_scripts_meet_the_isolated_tier`; macOS: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`.
 - **mcp**: Linux: no evidence yet; macOS: no evidence yet; Windows: no evidence yet.
-- **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
+- **credentials**: Linux: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/cursor/fixtures/beforeShellExecution.json`.
 - **hook-failure facts** come from: [1](https://cursor.com/docs/agent/hooks).
 - The weekly job's `cursor` run proves no hook call: every `cursor-agent` run needs a Cursor account, so the job never starts the agent.
@@ -155,7 +155,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **hook-failure**: Linux: the weekly `latest agents` job (`copilot-cli`); macOS: the weekly `latest agents` job (`copilot-cli`); Windows: no evidence yet.
 - **run**: Linux: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `differential::scripts::executing::hostile_scripts_meet_the_isolated_tier`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`, `hook_only::launch::each_hook_only_agent_holds_under_isolate`; macOS: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`.
 - **mcp**: Linux: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; macOS: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; Windows: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`.
-- **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
+- **credentials**: Linux: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/copilot_cli/fixtures/bash.json`.
 - **hook-failure facts** come from: [1](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference).
 
@@ -166,7 +166,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **hook-failure**: Linux: the weekly `latest agents` job (`pi`); macOS: no evidence yet; Windows: no evidence yet.
 - **run**: Linux: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `differential::scripts::executing::hostile_scripts_meet_the_isolated_tier`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`, `hook_only::launch::each_hook_only_agent_holds_under_isolate`; macOS: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`.
 - **mcp**: Linux: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; macOS: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; Windows: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`.
-- **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
+- **credentials**: Linux: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/pi/fixtures/bash.json`.
 - **hook-failure facts** come from: [1](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md).
 
@@ -177,7 +177,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **hook-failure**: Linux: the weekly `latest agents` job (`gemini-cli`); macOS: no evidence yet; Windows: no evidence yet.
 - **run**: Linux: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `differential::scripts::executing::hostile_scripts_meet_the_isolated_tier`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`, `hook_only::launch::each_hook_only_agent_holds_under_isolate`; macOS: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`.
 - **mcp**: Linux: no evidence yet; macOS: no evidence yet; Windows: no evidence yet.
-- **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
+- **credentials**: Linux: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/gemini_cli/fixtures/run_shell_command.json`.
 - **hook-failure facts** come from: [1](https://geminicli.com/docs/hooks/reference/).
 
@@ -188,7 +188,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **hook-failure**: Linux: the weekly `latest agents` job (`opencode-1`); macOS: the weekly `latest agents` job (`opencode-1`); Windows: no evidence yet.
 - **run**: Linux: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `differential::scripts::executing::hostile_scripts_meet_the_isolated_tier`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`, `hook_only::launch::each_hook_only_agent_holds_under_isolate`; macOS: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`.
 - **mcp**: Linux: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; macOS: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; Windows: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`.
-- **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
+- **credentials**: Linux: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/opencode/fixtures/bash.json`, `crates/openmoat-hosts/src/host/opencode/fixtures/v2-shell.json`.
 - **hook-failure facts** come from: [1](https://opencode.ai/docs/build/plugins/server).
 - The weekly job's `opencode-2` run proves no hook call: it checks only that OpenCode 2 reports OpenMoat's plugin active; no model call is driven through it yet.
@@ -200,7 +200,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **hook-failure**: Linux: no evidence yet; macOS: no evidence yet; Windows: no evidence yet.
 - **run**: Linux: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `differential::scripts::executing::hostile_scripts_meet_the_isolated_tier`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`, `hook_only::launch::each_hook_only_agent_holds_under_isolate`; macOS: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`.
 - **mcp**: Linux: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; macOS: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; Windows: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`.
-- **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
+- **credentials**: Linux: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/hermes/fixtures/terminal.json`.
 - **hook-failure facts** come from: [1](https://github.com/NousResearch/hermes-agent/blob/v0.22.5/agent/shell_hooks.py).
 - The weekly job's `hermes` run proves no hook call: `hermes hooks test` runs OpenMoat's hook through the code a session uses, but no model turn dispatches to it.
@@ -212,7 +212,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **hook-failure**: Linux: the weekly `latest agents` job (`cline`); macOS: the weekly `latest agents` job (`cline`); Windows: no evidence yet.
 - **run**: Linux: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `differential::scripts::executing::hostile_scripts_meet_the_isolated_tier`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`, `hook_only::launch::each_hook_only_agent_holds_under_isolate`; macOS: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`.
 - **mcp**: Linux: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; macOS: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; Windows: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`.
-- **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
+- **credentials**: Linux: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/cline/fixtures/run_commands.json`.
 - **hook-failure facts** come from: [1](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/hook-file-hooks.ts) [2](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/subprocess-runner.ts).
 
@@ -223,7 +223,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **hook-failure**: Linux: the weekly `latest agents` job (`goose`); macOS: the weekly `latest agents` job (`goose`); Windows: no evidence yet.
 - **run**: Linux: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `differential::scripts::executing::hostile_scripts_meet_the_isolated_tier`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`, `hook_only::launch::each_hook_only_agent_holds_under_isolate`; macOS: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`.
 - **mcp**: Linux: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; macOS: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`; Windows: `hosts::settings::a_changed_mcp_server_holds_back_only_its_tools`.
-- **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
+- **credentials**: Linux: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/goose/fixtures/shell.json`.
 - **hook-failure facts** come from: [1](https://github.com/aaif-goose/goose/blob/v1.57.0/crates/goose/src/hooks/mod.rs).
 
@@ -234,7 +234,7 @@ guard`; they test OpenMoat's side, not the agent, so they never make a hook prot
 - **hook-failure**: Linux: the weekly `latest agents` job (`antigravity-cli`); macOS: the weekly `latest agents` job (`antigravity-cli`); Windows: no evidence yet.
 - **run**: Linux: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `differential::scripts::executing::hostile_scripts_meet_the_isolated_tier`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`, `hook_only::launch::each_hook_only_agent_holds_under_isolate`; macOS: `differential::scripts::executing::hostile_scripts_meet_the_os_layer`, `hook_only::launch::each_hook_only_agent_holds_under_openmoat_run`.
 - **mcp**: Linux: no evidence yet; macOS: no evidence yet; Windows: no evidence yet.
-- **credentials**: Linux: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
+- **credentials**: Linux: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`; macOS: `run::inherited_fds::descriptors_the_launcher_left_open_do_not_reach_a_command`, `run::strict::a_planted_credential_does_not_reach_a_command_and_an_added_variable_does`.
 - **fixtures** the weekly job sends `openmoat guard` in the agent's format: `crates/openmoat-hosts/src/host/antigravity_cli/fixtures/run_command.json`.
 - **hook-failure facts** come from: [1](https://antigravity.google/docs/hooks?tab=cli) [2](https://github.com/crocodile-labs/openmoat/actions/runs/43254846914).
 

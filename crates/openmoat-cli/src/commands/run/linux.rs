@@ -512,6 +512,11 @@ impl Confined {
             watch,
             ..
         } = self;
+        // Landlock does not check a file opened before its rules apply, and
+        // bubblewrap passes every open descriptor on. Here, before the rules:
+        // the walk where `close_range` is missing reads `/proc`. Inside
+        // bubblewrap (`isolate::inside`) this runs again before the agent.
+        super::inherited::close_on_exec()?;
         let Some((ruleset, filters)) = restrict else {
             return command.status().context("starting bubblewrap");
         };

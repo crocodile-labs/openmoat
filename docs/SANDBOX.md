@@ -399,6 +399,22 @@ bubblewrap.
   start there instead (exit 64); the default, `--netns=auto`, is the behaviour above.
   A policy with `require.run: full-boundary` ([POLICY.md §9.3](POLICY.md#93-requiring-openmoat-runs-full-boundary-requirerun))
   refuses there too, whatever `--netns` says.
+- **Files the launcher left open.** Landlock and Seatbelt check a path when it is
+  opened, not a descriptor opened before, so a file, socket or directory that the
+  shell, IDE or CI runner starting `openmoat run` left open (`exec 3<~/.ssh/id_rsa`)
+  would read past every rule. Before the agent starts, `openmoat run` marks every
+  descriptor from 3 up close-on-exec (`close_range` on Linux, else a walk of
+  `/proc/self/fd` or `/dev/fd`; on macOS the walk), so the agent gets only standard
+  input, output and error, and a read of another fails with `EBADF`. Where that cannot
+  be done, `openmoat run` refuses to start the agent (ADR-088).
+
+  ```bash
+  bash -c 'exec 3<~/.ssh/id_rsa; openmoat run -- sh -c "cat <&3"'   # sh: 3: Bad file descriptor
+  ```
+
+  Process substitution is a descriptor too: `openmoat run -- tool <(cmd)` gives `tool`
+  `/dev/fd/63`, which it can no longer open. Write the output to a file in the project
+  first, or pipe it on standard input (`cmd | openmoat run -- tool -`).
 - **What Linux does not protect.** Landlock can only grant access to whole directory
   trees, so inside the project the policy's deny rules do not hold for the agent's
   commands: they can read and write `.env`, create `.envrc`, write `.moat/policy.yaml`
@@ -618,6 +634,9 @@ openmoat run --isolate --write ~/.claude --write ~/.claude.json -- claude
   with nothing but loopback, where OpenMoat serves the proxy's port and relays each
   connection over a Unix socket to the proxy outside. A tool that ignores
   `HTTP(S)_PROXY` has no network; there is no DNS.
+- **No files from the launcher.** bubblewrap passes every open descriptor on, so
+  `openmoat run` marks those from 3 up close-on-exec before it starts bubblewrap, and
+  again inside before the agent starts, as in the Lightweight tier (ADR-088).
 - Inside, the Lightweight tier's Landlock rules and seccomp filter apply too, so
   Linux 6.7 or later is needed. The agent's own sandbox must be off, as under
   `openmoat run`.

@@ -51,10 +51,14 @@ rustls-native-certs.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true
+# `fcntl` and Linux's `close_range` on descriptor numbers `openmoat run`
+# inherited (ADR-088, `commands/run/inherited.rs`): neither std nor rustix
+# marks a descriptor close-on-exec by number without a borrow it cannot prove.
+# Already built on every Unix through rustix and getrandom.
+libc.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 landlock.workspace = true
-libc.workspace = true
 seccompiler.workspace = true
 
 [dev-dependencies]
@@ -67,8 +71,28 @@ tempfile.workspace = true
 rcgen.workspace = true
 rustls.workspace = true
 
-[lints]
-workspace = true
+# The workspace's lints, except `unsafe_code`: `deny` instead of `forbid`, so
+# `commands/run/inherited.rs` alone can `#[expect]` it for its `fcntl` and
+# `close_range` calls (ADR-088); `openmoat-core`'s architecture test keeps every
+# other file of the crate free of `unsafe`. Keep this table in step with
+# Cargo.toml's.
+[lints.rust]
+unsafe_code = "deny"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+cognitive_complexity = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
 
 # Release archives carry the repository README (install, status) rather than this
 # crate's command reference.
