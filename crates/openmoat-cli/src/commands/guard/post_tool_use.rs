@@ -28,7 +28,7 @@ use crate::taint;
 /// cannot be.
 pub(super) fn answer(host: Host, payload: &str, event: &HookEvent) -> Code {
     let decision = host
-        .parse_request(payload)
+        .parse_request_as(payload, super::entry::event())
         .context("parsing hook payload")
         .and_then(|mut request| match std::mem::take(&mut request.event) {
             HookEvent::PostToolUse { output } => kept(host, request, &output),
@@ -43,6 +43,12 @@ pub(super) fn answer(host: Host, payload: &str, event: &HookEvent) -> Code {
 /// host is answered with: an `allow` it never sees (the response is empty),
 /// or the lock check's deny.
 fn kept(host: Host, request: HookRequest, output: &str) -> Result<Decision> {
+    // A call with no action has no output to keep (an adapter gives none to
+    // a tool whose output is never from outside, ADR-063): nothing to check
+    // or read. The payload was parsed in full before this.
+    if request.action.is_none() {
+        return Ok(Decision::new(Verdict::Allow));
+    }
     let started = Instant::now();
     let home = Home::locate()?;
     let verified = integrity::check(&home)?;
