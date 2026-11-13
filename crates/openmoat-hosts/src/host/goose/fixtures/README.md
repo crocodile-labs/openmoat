@@ -42,3 +42,14 @@ From each tool's schema:
 | `delegate.json` | a subagent started in another directory |
 | `list_functions.json` | an ungoverned call with no arguments |
 | `mcp.json`, `todo.json` | extension tools |
+
+## MCP server configuration
+
+`mcp-config.yaml` is not a hook payload: it is the `extensions` of a goose `config.yaml`,
+the two examples of goose's `documentation/docs/getting-started/using-extensions.md`
+(v1.57.0, read on 2026-11-12: a stdio extension and a Streamable HTTP one) in one
+mapping. The values are the page's placeholders. OpenMoat's unit tests read it through
+goose's extension reader and check that the stdio extension's `cmd` and `args` are put
+behind the proxy and given back exactly when unwrapped, and that the remote one is left
+alone (`crates/openmoat-cli/src/mcp/wrap/form/tests.rs`). `openmoat mcp wrap` does not
+rewrite goose's YAML file; it names what to set by hand.

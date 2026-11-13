@@ -74,3 +74,13 @@ latest-agents job copies what OpenCode 1's real `opencode run` sends `openmoat g
 into its artefact's `captured/scrubbed/` folder (`scripts/ci/latest-agents/README.md`,
 "Captured payloads"); `tests/captured.rs` parses each one committed here. OpenCode 2's
 headless run is not driven yet, so it has no capture.
+
+## MCP server configuration
+
+`mcp-config.jsonc` is not a hook payload: it is a configuration file of MCP servers, the
+two examples of OpenCode's documentation page <https://opencode.ai/docs/mcp-servers/>
+("Local" and "Remote", read on 2026-11-12) in one file, with the brackets the page's
+excerpts leave open closed. The values are the page's placeholders. OpenMoat's unit
+tests read it through OpenCode's MCP reader and check that `openmoat mcp wrap` puts the
+local server's `command` list behind the proxy and gives back exactly the original when
+unwrapped, and leaves the remote one alone (`crates/openmoat-cli/src/mcp/wrap/form/tests.rs`).

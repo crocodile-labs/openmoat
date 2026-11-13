@@ -261,6 +261,11 @@ fn service_for(code: i32, agent: Option<Host>) -> (tempfile::TempDir, Home, Serv
 /// What the service answers to `sent`: the reply, or the error of a caller
 /// that got none.
 fn ask(service: &Service, sent: &Request) -> Result<Reply> {
+    ask_at(service, sent, Instant::now)
+}
+
+/// [`ask`] of a service whose clock is `now`.
+fn ask_at(service: &Service, sent: &Request, now: impl Fn() -> Instant + Send) -> Result<Reply> {
     // One at a time: macOS has no `pipe2`, so a stand-in started by one test
     // can inherit another's standard input before close-on-exec is set, and
     // both `cat`s then wait for an end of input that never comes.
@@ -270,7 +275,7 @@ fn ask(service: &Service, sent: &Request) -> Result<Reply> {
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let (ours, theirs) = UnixStream::pair().unwrap();
     let server = std::thread::scope(|scope| {
-        let handle = scope.spawn(|| service.answer(theirs));
+        let handle = scope.spawn(|| service.answer_at(theirs, now));
         let reply = exchange(ours, sent, Instant::now() + Duration::from_secs(10));
         (reply, handle.join().unwrap())
     });
@@ -308,8 +313,11 @@ fn a_wrong_token_gets_no_answer_and_is_recorded() {
     // The run's token with its last character changed, so one byte differs.
     let mut near = token()[..token().len() - 1].to_owned();
     near.push(if token().ends_with('0') { '1' } else { '0' });
+    // All three within one interval, however long the calls take to run: the
+    // service's clock stands still.
+    let at = Instant::now();
     for wrong in [near.as_str(), "", "x"] {
-        let error = ask(&service, &request(wrong, "{}")).unwrap_err();
+        let error = ask_at(&service, &request(wrong, "{}"), || at).unwrap_err();
         assert!(format!("{error:#}").contains("answer"), "{error:#}");
     }
     // The first has its row at once; the two after it, within the interval,

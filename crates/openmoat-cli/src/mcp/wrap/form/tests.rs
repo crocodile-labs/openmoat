@@ -179,3 +179,66 @@ fn a_stray_cmd_does_not_hide_a_wrap_from_a_host_that_reads_command() {
     assert_eq!(unwrapped(&named, CommandArgs).unwrap(), entry);
     assert!(with_sandbox(&named, CommandArgs, true).is_some());
 }
+
+/// The `mcp-config.*` fixture a host's folder holds: its documentation's own
+/// example of a file of MCP servers (the folder's README cites the page).
+fn documented_config(host: openmoat_hosts::Host) -> Option<std::path::PathBuf> {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../openmoat-hosts/src/host")
+        .join(host.module())
+        .join("fixtures");
+    std::fs::read_dir(fixtures)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| p.file_stem().is_some_and(|s| s == "mcp-config"))
+}
+
+/// Each host's documented example file is read by the host's own reader; its
+/// local server is wrapped in the host's form and unwrapped to exactly what
+/// the documentation wrote, and its remote server is left alone.
+#[test]
+fn every_documented_example_wraps_and_unwraps_in_its_hosts_form() {
+    let mut read = 0;
+    for host in openmoat_hosts::Host::EVERY {
+        let (Some(path), Some(mcp)) = (documented_config(host), host.spec().mcp.as_ref()) else {
+            continue;
+        };
+        let source = crate::mcp::servers::Source {
+            host,
+            path: path.clone(),
+            reader: mcp.user_reader,
+            user: true,
+        };
+        let text = std::fs::read_to_string(&path).unwrap();
+        let servers = crate::mcp::servers::parse(&source, &text).unwrap();
+        let (mut local, mut remote) = (0, 0);
+        for server in &servers {
+            let (entry, form) = (&server.entry, server.form);
+            assert_eq!(
+                not_wrappable(entry, form),
+                None,
+                "{}: {entry}",
+                path.display()
+            );
+            if !starts_process(entry) {
+                remote += 1;
+                assert!(wrapped_as(entry, Path::new(BIN), &server.name, true, form).is_none());
+                continue;
+            }
+            local += 1;
+            let on = wrapped_as(entry, Path::new(BIN), &server.name, true, form).unwrap();
+            assert_eq!(sandboxed(&on, form), Some(true), "{on}");
+            let named = with_host(&on, form, host).unwrap();
+            let args = proxy_args(&named, form).unwrap();
+            let original = parts(entry, form).unwrap();
+            let split = args.iter().position(|a| a == "--").unwrap();
+            assert_eq!(args[split + 1], original.0, "{named}");
+            assert_eq!(args[split + 2..], original.1, "{named}");
+            assert_eq!(unwrapped(&named, form).as_ref(), Some(entry), "{named}");
+        }
+        assert!(local > 0 && remote > 0, "{}: {servers:?}", path.display());
+        read += 1;
+    }
+    assert!(read >= 2, "the OpenCode and goose examples are read");
+}
