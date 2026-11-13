@@ -37,6 +37,9 @@ struct Agent {
     /// The events its pre-call and after-call entries name (`guard --event`),
     /// where its payloads name none.
     events: (Option<&'static str>, Option<&'static str>),
+    /// Its shell tool runs PowerShell on Windows, which OpenMoat does not parse
+    /// (`ForeignShell`), so a later shell call there is not linked (LIMITS.md).
+    powershell_on_windows: bool,
 }
 
 fn codex_call(cwd: &Path, command: &str, output: Option<&str>) -> Value {
@@ -117,6 +120,7 @@ const AGENTS: [Agent; 3] = [
         // Codex cannot prompt.
         review: "deny",
         events: (None, None),
+        powershell_on_windows: false,
     },
     Agent {
         id: "gemini-cli",
@@ -127,6 +131,7 @@ const AGENTS: [Agent; 3] = [
         answer: decision_answer,
         review: "ask",
         events: (None, None),
+        powershell_on_windows: true,
     },
     Agent {
         id: "copilot-cli",
@@ -137,6 +142,7 @@ const AGENTS: [Agent; 3] = [
         answer: copilot_answer,
         review: "ask",
         events: (Some("preToolUse"), Some("postToolUse")),
+        powershell_on_windows: false,
     },
 ];
 
@@ -176,6 +182,11 @@ fn a_host_a_fetched_page_named_makes_a_later_curl_to_it_need_review_on_each_agen
         let out = guard(&sb, agent, agent.events.1, &report);
         assert_eq!(out.status.code(), Some(OK), "{id}: {}", text(&out));
         assert_eq!(stdout(&out), "", "{id}: nothing is for the model");
+        if cfg!(windows) && agent.powershell_on_windows {
+            // A PowerShell command is not parsed (`ForeignShell`): no host is
+            // read from the later call, so it is not linked (LIMITS.md).
+            continue;
+        }
 
         let (verdict, reason) = decide(&sb, agent, &(agent.call)(&proj, LATER, None));
         assert_eq!(verdict, agent.review, "{id}: {reason}");
