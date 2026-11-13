@@ -66,6 +66,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             "Continue CLI: its configuration, whose MCP servers it starts",
             &["**/.continue/config.yaml"],
         )],
+        runs_later: &[crate::contract::RunsLater::review(
+            "Continue CLI: its configuration, whose `mcpServers` it starts",
+            &["~/.continue/config.yaml"],
+        )],
         ..crate::contract::Protect::BASE
     },
     // Its tool calls are Claude Code's, mapped by Claude Code's rows.

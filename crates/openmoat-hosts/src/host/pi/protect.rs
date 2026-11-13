@@ -1,7 +1,7 @@
 //! pi's files the default policy and the taint list protect, and its
 //! processes.
 
-use crate::contract::{Paths, ProcessSpec, Protect};
+use crate::contract::{Paths, ProcessSpec, Protect, RunsLater};
 
 pub(super) const PROTECT: Protect = Protect {
     self_paths: &[Paths::new(
@@ -32,6 +32,28 @@ pub(super) const PROTECT: Protect = Protect {
             "~/.pi/agent/mcp-auth.json",
         ],
     )],
+    runs_later: &[
+        RunsLater::agent_config(
+            "pi: a project's extensions, which pi loads and runs with the agent's rights,\n\
+             its MCP servers, and its settings, which can add packages and turn extensions\n\
+             off (a write that removes OpenMoat's extension is denied, `project-settings`)",
+            &[
+                "**/.pi/extensions/**",
+                "**/.pi/mcp.json",
+                "**/.pi/settings.json",
+            ],
+        ),
+        RunsLater::review(
+            "pi: the person's extensions and MCP servers, and the folders above a\n\
+             project's (a rename away and back edits them)",
+            &[
+                "~/.pi/agent/extensions/**",
+                "~/.pi/agent/mcp.json",
+                "**/.pi",
+                "**/.pi/extensions",
+            ],
+        ),
+    ],
 };
 
 /// pi runs as `node <…>/pi-coding-agent/dist/bundle/cli.js` (its package

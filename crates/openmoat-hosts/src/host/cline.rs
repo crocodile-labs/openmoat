@@ -112,7 +112,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          (`--auto-approve`), so a call OpenMoat defers usually runs; another `PreToolUse` \
          file or plugin can rewrite a call's input (`overrideInput`) after OpenMoat checked \
          it (`openmoat status` and `doctor` name the ones they find), and a workspace's `.cline/hooks` and `.clinerules/hooks` run with the agent's \
-         rights (writing them needs review, `runs-later`); the provider's own `web_search` runs without a hook; on native Windows \
+         rights (writing them needs review, `runs-later`; under `openmoat run` commands cannot write them); the provider's own `web_search` runs without a hook; on native Windows \
          the script does not run",
     // `$CLINE_DIR/hooks`, `~/.cline` unless `CLINE_DIR` moves it
     // (`resolveClineDir`, `resolveHooksConfigSearchPaths` in `paths.ts`).

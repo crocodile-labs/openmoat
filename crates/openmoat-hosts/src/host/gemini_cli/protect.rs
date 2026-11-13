@@ -1,7 +1,7 @@
 //! Gemini CLI's files the default policy and the taint list protect, and its
 //! processes.
 
-use crate::contract::{Paths, ProcessSpec, Protect};
+use crate::contract::{Paths, ProcessSpec, Protect, RunsLater};
 
 pub(super) const PROTECT: Protect = Protect {
     self_paths: &[Paths::new(
@@ -35,6 +35,24 @@ pub(super) const PROTECT: Protect = Protect {
             "~/.cache/.gemini/a2a-oauth-tokens.json",
         ],
     )],
+    runs_later: &[
+        RunsLater::agent_config(
+            "Gemini CLI: a project's policy files, which can allow what OpenMoat leaves to\n\
+             it (accepted without a question in a non-interactive run); its custom\n\
+             commands, whose shell runs when the person types the command, outside any\n\
+             tool hook; and its subagents",
+            &[
+                "**/.gemini/policies/**",
+                "**/.gemini/commands/**",
+                "**/.gemini/agents/**",
+            ],
+        ),
+        RunsLater::review(
+            "Gemini CLI: the person's extensions, whose hooks and MCP servers it starts,\n\
+             and policy files",
+            &["~/.gemini/extensions/**", "~/.gemini/policies/**"],
+        ),
+    ],
 };
 
 pub(super) const PROCESS: ProcessSpec = ProcessSpec {

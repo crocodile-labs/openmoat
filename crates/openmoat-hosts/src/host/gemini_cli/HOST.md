@@ -72,7 +72,9 @@ read nor write them, under `GEMINI_CLI_HOME` too; its `.env` is `secrets-paths`'
 keychain entries (`gemini-cli-oauth`, `gemini-cli-api-key`) are read by `security
 find-generic-password -w` or `secret-tool lookup`, which `secrets-paths` denies.
 `gemini mcp add`, `gemini mcp enable` and `gemini extensions install`/`link` need review
-(`runs-later`). `openmoat status` and `openmoat doctor` warn when the `gemini` on the
+(`runs-later`), and so does writing a project's policy files, custom commands and
+subagents (`.gemini/policies/`, `.gemini/commands/`, `.gemini/agents/`), which
+commands under `openmoat run` cannot write at all (ADR-091). `openmoat status` and `openmoat doctor` warn when the `gemini` on the
 search path is a version with a published advisory (`advisories.rs`).
 
 ## When the hook fails

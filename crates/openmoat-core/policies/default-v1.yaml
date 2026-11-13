@@ -760,29 +760,47 @@ allow:
       "!${project}/**/.idea/**", "!${project}/**/.idea", "!${project}/**/*.run.xml",
       # package-manager and build configuration that runs code (`runs-later` needs review)
       "!${project}/**/.npmrc", "!${project}/**/.yarnrc", "!${project}/**/.yarnrc.yml", "!${project}/**/.cargo/config.toml", "!${project}/**/.cargo/config", "!${project}/**/bunfig.toml",
-      "!${project}/**/.claude/hooks/**", "!${project}/**/.mcp.json", "!${project}/**/.cursor/mcp.json", "!${project}/**/.codex/config.toml",
-      "!${project}/**/.openclaw/extensions/**", "!${project}/**/.github/hooks/**", "!${project}/**/.github/mcp.json",
-      "!${project}/**/.pi/extensions/**", "!${project}/**/.pi/mcp.json", "!${project}/**/.pi/settings.json",
-      # the folders above them, which a rename moves with everything inside (`runs-later` needs review)
-      "!${project}/**/.github/hooks", "!${project}/**/.pi", "!${project}/**/.pi/extensions",
-      "!${project}/**/.gemini/policies/**", "!${project}/**/.gemini/commands/**", "!${project}/**/.gemini/agents/**",
-      "!${project}/**/.github/agents/**", "!${project}/**/.claude/agents/**", "!${project}/**/.claude/skills/**",
-      "!${project}/**/.claude/commands/**",
-      "!${project}/**/.opencode/plugins/**", "!${project}/**/.opencode/plugin/**", "!${project}/**/.opencode/tools/**",
-      "!${project}/**/.opencode/tool/**", "!${project}/**/.opencode/commands/**", "!${project}/**/.opencode/command/**",
-      "!${project}/**/.opencode/opencode.json", "!${project}/**/.opencode/opencode.jsonc", "!${project}/**/.opencode/package.json",
-      "!${project}/**/opencode.json", "!${project}/**/opencode.jsonc",
-      "!${project}/**/.opencode", "!${project}/**/.opencode/plugins", "!${project}/**/.opencode/plugin",
-      "!${project}/**/.hermes/plugins/**", "!${project}/**/.hermes", "!${project}/**/.hermes/plugins",
-      # the folders a repository's `core.hooksPath` usually names, and Cline's workspace
-      # hooks, with the folders above them
+      # the folders a repository's `core.hooksPath` usually names, with the folders themselves
       "!${project}/**/.githooks/**", "!${project}/**/.git-hooks/**", "!${project}/**/githooks/**", "!${project}/**/git-hooks/**",
       "!${project}/**/.githooks", "!${project}/**/.git-hooks", "!${project}/**/githooks", "!${project}/**/git-hooks",
-      "!${project}/**/.clinerules/hooks/**", "!${project}/**/.cline/hooks/**",
-      "!${project}/**/.clinerules", "!${project}/**/.clinerules/hooks", "!${project}/**/.cline", "!${project}/**/.cline/hooks",
       # what every Python start runs, a project's `.venv` included
       "!${project}/**/site-packages/*.pth", "!${project}/**/dist-packages/*.pth",
       "!${project}/**/sitecustomize.py", "!${project}/**/usercustomize.py",
+      # each agent's files in a project that run later (`runs-later` needs review), from its spec
+      # Claude Code
+      "!${project}/**/.claude/hooks/**", "!${project}/**/.mcp.json",
+      "!${project}/**/.claude/agents/**", "!${project}/**/.claude/skills/**",
+      "!${project}/**/.claude/commands/**",
+      # Codex
+      "!${project}/**/.codex/config.toml",
+      # Cursor
+      "!${project}/**/.cursor/mcp.json",
+      # OpenClaw
+      "!${project}/**/.openclaw/extensions/**",
+      # GitHub Copilot CLI
+      "!${project}/**/.github/hooks/**", "!${project}/**/.github/mcp.json",
+      "!${project}/**/.github/agents/**", "!${project}/**/.github/hooks",
+      # pi
+      "!${project}/**/.pi/extensions/**", "!${project}/**/.pi/mcp.json",
+      "!${project}/**/.pi/settings.json", "!${project}/**/.pi", "!${project}/**/.pi/extensions",
+      # Gemini CLI
+      "!${project}/**/.gemini/policies/**", "!${project}/**/.gemini/commands/**",
+      "!${project}/**/.gemini/agents/**",
+      # OpenCode
+      "!${project}/**/.opencode/plugins/**", "!${project}/**/.opencode/plugin/**",
+      "!${project}/**/.opencode/tools/**", "!${project}/**/.opencode/tool/**",
+      "!${project}/**/.opencode/commands/**", "!${project}/**/.opencode/command/**",
+      "!${project}/**/.opencode/opencode.json", "!${project}/**/.opencode/opencode.jsonc",
+      "!${project}/**/.opencode/package.json", "!${project}/**/opencode.json",
+      "!${project}/**/opencode.jsonc", "!${project}/**/.opencode",
+      "!${project}/**/.opencode/plugins", "!${project}/**/.opencode/plugin",
+      # Hermes Agent
+      "!${project}/**/.hermes/plugins/**", "!${project}/**/.hermes",
+      "!${project}/**/.hermes/plugins",
+      # Cline CLI
+      "!${project}/**/.clinerules/hooks/**", "!${project}/**/.cline/hooks/**",
+      "!${project}/**/.clinerules", "!${project}/**/.clinerules/hooks", "!${project}/**/.cline",
+      "!${project}/**/.cline/hooks",
       # a virtual environment's interpreter and a dev container's host command
       "!${project}/**/.venv/bin/**", "!${project}/**/venv/bin/**", "!${project}/**/.venv/bin", "!${project}/**/venv/bin",
       "!${project}/**/.devcontainer/**", "!${project}/**/.devcontainer", "!${project}/**/.devcontainer.json"]
@@ -1192,10 +1210,12 @@ review:
       "git branch -d -f *", "git branch -f -d *", "git branch -df *", "git branch -fd *"]
   # CI configuration runs with the repository's secrets once a branch is pushed, and
   # commit-hook managers and editor tasks run on this machine outside any sandbox;
-  # so do the agent hosts' hook scripts, MCP server lists and Codex's project config,
-  # in the next session. `project-fs` leaves them out, so a write needs review wherever it is.
-  # Hook only: the OS sandboxes list them as writable (`sandbox/patterns.rs`), and the
-  # home files are the hosts' own state, which `moat run --write` may grant
+  # so do the agent hosts' hooks, MCP server lists, plugins and commands, in the next
+  # session. `project-fs` leaves them out, so a write needs review wherever it is.
+  # The OS sandboxes leave CI, commit-hook, editor and build files writable (an install
+  # writes them); `openmoat run` denies commands writing an agent's configuration in the
+  # project (ADR-091). The home files are the hosts' own state, which `moat run --write`
+  # may grant
   - id: runs-later
     reason: CI, commit hooks, the editor or the agent host run this later, outside any sandbox
     title: changing something that runs later, outside any sandbox
@@ -1214,80 +1234,96 @@ review:
       # `yarnPath`, `.cargo/config.toml` `rustc-wrapper`/`runner`, `bunfig.toml`
       # `preload`), in the project or the home
       "**/.npmrc", "**/.yarnrc", "**/.yarnrc.yml", "**/.cargo/config.toml", "**/.cargo/config", "**/bunfig.toml",
-      # a project's Codex, pi and OpenCode settings (here and below) need review;
-      # a write whose content turns that host's hook off (`[features] hooks =
-      # false`, a pi `extensions` entry or an OpenCode plugin entry that removes
-      # OpenMoat's) is denied before the file changes (`project-settings`)
-      "**/.claude/hooks/**", "**/.mcp.json", "**/.cursor/mcp.json", "**/.codex/config.toml",
-      "~/.claude.json", "~/.claude/plugins/**", "~/.cursor/mcp.json", "~/.cursor/cli-config.json",
-      # OpenClaw plugins, which its Gateway loads and runs with the agent's rights
-      "~/.openclaw/extensions/**", "**/.openclaw/extensions/**",
-      # GitHub Copilot CLI: a repository's hook files and MCP servers, and the user's MCP servers,
-      # plugins and custom agents (whose frontmatter may carry hooks)
-      "**/.github/hooks/**", "**/.github/mcp.json",
-      "~/.copilot/mcp-config.json", "~/.copilot/installed-plugins/**", "~/.copilot/agents/**",
-      # pi extensions, which pi loads and runs with the agent's rights, its MCP
-      # server lists, and a project's pi settings, which can add packages and turn
-      # extensions off
-      "~/.pi/agent/extensions/**", "**/.pi/extensions/**", "~/.pi/agent/mcp.json", "**/.pi/mcp.json",
-      "**/.pi/settings.json",
-      # the folders above a repository's Copilot hooks and its pi files: a rename away
-      # and back edits them under another name
-      "**/.github/hooks", "**/.pi", "**/.pi/extensions",
-      # Gemini CLI extensions, whose hooks and MCP servers it starts; its policy
-      # files, which can allow what OpenMoat leaves to it (accepted without a
-      # question in a non-interactive run); its custom commands, whose shell
-      # runs when the person types the command, outside any tool hook; and its
-      # subagents
-      "~/.gemini/extensions/**", "**/.gemini/policies/**", "~/.gemini/policies/**",
-      "**/.gemini/commands/**", "**/.gemini/agents/**",
-      # a repository's GitHub Copilot CLI agents, whose frontmatter may carry hooks
-      "**/.github/agents/**",
-      # Claude Code subagents, skills and slash commands, which carry their own
-      # hooks, allowed tools and shell
-      "**/.claude/agents/**", "**/.claude/skills/**", "**/.claude/commands/**",
-      # OpenCode plugins and custom tools, which it loads into its own process with
-      # the agent's rights (a project's at start, with no prompt); its commands,
-      # whose `` !`…` `` shell runs when the person types the command; a project's
-      # configuration, which adds plugins, MCP servers and permission rules; and the
-      # package files and caches it loads plugin code from
-      "~/.config/opencode/plugins/**", "~/.config/opencode/plugin/**",
-      "~/.config/opencode/tools/**", "~/.config/opencode/tool/**",
-      "~/.config/opencode/commands/**", "~/.config/opencode/command/**",
-      "~/.config/opencode/package.json", "~/.config/opencode/node_modules/**",
-      "~/.cache/opencode/node_modules/**",
-      "**/.opencode/plugins/**", "**/.opencode/plugin/**", "**/.opencode/tools/**", "**/.opencode/tool/**",
-      "**/.opencode/commands/**", "**/.opencode/command/**", "**/.opencode/opencode.json",
-      "**/.opencode/opencode.jsonc", "**/.opencode/package.json", "**/opencode.json", "**/opencode.jsonc",
-      # the folders above a project's OpenCode plugins: a rename away and back edits them
-      "**/.opencode", "**/.opencode/plugins", "**/.opencode/plugin",
-      # Hermes Agent: the cron jobs it runs later unattended and the skills it loads
-      # into later sessions; another profile's configuration, hook allowlist,
-      # `.env`, plugins, hooks, skills and cron jobs, which run when that profile is
-      # used; and a project's plugins (loaded with `HERMES_ENABLE_PROJECT_PLUGINS`),
-      # with the folders above them
-      "~/.hermes/cron/**", "~/.hermes/skills/**",
-      "~/.hermes/profiles/*/config.yaml", "~/.hermes/profiles/*/shell-hooks-allowlist.json",
-      "~/.hermes/profiles/*/.env", "~/.hermes/profiles/*/plugins/**", "~/.hermes/profiles/*/hooks/**",
-      "~/.hermes/profiles/*/agent-hooks/**", "~/.hermes/profiles/*/skills/**", "~/.hermes/profiles/*/cron/**",
-      "**/.hermes/plugins/**", "**/.hermes", "**/.hermes/plugins",
       # git hooks outside `.git`: the folders a repository's `core.hooksPath` usually
       # names (`.githooks` and `githooks`, `.git-hooks` and `scripts/git-hooks`), which
       # git runs on the next commit or push once the setting points there. Not every
       # folder named `hooks`: React hooks and docs live in those
       "**/.githooks/**", "**/.git-hooks/**", "**/githooks/**", "**/git-hooks/**",
       "**/.githooks", "**/.git-hooks", "**/githooks", "**/git-hooks",
-      # Cline: a workspace's hooks, every file of which it runs on each tool call, with
-      # the folders above them (a rename away and back edits them); its rules files
-      # in `.clinerules/` stay ordinary project writes
-      "**/.clinerules/hooks/**", "**/.cline/hooks/**",
-      "**/.clinerules", "**/.clinerules/hooks", "**/.cline", "**/.cline/hooks",
-      # the Continue CLI's configuration, whose `mcpServers` it starts
-      "~/.continue/config.yaml",
       # what every Python start runs, the allowed `pytest` included: a `.pth`
       # file in a site directory (a line starting `import` is executed) and
       # `sitecustomize`/`usercustomize`, imported from any folder on `sys.path`
       "**/site-packages/*.pth", "**/dist-packages/*.pth", "**/sitecustomize.py", "**/usercustomize.py",
+      # each agent's files that run later, generated from its spec
+      # Claude Code: a project's hook scripts and MCP servers, and its subagents,
+      # skills and slash commands, which carry their own hooks, allowed tools and shell
+      "**/.claude/hooks/**", "**/.mcp.json", "**/.claude/agents/**", "**/.claude/skills/**",
+      "**/.claude/commands/**",
+      # Claude Code: the person's MCP servers and plugins
+      "~/.claude.json", "~/.claude/plugins/**",
+      # Codex: a project's configuration, which can add MCP servers; a write whose
+      # content turns its hook off (`[features] hooks = false`) is denied before the
+      # file changes (`project-settings`)
+      "**/.codex/config.toml",
+      # Cursor: a project's MCP servers
+      "**/.cursor/mcp.json",
+      # Cursor: the person's MCP servers and the CLI's configuration
+      "~/.cursor/mcp.json", "~/.cursor/cli-config.json",
+      # Continue CLI: its configuration, whose `mcpServers` it starts
+      "~/.continue/config.yaml",
+      # OpenClaw: the person's plugins, which its Gateway loads and runs with the
+      # agent's rights
+      "~/.openclaw/extensions/**",
+      # OpenClaw: a project's plugins
+      "**/.openclaw/extensions/**",
+      # GitHub Copilot CLI: a repository's hook files, MCP servers and custom agents
+      # (whose frontmatter may carry hooks)
+      "**/.github/hooks/**", "**/.github/mcp.json", "**/.github/agents/**",
+      # GitHub Copilot CLI: the person's MCP servers, plugins and custom agents, and
+      # the folder above a repository's hooks (a rename away and back edits them)
+      "~/.copilot/mcp-config.json", "~/.copilot/installed-plugins/**", "~/.copilot/agents/**",
+      "**/.github/hooks",
+      # pi: a project's extensions, which pi loads and runs with the agent's rights,
+      # its MCP servers, and its settings, which can add packages and turn extensions
+      # off (a write that removes OpenMoat's extension is denied, `project-settings`)
+      "**/.pi/extensions/**", "**/.pi/mcp.json", "**/.pi/settings.json",
+      # pi: the person's extensions and MCP servers, and the folders above a
+      # project's (a rename away and back edits them)
+      "~/.pi/agent/extensions/**", "~/.pi/agent/mcp.json", "**/.pi", "**/.pi/extensions",
+      # Gemini CLI: a project's policy files, which can allow what OpenMoat leaves to
+      # it (accepted without a question in a non-interactive run); its custom
+      # commands, whose shell runs when the person types the command, outside any
+      # tool hook; and its subagents
+      "**/.gemini/policies/**", "**/.gemini/commands/**", "**/.gemini/agents/**",
+      # Gemini CLI: the person's extensions, whose hooks and MCP servers it starts,
+      # and policy files
+      "~/.gemini/extensions/**", "~/.gemini/policies/**",
+      # OpenCode: the person's plugins and custom tools, which it loads into its own
+      # process with the agent's rights; commands, whose `` !`…` `` shell runs when
+      # the person types the command; and the package files and caches it loads
+      # plugin code from
+      "~/.config/opencode/plugins/**", "~/.config/opencode/plugin/**",
+      "~/.config/opencode/tools/**", "~/.config/opencode/tool/**", "~/.config/opencode/commands/**",
+      "~/.config/opencode/command/**", "~/.config/opencode/package.json",
+      "~/.config/opencode/node_modules/**", "~/.cache/opencode/node_modules/**",
+      # OpenCode: a project's plugins, tools and commands (loaded at start, with no
+      # prompt), its configuration, which adds plugins, MCP servers and permission
+      # rules (a write that removes OpenMoat's plugin is denied, `project-settings`),
+      # and its package file
+      "**/.opencode/plugins/**", "**/.opencode/plugin/**", "**/.opencode/tools/**",
+      "**/.opencode/tool/**", "**/.opencode/commands/**", "**/.opencode/command/**",
+      "**/.opencode/opencode.json", "**/.opencode/opencode.jsonc", "**/.opencode/package.json",
+      "**/opencode.json", "**/opencode.jsonc",
+      # OpenCode: the folders above a project's plugins (a rename away and back edits
+      # them)
+      "**/.opencode", "**/.opencode/plugins", "**/.opencode/plugin",
+      # Hermes Agent: the cron jobs it runs later unattended and the skills it loads
+      # into later sessions; another profile's configuration, hook allowlist, `.env`,
+      # plugins, hooks, skills and cron jobs, which run when that profile is used
+      "~/.hermes/cron/**", "~/.hermes/skills/**", "~/.hermes/profiles/*/config.yaml",
+      "~/.hermes/profiles/*/shell-hooks-allowlist.json", "~/.hermes/profiles/*/.env",
+      "~/.hermes/profiles/*/plugins/**", "~/.hermes/profiles/*/hooks/**",
+      "~/.hermes/profiles/*/agent-hooks/**", "~/.hermes/profiles/*/skills/**",
+      "~/.hermes/profiles/*/cron/**",
+      # Hermes Agent: a project's plugins (loaded with `HERMES_ENABLE_PROJECT_PLUGINS`)
+      "**/.hermes/plugins/**",
+      # Hermes Agent: the folders above a project's plugins
+      "**/.hermes", "**/.hermes/plugins",
+      # Cline: a workspace's hooks, every file of which it runs on each tool call
+      "**/.clinerules/hooks/**", "**/.cline/hooks/**",
+      # Cline: the folders above them (a rename away and back edits them); its rules
+      # files in `.clinerules/` stay ordinary project writes
+      "**/.clinerules", "**/.clinerules/hooks", "**/.cline", "**/.cline/hooks",
       # a virtual environment's interpreter and scripts, which the editor's
       # Python extension and the test runners start outside any sandbox; with
       # the folder itself, a rename away and back edits it

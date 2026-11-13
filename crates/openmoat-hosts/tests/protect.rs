@@ -7,6 +7,12 @@
 //!   markers: the block is the lines between two lines that are there anyway.
 //! - the default policy's `agent-credentials` paths of every host, between the
 //!   rule's `fs.read` anchor and its `fs.write` alias.
+//! - the default policy's `runs-later` paths of every host, and `project-fs`'s
+//!   `!${project}/…` exceptions for the ones in a project, each between a
+//!   comment line naming the specs and the comment of the hand-written paths
+//!   that follow (CI, editors, builds, Python, virtual environments, dev
+//!   containers: files no host owns). The CLI's sandboxes read the same specs
+//!   (`RUNS_LATER`, `AGENT_CONFIG` in `crates/openmoat-cli/src/sandbox/patterns.rs`).
 //! - the core's taint list (`PROTECTED_WRITES`), between `// generated:taint`
 //!   and `// /generated`.
 //!
@@ -31,6 +37,20 @@ const POLICY_AFTER: &str = "      - \"**/.moat/**\"\n";
 /// The `agent-credentials` lines just before and just after its paths.
 const CREDENTIALS_BEFORE: &str = "    fs.read: &agent-credentials\n";
 const CREDENTIALS_AFTER: &str = "    fs.write: *agent-credentials\n";
+
+/// The `runs-later` rule's comment line just before the hosts' paths, and the
+/// comment of the rule's own paths that follow them.
+const RUNS_LATER_BEFORE: &str =
+    "      # each agent's files that run later, generated from its spec\n";
+const RUNS_LATER_AFTER: &str =
+    "      # a virtual environment's interpreter and scripts, which the editor's\n";
+/// `project-fs`'s comment line just before the hosts' project paths, and the
+/// comment of the exceptions that follow them.
+const PROJECT_FS_BEFORE: &str = "      # each agent's files in a project that run later (`runs-later` needs review), from its spec\n";
+const PROJECT_FS_AFTER: &str =
+    "      # a virtual environment's interpreter and a dev container's host command\n";
+/// The widest a generated line of quoted globs gets, as `cargo fmt` keeps code.
+const WIDTH: usize = 100;
 
 const TAINT: &str = "crates/openmoat-core/src/taint.rs";
 const TAINT_BEFORE: &str = "// generated:taint ";
@@ -220,6 +240,135 @@ fn the_taint_list_protects_each_hosts_own_files() {
     );
     assert!(body.contains("**/.copilot/hooks/**"), "{body}");
     check(TAINT, TAINT_BEFORE, TAINT_AFTER, &body);
+}
+
+/// `items` quoted, comma-separated and packed into lines of at most [`WIDTH`]
+/// columns (one item a line when it is wider), each line indented by six
+/// spaces and ending in a comma.
+fn packed(items: &[String]) -> String {
+    let mut out = String::new();
+    let mut line = String::new();
+    for item in items {
+        let quoted = format!("\"{item}\",");
+        if !line.is_empty() && 6 + line.len() + 1 + quoted.len() > WIDTH {
+            let _ = writeln!(out, "      {line}");
+            line.clear();
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(&quoted);
+    }
+    if !line.is_empty() {
+        let _ = writeln!(out, "      {line}");
+    }
+    out
+}
+
+/// The `runs-later` rule's lines for every host's [`Protect::runs_later`]:
+/// each entry's comment, then its globs.
+fn runs_later_lines() -> String {
+    let mut out = String::new();
+    for host in Host::EVERY {
+        for entry in host.spec().protect.runs_later {
+            for line in entry.paths.why.lines() {
+                let _ = writeln!(out, "      # {line}");
+            }
+            let globs: Vec<String> = entry.paths.globs.iter().map(|g| (*g).to_owned()).collect();
+            out.push_str(&packed(&globs));
+        }
+    }
+    out
+}
+
+/// `project-fs`'s exceptions for every host's project globs (`**/…`) among
+/// its [`Protect::runs_later`], one group a host.
+fn project_fs_lines() -> String {
+    let mut out = String::new();
+    for host in Host::EVERY {
+        let excepted: Vec<String> = host
+            .spec()
+            .protect
+            .runs_later
+            .iter()
+            .flat_map(|entry| entry.paths.globs)
+            .filter(|g| g.starts_with("**/"))
+            .map(|g| format!("!${{project}}/{g}"))
+            .collect();
+        if !excepted.is_empty() {
+            let _ = writeln!(out, "      # {}", host.display_name());
+            out.push_str(&packed(&excepted));
+        }
+    }
+    out
+}
+
+#[test]
+fn the_default_policy_holds_each_hosts_files_that_run_later_for_review() {
+    let body = runs_later_lines();
+    assert!(body.contains("\"**/.cline/hooks/**\""), "{body}");
+    assert!(body.contains("\"~/.claude.json\""), "{body}");
+    check(POLICY, RUNS_LATER_BEFORE, RUNS_LATER_AFTER, &body);
+}
+
+#[test]
+fn project_fs_leaves_out_each_hosts_files_that_run_later() {
+    let body = project_fs_lines();
+    assert!(
+        body.contains("\"!${project}/**/.gemini/commands/**\""),
+        "{body}"
+    );
+    assert!(!body.contains("~/"), "{body}");
+    check(POLICY, PROJECT_FS_BEFORE, PROJECT_FS_AFTER, &body);
+}
+
+/// An entry marked as the host's configuration names files in a project, as
+/// `**/<folder>/…` or `**/<file>`: the sandboxes of `openmoat run` match it below
+/// the project and deny the folders above it, which need no glob of their own.
+#[test]
+fn agent_configuration_is_named_in_the_project() {
+    let mut found = 0;
+    for host in Host::EVERY {
+        for entry in host.spec().protect.runs_later {
+            for glob in entry.paths.globs {
+                let rest = glob.strip_prefix("**/");
+                if entry.agent_config {
+                    found += 1;
+                    let rest = rest.unwrap_or_else(|| panic!("{host:?}: {glob} is not `**/…`"));
+                    let name = rest.strip_suffix("/**").unwrap_or(rest);
+                    assert!(
+                        !name.contains(['*', '?', '[', '{']),
+                        "{host:?}: {glob} has a glob below `**/`"
+                    );
+                } else if let Some(rest) = rest {
+                    // a project path held for review only is a folder above an
+                    // entry of the host's configuration
+                    let above = host.spec().protect.runs_later.iter().any(|e| {
+                        e.agent_config
+                            && e.paths
+                                .globs
+                                .iter()
+                                .any(|g| g.starts_with(&format!("**/{rest}/")))
+                    });
+                    assert!(above, "{host:?}: {glob} is above none of its configuration");
+                } else {
+                    assert!(glob.starts_with("~/"), "{host:?}: {glob}");
+                }
+            }
+        }
+    }
+    assert!(found > 0);
+}
+
+#[test]
+fn packed_lines_stay_narrow() {
+    let items: Vec<String> = (0..30).map(|i| format!("**/.agent{i}/x/**")).collect();
+    let text = packed(&items);
+    assert!(text.lines().count() > 1, "{text}");
+    for line in text.lines() {
+        assert!(line.len() <= WIDTH && line.ends_with(','), "{line}");
+    }
+    assert_eq!(packed(&[]), "");
 }
 
 #[test]

@@ -1,7 +1,7 @@
 //! Cline's files the default policy and the taint list protect, and its
 //! processes.
 
-use crate::contract::{Paths, ProcessSpec, Protect};
+use crate::contract::{Paths, ProcessSpec, Protect, RunsLater};
 
 pub(super) const PROTECT: Protect = Protect {
     self_paths: &[Paths::new(
@@ -39,6 +39,22 @@ pub(super) const PROTECT: Protect = Protect {
             "~/.cline/data/db/connectors.db",
         ],
     )],
+    runs_later: &[
+        RunsLater::agent_config(
+            "Cline: a workspace's hooks, every file of which it runs on each tool call",
+            &["**/.clinerules/hooks/**", "**/.cline/hooks/**"],
+        ),
+        RunsLater::review(
+            "Cline: the folders above them (a rename away and back edits them); its rules\n\
+             files in `.clinerules/` stay ordinary project writes",
+            &[
+                "**/.clinerules",
+                "**/.clinerules/hooks",
+                "**/.cline",
+                "**/.cline/hooks",
+            ],
+        ),
+    ],
 };
 
 /// The CLI is the `cline` bin of the npm package `cline`, a Node wrapper that

@@ -125,5 +125,7 @@ malformed (a deny). The full table is in
   a line of their own. `--yolo` is a flag of one run, which they cannot see. A workspace's `.cline/hooks` and `.clinerules/hooks` run
   with the agent's rights; writing them (or renaming a folder onto `.clinerules`,
   `.cline` or their `hooks`) needs review (`runs-later`), and session taint protects
-  every `.cline` and `.clinerules` file.
+  every `.cline` and `.clinerules` file. Under `openmoat run`, commands cannot write
+  those hooks nor create, rename or remove `.cline` and `.clinerules` in the project
+  (ADR-091).
 - The VS Code extension, and native Windows, are not covered.

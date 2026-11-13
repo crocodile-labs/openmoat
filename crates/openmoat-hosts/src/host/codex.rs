@@ -147,6 +147,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
              `rmcp-client/src/oauth.rs`)",
             &["~/.codex/auth.json", "~/.codex/.credentials.json"],
         )],
+        runs_later: &[crate::contract::RunsLater::agent_config(
+            "Codex: a project's configuration, which can add MCP servers; a write whose\n\
+             content turns its hook off (`[features] hooks = false`) is denied before the\n\
+             file changes (`project-settings`)",
+            &["**/.codex/config.toml"],
+        )],
         ..crate::contract::Protect::BASE
     },
     advisories: advisories::ADVISORIES,

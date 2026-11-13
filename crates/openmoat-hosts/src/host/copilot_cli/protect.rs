@@ -1,7 +1,7 @@
 //! GitHub Copilot CLI's files the default policy and the taint list protect,
 //! and its processes.
 
-use crate::contract::{Paths, ProcessSpec, Protect};
+use crate::contract::{Paths, ProcessSpec, Protect, RunsLater};
 
 pub(super) const PROTECT: Protect = Protect {
     self_paths: &[Paths::new(
@@ -54,6 +54,27 @@ pub(super) const PROTECT: Protect = Protect {
             "~/.copilot/mcp-secrets/**",
         ],
     )],
+    runs_later: &[
+        RunsLater::agent_config(
+            "GitHub Copilot CLI: a repository's hook files, MCP servers and custom agents\n\
+             (whose frontmatter may carry hooks)",
+            &[
+                "**/.github/hooks/**",
+                "**/.github/mcp.json",
+                "**/.github/agents/**",
+            ],
+        ),
+        RunsLater::review(
+            "GitHub Copilot CLI: the person's MCP servers, plugins and custom agents, and\n\
+             the folder above a repository's hooks (a rename away and back edits them)",
+            &[
+                "~/.copilot/mcp-config.json",
+                "~/.copilot/installed-plugins/**",
+                "~/.copilot/agents/**",
+                "**/.github/hooks",
+            ],
+        ),
+    ],
 };
 
 pub(super) const PROCESS: ProcessSpec = ProcessSpec {

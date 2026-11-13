@@ -26,7 +26,7 @@ pub use contract::{
     Locate, Located, Location, McpAutoStart, McpCommandForm, McpFile, McpNames, McpReader,
     McpServer, McpSpec, McpSyntax, OtherHooks, Paths, Platform, PluginDir, ProcessSpec,
     ProjectSettingsSpec, Protect, ProxySessions, RelaxedKey, Reviews, RunFacts, RunWrite,
-    SandboxFormat, SandboxSpec, SessionDir, SettingsFile, SettingsReader, SystemFile,
+    RunsLater, SandboxFormat, SandboxSpec, SessionDir, SettingsFile, SettingsReader, SystemFile,
     SystemSettingsSpec, ToolRow, ToolToken, Unseen, Version, WindowsSandboxLevel,
     WindowsSandboxMode, WindowsSandboxReader,
 };

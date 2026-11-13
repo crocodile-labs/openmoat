@@ -369,12 +369,13 @@ fn agent_config(p: &mut Generated, write: &Access, case: Case) {
         &with_real_paths(&patterns),
         case,
     );
-    let message = "commands may not write an agent's hooks, MCP servers or extensions in the \
-                   project (`.claude/hooks`, `.mcp.json`, `.cursor/mcp.json`, \
-                   `.codex/config.toml`, `.github/hooks`, `.pi/…`, `.openclaw/extensions`), \
-                   which the agent loads later outside the sandbox, even when the hook allowed \
-                   it, nor create, rename or remove the folders that hold them (`.github`, \
-                   `.pi`, `.openclaw`): change one outside `openmoat run`";
+    let message = "commands may not write an agent's hooks, MCP servers, plugins, commands or \
+                   other configuration in the project (`.claude/hooks`, `.mcp.json`, \
+                   `.cursor/mcp.json`, `.codex/config.toml`, `.github/hooks`, `.pi/…`, \
+                   `.gemini/commands`, `.cline/hooks`, …), which the agent loads later outside \
+                   the sandbox, even when the hook allowed it, nor create, rename or remove the \
+                   folders that hold them (`.github`, `.pi`, `.gemini`, …): change one outside \
+                   `openmoat run`";
     p.report
         .loss(Kind::FsWrite, "seatbelt.agent-config", message.into());
 }

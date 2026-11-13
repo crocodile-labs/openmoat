@@ -1,7 +1,7 @@
 //! OpenCode's files the default policy and the taint list protect, and its
 //! processes.
 
-use crate::contract::{Paths, ProcessSpec, Protect};
+use crate::contract::{Paths, ProcessSpec, Protect, RunsLater};
 
 pub(super) const PROTECT: Protect = Protect {
     self_paths: &[
@@ -64,6 +64,49 @@ pub(super) const PROTECT: Protect = Protect {
             "~/.local/share/opencode/opencode*.db*",
         ],
     )],
+    runs_later: &[
+        RunsLater::review(
+            "OpenCode: the person's plugins and custom tools, which it loads into its own\n\
+             process with the agent's rights; commands, whose `` !`…` `` shell runs when\n\
+             the person types the command; and the package files and caches it loads\n\
+             plugin code from",
+            &[
+                "~/.config/opencode/plugins/**",
+                "~/.config/opencode/plugin/**",
+                "~/.config/opencode/tools/**",
+                "~/.config/opencode/tool/**",
+                "~/.config/opencode/commands/**",
+                "~/.config/opencode/command/**",
+                "~/.config/opencode/package.json",
+                "~/.config/opencode/node_modules/**",
+                "~/.cache/opencode/node_modules/**",
+            ],
+        ),
+        RunsLater::agent_config(
+            "OpenCode: a project's plugins, tools and commands (loaded at start, with no\n\
+             prompt), its configuration, which adds plugins, MCP servers and permission\n\
+             rules (a write that removes OpenMoat's plugin is denied, `project-settings`),\n\
+             and its package file",
+            &[
+                "**/.opencode/plugins/**",
+                "**/.opencode/plugin/**",
+                "**/.opencode/tools/**",
+                "**/.opencode/tool/**",
+                "**/.opencode/commands/**",
+                "**/.opencode/command/**",
+                "**/.opencode/opencode.json",
+                "**/.opencode/opencode.jsonc",
+                "**/.opencode/package.json",
+                "**/opencode.json",
+                "**/opencode.jsonc",
+            ],
+        ),
+        RunsLater::review(
+            "OpenCode: the folders above a project's plugins (a rename away and back edits\n\
+             them)",
+            &["**/.opencode", "**/.opencode/plugins", "**/.opencode/plugin"],
+        ),
+    ],
 };
 
 /// OpenCode 1 runs as `opencode`: the compiled binary, or the npm package's

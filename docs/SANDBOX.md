@@ -522,16 +522,23 @@ bubblewrap.
   repository. Install bubblewrap and allow unprivileged user namespaces, or grant
   only paths inside the project.
 - **Agents' configuration in the project.** Commands may not write the files an agent
-  loads as its own hooks, MCP servers or extensions in its next session: a project's
-  `.claude/hooks/`, `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`,
-  `.github/hooks/`, `.github/mcp.json`, `.openclaw/extensions/`, `.pi/extensions/`,
-  `.pi/mcp.json`, `.pi/settings.json`, OpenCode's `opencode.json[c]` and its
-  `.opencode/` plugins, tools and `opencode.json[c]`, at any depth. On macOS Seatbelt denies them
+  loads as its own configuration in its next session (hooks, MCP servers, plugins,
+  commands, subagents, policy files), each host's spec marks them
+  (`Protect::runs_later`, ADR-091): a project's
+  `.claude/hooks/`, `.claude/agents/`, `.claude/skills/`, `.claude/commands/`,
+  `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`,
+  `.github/hooks/`, `.github/mcp.json`, `.github/agents/`, `.openclaw/extensions/`,
+  `.pi/extensions/`, `.pi/mcp.json`, `.pi/settings.json`, Gemini CLI's
+  `.gemini/policies/`, `.gemini/commands/` and `.gemini/agents/`, OpenCode's
+  `opencode.json[c]` and its `.opencode/` plugins, tools, commands, `package.json` and
+  `opencode.json[c]`, Hermes Agent's `.hermes/plugins/`, and Cline's `.cline/hooks/`
+  and `.clinerules/hooks/`, at any depth. On macOS Seatbelt denies them
   after every grant, in either case on a case-insensitive disk (`.MCP.json` too), so
   this holds inside a `--write` path too, and also for a write the hook held for review
   and the person allowed: change one outside `openmoat run`. The folders that hold
-  them directly in the project (`.github`, `.pi`, `.openclaw`, `.opencode`, besides `.claude`,
-  `.codex` and `.cursor`) cannot be created, renamed or removed there either, since a
+  them directly in the project (`.github`, `.pi`, `.openclaw`, `.opencode`, `.hermes`,
+  `.gemini`, `.cline`, `.clinerules`, besides `.claude`, `.codex` and `.cursor`) cannot
+  be created, renamed or removed there either, since a
   folder renamed away and back would carry a hook written under the other name; create
   a missing `.github` outside `openmoat run`. CI files and commit-hook managers' files
   (`.github/workflows/`, `.husky/`, …) stay writable, since installs write them; the

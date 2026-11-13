@@ -1,5 +1,9 @@
 //! Classifying IR patterns for hosts that have no project of their own.
 
+use std::sync::LazyLock;
+
+use openmoat_hosts::{Host, RunsLater};
+
 use super::PROJECT;
 
 /// Where an IR pattern points.
@@ -40,11 +44,45 @@ pub const ANY_GIT: &str = "**/.git/**";
 
 /// Files in a project that CI, a commit-hook manager, the editor or the agent
 /// host runs later, outside any sandbox (`runs-later` in the default policy,
-/// which also lists the hosts' home files). `project-fs` and `moat allow --dir`
-/// leave them out so the hook holds them for review; an OS sandbox gets no deny for them, which
-/// would also make them unreadable (Codex globs) or refuse a whole granted
-/// directory (Cursor).
-pub const RUNS_LATER: &[&str] = &[
+/// which also lists the hosts' home files): [`NOT_AN_AGENTS`] and each host's
+/// project globs among its spec's `Protect::runs_later`. `project-fs` and
+/// `moat allow --dir` leave them out so the hook holds them for review; an OS
+/// sandbox gets no deny for them, which would also make them unreadable (Codex
+/// globs) or refuse a whole granted directory (Cursor), except an agent's own
+/// configuration ([`AGENT_CONFIG`]) under `openmoat run`.
+pub static RUNS_LATER: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    let mut list = NOT_AN_AGENTS.to_vec();
+    list.extend(hosts_runs_later(|_| true));
+    list
+});
+
+/// The [`RUNS_LATER`] files an agent host loads as its own configuration when
+/// it next opens the project: hooks, MCP servers, plugins, commands, subagents
+/// and policy files, which run with the person's rights or decide what does.
+/// The globs each host's spec marks `RunsLater::agent_config`. Nothing a build
+/// or an install writes, so `openmoat run` denies commands writing them, and
+/// the folders above them, in every tier; CI files and commit-hook managers'
+/// files stay writable there (an install runs `husky`).
+pub static AGENT_CONFIG: LazyLock<Vec<&'static str>> =
+    LazyLock::new(|| hosts_runs_later(|entry| entry.agent_config).collect());
+
+/// The project globs (`**/…`) of every host's `Protect::runs_later` entries
+/// that `pick` takes, in the host list's order.
+fn hosts_runs_later(pick: fn(&RunsLater) -> bool) -> impl Iterator<Item = &'static str> {
+    Host::EVERY
+        .iter()
+        .flat_map(|host| host.spec().protect.runs_later)
+        .filter(move |entry| pick(entry))
+        .flat_map(|entry| entry.paths.globs.iter().copied())
+        .filter(|glob| glob.starts_with("**/"))
+}
+
+/// The [`RUNS_LATER`] files no agent host owns: CI configuration, commit-hook
+/// managers', the editors', package managers' and builds' configuration, git
+/// hooks outside `.git`, what every Python start runs, virtual environments
+/// and dev containers. The default policy lists the same files by hand
+/// beside the hosts' generated lines.
+const NOT_AN_AGENTS: &[&str] = &[
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
     "**/.circleci/**",
@@ -69,47 +107,8 @@ pub const RUNS_LATER: &[&str] = &[
     "**/.cargo/config.toml",
     "**/.cargo/config",
     "**/bunfig.toml",
-    "**/.claude/hooks/**",
-    "**/.mcp.json",
-    "**/.cursor/mcp.json",
-    "**/.codex/config.toml",
-    "**/.openclaw/extensions/**",
-    "**/.github/hooks/**",
-    "**/.github/mcp.json",
-    "**/.pi/extensions/**",
-    "**/.pi/mcp.json",
-    "**/.pi/settings.json",
-    // the folders above them, which a rename moves with everything inside
-    "**/.github/hooks",
-    "**/.pi",
-    "**/.pi/extensions",
-    "**/.gemini/policies/**",
-    "**/.gemini/commands/**",
-    "**/.gemini/agents/**",
-    "**/.github/agents/**",
-    "**/.claude/agents/**",
-    "**/.claude/skills/**",
-    "**/.claude/commands/**",
-    "**/.opencode/plugins/**",
-    "**/.opencode/plugin/**",
-    "**/.opencode/tools/**",
-    "**/.opencode/tool/**",
-    "**/.opencode/commands/**",
-    "**/.opencode/command/**",
-    "**/.opencode/opencode.json",
-    "**/.opencode/opencode.jsonc",
-    "**/.opencode/package.json",
-    "**/opencode.json",
-    "**/opencode.jsonc",
-    // the folders above a project's OpenCode plugins
-    "**/.opencode",
-    "**/.opencode/plugins",
-    "**/.opencode/plugin",
-    "**/.hermes/plugins/**",
-    "**/.hermes",
-    "**/.hermes/plugins",
-    // git hooks in the folders a repository's `core.hooksPath` usually names, and
-    // Cline's workspace hooks, with the folders above them
+    // git hooks in the folders a repository's `core.hooksPath` usually names,
+    // with the folders themselves
     "**/.githooks/**",
     "**/.git-hooks/**",
     "**/githooks/**",
@@ -118,12 +117,6 @@ pub const RUNS_LATER: &[&str] = &[
     "**/.git-hooks",
     "**/githooks",
     "**/git-hooks",
-    "**/.clinerules/hooks/**",
-    "**/.cline/hooks/**",
-    "**/.clinerules",
-    "**/.clinerules/hooks",
-    "**/.cline",
-    "**/.cline/hooks",
     // what every Python start runs; an install writes them (`pip install -e .`)
     "**/site-packages/*.pth",
     "**/dist-packages/*.pth",
@@ -140,42 +133,15 @@ pub const RUNS_LATER: &[&str] = &[
     "**/.devcontainer.json",
 ];
 
-/// The [`RUNS_LATER`] files an agent host loads as its own configuration when
-/// it next opens the project: hooks, MCP servers and extensions, which run
-/// with the person's rights. Nothing a build or an install writes, so
-/// `openmoat run` denies commands writing them; CI files and commit-hook
-/// managers' files stay writable there (an install runs `husky`).
-pub const AGENT_CONFIG: &[&str] = &[
-    "**/.claude/hooks/**",
-    "**/.mcp.json",
-    "**/.cursor/mcp.json",
-    "**/.codex/config.toml",
-    "**/.openclaw/extensions/**",
-    "**/.github/hooks/**",
-    "**/.github/mcp.json",
-    "**/.pi/extensions/**",
-    "**/.pi/mcp.json",
-    "**/.pi/settings.json",
-    "**/.opencode/plugins/**",
-    "**/.opencode/plugin/**",
-    "**/.opencode/tools/**",
-    "**/.opencode/tool/**",
-    "**/.opencode/opencode.json",
-    "**/.opencode/opencode.jsonc",
-    "**/opencode.json",
-    "**/opencode.jsonc",
-    "**/.hermes/plugins/**",
-];
-
 /// A write exclusion of one of [`RUNS_LATER`], below the project or below a
 /// directory `moat allow --dir` granted.
 pub fn runs_later_exclusion(pattern: &str) -> bool {
-    exclusion_of(pattern, RUNS_LATER)
+    exclusion_of(pattern, &RUNS_LATER)
 }
 
 /// A write exclusion of one of [`AGENT_CONFIG`], as [`runs_later_exclusion`].
 pub fn agent_config_exclusion(pattern: &str) -> bool {
-    exclusion_of(pattern, AGENT_CONFIG)
+    exclusion_of(pattern, &AGENT_CONFIG)
 }
 
 /// The folders above the file or folder an [`AGENT_CONFIG`] entry names, as
@@ -200,7 +166,7 @@ pub fn folders_above(entry: &str) -> Vec<String> {
 /// (`/p/.github`). Not at any depth: packages bring their own `.github` into
 /// `node_modules`, and installing or removing one would fail.
 pub fn agent_config_folders(pattern: &str) -> Vec<String> {
-    for file in AGENT_CONFIG {
+    for file in AGENT_CONFIG.iter() {
         let Some(head) = pattern.strip_suffix(file) else {
             continue;
         };
@@ -332,7 +298,7 @@ mod tests {
         };
         let reviewed = group(&policy.review, "runs-later");
         let allowed = group(&policy.allow, "project-fs");
-        for file in RUNS_LATER {
+        for file in RUNS_LATER.iter() {
             assert!(
                 reviewed.iter().any(|p| p == file),
                 "runs-later lacks {file}"
@@ -342,13 +308,51 @@ mod tests {
         }
         let in_projects = reviewed.iter().filter(|p| p.starts_with("**/")).count();
         assert_eq!(in_projects, RUNS_LATER.len(), "{reviewed:?}");
+        let mut unique = RUNS_LATER.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), RUNS_LATER.len(), "a file listed twice");
+    }
+
+    /// Every glob a host's spec marks as its configuration in a project is in
+    /// [`AGENT_CONFIG`], so every `openmoat run` tier denies commands writing
+    /// it; and no other is. Cline's workspace hooks and Gemini CLI's policy
+    /// files, commands and subagents among them.
+    #[test]
+    fn agent_configuration_comes_from_every_hosts_spec() {
+        let mut flagged = Vec::new();
+        for host in Host::EVERY {
+            for entry in host.spec().protect.runs_later {
+                if entry.agent_config {
+                    flagged.extend(entry.paths.globs.iter().copied());
+                }
+            }
+        }
+        assert_eq!(*AGENT_CONFIG, flagged);
+        for file in [
+            "**/.cline/hooks/**",
+            "**/.clinerules/hooks/**",
+            "**/.gemini/policies/**",
+            "**/.gemini/commands/**",
+            "**/.gemini/agents/**",
+            "**/.claude/skills/**",
+            "**/.github/agents/**",
+            "**/.opencode/commands/**",
+        ] {
+            assert!(AGENT_CONFIG.contains(&file), "{file}");
+            let excepted = format!("{PROJECT}/{file}");
+            assert!(agent_config_exclusion(&excepted), "{excepted}");
+        }
+        // home files are the hosts' own state, which `--write` may grant
+        assert!(AGENT_CONFIG.iter().all(|f| f.starts_with("**/")));
+        assert!(!NOT_AN_AGENTS.iter().any(|f| AGENT_CONFIG.contains(f)));
     }
 
     /// Every agent configuration file is one `runs-later` holds for review; CI files
     /// and commit-hook managers' files are not among them.
     #[test]
     fn agent_configuration_is_part_of_runs_later() {
-        for file in AGENT_CONFIG {
+        for file in AGENT_CONFIG.iter() {
             assert!(RUNS_LATER.contains(file), "{file}");
         }
         for file in [

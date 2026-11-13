@@ -38,6 +38,7 @@ pub(super) const PROTECT: Protect = Protect {
          (`GOOSE_DISABLE_KEYRING`; `config/base.rs`)",
         &["~/.config/goose/secrets.yaml"],
     )],
+    runs_later: &[],
 };
 
 /// The CLI is `goose`; the desktop app runs its agent as `goosed`.
