@@ -83,20 +83,29 @@ Each agent's gaps and the reasons are in
   there; other agents' logins stay denied. An API-key login can go through the broker
   instead ([BROKER_LOGINS.md](BROKER_LOGINS.md)); an OAuth login cannot
   ([ADR-054](adr/ADR-054-agent-credentials-in-sandboxes.md)).
-- **On Linux, the Lightweight tier does not protect files inside the project:**
-  commands the agent starts can read and write `.env`, create `.envrc`, and write `.moat`
-  and `.git/hooks`. `openmoat run` starts the Isolated tier (bubblewrap), which closes it,
-  by default where bubblewrap works (ADR-080); the Lightweight tier runs with
+- **On Linux without bubblewrap, nothing can be created at the top of the project, and
+  deeper denied paths stay open.** Landlock grants a folder with everything in it, so
+  where `openmoat run` gets no network namespace (bubblewrap missing or blocked) it grants
+  the project entry by entry (ADR-090): `.env` there is unreadable and `.git` and `.moat`
+  read-only, but commands cannot create, rename or remove anything directly at the
+  project's top (a new file, a `target/` that does not exist yet), and a `.env` or nested
+  `.git` in a subfolder stays readable and writable; `openmoat run` names each such path
+  when it starts and `openmoat doctor` warns. With bubblewrap, the Lightweight tier's
+  network namespace covers the project as the Isolated tier does, and `git commit` inside
+  the run fails there as under `--isolate` and on macOS. `openmoat run` starts the
+  Isolated tier by default where bubblewrap works (ADR-080); the Lightweight tier runs with
   `--no-isolate` or where bubblewrap is missing or blocked, and then `openmoat run` says so
-  when it starts, records it in the audit log and `openmoat doctor` warns. The Isolated
+  when it starts, records it in the audit log and `openmoat doctor` warns. In every Linux
+  tier, a `.env` created after the start where nothing stood (`.env.local`) stays readable
+  to commands. The Isolated
   tier shows the agent only the project, the read roots and `--write` paths, so an agent
   whose runtime lives elsewhere in the home (a `node` under `~/.nvm`) can fail to start in
   it until that directory is in `sandbox.read_roots`; this was not tried with every agent.
   An agent's hook settings in the
   project (`.gemini/settings.json`, `.claude/settings.local.json`, …) are protected where
   the agent gets a network namespace, missing ones by a read-only `{}` placeholder for the
-  session; without a namespace a command can create one that turns the next session's
-  hook off, and `openmoat run` only names it when the agent exits.
+  session; without a namespace those at the top and in the folders holding them cannot be
+  created, and one deeper that a command creates is named when the agent exits.
 - **macOS's per-user caches stay readable under `openmoat run`.** Commands read and write
   only the run's own temp directory (`TMPDIR`); `/tmp` and macOS's temp folder
   (`/var/folders/…/T`) are not read roots there, nor the Kerberos ticket caches in them. On

@@ -347,20 +347,28 @@ something OpenMoat claims to stop.
     (Apple silicon only); GitHub Actions no longer offers `macos-13` or `macos-14`
     runners, so macOS 13 and 14 are not exercised (#389).
   - The profile leaves every file's existence, size and times visible.
-  - On Linux, Landlock only grants. Secrets inside a granted tree stay readable and
-    writable for the agent's commands: `.env` in the project, `~/.cargo/credentials.toml`
-    in a read root, the project's `.git`; `.envrc` and `.moat` can be created. The hook still denies them for the agent's
-    tool calls. `openmoat run --isolate` closes this where bubblewrap runs (below);
-    plain `openmoat run` says so when it starts and `openmoat doctor` warns. Without a network namespace, a `--write` path that holds what `kernel-self`
+  - On Linux, Landlock only grants, so a deny inside a granted tree needs more than
+    Landlock (ADR-090). With a network namespace, its mounts cover the project as
+    `--isolate` does: `.env` files hidden, `.git`, `.moat` and agents' configuration
+    read-only, placeholders for a missing `.env`, `.envrc` and `.moat`. Without one,
+    the project is granted entry by entry: nothing can be created, renamed or removed
+    at its top (commands cannot create a new file there either), `.env` there is
+    unreadable and `.git` and `.moat` read-only, while a `.env` or nested `.git` in a
+    subfolder stays readable and writable; `openmoat run` and `openmoat doctor` name
+    each such path. A match created after the start where nothing stood (`.env.local`)
+    stays open in every Linux tier. The hook still denies them for the agent's tool
+    calls. Without a network namespace, a `--write` path that holds what `kernel-self`
     protects (`--write ~/.claude` holds `settings.json`) refuses to start, since
     nothing could keep those paths from commands.
   - An agent's own configuration in the project (`.claude/hooks/`, `.mcp.json`,
     `.cursor/mcp.json`, `.codex/config.toml`, `.github/hooks/`, `.github/mcp.json`,
     `.openclaw/extensions/`, `.pi/…`, OpenCode's `opencode.json[c]` and `.opencode/…`)
     is unwritable for commands on macOS, a write
-    the person allowed included; on Linux only the files existing directly in the
-    project are, where the agent gets a network namespace, and the rest stays
-    writable inside the project, which Landlock grants whole. The folders holding them
+    the person allowed included; on Linux, where the agent gets a network namespace,
+    the ones that exist at the start anywhere in the project are, and so are the
+    configuration folders missing where their holder exists, made empty and read-only
+    for the session (ADR-090); without a namespace those at the top and in the holder
+    folders are, since nothing can be created there. The folders holding them
     directly in the project (`.github`, `.pi`, `.openclaw`, `.opencode`) cannot be renamed away and
 
     back on either (on macOS not created or removed either); a nested one, such as a
@@ -370,8 +378,11 @@ something OpenMoat claims to stop.
     as a read-only `{}`, so a command cannot create one that turns the next session's hook
     off. Without a namespace a command can, and `openmoat run` names it when the agent exits. CI files and commit-hook managers' files
     stay writable on both (installs write them); the hook holds the agent's tools'
-    writes to one for review. On Linux an agent configuration file missing when the run starts
-    (`.mcp.json`, `.claude/hooks/`) can still be created by a command.
+    writes to one for review. On Linux, in the namespace and under `--isolate`, an agent
+    configuration file missing when the run starts (`.mcp.json`) can still be created
+    by a command, and so can a configuration folder whose holder is missing at the
+    start and not made for hook settings (`mkdir -p .pi/extensions`; `.claude` and
+    `.github` are made, so `.claude/hooks/` and `.github/hooks/` are covered).
   - Also on Linux, Landlock restricts TCP by port only. Where bubblewrap can run,
     `openmoat run` gives the agent a network namespace with only loopback, where the
     proxy's port is relayed in, so connections reach only the proxy. Where it is
@@ -415,9 +426,13 @@ something OpenMoat claims to stop.
   empty temp directory, and a network namespace whose only exit is OpenMoat's proxy,
   with the Lightweight tier's Landlock rules and seccomp filter inside
   ([SANDBOX.md](SANDBOX.md#openmoat-run---isolate-isolated-tier-linux)). It hides what the
-  policy denies inside those trees only where it exists when the session starts (and
-  `.env`, `.envrc` and `.moat` directly in the project even when missing): a match a
-  command creates later stays open to the agent's commands. The agent and its scripts
+  policy denies inside those trees where it exists when the session starts, and
+  `.env`, `.envrc` and `.moat` directly in the project and the folders of an agent's
+  configuration in a holder that exists or is made for hook settings (`.claude/hooks/`,
+  `.github/hooks/`) even when missing, but not one below a missing `.pi` or `.opencode`; a folder
+  bound read-only covers files created in it later (ADR-090). A match created later
+  anywhere else (`.env.local`, a `.env` in a new folder) stays open to the agent's
+  commands; ADR-090 designs a copy workspace for unattended runs that would close it. The agent and its scripts
   still share one sandbox, so everything the agent needs (its state, its API host,
   the credentials in its environment) its scripts get too. It depends on bubblewrap and
   on the kernel's user namespaces, which have their own CVE history. On macOS it

@@ -164,16 +164,18 @@ pub fn row(tier: &Tier) -> Option<(&'static str, String)> {
         Tier::Lightweight(Lightweight::OptedOut) => Some((
             OPTED_OUT_RULE,
             "`openmoat run --no-isolate`: the person started the Lightweight tier instead of \
-             the Isolated one, so commands could read and write `.env`, `.git` and `.moat` \
-             inside the project"
+             the Isolated one, so commands could see the rest of the machine the policy's read \
+             roots allow, and inside the project the paths the policy denies were covered only \
+             as far as `openmoat run` said when it started"
                 .to_owned(),
         )),
         Tier::Lightweight(Lightweight::Unavailable(why)) => Some((
             UNAVAILABLE_RULE,
             format!(
                 "`openmoat run` could not start the Isolated tier ({why}) and started the \
-                 Lightweight tier, so commands could read and write `.env`, `.git` and \
-                 `.moat` inside the project"
+                 Lightweight tier, so commands could see the rest of the machine the policy's \
+                 read roots allow, and inside the project the paths the policy denies were \
+                 covered only as far as `openmoat run` said when it started"
             ),
         )),
         Tier::Isolated { .. } | Tier::Lightweight(Lightweight::Platform) => None,
@@ -253,8 +255,8 @@ pub fn doctor_row(offered: &Offered, strict: Option<&str>) -> Option<(bool, Stri
             true,
             format!(
                 "openmoat run     cannot start the Isolated tier here, so it warns and starts \
-                 the Lightweight tier, where commands can read and write `.env`, `.git` and \
-                 `.moat` inside the project: {why}"
+                 the Lightweight tier, which shows commands more of the machine and covers less \
+                 of the project (another row names what stays open there): {why}"
             ),
         )),
     }

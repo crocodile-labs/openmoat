@@ -121,6 +121,12 @@ pub fn bubblewrap() -> Option<bool> {
     None
 }
 
+/// None: Seatbelt denies inside the project what the policy denies, so
+/// nothing there stays open for `moat doctor` to name.
+pub fn project_open(_: &Policy, _: &EvalContext) -> Option<String> {
+    None
+}
+
 /// The terminals (`/dev/ttys*`) this process's standard input, output and
 /// error are on. macOS has no `/proc` to name an open file, so each stream's
 /// device number is looked up among the terminals in `/dev`.
@@ -178,6 +184,16 @@ impl Confined {
         reason = "the method every platform's `Confined` has; Linux's reads itself"
     )]
     pub fn warning(&self) -> Option<&str> {
+        None
+    }
+
+    /// None: Seatbelt denies inside the project what the policy denies,
+    /// matches created later included, so there is nothing to name.
+    #[expect(
+        clippy::unused_self,
+        reason = "the method every platform's `Confined` has; Linux's reads itself"
+    )]
+    pub fn project_notice(&self) -> Option<&str> {
         None
     }
 

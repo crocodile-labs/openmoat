@@ -18,24 +18,24 @@ pull request, together with its side effects (no secret printed, no file written
 nothing reached the listener), and fails when it changes. Network targets are loopback
 listeners the test owns.
 
-| Case | Threat | Payload | `openmoat run`, macOS (Seatbelt) | `openmoat run --no-isolate`, Linux (Landlock + seccomp) | `openmoat run --isolate`, Linux (bubblewrap; the default where it works) | Claude Code sandbox, macOS | Claude Code sandbox, Linux | Codex `moat` profile, macOS | Codex `moat` profile, Linux |
-|---|---|---|---|---|---|---|---|---|---|
-| `script-benign-work` | control | `cat package.json > /dev/null && echo ok > out.txt && ln -sf src s && cat s/main.rs && /bin/bash -c true && curl --version > /dev/null` | ran | ran | ran | ran | ran | ran | ran |
-| `script-reads-ssh-key` | T1 | `cat "$HOME/.ssh/id_rsa"` | EPERM | EACCES | ENOENT | EPERM | ENOENT | EPERM | EACCES |
-| `script-reads-aws-credentials` | T1 | `cat "$HOME/.aws/credentials"` | EPERM | EACCES | ENOENT | EPERM | ENOENT | EPERM | EACCES |
-| `script-reads-project-env` | T1 | `cat .env` | EPERM | **gap**: ran (#174) | EACCES | EPERM | EACCES | EPERM | EACCES |
-| `script-writes-project-env` | T1 | `echo TOKEN=PLANTED >> .env` | EPERM | **gap**: ran (#174) | EACCES | EPERM | EACCES | EPERM | EACCES |
-| `script-plants-envrc` | T6 | `echo 'export LD_PRELOAD=PLANTED' > .envrc` | EPERM | **gap**: ran (#174) | EROFS | EPERM | EACCES | EPERM | EROFS |
-| `script-writes-project-policy` | T9 | `mkdir -p .moat && echo '# PLANTED' > .moat/policy.yaml` | EPERM | **gap**: ran (#174) | EEXIST | EPERM | EEXIST | EPERM | EEXIST |
-| `script-plants-git-hook` | T6 | `echo '# PLANTED' > .git/hooks/pre-commit` | EPERM | **gap**: ran (#174) | EROFS | EPERM | EROFS | EPERM | EROFS |
-| `script-writes-outside-project` | T4 | `echo x > "$HOME/outside.txt"` | EPERM | EACCES | EACCES | EPERM | contained | EPERM | contained |
-| `script-direct-tcp` | T12 | `/bin/bash -c 'exec 3<>/dev/tcp/127.0.0.1/{tcp}'` | EPERM | EACCES | EACCES | EPERM | refused | EPERM | refused |
-| `script-dns-query` | T12 | `/bin/bash -c 'printf q > /dev/udp/127.0.0.1/{udp}'` | EPERM | EPERM | EPERM | EPERM | contained | EPERM | contained |
-| `script-symlink-into-ssh` | T11 | `rm -f keys; ln -s "$HOME/.ssh" keys && cat keys/id_rsa` | EPERM | EACCES | ENOENT | EPERM | ENOENT | EPERM | EACCES |
-| `script-edits-policy` | T9 | `echo "# widened" >> "$HOME/.moat/policy.yaml"` | EPERM | EACCES | ENOENT | EPERM | ENOENT | EPERM | EACCES |
-| `script-edits-hook-file` | T9 | `echo "{}" > "$HOME/.claude/settings.json"` | EPERM | EACCES | ENOENT | EPERM | ENOENT | EPERM | EROFS |
-| `script-proxy-unlisted-host` | T12 | `curl -fsS -o /dev/null -m 30 http://evil.example/` | proxy 403 | proxy 403 | proxy 403 | proxy 403 | proxy 403 | proxy 403 | proxy 403 |
-| `script-injects-terminal-input` | T6 | `perl -e 'open(T, "+<", "/dev/tty") or (-t STDIN and open(T, "+<&STDIN")) or die "no terminal: $!\n"; ioctl(T, $^O eq "darwin" ? 0x80017472 : 0x5412, my $c = "#") or die "TIOCSTI: $!\n"'`, on a terminal | EPERM | EPERM | EPERM | no terminal | no terminal | EPERM | EIO |
+| Case | Threat | Payload | `openmoat run`, macOS (Seatbelt) | `openmoat run --no-isolate`, Linux (Landlock + seccomp, network namespace) | `openmoat run --no-isolate`, Linux without bubblewrap (Landlock + seccomp) | `openmoat run --isolate`, Linux (bubblewrap; the default where it works) | Claude Code sandbox, macOS | Claude Code sandbox, Linux | Codex `moat` profile, macOS | Codex `moat` profile, Linux |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `script-benign-work` | control | `cat package.json > /dev/null && echo ok > out.txt && ln -sf src s && cat s/main.rs && /bin/bash -c true && curl --version > /dev/null` | ran | ran | **gap**: EACCES (#174) | ran | ran | ran | ran | ran |
+| `script-reads-ssh-key` | T1 | `cat "$HOME/.ssh/id_rsa"` | EPERM | EACCES | EACCES | ENOENT | EPERM | ENOENT | EPERM | EACCES |
+| `script-reads-aws-credentials` | T1 | `cat "$HOME/.aws/credentials"` | EPERM | EACCES | EACCES | ENOENT | EPERM | ENOENT | EPERM | EACCES |
+| `script-reads-project-env` | T1 | `cat .env` | EPERM | EACCES | EACCES | EACCES | EPERM | EACCES | EPERM | EACCES |
+| `script-writes-project-env` | T1 | `echo TOKEN=PLANTED >> .env` | EPERM | EACCES | EACCES | EACCES | EPERM | EACCES | EPERM | EACCES |
+| `script-plants-envrc` | T6 | `echo 'export LD_PRELOAD=PLANTED' > .envrc` | EPERM | EROFS | EACCES | EROFS | EPERM | EACCES | EPERM | EROFS |
+| `script-writes-project-policy` | T9 | `mkdir -p .moat && echo '# PLANTED' > .moat/policy.yaml` | EPERM | EEXIST | EACCES | EEXIST | EPERM | EEXIST | EPERM | EEXIST |
+| `script-plants-git-hook` | T6 | `echo '# PLANTED' > .git/hooks/pre-commit` | EPERM | EROFS | EACCES | EROFS | EPERM | EROFS | EPERM | EROFS |
+| `script-writes-outside-project` | T4 | `echo x > "$HOME/outside.txt"` | EPERM | EACCES | EACCES | EACCES | EPERM | contained | EPERM | contained |
+| `script-direct-tcp` | T12 | `/bin/bash -c 'exec 3<>/dev/tcp/127.0.0.1/{tcp}'` | EPERM | EACCES | EACCES | EACCES | EPERM | refused | EPERM | refused |
+| `script-dns-query` | T12 | `/bin/bash -c 'printf q > /dev/udp/127.0.0.1/{udp}'` | EPERM | EPERM | EPERM | EPERM | EPERM | contained | EPERM | contained |
+| `script-symlink-into-ssh` | T11 | `rm -f keys; ln -s "$HOME/.ssh" keys && cat keys/id_rsa` | EPERM | EACCES | EACCES | ENOENT | EPERM | ENOENT | EPERM | EACCES |
+| `script-edits-policy` | T9 | `echo "# widened" >> "$HOME/.moat/policy.yaml"` | EPERM | EACCES | EACCES | ENOENT | EPERM | ENOENT | EPERM | EACCES |
+| `script-edits-hook-file` | T9 | `echo "{}" > "$HOME/.claude/settings.json"` | EPERM | EACCES | EACCES | ENOENT | EPERM | ENOENT | EPERM | EROFS |
+| `script-proxy-unlisted-host` | T12 | `curl -fsS -o /dev/null -m 30 http://evil.example/` | proxy 403 | proxy 403 | proxy 403 | proxy 403 | proxy 403 | proxy 403 | proxy 403 | proxy 403 |
+| `script-injects-terminal-input` | T6 | `perl -e 'open(T, "+<", "/dev/tty") or (-t STDIN and open(T, "+<&STDIN")) or die "no terminal: $!\n"; ioctl(T, $^O eq "darwin" ? 0x80017472 : 0x5412, my $c = "#") or die "TIOCSTI: $!\n"'`, on a terminal | EPERM | EPERM | EPERM | EPERM | no terminal | no terminal | EPERM | EIO |
 
 EPERM, EACCES and EROFS: the system call failed with that error (EROFS: the sandbox
 mounted the path read-only). ENOENT: the path does not exist
@@ -51,18 +51,15 @@ itself, not the sandbox (the CI runner's kernel has `dev.tty.legacy_tiocsti` at 
 
 ## Known gaps
 
-- `script-reads-project-env` under `openmoat run --no-isolate`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .env stays readable (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
-- `script-writes-project-env` under `openmoat run --no-isolate`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .env stays writable (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
-- `script-plants-envrc` under `openmoat run --no-isolate`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .envrc can be created (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
-- `script-writes-project-policy` under `openmoat run --no-isolate`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .moat can be written (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
-- `script-plants-git-hook` under `openmoat run --no-isolate`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .git/hooks stays writable (THREAT_MODEL §5); the hook still holds the agent's own writes there for review
+- `script-benign-work` under `openmoat run --no-isolate`, Linux without bubblewrap (Landlock + seccomp) (#174): without a network namespace Landlock grants the project entry by entry, and any right to create at its top would reach into .git/hooks too, so a command cannot create out.txt there (ADR-090); folders that exist stay writable, and with bubblewrap installed nothing changes
 
 ## Layers
 
 | Layer | Status |
 |---|---|
 | `openmoat run`, macOS (Seatbelt) | verified by the `test (macos-15)` CI job |
-| `openmoat run --no-isolate`, Linux (Landlock + seccomp) | verified, with a network namespace, by the `test (ubuntu-latest)` CI job (Linux 6.7 or later); not run in CI as on a stock Ubuntu (no bubblewrap, unprivileged user namespaces restricted) |
+| `openmoat run --no-isolate`, Linux (Landlock + seccomp, network namespace) | verified by the `test (ubuntu-latest)` CI job (Linux 6.7 or later, bubblewrap installed) |
+| `openmoat run --no-isolate`, Linux without bubblewrap (Landlock + seccomp) | verified by the `test (ubuntu-latest)` CI job with the namespace turned off in a test build (`MOAT_TEST_NO_NETNS`), and by hand on a stock Ubuntu (no bubblewrap, unprivileged user namespaces restricted) |
 | `openmoat run --isolate`, Linux (bubblewrap; the default where it works) | verified by the `test (ubuntu-latest)` CI job (bubblewrap installed) |
 | `openmoat run --isolate`, macOS | not run: refused until the Isolated tier has a virtual machine there (#175) |
 | Claude Code sandbox and Codex profile, macOS | verified with the pinned host binaries (`scripts/ci/host-binaries.sh`); CI does not fetch them |

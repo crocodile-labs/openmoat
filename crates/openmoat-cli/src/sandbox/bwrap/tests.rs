@@ -235,6 +235,7 @@ allow:
     let rules = Rules {
         read: vec![p(".tools"), "/dev/null".into()],
         write: vec![p("proj"), p(".agent")],
+        list: Vec::new(),
         connect_port: Some(18080),
     };
     let masks = grant_masks(&ir, &rules, &[p("proj")]).unwrap();
@@ -435,6 +436,7 @@ fn a_linked_agent_folder_keeps_its_hook_settings_read_only() {
     let rules = Rules {
         read: Vec::new(),
         write: vec![p("proj"), p("real-claude")],
+        list: Vec::new(),
         connect_port: Some(18080),
     };
     let masks = grant_masks(&ir, &rules, &[p("proj")]).unwrap();
@@ -503,6 +505,7 @@ allow:
     let rules = Rules {
         read: vec![tmp.clone()],
         write: vec![p("proj")],
+        list: Vec::new(),
         connect_port: Some(18080),
     };
     let mut masks = grant_masks(&ir, &rules, &[p("proj")]).unwrap();

@@ -74,6 +74,11 @@ pub fn bubblewrap() -> Option<bool> {
     None
 }
 
+/// None: `moat run` refuses here, so nothing in a project is open to it.
+pub fn project_open(_: &Policy, _: &EvalContext) -> Option<String> {
+    None
+}
+
 /// `moat run` refuses here, so no wrapper is ever linked.
 pub fn link_tool_shell(_: &Path, _: &Path) -> std::io::Result<()> {
     Err(std::io::ErrorKind::Unsupported.into())
@@ -112,6 +117,10 @@ impl Confined {
     }
 
     pub fn warning(&self) -> Option<&str> {
+        match *self {}
+    }
+
+    pub fn project_notice(&self) -> Option<&str> {
         match *self {}
     }
 

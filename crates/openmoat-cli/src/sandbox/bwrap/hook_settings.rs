@@ -14,7 +14,7 @@
 //! when the session ends, each only while it is still as it was made.
 
 use super::{Mount, nested_write_denials};
-use crate::sandbox::patterns::folders_above;
+use crate::sandbox::patterns::{AGENT_CONFIG, folders_above};
 use openmoat_core::ir::Enforcement;
 
 /// A file or folder created in the project for one session.
@@ -115,6 +115,7 @@ pub fn plan(
         });
         out.mounts.push(Mount::ReadOnly(path));
     }
+    config_folders(&mut out, real, found, dir_below);
     // folders first, outermost first: a bind onto a folder must come before
     // the read-only file inside it
     out.mounts.sort_by_key(|m| match m {
@@ -122,6 +123,46 @@ pub fn plan(
         other => (1, super::depth(super::path_of(other))),
     });
     out
+}
+
+/// Add to `out` the folders of an agent's configuration ([`AGENT_CONFIG`]:
+/// `.claude/hooks`, `.github/hooks`, `.pi/extensions`) missing in the project
+/// `real` below which `dir_below` says writing is denied, each made an empty
+/// folder for the session and bound read-only (ADR-090): a hook written there
+/// after the start would be loaded by the agent's next session, outside any
+/// sandbox, and a mount over a folder covers files created in it later, where
+/// one over a file cannot. Only where every folder above it is there already or
+/// made for the hook settings (`.claude`), so a project gets no folders of
+/// agents it has none of.
+fn config_folders(
+    out: &mut Plan,
+    real: &str,
+    found: &dyn Fn(&str) -> Found,
+    dir_below: &dyn Fn(&str) -> bool,
+) {
+    let subtrees = AGENT_CONFIG.iter().filter_map(|entry| {
+        let rest = entry.strip_prefix("**/")?.strip_suffix("/**")?;
+        (!folders_above(rest).is_empty()).then_some(rest)
+    });
+    for rest in subtrees {
+        let path = format!("{real}/{rest}");
+        if found(&path) != Found::Missing || !dir_below(&path) {
+            continue;
+        }
+        let held = folders_above(rest).iter().all(|folder| {
+            let folder = format!("{real}/{folder}");
+            found(&folder) == Found::Dir
+                || out.placeholders.iter().any(|p| p.dir && p.path == folder)
+        });
+        if held && !out.placeholders.iter().any(|p| p.path == path) {
+            out.placeholders.push(Placeholder {
+                path: path.clone(),
+                dir: true,
+                contents: "",
+            });
+            out.mounts.push(Mount::ReadOnly(path));
+        }
+    }
 }
 
 /// [`Found`] for `path` on this machine, links not followed.

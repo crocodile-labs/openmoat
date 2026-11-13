@@ -416,6 +416,13 @@ pub fn bubblewrap() -> Option<bool> {
     platform::bubblewrap()
 }
 
+/// On Linux without a network namespace, which paths the policy denies in the
+/// project of `ctx` `moat run` would leave open to commands, for `moat doctor`
+/// (ADR-090); `None` elsewhere.
+pub fn project_open(policy: &Policy, ctx: &openmoat_core::EvalContext) -> Option<String> {
+    platform::project_open(policy, ctx)
+}
+
 /// What `openmoat run` would withhold here under the allowlist (ADR-077), for
 /// `openmoat doctor`: names only, given what `policy` adds and with `hosts`'
 /// own names kept.
@@ -505,7 +512,7 @@ fn notice(
     if let Some(fallback) = isolation::notice(tier) {
         writeln!(err, "{fallback}")?;
     }
-    if let Some(open) = self::tier::notice(platform::bubblewrap(), tier.isolated()) {
+    if let Some(open) = agent.project_notice() {
         writeln!(err, "{open}")?;
     }
     if verbose {

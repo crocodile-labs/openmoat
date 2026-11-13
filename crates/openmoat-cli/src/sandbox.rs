@@ -201,6 +201,31 @@ pub fn landlock_rules(
     landlock::generate(&ir, &grants)
 }
 
+/// The Landlock rules `moat run` applies on Linux where no mount can cover
+/// paths inside the project (no network namespace): the project granted entry
+/// by entry ([`landlock::entries`], ADR-090). With them, the paths the policy
+/// denies in the project that stay open to commands, or why they could not be
+/// listed.
+#[cfg(target_os = "linux")]
+pub fn landlock_entries(
+    policy: &Policy,
+    ctx: &EvalContext,
+    grants: Grants,
+) -> anyhow::Result<(landlock::Generated, Result<Vec<String>, String>)> {
+    let (ir, grants) = lower_for_session(policy, ctx, grants)?;
+    let mut generated = landlock::generate(&ir, &grants)?;
+    let project = project_spellings(ctx);
+    let landlock::Generated { rules, report } = &mut generated;
+    landlock::entries::split_project(&ir, rules, report, &project)?;
+    let open = match project.first() {
+        Some(real) => bwrap::project_masks(&ir, std::slice::from_ref(real))
+            .map(|masks| landlock::entries::open(&masks.mounts, &generated.rules))
+            .map_err(|error| format!("{error:#}")),
+        None => Ok(Vec::new()),
+    };
+    Ok((generated, open))
+}
+
 /// The bubblewrap mounts and Landlock rules `moat run --isolate` applies on
 /// Linux, for the project's spellings in `ctx` (the resolved one first).
 #[cfg(target_os = "linux")]
@@ -226,10 +251,9 @@ pub fn netns_masks(
     bwrap::grant_masks(&ir, rules, &project_spellings(ctx))
 }
 
-/// The binds `moat run`'s network namespace on Linux adds over the agent
-/// configuration and hook settings in the project of `ctx`, and the folders
-/// that hold them, with the missing hook settings it creates
-/// ([`bwrap::project_masks`]).
+/// The masks `moat run`'s network namespace on Linux adds over the project of
+/// `ctx`, as the Isolated tier's, with the placeholders it creates
+/// ([`bwrap::project_masks`], ADR-090).
 #[cfg(target_os = "linux")]
 pub fn netns_project_masks(
     policy: &Policy,
@@ -237,6 +261,17 @@ pub fn netns_project_masks(
 ) -> anyhow::Result<bwrap::ProjectMasks> {
     let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
     bwrap::project_masks(&ir, &project_spellings(ctx))
+}
+
+/// [`netns_project_masks`] for the project's top and the folders directly in
+/// it only, where the whole walk failed ([`bwrap::project_masks_near_top`]).
+#[cfg(target_os = "linux")]
+pub fn netns_project_masks_near_top(
+    policy: &Policy,
+    ctx: &EvalContext,
+) -> anyhow::Result<bwrap::ProjectMasks> {
+    let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
+    bwrap::project_masks_near_top(&ir, &project_spellings(ctx))
 }
 
 /// The agents' hook settings missing in the project of `ctx`, which `moat

@@ -4,9 +4,11 @@
 //! calling thread and what it starts, so OpenMoat's proxy thread stays
 //! unrestricted and keeps its audit log and its network. Landlock limits TCP by
 //! port only, so where bubblewrap can make one the agent also gets a network
-//! namespace of its own (`linux/netns.rs`), and `moat` inside it applies the
-//! rules and filter; elsewhere `moat run` says the network is restricted by port
-//! only. In the Isolated tier (`linux/isolate.rs`), the default where
+//! namespace of its own (`linux/netns.rs`), whose mounts cover in the project
+//! what the policy denies, and `moat` inside it applies the rules and filter;
+//! elsewhere `moat run` says the network is restricted by port only, and grants
+//! the project entry by entry (`crate::sandbox::landlock::entries`, ADR-090).
+//! In the Isolated tier (`linux/isolate.rs`), the default where
 //! bubblewrap works (ADR-080), the agent starts in bubblewrap's own view of the
 //! machine, and `moat` inside it applies the same rules and filter.
 
@@ -25,11 +27,13 @@ use seccompiler::{
 };
 
 use super::isolation::Offered;
+use crate::sandbox::bwrap::shared::Shared;
 use crate::sandbox::landlock::Rules;
 use crate::sandbox::seccomp::{SOCKET_ARGS, SOCKETPAIR_TYPES};
 use crate::sandbox::{
-    Grants, Report, exposure, kernel_self_in_writes, landlock_rules, missing_hook_settings,
-    netns_masks, netns_project_masks, session_tmpdir,
+    Grants, Report, exposure, kernel_self_in_writes, landlock_entries, landlock_rules,
+    missing_hook_settings, netns_masks, netns_project_masks, netns_project_masks_near_top,
+    session_tmpdir,
 };
 
 /// The kernel's Landlock ABI, read without restricting anything (ADR-082).
@@ -153,6 +157,9 @@ pub struct Confined {
     /// Where the sandbox is weaker than `moat run` promises: printed before
     /// the agent starts.
     warning: Option<String>,
+    /// What the Lightweight tier covers inside the project and what it leaves
+    /// open there (`tier.rs`, ADR-090): printed before the agent starts.
+    project: Option<String>,
     /// Hook settings missing in the project when the agent starts, which
     /// nothing covers without a network namespace: each that exists when the
     /// agent exits is named.
@@ -168,45 +175,70 @@ pub fn confine(
 ) -> Result<Confined> {
     let port = grants.proxy_port;
     let writes = grants.writes.clone();
+    let entries = grants.clone();
     let generated = landlock_rules(policy, ctx, grants)?;
     refuse_exposed(state, &generated.rules, false)?;
     // Built here also where `inside` applies them: a kernel without Landlock
     // ABI 4 is refused before anything starts.
-    let mut agent = restricted(&generated.rules, generated.report, Command::new(program))?;
-    let Some(port) = port else {
-        // No port: Landlock allows no TCP connection at all.
-        return Ok(agent);
+    let agent = restricted(&generated.rules, generated.report, Command::new(program))?;
+    // No port: Landlock allows no TCP connection at all, and no namespace is made.
+    let network = match port {
+        Some(port) => match netns::network() {
+            netns::Network::Namespace(bwrap) => Ok((bwrap, port)),
+            netns::Network::PortOnly(why) => Err(Some((port, why))),
+        },
+        None => Err(None),
     };
-    // What the deny rules name inside the read roots and `--write` paths,
-    // which Landlock grants whole.
-    let masks = netns_masks(policy, ctx, &generated.rules)?;
-    match netns::network() {
-        netns::Network::Namespace(bwrap) => {
-            // The agent configuration and hook settings in the project,
-            // read-only where they exist (missing hook settings created for
-            // the session), and the folders holding them pinned.
-            let project = netns_project_masks(policy, ctx)?;
-            let mut masks = masks;
+    match network {
+        Ok((bwrap, port)) => {
+            // What the deny rules name inside the read roots and `--write`
+            // paths, which Landlock grants whole, and in the project the
+            // Isolated tier's masks, with the placeholders they need.
+            let mut masks = netns_masks(policy, ctx, &generated.rules)?;
+            // Held before the project is looked at (`isolate::Session`).
+            let shared = Shared::take(state, isolate::project_of(ctx))?;
+            // A project too large to walk, or with a name no mount can take,
+            // still starts as before, covered near its top and saying so.
+            let (project, notice) = match netns_project_masks(policy, ctx) {
+                Ok(project) => (project, super::tier::NAMESPACED.to_owned()),
+                Err(error) => (
+                    netns_project_masks_near_top(policy, ctx)?,
+                    super::tier::namespaced_near_top(&format!("{error:#}")),
+                ),
+            };
             masks.extend(project.mounts);
-            netns::namespaced(
+            let mut agent = netns::namespaced(
                 &bwrap,
                 &generated.rules,
                 &masks,
-                &project.placeholders,
+                (&project.placeholders, shared),
                 agent.report,
                 program,
                 &ctx.cwd,
                 port,
-            )
+            )?;
+            agent.project = Some(notice);
+            Ok(agent)
         }
-        netns::Network::PortOnly(why) => {
-            // Only the namespace's mounts keep these from commands inside a
-            // `--write` path: without it, refuse rather than leave them open.
-            let held = kernel_self_in_writes(policy, ctx, &writes)?;
-            if let Some(refusal) = exposure::kernel_self_refusal(&held, &why) {
-                bail!("{refusal}");
+        Err(port_only) => {
+            if let Some((_, why)) = &port_only {
+                // Only the namespace's mounts keep these from commands inside
+                // a `--write` path: without it, refuse rather than leave them open.
+                let held = kernel_self_in_writes(policy, ctx, &writes)?;
+                if let Some(refusal) = exposure::kernel_self_refusal(&held, why) {
+                    bail!("{refusal}");
+                }
             }
-            agent.warning = Some(netns::port_only_notice(port, &why, &masks));
+            // No mount can cover inside the project: it is granted entry by
+            // entry instead (ADR-090).
+            let (split, open) = landlock_entries(policy, ctx, entries)?;
+            refuse_exposed(state, &split.rules, false)?;
+            let mut agent = restricted(&split.rules, split.report, Command::new(program))?;
+            if let Some((port, why)) = &port_only {
+                let masks = netns_masks(policy, ctx, &generated.rules)?;
+                agent.warning = Some(netns::port_only_notice(*port, why, &masks));
+            }
+            agent.project = Some(super::tier::port_only(&open));
             agent.watch = missing_hook_settings(policy, ctx)?;
             Ok(agent)
         }
@@ -252,14 +284,28 @@ pub fn isolation() -> Offered {
 }
 
 /// Whether the system's bubblewrap, which `moat run --isolate` needs, is
-/// installed; always `Some` here, where the Lightweight tier's Landlock rules
-/// cannot deny a path inside the project (`tier.rs`).
+/// installed; always `Some` here, where the Lightweight tier covers less of
+/// the project than the Isolated one (`tier.rs`).
 #[expect(
     clippy::unnecessary_wraps,
     reason = "one signature on every platform: `None` where plain `moat run` has no gap to name"
 )]
 pub fn bubblewrap() -> Option<bool> {
     Some(isolate::system_bwrap().is_some())
+}
+
+/// What `moat doctor` says where `moat run --no-isolate`, or a plain `moat run`
+/// that cannot isolate, would grant the project of `ctx` entry by entry (no
+/// network namespace, ADR-090): the paths the policy denies there that would
+/// stay open to commands. `None` where the namespace's mounts cover them.
+pub fn project_open(policy: &Policy, ctx: &EvalContext) -> Option<String> {
+    let netns::Network::PortOnly(_) = netns::network() else {
+        return None;
+    };
+    Some(match landlock_entries(policy, ctx, Grants::default()) {
+        Ok((_, open)) => super::tier::doctor_line(&open),
+        Err(error) => super::tier::doctor_refusal(&format!("{error:#}")),
+    })
 }
 
 pub use isolate::{inside, isolate};
@@ -352,6 +398,9 @@ fn restricted(rules: &Rules, report: Report, command: Command) -> Result<Confine
                 &rules.write,
                 AccessFs::from_all(ABI_REQUIRED),
             ))?
+            // Listing only: no file is read and nothing is made or removed
+            // directly in these (ADR-090).
+            .add_rules(path_beneath_rules(&rules.list, AccessFs::ReadDir))?
             .add_rules(ports)
     };
     let ruleset = build().context("`openmoat run` needs Landlock ABI 4 (Linux 6.7 or later)")?;
@@ -362,6 +411,7 @@ fn restricted(rules: &Rules, report: Report, command: Command) -> Result<Confine
         restrict: Some((ruleset, filters)),
         _session: None,
         warning: None,
+        project: None,
         watch: Vec::new(),
     })
 }
@@ -502,6 +552,10 @@ impl Confined {
 
     pub fn warning(&self) -> Option<&str> {
         self.warning.as_deref()
+    }
+
+    pub fn project_notice(&self) -> Option<&str> {
+        self.project.as_deref()
     }
 
     pub fn status(self) -> Result<ExitStatus> {

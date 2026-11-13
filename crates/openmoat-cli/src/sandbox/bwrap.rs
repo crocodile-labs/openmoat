@@ -15,7 +15,11 @@
 //! literal paths the deny rules name are looked up. A name a `**/` deny rule
 //! names (`.env`, `.envrc`, `.moat`) that is missing directly in the project
 //! gets an empty placeholder file there for the session, so it cannot be
-//! created. A match created later anywhere else stays open, as listed.
+//! created, and a folder of an agent's configuration (`.claude/hooks`) missing
+//! in a folder that holds one gets an empty placeholder folder, bound
+//! read-only, so nothing can be created in it (ADR-090). A match created later
+//! anywhere else stays open, as listed. `moat run`'s network namespace puts the
+//! same masks over the project ([`project_masks`]).
 
 use anyhow::{Result, bail};
 use openmoat_core::ir::{Access, Checker, Effect, Enforcement};
@@ -24,8 +28,8 @@ use openmoat_core::{AtomicAction, Kind};
 use super::landlock::{self, INSIDE_GRANTS_ALLOWANCE, Rules, TCP_PORT_ALLOWANCE};
 use super::links;
 use super::patterns::{
-    AGENT_CONFIG, folders_above, has_glob, is_below, literal_tree, push_unique,
-    runs_later_exclusion, split,
+    AGENT_CONFIG, agent_config_exclusion, folders_above, has_glob, is_below, literal_tree,
+    push_unique, runs_later_exclusion, split,
 };
 use super::{Grants, Report};
 
@@ -34,6 +38,8 @@ mod globs;
 /// Agents' hook settings in the project that do not exist yet.
 mod hook_settings;
 pub use hook_settings::Placeholder;
+/// Placeholders sessions in one project share, removed by the last to end.
+pub mod shared;
 
 /// A name below a directory that only a rule for the whole subtree (`dir/**`)
 /// matches: no policy names it.
@@ -113,38 +119,14 @@ pub fn generate(ir: &Enforcement, grants: &Grants, project: &[String]) -> Result
     }
     trees.sort_by_key(|m| depth(path_of(m)));
     let real = project.first().map(String::as_str);
-    let mut masks = Masks {
-        checker: &checker,
-        project: real,
-        mounts: Vec::new(),
-        entries: 0,
+    let (mut masks, placeholders) = match real {
+        Some(real) => project_view(ir, &checker, real, None)?,
+        None => (Vec::new(), Vec::new()),
     };
-    if let Some(real) = real {
-        masks.walk(real, false)?;
-    }
-    let mut placeholders = Vec::new();
-    for name in denied_names(ir) {
-        let Some(real) = real else { break };
-        let path = format!("{real}/{name}");
-        let missing = std::fs::symlink_metadata(&path).is_err();
-        if missing && (masks.denied(Kind::FsRead, &path) || masks.denied_below(&path)) {
-            placeholders.push(Placeholder::empty_file(path.clone()));
-            masks.mounts.push(Mount::Hide { path, dir: false });
-        }
-    }
-    if let Some(real) = real {
-        let missing = hook_settings::plan(ir, real, &hook_settings::on_disk, &|p| {
-            masks.denied_below(p)
-        });
-        placeholders.extend(missing.placeholders);
-        masks.mounts.extend(missing.mounts);
-    }
-    masks.mounts.extend(literal_masks(ir, &trees, real));
-    masks
-        .mounts
-        .extend(globs::name_glob_masks(ir, &trees, real)?);
+    masks.extend(literal_masks(ir, &trees, real));
+    masks.extend(globs::name_glob_masks(ir, &trees, real)?);
     let mut mounts = trees;
-    mounts.extend(respelled(&masks.mounts, project));
+    mounts.extend(respelled(&masks, project));
     Ok(Generated {
         rules,
         mounts,
@@ -183,62 +165,101 @@ pub fn grant_masks(ir: &Enforcement, rules: &Rules, project: &[String]) -> Resul
 }
 
 /// The masks `moat run`'s network namespace adds in the project (`project`,
-/// its resolved spelling first), for what exists directly in it:
-/// - each agent configuration file or directory ([`AGENT_CONFIG`]), bound
-///   read-only, so commands cannot write, remove or replace it;
-/// - each file a `**/` write deny of `ir` names below a folder (an agent's hook
-///   settings: `.claude/settings.json`, `.copilot/hooks`), read-only as under
-///   `--isolate`;
-/// - the folders above both (`.github`, `.pi`, `.claude`), each bound onto
-///   itself, so it cannot be renamed away with the file inside and back.
-///
-/// A hook settings file that is missing is created for the session and bound
-/// read-only, with the folders above it ([`hook_settings`]). Agent
-/// configuration created later, or one in a subdirectory, stays writable;
-/// Landlock grants the project whole.
+/// its resolved spelling first): the Isolated tier's ([`project_view`]), so
+/// commands cannot read the project's `.env` files nor write its `.git`, its
+/// `.moat` or an agent's configuration and hook settings, wherever they are
+/// when the session starts (ADR-090). Files a build or an install writes
+/// ([`without_runs_later`]) stay writable, as Seatbelt leaves them. A match
+/// created later where no placeholder stands stays open; Landlock grants the
+/// project whole.
 pub fn project_masks(ir: &Enforcement, project: &[String]) -> Result<ProjectMasks> {
     let Some(real) = project.first() else {
         return Ok(ProjectMasks::default());
     };
+    let ir = without_runs_later(ir);
     let checker = ir.checker()?;
+    let (mounts, placeholders) = project_view(&ir, &checker, real, None)?;
+    Ok(ProjectMasks {
+        mounts: respelled(&mounts, project),
+        placeholders,
+    })
+}
+
+/// [`project_masks`] looking only at the project's top and the folders
+/// directly in it, skipping names that are not UTF-8: what the network
+/// namespace falls back to when the whole walk fails (more than
+/// [`MAX_ENTRIES`] entries, a name it cannot mount over), so a run that started
+/// before still starts, with `.env`, `.git`, `.moat` and the agents'
+/// configuration at the top covered and what lies deeper left open, as
+/// `openmoat run` says (ADR-090).
+pub fn project_masks_near_top(ir: &Enforcement, project: &[String]) -> Result<ProjectMasks> {
+    let Some(real) = project.first() else {
+        return Ok(ProjectMasks::default());
+    };
+    let ir = without_runs_later(ir);
+    let checker = ir.checker()?;
+    let (mounts, placeholders) = project_view(&ir, &checker, real, Some(NEAR_TOP))?;
+    Ok(ProjectMasks {
+        mounts: respelled(&mounts, project),
+        placeholders,
+    })
+}
+
+/// How deep [`project_masks_near_top`] looks: the project's top and the
+/// folders directly in it (`.claude/settings.json`, `.github/hooks`).
+const NEAR_TOP: usize = 2;
+
+/// The masks over the project `real` (resolved) and the placeholders they
+/// need, outermost first: every path in it the policy denies, walked
+/// ([`Masks::walk`]); an empty file for each name a `**/` rule denies that is
+/// missing directly in it (`.env`, `.envrc`, `.moat`), so it cannot be
+/// created; and the agents' hook settings and configuration folders missing
+/// there ([`hook_settings`]). With `depth`, only that many levels are walked
+/// and a name that is not UTF-8 is passed by rather than refused.
+fn project_view(
+    ir: &Enforcement,
+    checker: &Checker,
+    real: &str,
+    depth: Option<usize>,
+) -> Result<(Vec<Mount>, Vec<Placeholder>)> {
     let mut masks = Masks {
-        checker: &checker,
+        checker,
         project: Some(real),
         mounts: Vec::new(),
         entries: 0,
+        depth,
     };
-    for folder in agent_config_holders() {
-        let path = format!("{real}/{folder}");
-        if is_directory(&path) {
-            push_mount(&mut masks.mounts, Mount::ReadWrite(path));
-        }
-    }
-    for entry in AGENT_CONFIG {
-        let rest = entry.strip_prefix("**/").unwrap_or(entry);
-        let path = format!("{real}/{}", rest.strip_suffix("/**").unwrap_or(rest));
-        if std::fs::symlink_metadata(&path).is_ok() {
-            push_mount(&mut masks.mounts, Mount::ReadOnly(path));
-        }
-    }
-    for rest in nested_write_denials(ir) {
-        let mut paths = folders_above(&rest);
-        paths.push(rest);
-        for path in paths.iter().map(|p| format!("{real}/{p}")) {
-            if let Ok(meta) = std::fs::symlink_metadata(&path) {
-                masks.pin(&path, meta.is_dir());
-            }
+    masks.walk(real, false, 1)?;
+    let mut placeholders = Vec::new();
+    for name in denied_names(ir) {
+        let path = format!("{real}/{name}");
+        let missing = std::fs::symlink_metadata(&path).is_err();
+        if missing && (masks.denied(Kind::FsRead, &path) || masks.denied_below(&path)) {
+            placeholders.push(Placeholder::empty_file(path.clone()));
+            masks.mounts.push(Mount::Hide { path, dir: false });
         }
     }
     let missing = hook_settings::plan(ir, real, &hook_settings::on_disk, &|p| {
         masks.denied_below(p)
     });
-    let mut mounts = masks.mounts;
-    mounts.extend(missing.mounts);
-    mounts.sort_by_key(|m| depth(path_of(m)));
-    Ok(ProjectMasks {
-        mounts: respelled(&mounts, project),
-        placeholders: missing.placeholders,
-    })
+    placeholders.extend(missing.placeholders);
+    masks.mounts.extend(missing.mounts);
+    Ok((masks.mounts, placeholders))
+}
+
+/// `ir` without the write exclusions of files a build or an install writes
+/// (`runs-later`: `.husky`, `.github/workflows`, `.vscode`), except an agent's
+/// own configuration: the hook holds the agent's own writes of them for
+/// review, and Seatbelt leaves them writable to commands too.
+pub fn without_runs_later(ir: &Enforcement) -> Enforcement {
+    let mut ir = ir.clone();
+    for rule in &mut ir.fs.write.allow {
+        rule.patterns.retain(|p| {
+            let excluded = p.strip_prefix('!');
+            !excluded.is_some_and(|p| runs_later_exclusion(p) && !agent_config_exclusion(p))
+        });
+    }
+    ir
 }
 
 /// What `moat run`'s network namespace adds in the project
@@ -287,11 +308,6 @@ fn nested_write_denials(ir: &Enforcement) -> Vec<String> {
 /// are found (`.github`, `.pi`).
 fn agent_config_holders() -> impl Iterator<Item = String> {
     AGENT_CONFIG.iter().flat_map(|entry| folders_above(entry))
-}
-
-/// A directory, not a link to one.
-fn is_directory(path: &str) -> bool {
-    std::fs::symlink_metadata(path).is_ok_and(|m| m.is_dir())
 }
 
 /// Append `mount` unless the same path is already mounted.
@@ -450,6 +466,9 @@ struct Masks<'a> {
     project: Option<&'a str>,
     mounts: Vec<Mount>,
     entries: usize,
+    /// How many levels to walk, and pass by names that are not UTF-8; `None`:
+    /// all of them, refusing such a name.
+    depth: Option<usize>,
 }
 
 impl Masks<'_> {
@@ -515,7 +534,7 @@ impl Masks<'_> {
     }
 
     /// Classify every entry below `dir`, symlinks not followed.
-    fn walk(&mut self, dir: &str, read_only: bool) -> Result<()> {
+    fn walk(&mut self, dir: &str, read_only: bool, level: usize) -> Result<()> {
         let mut entries: Vec<_> = std::fs::read_dir(dir)?.collect::<Result<_, _>>()?;
         entries.sort_by_key(std::fs::DirEntry::file_name);
         for entry in entries {
@@ -528,14 +547,18 @@ impl Masks<'_> {
             }
             let is_dir = entry.file_type()?.is_dir();
             let Ok(name) = entry.file_name().into_string() else {
+                if self.depth.is_some() {
+                    continue;
+                }
                 bail!(
                     "{dir} holds a name that is not UTF-8, which `openmoat run --isolate` cannot mount over"
                 );
             };
             let path = format!("{dir}/{name}");
             let read_only_here = read_only || (is_dir && self.denied_below(&path));
-            if self.classify(&path, is_dir, read_only) {
-                self.walk(&path, read_only_here)?;
+            let deeper = self.depth.is_none_or(|depth| level < depth);
+            if self.classify(&path, is_dir, read_only) && deeper {
+                self.walk(&path, read_only_here, level + 1)?;
             }
         }
         Ok(())
