@@ -79,10 +79,42 @@ pub fn port_only(open: &Result<Vec<String>, String>) -> String {
          create, rename or remove entries directly in it (create what they need before the \
          run), `.env` files there stay unreadable and `.git` and `.moat` read-only. {} With \
          bubblewrap (`apt install bubblewrap`) `openmoat run` covers these with mounts and \
-         needs none of this; the hook still checks the agent's own tool calls",
+         needs none of this; or set `sandbox.project_top: writable` in your policy and accept \
+         that `.env` and git hooks at the top are open to commands. The hook still checks the \
+         agent's own tool calls",
         left_open(open)
     )
 }
+
+/// What `moat run` prints when the person's policy opened the project's top
+/// (`sandbox.project_top: writable`, ADR-090).
+#[cfg_attr(
+    not(any(target_os = "linux", test)),
+    expect(
+        dead_code,
+        reason = "only Linux has a Lightweight tier with a gap to name"
+    )
+)]
+pub const PORT_ONLY_TOP_OPEN: &str = "moat run: without bubblewrap, and with \
+     `sandbox.project_top: writable` in your policy, the project is granted whole: commands the \
+     agent starts can read and write `.env`, write `.git/hooks` and `.moat`, and create \
+     `.envrc` there. This run is recorded in the audit log (`run-project-top-open`). Install \
+     bubblewrap (`apt install bubblewrap`), or remove the setting, to cover them; the hook \
+     still checks the agent's own tool calls";
+
+/// `moat doctor`'s warning where the person's policy opened the project's top
+/// and `moat run` would get no network namespace.
+#[cfg_attr(
+    not(any(target_os = "linux", test)),
+    expect(
+        dead_code,
+        reason = "only Linux has a Lightweight tier with a gap to name"
+    )
+)]
+pub const DOCTOR_TOP_OPEN: &str = "openmoat run     `sandbox.project_top: writable`: without a \
+     network namespace the project is granted whole, so commands can read `.env` and write \
+     `.git/hooks` and `.moat` there; every such run is in the audit log. Install bubblewrap \
+     (`apt install bubblewrap`) or remove the setting";
 
 /// `moat doctor`'s row where `moat run` would grant the project entry by entry.
 #[cfg_attr(
@@ -96,7 +128,8 @@ pub fn doctor_line(open: &Result<Vec<String>, String>) -> String {
     format!(
         "openmoat run     without a network namespace the project here is granted entry by \
          entry: commands cannot create entries directly in it. {} Install bubblewrap \
-         (`apt install bubblewrap`) to cover them",
+         (`apt install bubblewrap`) to cover them, or set `sandbox.project_top: writable` \
+         and accept that `.env` and git hooks at the top are open to commands",
         left_open(open)
     )
 }
@@ -169,9 +202,18 @@ mod tests {
             "`.git` and `.moat` read-only",
             "Nothing else the policy denies",
             "apt install bubblewrap",
+            "set `sandbox.project_top: writable`",
         ] {
             assert!(none.contains(said), "{said}: {none}");
         }
+        // The setting that opens the top says plainly what it opens and that
+        // the run is on record; `doctor` warns of it.
+        for said in ["`.env`", "`.git/hooks`", "run-project-top-open"] {
+            assert!(PORT_ONLY_TOP_OPEN.contains(said), "{said}");
+        }
+        assert!(DOCTOR_TOP_OPEN.starts_with("openmoat run     "));
+        assert!(DOCTOR_TOP_OPEN.contains("`.git/hooks`"));
+        assert!(doctor_line(&Ok(Vec::new())).contains("sandbox.project_top: writable"));
         let paths: Vec<String> = (0..10).map(|i| format!("/p/sub{i}/.env")).collect();
         let some = port_only(&Ok(paths));
         assert!(some.contains("/p/sub0/.env, /p/sub1/.env"), "{some}");

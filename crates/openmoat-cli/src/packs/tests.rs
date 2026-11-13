@@ -55,6 +55,7 @@ fn a_pack_with_anything_but_rules_is_refused() {
     for bad in [
         "version: 1\ndefaults: allow\n",
         "version: 1\nsandbox:\n  read_roots: ['/etc']\n",
+        "version: 1\nsandbox:\n  project_top: writable\n",
         "version: 1\nrequire_signed_repo_policy: true\n",
         "version: 2\n",
     ] {

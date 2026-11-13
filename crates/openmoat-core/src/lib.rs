@@ -69,9 +69,9 @@ pub use patch::{Replayed as PatchReplayed, replay as patch_replay, writes as pat
 pub use paths::resolve as resolve_path;
 pub use pattern::literal_shell_pattern;
 pub use policy::{
-    BrowserOpen, Defaults, McpSettings, OldNames, Policy, PolicyError, Require, RequiredBy,
-    RequiredLevel, Requirement, RuleGroup, RunBoundary, SUPPORTED_VERSION, SandboxSettings,
-    TITLE_MAX_CHARS, WHY_MAX_CHARS, env_name_problem,
+    BrowserOpen, Defaults, McpSettings, OldNames, Policy, PolicyError, ProjectTop, Require,
+    RequiredBy, RequiredLevel, Requirement, RuleGroup, RunBoundary, SUPPORTED_VERSION,
+    SandboxSettings, TITLE_MAX_CHARS, WHY_MAX_CHARS, env_name_problem,
 };
 pub use programs::{MapResolver, NoResolver, ProgramResolver};
 pub use realpath::{MapPathResolver, PathResolver};

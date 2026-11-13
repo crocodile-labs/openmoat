@@ -20,7 +20,7 @@ use landlock::{
     ABI, Access, AccessFs, AccessNet, CompatLevel, Compatible, NetPort, Ruleset, RulesetAttr,
     RulesetCreated, RulesetCreatedAttr, RulesetError, Scope, path_beneath_rules,
 };
-use openmoat_core::{EvalContext, Policy};
+use openmoat_core::{EvalContext, Policy, ProjectTop};
 use seccompiler::{
     BpfProgram, SeccompAction, SeccompCmpArgLen, SeccompCmpOp, SeccompCondition, SeccompFilter,
     SeccompRule,
@@ -160,6 +160,9 @@ pub struct Confined {
     /// What the Lightweight tier covers inside the project and what it leaves
     /// open there (`tier.rs`, ADR-090): printed before the agent starts.
     project: Option<String>,
+    /// The person's policy opened the project's top (`sandbox.project_top:
+    /// writable`, ADR-090): the run writes that to the audit log.
+    top_open: bool,
     /// Hook settings missing in the project when the agent starts, which
     /// nothing covers without a network namespace: each that exists when the
     /// agent exits is named.
@@ -230,15 +233,23 @@ pub fn confine(
                 }
             }
             // No mount can cover inside the project: it is granted entry by
-            // entry instead (ADR-090).
-            let (split, open) = landlock_entries(policy, ctx, entries)?;
-            refuse_exposed(state, &split.rules, false)?;
-            let mut agent = restricted(&split.rules, split.report, Command::new(program))?;
+            // entry instead (ADR-090), unless the person's own policy opens
+            // its top (`sandbox.project_top: writable`), which is on record.
+            let top_open = policy.project_top() == ProjectTop::Writable;
+            let (mut agent, notice) = if top_open {
+                (agent, super::tier::PORT_ONLY_TOP_OPEN.to_owned())
+            } else {
+                let (split, open) = landlock_entries(policy, ctx, entries)?;
+                refuse_exposed(state, &split.rules, false)?;
+                let agent = restricted(&split.rules, split.report, Command::new(program))?;
+                (agent, super::tier::port_only(&open))
+            };
+            agent.top_open = top_open;
             if let Some((port, why)) = &port_only {
                 let masks = netns_masks(policy, ctx, &generated.rules)?;
                 agent.warning = Some(netns::port_only_notice(*port, why, &masks));
             }
-            agent.project = Some(super::tier::port_only(&open));
+            agent.project = Some(notice);
             agent.watch = missing_hook_settings(policy, ctx)?;
             Ok(agent)
         }
@@ -302,6 +313,9 @@ pub fn project_open(policy: &Policy, ctx: &EvalContext) -> Option<String> {
     let netns::Network::PortOnly(_) = netns::network() else {
         return None;
     };
+    if policy.project_top() == ProjectTop::Writable {
+        return Some(super::tier::DOCTOR_TOP_OPEN.to_owned());
+    }
     Some(match landlock_entries(policy, ctx, Grants::default()) {
         Ok((_, open)) => super::tier::doctor_line(&open),
         Err(error) => super::tier::doctor_refusal(&format!("{error:#}")),
@@ -412,6 +426,7 @@ fn restricted(rules: &Rules, report: Report, command: Command) -> Result<Confine
         _session: None,
         warning: None,
         project: None,
+        top_open: false,
         watch: Vec::new(),
     })
 }
@@ -556,6 +571,10 @@ impl Confined {
 
     pub fn project_notice(&self) -> Option<&str> {
         self.project.as_deref()
+    }
+
+    pub fn project_top_open(&self) -> bool {
+        self.top_open
     }
 
     pub fn status(self) -> Result<ExitStatus> {

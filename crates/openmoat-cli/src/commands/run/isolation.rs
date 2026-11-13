@@ -194,6 +194,21 @@ pub fn record(home: &Home, session: &str, cwd: &str, tier: &Tier) -> Result<()> 
 /// The rule of the row that records the kernel's Landlock ABI (ADR-082).
 pub const LANDLOCK_RULE: &str = "run-landlock-abi";
 
+/// The rule of the row a run writes when the person's policy opened the
+/// project's top to commands (`sandbox.project_top: writable`, ADR-090).
+pub const PROJECT_TOP_RULE: &str = "run-project-top-open";
+
+/// Write that this run granted the project's top whole because the person's
+/// policy says `sandbox.project_top: writable` (ADR-090). An error stops the
+/// run: the choice must be on record.
+pub fn record_project_top(home: &Home, session: &str, cwd: &str) -> Result<()> {
+    let reason = "`sandbox.project_top: writable` in the person's policy: `openmoat run` had no \
+                  network namespace and granted the project's top whole, so commands could read \
+                  `.env` and write `.git/hooks` and `.moat` there"
+        .to_owned();
+    write_row(home, (session, cwd), (TOOL, PROJECT_TOP_RULE), reason)
+}
+
 /// Write which Landlock ABI the run's sandbox has and what it applies from
 /// it (ADR-082), on Linux; `kernel` is `None` elsewhere. Its tool is
 /// `landlock`, apart from the tier's rows, and never a host id.

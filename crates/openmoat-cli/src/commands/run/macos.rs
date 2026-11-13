@@ -197,6 +197,16 @@ impl Confined {
         None
     }
 
+    /// False: Seatbelt denies by path, so `sandbox.project_top` changes
+    /// nothing here (ADR-090).
+    #[expect(
+        clippy::unused_self,
+        reason = "the method every platform's `Confined` has; Linux's reads itself"
+    )]
+    pub fn project_top_open(&self) -> bool {
+        false
+    }
+
     pub fn status(mut self) -> Result<ExitStatus> {
         // Seatbelt does not check a file opened before the profile applies.
         super::inherited::close_on_exec()?;

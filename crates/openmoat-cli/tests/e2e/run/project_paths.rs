@@ -181,3 +181,79 @@ fn a_read_root_linked_above_the_project_does_not_grant_it_whole() {
     assert!(!shown.contains(SECRET), "{shown}");
     assert_eq!(bytes(&project.join(".env")), SECRET.as_bytes());
 }
+
+/// `sb` with `sandbox.project_top: writable` in the person's own policy,
+/// re-pinned as a person would.
+fn open_top(sb: &crate::common::Sandbox) {
+    let path = sb.home.join(".moat/policy.yaml");
+    let policy = std::fs::read_to_string(&path).unwrap();
+    let edited = policy.replacen("\nsandbox:\n", "\nsandbox:\n  project_top: writable\n", 1);
+    assert_ne!(
+        policy, edited,
+        "the default policy has a `sandbox:` section"
+    );
+    std::fs::write(&path, edited).unwrap();
+    let out = sb.moat_as_person(&["doctor", "--accept"]);
+    assert!(text(&out).contains("re-pinned"), "{}", text(&out));
+}
+
+/// The person's own `sandbox.project_top: writable` gives back, without a
+/// network namespace, the whole-project grant: a new file at the top can be
+/// made, and `.env` there is open, which the start notice says and the audit
+/// log records (`run-project-top-open`); `doctor` warns. A policy that requires
+/// the full boundary still refuses to start without the namespace.
+#[test]
+fn the_persons_policy_can_open_the_project_top_on_record() {
+    let (sb, project) = installed_with_secret();
+    open_top(&sb);
+    std::fs::write(project.join(".env"), SECRET).unwrap();
+    let script = "echo x > top.txt; echo \"top=$?\"";
+    let out = run_sh_with(&sb, &project, script, &[("MOAT_TEST_NO_NETNS", "1")]);
+    if !ran(&out) {
+        return;
+    }
+    let shown = text(&out);
+    assert!(succeeded(&out, "top"), "{shown}");
+    assert!(project.join("top.txt").exists(), "{shown}");
+    for said in [
+        "sandbox.project_top: writable",
+        "`.git/hooks`",
+        "run-project-top-open",
+    ] {
+        assert!(stderr(&out).contains(said), "{said}: {shown}");
+    }
+    let rows = super::default_tier::tier_rows(&sb);
+    assert!(rows.iter().any(|r| r == "run-project-top-open"), "{rows:?}");
+    // `doctor` warns where `openmoat run` would have no namespace.
+    let doctor = sb
+        .command()
+        .current_dir(&project)
+        .env("MOAT_TEST_NO_NETNS", "1")
+        .arg("doctor")
+        .output()
+        .unwrap();
+    assert!(
+        text(&doctor).contains("`sandbox.project_top: writable`"),
+        "{}",
+        text(&doctor)
+    );
+    super::strict::require(&sb, super::strict::STRICT);
+    let refused = run_sh_with(
+        &sb,
+        &project,
+        "echo started",
+        &[("MOAT_TEST_NO_NETNS", "1")],
+    );
+    assert_eq!(
+        refused.status.code(),
+        Some(crate::common::USAGE),
+        "{}",
+        text(&refused)
+    );
+    assert!(!stdout(&refused).contains("started"), "{}", text(&refused));
+    assert!(
+        stderr(&refused).contains("full-boundary"),
+        "{}",
+        text(&refused)
+    );
+}

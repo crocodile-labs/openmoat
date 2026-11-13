@@ -124,6 +124,10 @@ impl Confined {
         match *self {}
     }
 
+    pub fn project_top_open(&self) -> bool {
+        match *self {}
+    }
+
     pub fn status(self) -> Result<ExitStatus> {
         match self {}
     }
