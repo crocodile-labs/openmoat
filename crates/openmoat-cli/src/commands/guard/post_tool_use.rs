@@ -43,17 +43,18 @@ pub(super) fn answer(host: Host, payload: &str, event: &HookEvent) -> Code {
 /// host is answered with: an `allow` it never sees (the response is empty),
 /// or the lock check's deny.
 fn kept(host: Host, request: HookRequest, output: &str) -> Result<Decision> {
-    // A call with no action has no output to keep (an adapter gives none to
-    // a tool whose output is never from outside, ADR-063): nothing to check
-    // or read. The payload was parsed in full before this.
-    if request.action.is_none() {
-        return Ok(Decision::new(Verdict::Allow));
-    }
     let started = Instant::now();
     let home = Home::locate()?;
     let verified = integrity::check(&home)?;
     if let Some(deny) = verified.checked.deny {
         return Ok(deny);
+    }
+    // A call with no action has no output to keep (an adapter gives none to
+    // a tool whose output is never from outside, ADR-063): once the lock is
+    // checked, nothing is placed, compiled or read. The payload was parsed in
+    // full before this.
+    if request.action.is_none() {
+        return Ok(Decision::new(Verdict::Allow));
     }
     let drifted = verified.checked.relaxed;
     let home = verified.home;
