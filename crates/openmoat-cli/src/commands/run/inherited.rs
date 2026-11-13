@@ -59,17 +59,22 @@ pub fn close_on_exec() -> Result<()> {
     reason = "the C library has no safe wrapper, nor rustix: one raw system call"
 )]
 fn close_range() -> bool {
-    // SAFETY: integer arguments only, no pointer. With CLOSE_RANGE_CLOEXEC the
-    // call closes nothing; it sets a flag on descriptors, so no `OwnedFd` or
-    // `File` anywhere in this process is invalidated.
-    let done = unsafe {
-        libc::syscall(
-            libc::SYS_close_range,
-            FIRST.unsigned_abs(),
-            libc::c_uint::MAX,
-            libc::CLOSE_RANGE_CLOEXEC,
-        )
+    use libc::c_long;
+
+    // `syscall` is variadic and reads each argument as a `long`, so each is
+    // passed as one. The kernel takes the low 32 bits as `unsigned int`:
+    // -1 is `~0`, every descriptor up to the last.
+    let first = c_long::from(FIRST);
+    let last: c_long = -1;
+    // Through `u16`, which widens into a `long` on 32- and 64-bit targets alike.
+    let Ok(flags) = u16::try_from(libc::CLOSE_RANGE_CLOEXEC).map(c_long::from) else {
+        return false;
     };
+    // SAFETY: three `long` integers, no pointer, as the variadic `syscall`
+    // reads them. With CLOSE_RANGE_CLOEXEC the call closes nothing; it sets a
+    // flag on descriptors, so no `OwnedFd` or `File` anywhere in this process
+    // is invalidated.
+    let done = unsafe { libc::syscall(libc::SYS_close_range, first, last, flags) };
     done == 0
 }
 
