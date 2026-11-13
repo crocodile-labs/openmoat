@@ -190,12 +190,14 @@ fn entries(dacl: *mut ACL) -> Result<Vec<RawAce>> {
     let count = unsafe { ptr::read_unaligned(addr_of!((*dacl).AceCount)) };
     let mut aces = Vec::with_capacity(usize::from(count));
     for index in 0..u32::from(count) {
-        let mut ace: *mut c_void = ptr::null_mut();
-        // SAFETY: `index` is below the ACL's AceCount; `ace` receives a
-        // pointer into the ACL.
-        if unsafe { GetAce(dacl, index, &raw mut ace) } == 0 {
+        let mut slot = std::mem::MaybeUninit::<*mut c_void>::uninit();
+        // SAFETY: `index` is below the ACL's AceCount; GetAce writes a pointer
+        // into the ACL to `slot` when it succeeds.
+        if unsafe { GetAce(dacl, index, slot.as_mut_ptr()) } == 0 {
             bail!("reading entry {index} of the access list: {}", last_error());
         }
+        // SAFETY: GetAce succeeded, so it wrote `slot`.
+        let ace = unsafe { slot.assume_init() };
         if ace.is_null() {
             bail!("entry {index} of the access list could not be read");
         }
