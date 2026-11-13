@@ -682,7 +682,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "openmoat"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -714,7 +714,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-audit"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "openmoat-core",
  "regex",
@@ -728,7 +728,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-core"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "globset",
  "serde",
@@ -740,7 +740,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-hosts"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "openmoat-core",
  "serde",
@@ -750,7 +750,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-proxy"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "httparse",
  "openmoat-core",
@@ -763,7 +763,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-sdk"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "openmoat-core",
  "serde",
@@ -774,7 +774,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-wasm"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "openmoat-core",
  "openmoat-sdk",
