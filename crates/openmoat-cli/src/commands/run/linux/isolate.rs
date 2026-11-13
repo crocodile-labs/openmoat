@@ -25,6 +25,7 @@ use anyhow::{Context as _, Result, bail};
 use openmoat_core::{EvalContext, Policy};
 
 use super::super::temp::socket_parent;
+use super::launch::{Reports, reporter};
 use super::{Confined, Rules, refuse_exposed, restricted};
 use crate::cli::IsolatedArgs;
 use crate::context::path_string;
@@ -131,6 +132,8 @@ pub fn isolate(
         .arg(&session.socket)
         .args(["--port", &port.to_string(), "--rules"])
         .arg(serde_json::to_string(&generated.rules)?)
+        .arg("--report")
+        .arg(&session.report)
         .arg("--")
         .arg(program);
     Ok(Confined {
@@ -242,7 +245,9 @@ pub fn inside(args: &IsolatedArgs) -> Result<Code> {
     let (program, rest) = args.command.split_first().context("no agent to run")?;
     let mut agent = restricted(&rules, Report::default(), Command::new(program))?;
     agent.command().args(rest);
-    let status = agent.status()?;
+    // Connected before the agent starts, so the run reads this report first.
+    let report = reporter(&args.report)?;
+    let status = agent.status(report)?;
     Ok(if status.success() {
         Code::Ok
     } else {
@@ -268,6 +273,9 @@ fn splice(tcp: &TcpStream, unix: &UnixStream) {
 /// The proxy's socket, in the session's directory.
 const SOCKET: &str = "proxy.sock";
 
+/// The launch report's socket (ADR-089), no longer than [`SOCKET`].
+const REPORT: &str = "check.sock";
+
 /// A private directory for the session (mode `0700`) with the proxy's socket
 /// and the placeholders hidden paths are covered with (mode `000`), and the
 /// placeholders created in the project. All are removed when it drops, the
@@ -278,6 +286,9 @@ pub struct Session {
     /// The project's lock, which records the placeholders made here and
     /// removes them when the last session in the project ends ([`Shared`]).
     shared: Option<Shared>,
+    /// Where `moat isolated` reports the agent's start.
+    pub(super) report: PathBuf,
+    reports: Option<Reports>,
 }
 
 impl Session {
@@ -290,9 +301,12 @@ impl Session {
             .with_context(|| format!("creating {}", dir.display()))?;
         let mut session = Self {
             socket: dir.join(SOCKET),
+            report: dir.join(REPORT),
+            reports: None,
             dir,
             shared: Some(shared),
         };
+        session.reports = Some(Reports::bind(&session.report)?);
         File::create_new(session.dir.join("file"))?
             .set_permissions(Permissions::from_mode(0o000))?;
         std::fs::create_dir(session.dir.join("dir"))?;
@@ -324,6 +338,12 @@ impl Session {
         Ok(session)
     }
 
+    /// The launch report's socket, bound when the session was made; taken
+    /// once, by the start.
+    pub(super) fn take_reports(&mut self) -> Option<Reports> {
+        self.reports.take()
+    }
+
     /// The empty file and directory no one may open, which hidden paths are
     /// covered with ([`bwrap::args`]).
     pub(super) fn blanks(&self) -> (String, String) {
@@ -342,6 +362,7 @@ impl Drop for Session {
             shared.finish(remove_placeholder);
         }
         let _ = std::fs::remove_file(&self.socket);
+        let _ = std::fs::remove_file(&self.report);
         let _ = std::fs::remove_file(self.dir.join("file"));
         let _ = std::fs::remove_dir(self.dir.join("dir"));
         let _ = std::fs::remove_dir(&self.dir);

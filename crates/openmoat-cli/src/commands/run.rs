@@ -22,6 +22,7 @@
 // process's standard streams are on, the only ones the sandbox opens.
 // Each `status()` first marks the descriptors this process inherited
 // close-on-exec (`inherited.rs`, ADR-088).
+mod boundary;
 mod env;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod inherited;
@@ -105,6 +106,9 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let strict = required::check(&home, &ctx, owner, &name.to_string_lossy())?;
     // The tier (ADR-080): on Linux the Isolated one where bubblewrap works.
     let tier = isolation::choose(Asked::of(args), &platform::isolation(), strict.as_deref())?;
+    if args.print_boundary {
+        return boundary::print_plan((args, &home), &ctx, owner, (&tier, strict.as_deref()));
+    }
     // A bare repository a command plants (no `.git` name) is used only when named.
     let git = git_env::add(&|var| std::env::var(var).ok())?;
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
@@ -196,13 +200,24 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let run_session = credential.session().to_owned();
     // A run weaker than the default is on record before the agent starts.
     isolation::record(&home, &run_session, &ctx.cwd, &tier)?;
-    // And the Landlock ABI the sandbox has, on Linux (ADR-082).
+    // The whole boundary goes on record once the agent started (ADR-089).
     let landlock = platform::landlock();
-    isolation::record_landlock(&home, &run_session, &ctx.cwd, landlock.as_ref())?;
     // And a project top the person's policy opened (`sandbox.project_top`, ADR-090).
     if agent.project_top_open() {
         isolation::record_project_top(&home, &run_session, &ctx.cwd)?;
     }
+    let mut record = boundary::plan(boundary::Plan {
+        asked: Asked::of(args),
+        tier: &tier,
+        port_only: agent
+            .warning()
+            .map(|warning| platform::no_network_namespace().unwrap_or_else(|| warning.to_owned())),
+        kernel: landlock.as_ref(),
+        token: tool_shell::token(agent_host, tool_shell.is_some()),
+        port: Some(port),
+        project_top_open: agent.project_top_open(),
+    });
+    let cwd = ctx.cwd.clone();
     // Outside the sandbox, before the agent starts (ADR-085).
     let snapshots = RunSnapshots::start(&home, &ctx, args.no_snapshot, &run_session);
     // The hooks the agent starts run in its sandbox, without OpenMoat's home:
@@ -220,6 +235,9 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         &agent,
         (&tier, landlock.as_ref(), args.verbose),
     )?;
+    if args.verbose {
+        boundary::show(&record)?;
+    }
     let notices = ca_notice
         .into_iter()
         .chain(release_age.notices)
@@ -288,7 +306,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     )
     .context("keeping OpenMoat running on Ctrl-C")?;
     let status = agent
-        .status()
+        .status(|check| boundary::launched(&home, (&run_session, &cwd), &mut record, check))
         .with_context(|| format!("starting {}", program.display()))?;
     snapshots.finish();
     Ok(if status.success() {

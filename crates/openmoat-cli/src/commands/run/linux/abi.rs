@@ -15,7 +15,9 @@ pub fn kernel() -> Kernel {
     }
 }
 
-fn from_status(status: LandlockStatus) -> Kernel {
+/// The kernel's ABI as a Landlock status gives it: the probe's, and the one
+/// `restrict_self` reports when the agent starts (`launch.rs`).
+pub(super) fn from_status(status: LandlockStatus) -> Kernel {
     match status {
         LandlockStatus::Available {
             effective_abi,

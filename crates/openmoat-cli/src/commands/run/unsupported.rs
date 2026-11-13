@@ -5,6 +5,7 @@ use std::path::Path;
 use std::process::{Command, ExitStatus};
 
 use anyhow::{Result, bail};
+use openmoat_core::boundary::{LaunchCheck, NetworkMode, Restriction};
 use openmoat_core::{EvalContext, Policy};
 
 use crate::cli::IsolatedArgs;
@@ -47,6 +48,18 @@ pub fn unavailable() -> Option<String> {
         "`openmoat run` has no sandbox OpenMoat can generate on {}",
         std::env::consts::OS
     ))
+}
+
+/// `moat run` refuses here; a record needs a value.
+pub const NETWORK: NetworkMode = NetworkMode::PortOnly;
+
+/// None: `moat run` refuses here.
+pub fn restrictions(
+    _: bool,
+    _: bool,
+    _: Option<&crate::sandbox::landlock::abi::Kernel>,
+) -> Vec<Restriction> {
+    Vec::new()
 }
 
 /// None: Landlock is Linux's (ADR-082).
@@ -128,7 +141,7 @@ impl Confined {
         match *self {}
     }
 
-    pub fn status(self) -> Result<ExitStatus> {
+    pub fn status(self, _: impl FnOnce(Option<LaunchCheck>) -> Result<()>) -> Result<ExitStatus> {
         match self {}
     }
 }

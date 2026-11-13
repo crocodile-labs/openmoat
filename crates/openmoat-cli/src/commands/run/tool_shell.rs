@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context as _, Result};
+use openmoat_core::boundary;
 use openmoat_hosts::{Host, ToolToken};
 
 use super::platform;
@@ -73,6 +74,31 @@ pub fn off_notice(host: Option<Host>, tools: Option<&ToolShell>) -> Option<&'sta
         "moat run: tool commands keep the hook relay token in this run: \
          its write grants include the system temp directory, where the shell wrapper would be",
     )
+}
+
+/// What a run with `host` does with the relay token in tool commands, for
+/// its boundary record (ADR-089); `wrapped` is whether the run has the wrapper.
+pub fn token(host: Option<Host>, wrapped: bool) -> boundary::ToolToken {
+    match host.map(|h| h.spec().tool_token) {
+        None => boundary::ToolToken::UnknownAgent,
+        Some(ToolToken::Wrapper { .. }) if wrapped => boundary::ToolToken::Withheld,
+        Some(ToolToken::Wrapper { .. }) => boundary::ToolToken::NotWithheld(
+            "the run's write grants include the system temp directory, where the shell \
+             wrapper would be"
+                .to_owned(),
+        ),
+        Some(ToolToken::Integration) => boundary::ToolToken::WithheldByIntegration,
+        Some(ToolToken::NotWithheld { why }) => boundary::ToolToken::NotWithheld(why.to_owned()),
+        Some(_) => boundary::ToolToken::NotWithheld("not checked for this host".to_owned()),
+    }
+}
+
+/// Whether [`prepare`] would make a wrapper under `write_roots`, without
+/// making it (`openmoat run --print-boundary`).
+pub fn would_wrap(write_roots: &[String]) -> Result<bool> {
+    let system =
+        std::fs::canonicalize(std::env::temp_dir()).context("resolving the temp directory")?;
+    Ok(!write_roots.iter().any(|root| system.starts_with(root)))
 }
 
 /// The wrapper for `host`'s tool commands, when it has one. `write_roots` are

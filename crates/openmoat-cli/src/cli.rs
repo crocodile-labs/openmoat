@@ -519,6 +519,15 @@ pub struct RunArgs {
     #[arg(long)]
     pub no_snapshot: bool,
 
+    /// Print the sandbox boundary this run would start with (tier, downgrades, network,
+    /// Landlock ABI, each restriction) and exit without starting the agent.
+    #[arg(long)]
+    pub print_boundary: bool,
+
+    /// Output format of `--print-boundary`.
+    #[arg(long, value_enum, default_value_t = Format::Text, requires = "print_boundary")]
+    pub format: Format,
+
     /// The agent and its arguments, after `--`.
     #[arg(required = true, last = true, value_name = "AGENT")]
     pub command: Vec<std::ffi::OsString>,
@@ -563,6 +572,9 @@ pub struct IsolatedArgs {
     /// The Landlock rules, as JSON.
     #[arg(long)]
     pub rules: String,
+    /// The Unix socket the check of the agent's start is reported on (ADR-089).
+    #[arg(long)]
+    pub report: PathBuf,
     /// The agent and its arguments, after `--`.
     #[arg(required = true, last = true, value_name = "AGENT")]
     pub command: Vec<std::ffi::OsString>,

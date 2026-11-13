@@ -126,26 +126,3 @@ fn the_rows_are_never_read_as_a_link() {
     // The run's taint reads a link row's tool as a host id (`taint/run.rs`).
     assert!(TOOL.parse::<openmoat_hosts::Host>().is_err());
 }
-
-/// The kernel's Landlock ABI is on record for every Linux run (ADR-082), in
-/// a row of its own tool, apart from the tier's rows; nothing elsewhere.
-#[test]
-fn the_landlock_abi_is_on_record() {
-    assert!("landlock".parse::<openmoat_hosts::Host>().is_err());
-    let dir = tempfile::tempdir().unwrap();
-    let home = Home::at(dir.path().join("state"));
-    std::fs::create_dir_all(home.root()).unwrap();
-    drop(Store::open(&home.audit_path()).unwrap());
-    record_landlock(&home, "run-1-abcd", "/p", None).unwrap();
-    record_landlock(&home, "run-1-abcd", "/p", Some(&Kernel::Abi(6))).unwrap();
-    let store = Store::open_read_only(&home.audit_path()).unwrap();
-    let rows = store.since(0, Some(LINK_HOST)).unwrap();
-    assert_eq!(rows.len(), 1, "only the Linux run writes a row");
-    assert_eq!(rows[0].tool, "landlock");
-    assert_eq!(rows[0].rules, [LANDLOCK_RULE]);
-    assert!(
-        rows[0].reasons[0].contains("Landlock ABI 6 here"),
-        "{:?}",
-        rows[0].reasons
-    );
-}

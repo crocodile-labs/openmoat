@@ -210,7 +210,7 @@ pub fn namespaced(
     command.args(arguments(
         bwrap,
         &moat,
-        &session.socket,
+        (&session.socket, &session.report),
         port,
         &serde_json::to_string(rules)?,
         cwd,
@@ -230,11 +230,12 @@ pub fn namespaced(
 }
 
 /// `/bin/sh`'s arguments up to the agent; `masks` are bubblewrap's mount
-/// arguments over the whole root.
+/// arguments over the whole root; `socket` reaches the proxy and `report`
+/// takes the launch report (`launch.rs`).
 fn arguments(
     bwrap: &Path,
     moat: &Path,
-    socket: &Path,
+    (socket, report): (&Path, &Path),
     port: u16,
     rules: &str,
     cwd: &str,
@@ -256,7 +257,8 @@ fn arguments(
     ]);
     args.push(path_string(socket));
     args.extend(["--port".to_owned(), port.to_string(), "--rules".to_owned()]);
-    args.extend([rules.to_owned(), "--".to_owned()]);
+    args.extend([rules.to_owned(), "--report".to_owned(), path_string(report)]);
+    args.push("--".to_owned());
     args
 }
 
@@ -344,7 +346,10 @@ mod tests {
         let args = arguments(
             Path::new("/usr/bin/bwrap"),
             Path::new("/opt/moat"),
-            Path::new("/tmp/moat-run-1/proxy.sock"),
+            (
+                Path::new("/tmp/moat-run-1/proxy.sock"),
+                Path::new("/tmp/moat-run-1/check.sock"),
+            ),
             41_000,
             "{}",
             "/work/project",
@@ -379,6 +384,8 @@ mod tests {
             "41000",
             "--rules",
             "{}",
+            "--report",
+            "/tmp/moat-run-1/check.sock",
             "--",
         ];
         assert_eq!(args, expected);

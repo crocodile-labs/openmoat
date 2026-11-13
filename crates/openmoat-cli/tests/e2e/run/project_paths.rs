@@ -224,6 +224,36 @@ fn the_persons_policy_can_open_the_project_top_on_record() {
     }
     let rows = super::default_tier::tier_rows(&sb);
     assert!(rows.iter().any(|r| r == "run-project-top-open"), "{rows:?}");
+    // The run's boundary record names it as the person's own downgrade, and
+    // `--print-boundary` says the same before a start (ADR-089).
+    let printed = sb
+        .command()
+        .current_dir(&project)
+        .env("MOAT_TEST_NO_NETNS", "1")
+        .args([
+            "run",
+            "--no-isolate",
+            "--print-boundary",
+            "--format",
+            "json",
+        ])
+        .args(["--", "/bin/sh", "-c", "true"])
+        .output()
+        .unwrap();
+    let plan: serde_json::Value = serde_json::from_slice(&printed.stdout).unwrap();
+    let records = super::boundary::boundary_rows(&sb);
+    assert_eq!(records.len(), 1, "{records:?}");
+    for record in [&records[0], &plan] {
+        let top = record["downgrades"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|d| d["what"] == "project_top")
+            .unwrap_or_else(|| panic!("no project_top downgrade: {record}"));
+        assert_eq!(top["chosen"], true, "{record}");
+        let why = top["why"].as_str().unwrap();
+        assert!(why.contains("sandbox.project_top: writable"), "{record}");
+    }
     // `doctor` warns where `openmoat run` would have no namespace.
     let doctor = sb
         .command()

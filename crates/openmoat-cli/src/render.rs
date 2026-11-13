@@ -1,5 +1,7 @@
 //! Human and machine output.
 
+pub mod boundary;
+
 use std::borrow::Cow;
 use std::io::{self, Write};
 

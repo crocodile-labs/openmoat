@@ -413,7 +413,16 @@ something OpenMoat claims to stop.
     proxy's port is relayed in, so connections reach only the proxy. Where it is
     missing or cannot create user namespaces, the proxy's port is reachable on any
     host, around the proxy's host checks, secrets broker, taint and audit; `openmoat run`
-    says so on every start and `openmoat doctor` warns.
+    says so on every start and `openmoat doctor` warns. Every run's `run-boundary`
+    audit row records such a downgrade, and the Lightweight tier in place of the
+    Isolated one, with why (ADR-089); `openmoat run --print-boundary --format json`
+    shows it before a start.
+  - On Linux the run checks the agent right after it starts: its `/proc/<pid>/status`
+    must show `NoNewPrivs: 1` and `Seccomp: 2`, and Landlock must report the ruleset
+    enforced, or the agent is stopped (ADR-089). Landlock's rules themselves cannot be
+    read back, so which paths they hold is shown by the end-to-end tests, not by this
+    check; the check also runs a moment after the agent's first instructions, so a
+    gap stops an agent that has already started.
   - On Linux a seccomp filter allows only IPv4 and IPv6 TCP sockets, so the user's
     D-Bus session bus, other Unix sockets, UDP, raw, netlink and packet sockets are
     closed (`EPERM`), and `io_uring`, which could create sockets around the filter, is
