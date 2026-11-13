@@ -192,6 +192,12 @@
   context: { cwd: /p, project: /p }
   action: { fs_write: "/p/.opencode/themes/dark.json" }
   expect: { verdict: allow, rules: [project-fs] }
+# a project's own `skills/` folder outside `.opencode` is project work
+- id: benign-write-project-skills-folder
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/docs/skills/onboarding.md" }
+  expect: { verdict: allow, rules: [project-fs] }
 - id: benign-opencode-run
   threat: T9
   action: { shell: "opencode run 'fix the failing test'" }

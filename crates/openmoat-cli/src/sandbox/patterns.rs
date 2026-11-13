@@ -339,6 +339,7 @@ mod tests {
             "**/.github/agents/**",
             "**/.opencode/commands/**",
             "**/.opencode/agents/**",
+            "**/.opencode/skills/**",
         ] {
             assert!(AGENT_CONFIG.contains(&file), "{file}");
             let excepted = format!("{PROJECT}/{file}");

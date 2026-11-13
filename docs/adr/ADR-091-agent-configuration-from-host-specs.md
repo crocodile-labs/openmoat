@@ -34,8 +34,9 @@ the rest: a command under `openmoat run` could write, on every tier,
   `.claude/skills/`, `.claude/commands/`) and GitHub Copilot CLI's custom agents
   (`.github/agents/`), whose frontmatter can carry hooks and shell;
 - OpenCode's commands (`.opencode/commands/`, `.opencode/command/`); its project
-  agents (`.opencode/agents/`, and `.opencode/agent/`, which it also reads) were not
-  even held for review.
+  agents (`.opencode/agents/`, and `.opencode/agent/`, which it also reads), which
+  can grant themselves tools and permissions, and its project skills
+  (`.opencode/skills/`) were not even held for review.
 
 The agent's own write of any of them was held for review; a command's was not, and
 the host loaded the file in its next session, outside the sandbox.
@@ -85,8 +86,9 @@ the host loaded the file in its next session, outside the sandbox.
    only beside a host's marked configuration.
 
 The files the policy reviews and `project-fs` leaves out are those of before plus
-OpenCode's project agents (`.opencode/agents/`, `.opencode/agent/`); the other lines
-only changed order.
+OpenCode's project agents (`.opencode/agents/`, `.opencode/agent/`) and skills
+(`.opencode/skills/`, the folder OpenCode's skills documentation names); the other
+lines only changed order.
 
 ## Consequences
 
@@ -119,4 +121,12 @@ only changed order.
   afterwards, as `.claude/hooks/` already was.
 - A host whose project configuration is not marked stays review-only in the hook;
   the specs' test fails on a project glob that is neither marked nor a folder above
-  a marked one.
+  a marked one, nor a single file beside a marked one.
+
+## Open points
+
+- The person's own OpenCode agents and skills (`~/.config/opencode/agents/`,
+  `~/.config/opencode/skills/`) are not in `runs-later` yet; they are home files, so
+  they would be review-only entries of OpenCode's spec.
+- OpenCode also reads skills from a project's `.agents/skills/` and `.claude/skills/`;
+  the second is Claude Code's and marked, the first is not named by any spec yet.

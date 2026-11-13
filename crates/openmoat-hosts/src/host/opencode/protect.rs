@@ -83,10 +83,10 @@ pub(super) const PROTECT: Protect = Protect {
             ],
         ),
         RunsLater::agent_config(
-            "OpenCode: a project's plugins, tools, commands and agents (loaded at start,\n\
-             with no prompt), and its configuration, which adds plugins, MCP servers and\n\
-             permission rules (a write that removes OpenMoat's plugin is denied,\n\
-             `project-settings`)",
+            "OpenCode: a project's plugins, tools, commands, agents and skills (loaded at\n\
+             start, with no prompt), and its configuration, which adds plugins, MCP\n\
+             servers and permission rules (a write that removes OpenMoat's plugin is\n\
+             denied, `project-settings`)",
             &[
                 "**/.opencode/plugins/**",
                 "**/.opencode/plugin/**",
@@ -96,6 +96,9 @@ pub(super) const PROTECT: Protect = Protect {
                 "**/.opencode/command/**",
                 "**/.opencode/agents/**",
                 "**/.opencode/agent/**",
+                // the folder its skills docs name, searched from the working
+                // directory up to the project root (opencode.ai/docs/skills)
+                "**/.opencode/skills/**",
                 "**/.opencode/opencode.json",
                 "**/.opencode/opencode.jsonc",
                 "**/opencode.json",

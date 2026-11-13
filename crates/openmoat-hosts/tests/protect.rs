@@ -25,6 +25,7 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 
 use openmoat_hosts::{Host, Paths, Protect};
 
@@ -99,7 +100,14 @@ fn splice(text: &str, before: &str, after: &str, body: &str) -> Result<String, S
     Ok(format!("{}{body}{}", &text[..start], &text[end..]))
 }
 
+/// Held while a test reads and rewrites a generated file: four tests splice
+/// blocks into the one default policy, and run in parallel, one's write would
+/// drop another's.
+static FILES: Mutex<()> = Mutex::new(());
+
 fn check(file: &str, before: &str, after: &str, body: &str) {
+    // another test failing while it held the lock does not stop this one
+    let _held = FILES.lock().unwrap_or_else(PoisonError::into_inner);
     let path = repo_root().join(file);
     let current = fs::read_to_string(&path).unwrap().replace("\r\n", "\n");
     let want = splice(&current, before, after, body).unwrap();

@@ -462,6 +462,7 @@ fn every_hosts_configuration_is_denied_to_commands() {
         ".gemini/agents/helper.md",
         ".claude/skills/deploy/SKILL.md",
         ".opencode/agents/reviewer.md",
+        ".opencode/skills/deploy/SKILL.md",
     ] {
         let path = format!("/Users/me/proj/{path}");
         assert!(rule_matches(&profile, rule, &path), "{path}: {profile}");

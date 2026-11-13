@@ -530,7 +530,7 @@ bubblewrap.
   `.github/hooks/`, `.github/mcp.json`, `.github/agents/`, `.openclaw/extensions/`,
   `.pi/extensions/`, `.pi/mcp.json`, `.pi/settings.json`, Gemini CLI's
   `.gemini/policies/`, `.gemini/commands/` and `.gemini/agents/`, OpenCode's
-  `opencode.json[c]` and its `.opencode/` plugins, tools, commands, agents and
+  `opencode.json[c]` and its `.opencode/` plugins, tools, commands, agents, skills and
   `opencode.json[c]` (not `.opencode/package.json`, which OpenCode writes itself at
   start: the hook holds an agent's write of it for review), Hermes Agent's
   `.hermes/plugins/`, and Cline's `.cline/hooks/` and `.clinerules/hooks/`, at any
