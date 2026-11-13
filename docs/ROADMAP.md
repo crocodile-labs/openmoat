@@ -65,7 +65,8 @@ What exists:
   need review (ADR-020), also across the files a tainted session writes (ADR-029); after a
   secret read, a URL carrying a long encoded value is denied (`encoded-egress`, ADR-047).
   A payment card number sent off the machine is denied (`card-egress`, ADR-052). With
-  Claude Code, the Cline CLI and wrapped MCP servers, a later command or write that uses
+  Claude Code, the Continue CLI, Codex, Gemini CLI, GitHub Copilot CLI, the Cline CLI and
+  wrapped MCP servers, a later command or write that uses
   a host, path or command untrusted output named needs review (`injected-input`,
   ADR-057), also in another spelling of the same request (ADR-063, proposed). A send after the session collected
   files outside the project is recorded and counted in `openmoat report`, with no

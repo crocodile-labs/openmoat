@@ -48,8 +48,8 @@ const ASI: [Risk; 10] = [
         name: "Agent Goal Hijack",
         status: Status::Partial,
         reason: "Does not detect the hijack: it limits the calls that follow, and links a later \
-                 call to what untrusted output named only on Claude Code, the Continue CLI, the \
-                 Cline CLI and wrapped MCP servers.",
+                 call to what untrusted output named only on Claude Code, the Continue CLI, \
+                 Codex, Gemini CLI, GitHub Copilot CLI, the Cline CLI and wrapped MCP servers.",
     },
     Risk {
         id: "ASI02",

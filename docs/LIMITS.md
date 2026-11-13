@@ -306,8 +306,9 @@ rest of each agent's protection on each OS, with the runs that back them.
   directory. `openmoat doctor` lists these denials of the last day
   ([ARCHITECTURE.md, "Session cache"](ARCHITECTURE.md)).
 
-- **Injected input is linked only with Claude Code, Codex, Gemini CLI, GitHub Copilot
-  CLI, the Cline CLI and wrapped MCP servers, and only for the same request.** Other
+- **Injected input is linked only with Claude Code, the Continue CLI, Codex, Gemini CLI,
+  GitHub Copilot CLI, the Cline CLI and wrapped MCP servers, and only for the same
+  request.** Other
   agents report no call output (their
   wrapped MCP servers' results are read by the gateway). Another spelling of a planted
   address, a subdomain of a planted URL host and a planted command run through a wrapper

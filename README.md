@@ -370,8 +370,8 @@ The most important gaps:
   plugin), and agent settings can turn hooks off. `openmoat status` reports what it can see.
 - **Tools no hook exposes are not seen**, and a repository's git configuration can run a
   program before any hook.
-- **Injected input is linked only with Claude Code, Codex, Gemini CLI, GitHub Copilot
-  CLI, the Cline CLI and wrapped MCP servers**; a host by another name or a reworded command is not linked.
+- **Injected input is linked only with Claude Code, the Continue CLI, Codex, Gemini CLI,
+  GitHub Copilot CLI, the Cline CLI and wrapped MCP servers**; a host by another name or a reworded command is not linked.
 - **A program running as you outside any sandbox** can change the policy and the lock.
 
 The full list, per area: [docs/LIMITS.md](docs/LIMITS.md). Per agent:
