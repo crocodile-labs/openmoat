@@ -411,6 +411,10 @@ bubblewrap.
   ```bash
   bash -c 'exec 3<~/.ssh/id_rsa; openmoat run -- sh -c "cat <&3"'   # sh: 3: Bad file descriptor
   ```
+
+  Process substitution is a descriptor too: `openmoat run -- tool <(cmd)` gives `tool`
+  `/dev/fd/63`, which it can no longer open. Write the output to a file in the project
+  first, or pipe it on standard input (`cmd | openmoat run -- tool -`).
 - **What Linux does not protect.** Landlock can only grant access to whole directory
   trees, so inside the project the policy's deny rules do not hold for the agent's
   commands: they can read and write `.env`, create `.envrc`, write `.moat/policy.yaml`

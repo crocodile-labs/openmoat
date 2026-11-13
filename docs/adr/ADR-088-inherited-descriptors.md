@@ -57,7 +57,10 @@ changes the descriptors the process started with. Nothing in OpenMoat did.
    return integers (`syscall(SYS_close_range, …)`, `fcntl(F_GETFD)`, `fcntl(F_SETFD)`),
    each with a `SAFETY` comment. `openmoat-core`'s architecture test lists the files
    that may name the lint (this one and `openmoat-wasm`'s exports) and fails on any
-   other; the list only shrinks. `libc` moves from a Linux-only to a Unix dependency of
+   other, in sources, tests, benches, examples and `build.rs`; it fails too unless the
+   workspace's level is `forbid` and every crate takes it or sets `forbid` itself, with
+   `deny` only in a crate that owns a listed file, and when a listed file no longer
+   names the lint, so the list only shrinks. `libc` moves from a Linux-only to a Unix dependency of
    `openmoat-cli`; it was already built on macOS through rustix and getrandom.
 
 ## Paths that do not sweep, and why
@@ -84,6 +87,12 @@ changes the descriptors the process started with. Nothing in OpenMoat did.
 - A workflow that relied on passing a descriptor into `openmoat run` (a pipe on 3 for a
   build tool's job server, say) no longer gets it. Such a descriptor reached a sandbox
   that could not check it; the agent's standard streams are unchanged.
+- Process substitution no longer reaches the program: in
+  `openmoat run -- tool <(cmd)` the shell passes `tool` the path `/dev/fd/63` and keeps
+  the pipe open on descriptor 63, which is now closed at `exec`, so opening the path
+  inside fails (`EBADF` on macOS; `ENOENT` on Linux, where it is a `/proc` link). Write
+  the output to a file in the project first (`cmd > input.txt; openmoat run -- tool
+  input.txt`), or pipe it on standard input (`cmd | openmoat run -- tool -`).
 - Another thread that opens a descriptor without close-on-exec after the sweep would
   pass it on. OpenMoat's threads open everything through the standard library, which
   sets the flag.
