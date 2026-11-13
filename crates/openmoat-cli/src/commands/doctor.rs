@@ -131,6 +131,9 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     }
     report.note(&warnings::relay_token());
     report.note(warnings::RENAMED);
+    if let Some(note) = crate::os_version::wsl_note() {
+        report.note(&note);
+    }
     // Loaded when a session starts here, where no `ConfigChange` fires.
     for warning in crate::project_settings::warnings_here(&home) {
         let name = warning.host.display_name();

@@ -22,6 +22,7 @@ mod post_tool_use;
 mod project_settings;
 mod tools;
 mod trust;
+mod windows_sandbox;
 
 #[cfg(test)]
 mod tests;
@@ -111,6 +112,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         format: SandboxFormat::CodexProfile,
         file: "config.toml",
         unavailable_on_windows: None,
+        windows_modes: Some(&windows_sandbox::Codex),
         // Codex's Linux sandbox does not refuse `TIOCSTI`.
         tiocsti_open_on_linux: true,
         // Its upstream proxy comes from the Codex process's own `HTTP_PROXY`,

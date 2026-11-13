@@ -21,7 +21,7 @@ use super::tokens::{
 use super::{ClassifyError, MAX_DEPTH, ShellContext, Sink};
 use super::{
     copy, cwd, database, decoders, embedded, extract, git, in_place, invocation, kills, mailbox,
-    make, operands, options, text,
+    make, operands, options, text, wsl,
 };
 use crate::action::AtomicAction;
 use crate::host;
@@ -313,6 +313,7 @@ fn classify_as_written(
     push_command(cmd, &argv, program, substitution, ctx, sink)?;
     push_kill_substituted(program, words, sink)?;
     kills::note(&argv, program, sink)?;
+    wsl::note(&argv, ctx, sink)?;
 
     if ENV_BUILTINS.contains(&program) {
         for word in &words[1..] {

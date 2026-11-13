@@ -24,6 +24,8 @@ extend-ignore-re = [
     "\\bcomand\"?:",  # a misspelt field the SDK tests send on purpose: an unknown field is refused
     "\\bcatalog(\\.ts|\":)",  # OpenCode 2's `mcp/catalog.ts` and `mcp.timeout.catalog` key, spelt as OpenCode spells them
     "-passin\\b",  # OpenSSL's option for the input password, spelt as OpenSSL spells it
+    "(;|\"|O:)BA\\b",  # SDDL's alias for the Administrators group (`(A;;FA;;;BA)`)
+    "/fo\\b",      # whoami's `/fo csv` (output format)
 ]
 
 [default.extend-identifiers]

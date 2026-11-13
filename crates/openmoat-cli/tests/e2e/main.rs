@@ -99,3 +99,4 @@ mod taint_answered;
 mod team;
 mod trust;
 mod uninstall;
+mod windows;

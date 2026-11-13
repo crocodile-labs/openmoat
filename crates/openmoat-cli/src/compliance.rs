@@ -218,14 +218,16 @@ pub const GROUPS: &[Group] = &[
         id: "code-execution",
         title: "Running code the agent did not show",
         does: "deny piping downloaded or decoded content into a shell and a program that \
-               resolves to another path than its pin; hold for review running opaque code, a \
-               file the session wrote or a container handed the host",
+               resolves to another path than its pin, and work handed to WSL from Windows; hold \
+               for review running opaque code, a file the session wrote or a container handed \
+               the host",
         covers: Covers::Rules(&[
             "pipe-to-shell",
             "opaque-code",
             crate::session_code::RULE,
             "executables",
             "container-host",
+            "wsl-crossing",
         ]),
         controls: &[&LLM05, &CC6_8, &A8_7],
     },

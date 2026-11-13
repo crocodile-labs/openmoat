@@ -198,11 +198,17 @@ impl Home {
     }
 
     /// Create the directory with owner-only permissions, tightening an
-    /// existing one.
+    /// existing one: mode `0700` on Unix, an access list of the person's
+    /// account and `SYSTEM` only on Windows (ADR-083), where one another
+    /// account owns is refused.
     pub fn ensure(&self) -> Result<()> {
+        #[cfg(windows)]
+        let created = create_dir_here(&self.root)?;
         create_private_dir(&self.root)?;
         #[cfg(unix)]
         restrict(&self.root, PRIVATE_DIR)?;
+        #[cfg(windows)]
+        crate::state_acl::protect(&self.root, !created)?;
         Ok(())
     }
 
@@ -492,8 +498,24 @@ pub fn private_lock_options() -> fs::OpenOptions {
     options
 }
 
-/// Set Unix permission bits. Unix only: elsewhere the profile directory's ACL
-/// already limits access to the user.
+/// Create `path` (its parents as needed) and say whether this call made it:
+/// `create_dir` fails when anything is already there, so a folder another
+/// account made a moment before is never taken for one of ours, and its
+/// owner is checked (ADR-083).
+#[cfg(windows)]
+fn create_dir_here(path: &Path) -> Result<bool> {
+    if let Some(parent) = path.parent() {
+        create_private_dir(parent)?;
+    }
+    match fs::create_dir(path) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+        Err(e) => Err(e).with_context(|| format!("creating {}", path.display())),
+    }
+}
+
+/// Set Unix permission bits. Unix only: on Windows `ensure` gives the state
+/// directory its own access list (`crate::state_acl`).
 #[cfg(unix)]
 fn restrict(path: &Path, mode: u32) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;

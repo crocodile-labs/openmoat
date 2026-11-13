@@ -662,6 +662,33 @@ deny:
     fs.write: ["/Library/Application Support/ClaudeCode/**", "/etc/claude-code/**", "C:/Program Files/ClaudeCode/**",
       "/Library/Application Support/GeminiCli/**", "/etc/gemini-cli/**", "C:/ProgramData/gemini-cli/**",
       "/etc/codex/**", "C:/ProgramData/OpenAI/Codex/**"]
+  # Windows: work handed to the Windows Subsystem for Linux. A command inside a
+  # WSL distribution reads the distribution's own files (its `~/.ssh`, its shell
+  # start-up files), which no Windows path in this policy names, and reaches the
+  # Windows drives through `/mnt/c` beside them. `@wsl <launcher>` atoms: `wsl`,
+  # `wslg`, `wslconfig`, `bash.exe` in the system folders, a listed distribution's
+  # own launcher, read as Win32 reads a path, also in a `cmd`, PowerShell or
+  # `start` line; `@wsl share`: a word naming the `\\wsl$` or `\\wsl.localhost`
+  # share (`net use Z: \\wsl$\Ubuntu`). The paths: the share as file tools and
+  # redirections name it, `wsl$` or `wsl.localhost` as any component of a UNC path
+  # (the `\\?\UNC\`, `\\.\UNC\` and `GLOBALROOT` forms); and reading the
+  # launchers themselves (the system folders, `WinSxS` and the Store WSL's `Program
+  # Files\WSL`, on `C:`), so a copy under another name is denied too, and hard links
+  # made to them (`fsutil hardlink`, `mklink /H`, `New-Item -ItemType HardLink`) (ADR-083).
+  # A runner line built at run time is held by `opaque-code`. `hook_only`: no
+  # sandbox grants these
+  - id: wsl-crossing
+    reason: hands work to the Windows Subsystem for Linux, whose files and commands no Windows rule names
+    title: running commands or opening files inside WSL from Windows
+    why: inside WSL a command reaches files this policy names only by their Windows paths
+    hook_only: true
+    shell: ["@wsl *"]
+    fs.read: ["//wsl$", "//wsl$/**", "//wsl.localhost", "//wsl.localhost/**",
+      "//**/wsl$", "//**/wsl$/**", "//**/wsl.localhost", "//**/wsl.localhost/**",
+      "C:/Windows/{System32,Sysnative,SysWOW64}/{wsl,wslg,wslconfig,bash}.exe",
+      "C:/Windows/WinSxS/**/{wsl,wslg,wslconfig,bash}.exe", "C:/Program Files/WSL/*.exe"]
+    fs.write: ["//wsl$", "//wsl$/**", "//wsl.localhost", "//wsl.localhost/**",
+      "//**/wsl$", "//**/wsl$/**", "//**/wsl.localhost", "//**/wsl.localhost/**"]
   - id: shell-rc
     reason: edits persist into every future shell session
     title: editing your shell's start-up files
@@ -1352,6 +1379,8 @@ review:
     # `@opaque-code <interpreter>`: inline code (`python3 -c`, `node -e`, a here-document)
     # that opens files, connects, reads the environment or runs programs with text it
     # builds at run time, so the scan cannot see what it opens
+    # or a `cmd`, PowerShell or `wt` line built at run time (`^`, `%x%`, `!x!`, joined
+    # strings, `iex`, `-EncodedCommand`), so what it runs cannot be read (ADR-083)
     shell: ["awk @*", "gawk @*", "mawk @*", "nawk @*", "sed @*", "gsed @*", "sort @*", "uniq @*", "cut @*", "printf -v *", "{sh,bash,zsh,dash,ksh,fish} @stdin", "@opaque-code *"]
     env.set: ["CDPATH"]
   # `@package-near-miss <ecosystem> <name> <popular>` atoms (ADR-030): an install of a

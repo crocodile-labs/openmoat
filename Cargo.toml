@@ -64,6 +64,10 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rcgen = { version = "0.14", default-features = false, features = ["ring", "pem", "zeroize"] }
 rustls-native-certs = "0.8"
 similar = { version = "3", default-features = false, features = ["text"] }
+# The state directory's access list on Windows (ADR-083): the current
+# account, a folder's owner and DACL, a new DACL. Already in the lock on
+# Windows through rustix, tempfile and errno; the same version.
+windows-sys = { version = "0.61.2", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

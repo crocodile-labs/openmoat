@@ -6,6 +6,11 @@ use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
 use std::path::Path;
 
 use super::Found;
+use crate::commands::doctor::rows::Report;
+use crate::home::Home;
+
+/// No row of its own for the directory: its mode is one of the file rows.
+pub(super) fn directory(_: &mut Report, _: &Home) {}
 
 /// Group and other write bits.
 const OTHERS_WRITE: u32 = 0o022;

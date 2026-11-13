@@ -94,6 +94,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         unavailable_on_windows: Some(
             "Cursor's sandbox runs on macOS and Linux only; the hook still applies the policy",
         ),
+        windows_modes: None,
         tiocsti_open_on_linux: false,
         // `sandbox.json` has no proxy setting.
         proxy_sessions: ProxySessions::NotProxied,

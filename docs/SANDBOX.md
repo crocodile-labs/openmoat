@@ -164,7 +164,9 @@ init`, `sandbox sync`, `sandbox show`, `doctor` and `status` print `sandbox not
 available on native Windows; the hook still applies the policy (use WSL2 for OS
 confinement)` for Claude Code instead. `openmoat init` and `openmoat sandbox sync` remove those
 settings where an older version wrote them, keep the rest of the file and re-pin it.
-Codex is configured as on other systems. `openmoat status` reports such an agent as
+Codex is configured as on other systems, and `openmoat doctor` shows the Windows sandbox
+mode its `config.toml` selects: under `unelevated` Codex does not enforce denied reads, so
+OpenMoat's read denies hold only through the hook there (ADR-083). `openmoat status` reports such an agent as
 `hook only`, and a sandbox that is missing, weakened or out of date the same way, with
 the reason ([USAGE.md](USAGE.md#how-each-agent-is-protected)).
 

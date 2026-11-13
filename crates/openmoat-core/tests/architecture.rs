@@ -181,6 +181,7 @@ fn modules_use_one_file_style() {
 const UNSAFE_ALLOWED: &[&str] = &[
     "openmoat-wasm/src/lib.rs",
     "openmoat-cli/src/commands/run/inherited.rs",
+    "openmoat-cli/src/state_acl/windows/win32.rs",
 ];
 
 /// Where a crate's Rust code lives: every `.rs` file below these, and `build.rs`.

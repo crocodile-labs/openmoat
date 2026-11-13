@@ -1648,12 +1648,6 @@
 - id: benign-python-printenv-home
   action: { shell: "python3 -c \"import subprocess;subprocess.run(['printenv','HOME'])\"" }
   expect: { verdict: defer, rules: [default] }
-- id: benign-pwsh-env-home
-  action: { shell: "pwsh -c 'echo $Env:HOME'" }
-  expect: { verdict: defer, rules: [default] }
-- id: benign-pwsh-get-environment-variable-path
-  action: { shell: "pwsh -c \"[Environment]::GetEnvironmentVariable('PATH')\"" }
-  expect: { verdict: defer, rules: [default] }
 - id: benign-pwsh-env-drive-home
   action: { shell: "pwsh -c 'Get-ChildItem Env:HOME'" }
   expect: { verdict: defer, rules: [default] }
@@ -2624,3 +2618,46 @@
   context: { cwd: /p, project: /p }
   action: { fs_write: "/p/.agents/notes.md" }
   expect: { verdict: allow, rules: [project-fs] }
+
+# Windows: what only looks like WSL is decided as before (ADR-083)
+- id: benign-git-bash-bash-is-not-wsl
+  action: { shell: "bash -c 'git status'" }
+  expect: { verdict: defer }
+- id: benign-ubuntu-tool-is-not-a-wsl-launcher
+  action: { shell: "ubuntu-drivers list" }
+  expect: { verdict: defer }
+- id: benign-wslpath-inside-wsl
+  action: { shell: "wslpath -w /p" }
+  expect: { verdict: defer }
+- id: benign-grep-for-wsl-word
+  action: { shell: "grep -n wsl README.md" }
+  expect: { verdict: allow }
+# only the program of a cmd or PowerShell segment is a launcher
+- id: benign-cmd-docker-run-ubuntu-image
+  action: { shell: "cmd /c docker run ubuntu" }
+  expect: { verdict: defer }
+- id: benign-pwsh-docker-pull-debian-image
+  action: { shell: "pwsh -c \"docker pull debian\"" }
+  expect: { verdict: defer }
+- id: benign-cmd-docker-env-option
+  action: { shell: "cmd /c \"docker run -e X=1 kali\"" }
+  expect: { verdict: defer }
+- id: benign-cmd-echo-to-text-file
+  action: { shell: "cmd /c \"echo done> out.txt\"" }
+  expect: { verdict: defer }
+- id: benign-forfiles-old-logs
+  action: { shell: "forfiles /p C:/logs /d -30" }
+  expect: { verdict: defer }
+# simple Windows build commands stay with the agent's own prompt (ADR-083)
+- id: benign-cmd-runs-build-script
+  action: { shell: "cmd /c build.cmd" }
+  expect: { verdict: defer }
+- id: benign-cmd-runs-gradle-wrapper
+  action: { shell: "cmd /c gradlew.bat build" }
+  expect: { verdict: defer }
+- id: benign-powershell-runs-build-script
+  action: { shell: "powershell -c .\\build.ps1" }
+  expect: { verdict: defer }
+- id: benign-powershell-lists-logs
+  action: { shell: "powershell -c \"Get-ChildItem *.log\"" }
+  expect: { verdict: defer }

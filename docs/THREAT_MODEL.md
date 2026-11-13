@@ -257,6 +257,28 @@ something OpenMoat claims to stop.
   that holds them (`cp -r ~/.codex x`, `tar czf a.tgz ~/.hermes`) is one read of the
   folder; the hook holds it for review (`protected-contents`, ADR-038), and a host that
   cannot prompt denies it, but once a person approves it the copy holds the files.
+- **Native Windows and WSL (ADR-083).** The hook denies commands that hand work to
+  WSL (`wsl`, `wslg`, `bash.exe` in the system folders, a listed Store distribution's
+  launcher, read as Win32 reads a path; also as the program of a `cmd` or PowerShell
+  segment, where a bare `bash` counts, or in a `start` line), any word or path naming the
+  `\\wsl$` or `\\wsl.localhost` share, and copying the launchers (`wsl-crossing`),
+  because inside WSL no Windows path rule reaches. A `cmd` or PowerShell line built at run
+  time (`^`, `%x%`, `!x!`, joined strings, a computed program after `&`, `iex`, `gcm`,
+  `-EncodedCommand`, any `wt` line, a script it writes and may run, `forfiles` with a mask, a
+  wildcard naming a launcher), a PowerShell or `cmd` line that is not simple (any `$`,
+  bracket, brace, parenthesis, `::` or call operator in PowerShell; `^`, `%`, `!`, a block,
+  `for` or `call` in `cmd`), or one that names `wsl`, `wslg`, `wslconfig` or `bash` anywhere,
+  quoted or not, is held for review, not decided. A script an earlier call wrote is not
+  read when a later one runs it. It does not see a distribution launcher it does not list, a
+  launcher started through a name the line does not show (a shortcut, a renamed copy made
+  outside the hook, a scheduled task), a line built by other means (`-join`, a script
+  file), or the other direction: a command inside WSL starting a Windows program through
+  interop, and WSL reading the Windows profile under `/mnt/c`. The state directory's access
+  list (your account and `SYSTEM` only, set by `openmoat init`, which refuses a directory
+  another account owns) keeps other accounts out, not the agent: it runs as you, and an
+  account can always change the list of a folder it owns; `doctor` says so. A state file
+  given a list of its own is not read. Codex's `unelevated` Windows sandbox does not
+  enforce denied reads, which `doctor` reports.
 - **What the Standard tier does not cover.** It is as strong as each host's sandbox
   and OpenMoat's translation, and every host version bump must keep the generated keys
   working (`openmoat doctor` names a weakened setting; the differential suite executes

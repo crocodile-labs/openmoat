@@ -42,6 +42,12 @@ mod secrets;
 mod session_code;
 mod signing;
 mod snapshot;
+// Read and set only on Windows; its parsing is tested on every system.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only Windows has the access lists it reads")
+)]
+mod state_acl;
 mod taint;
 mod terminal;
 mod time;
