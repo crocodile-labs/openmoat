@@ -19,9 +19,9 @@ use windows_sys::Win32::Security::Authorization::{
 use windows_sys::Win32::Security::{
     ACCESS_ALLOWED_ACE, ACE_HEADER, ACL, ACL_REVISION, AddAccessAllowedAceEx,
     CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION, GetAce, GetLengthSid,
-    GetSecurityDescriptorControl, GetTokenInformation, InitializeAcl, OBJECT_INHERIT_ACE,
-    OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID,
-    SE_DACL_PROTECTED, TOKEN_QUERY, TOKEN_USER, TokenUser,
+    GetSecurityDescriptorControl, GetTokenInformation, InitializeAcl, IsValidAcl, IsValidSid,
+    OBJECT_INHERIT_ACE, OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
+    PSECURITY_DESCRIPTOR, PSID, SE_DACL_PROTECTED, TOKEN_QUERY, TOKEN_USER, TokenUser,
 };
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
@@ -176,8 +176,18 @@ pub(super) fn read(path: &[u16]) -> Result<Descriptor> {
 /// this runs. An entry of a type without a plain mask and SID is an error.
 #[expect(unsafe_code, reason = "ACL walking is foreign memory")]
 fn entries(dacl: *mut ACL) -> Result<Vec<RawAce>> {
-    // SAFETY: `dacl` is a valid, non-null ACL from GetNamedSecurityInfoW.
-    let count = unsafe { (*dacl).AceCount };
+    if dacl.is_null() {
+        bail!("the access list could not be read");
+    }
+    // SAFETY: `dacl` is non-null and points into the descriptor
+    // GetNamedSecurityInfoW returned, which the caller keeps alive;
+    // IsValidAcl only reads it.
+    if unsafe { IsValidAcl(dacl) } == 0 {
+        bail!("the access list Windows returned is not valid");
+    }
+    // SAFETY: `dacl` is a non-null ACL that IsValidAcl accepted; the read is
+    // unaligned-safe.
+    let count = unsafe { ptr::read_unaligned(addr_of!((*dacl).AceCount)) };
     let mut aces = Vec::with_capacity(usize::from(count));
     for index in 0..u32::from(count) {
         let mut ace: *mut c_void = ptr::null_mut();
@@ -186,7 +196,11 @@ fn entries(dacl: *mut ACL) -> Result<Vec<RawAce>> {
         if unsafe { GetAce(dacl, index, &raw mut ace) } == 0 {
             bail!("reading entry {index} of the access list: {}", last_error());
         }
-        // SAFETY: every ACE starts with an ACE_HEADER.
+        if ace.is_null() {
+            bail!("entry {index} of the access list could not be read");
+        }
+        // SAFETY: `ace` is non-null and points into the ACL that IsValidAcl
+        // accepted; every ACE starts with an ACE_HEADER.
         let header = unsafe { ptr::read_unaligned(ace.cast::<ACE_HEADER>()) };
         let allows = match header.AceType {
             ACCESS_ALLOWED_ACE_TYPE => true,
@@ -194,7 +208,12 @@ fn entries(dacl: *mut ACL) -> Result<Vec<RawAce>> {
             other => bail!("entry {index} of the access list is of a kind not read here ({other})"),
         };
         // Allowed and denied entries share ACCESS_ALLOWED_ACE's layout: the
-        // header, the mask, then the SID.
+        // header, the mask, then the SID. The entry must hold at least that
+        // much (a SID is at least 8 bytes) before any of it is read.
+        let least = std::mem::size_of::<ACE_HEADER>() + std::mem::size_of::<u32>() + 8;
+        if usize::from(header.AceSize) < least {
+            bail!("entry {index} of the access list is too short to hold a SID");
+        }
         let body = ace.cast::<ACCESS_ALLOWED_ACE>();
         // SAFETY: an allowed or denied ACE holds at least the header, the
         // mask and a SID, all inside the ACL.
@@ -203,6 +222,11 @@ fn entries(dacl: *mut ACL) -> Result<Vec<RawAce>> {
         let sid = unsafe { addr_of!((*body).SidStart) }
             .cast_mut()
             .cast::<c_void>();
+        // SAFETY: `sid` points inside the entry, which is long enough to hold
+        // a SID's fixed part; IsValidSid only reads it.
+        if unsafe { IsValidSid(sid) } == 0 {
+            bail!("entry {index} of the access list holds no valid SID");
+        }
         aces.push(RawAce {
             allows,
             flags: header.AceFlags,
