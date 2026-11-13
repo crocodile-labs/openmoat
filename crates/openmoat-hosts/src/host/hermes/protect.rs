@@ -1,7 +1,7 @@
 //! Hermes Agent's files the default policy and the taint list protect, and
 //! its processes.
 
-use crate::contract::{Paths, ProcessSpec, Protect};
+use crate::contract::{Paths, ProcessSpec, Protect, RunsLater};
 
 pub(super) const PROTECT: Protect = Protect {
     self_paths: &[Paths::new(
@@ -63,6 +63,33 @@ pub(super) const PROTECT: Protect = Protect {
             "~/.hermes/profiles/*/browser-profile/**",
         ],
     )],
+    runs_later: &[
+        RunsLater::review(
+            "Hermes Agent: the cron jobs it runs later unattended and the skills it loads\n\
+             into later sessions; another profile's configuration, hook allowlist, `.env`,\n\
+             plugins, hooks, skills and cron jobs, which run when that profile is used",
+            &[
+                "~/.hermes/cron/**",
+                "~/.hermes/skills/**",
+                "~/.hermes/profiles/*/config.yaml",
+                "~/.hermes/profiles/*/shell-hooks-allowlist.json",
+                "~/.hermes/profiles/*/.env",
+                "~/.hermes/profiles/*/plugins/**",
+                "~/.hermes/profiles/*/hooks/**",
+                "~/.hermes/profiles/*/agent-hooks/**",
+                "~/.hermes/profiles/*/skills/**",
+                "~/.hermes/profiles/*/cron/**",
+            ],
+        ),
+        RunsLater::agent_config(
+            "Hermes Agent: a project's plugins (loaded with `HERMES_ENABLE_PROJECT_PLUGINS`)",
+            &["**/.hermes/plugins/**"],
+        ),
+        RunsLater::review(
+            "Hermes Agent: the folders above a project's plugins",
+            &["**/.hermes", "**/.hermes/plugins"],
+        ),
+    ],
 };
 
 /// `hermes` is a Python entry point (`hermes_cli.main:main`), so a session

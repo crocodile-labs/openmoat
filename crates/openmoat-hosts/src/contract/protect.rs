@@ -21,6 +21,14 @@ pub struct Protect {
     /// engine adds the moved one (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, …) as for
     /// `kernel-self`.
     pub credentials: &'static [Paths],
+    /// The host's files it loads or runs later, outside any sandbox: the
+    /// default policy's `runs-later` rule holds a write of one for review,
+    /// and `project-fs` leaves the project's (`**/…`) out of its grant. Those
+    /// marked [`RunsLater::agent_config`] are the configuration the host
+    /// loads when it next opens the project (hooks, MCP servers, plugins,
+    /// commands, subagents, policy files); `openmoat run`'s sandboxes deny
+    /// commands writing them, and the folders above them, in every tier.
+    pub runs_later: &'static [RunsLater],
 }
 
 impl Protect {
@@ -29,7 +37,47 @@ impl Protect {
         self_paths: &[],
         taint: &[],
         credentials: &[],
+        runs_later: &[],
     };
+}
+
+/// Files of a host that run later ([`Protect::runs_later`]), the comment
+/// above them in the default policy, and whether they are the host's own
+/// configuration in a project.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct RunsLater {
+    /// The globs, the comment above them, in the `runs-later` rule's order.
+    pub paths: Paths,
+    /// The host loads them as its configuration when it next opens the
+    /// project, so `openmoat run`'s sandboxes deny commands writing them.
+    /// Only project globs (`**/…`) carry it: a home file is the host's own
+    /// state, which `openmoat run --write` may grant.
+    pub agent_config: bool,
+}
+
+impl RunsLater {
+    /// The host's configuration in a project (`**/…` globs only): held for
+    /// review in the hook, denied to commands under `openmoat run`.
+    #[must_use]
+    pub const fn agent_config(why: &'static str, globs: &'static [&'static str]) -> Self {
+        Self {
+            paths: Paths::new(why, globs),
+            agent_config: true,
+        }
+    }
+
+    /// Files held for review in the hook only: the host's files in the home,
+    /// and the folders above its configuration in a project, which the
+    /// sandboxes cover as the folders above [`RunsLater::agent_config`]
+    /// entries.
+    #[must_use]
+    pub const fn review(why: &'static str, globs: &'static [&'static str]) -> Self {
+        Self {
+            paths: Paths::new(why, globs),
+            agent_config: false,
+        }
+    }
 }
 
 /// Path globs and the comment above them in a generated list.

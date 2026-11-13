@@ -1,7 +1,7 @@
 //! OpenClaw's files the default policy and the taint list protect, and its
 //! processes.
 
-use crate::contract::{Paths, ProcessSpec, Protect};
+use crate::contract::{Paths, ProcessSpec, Protect, RunsLater};
 
 pub(super) const PROTECT: Protect = Protect {
     self_paths: &[
@@ -57,6 +57,17 @@ pub(super) const PROTECT: Protect = Protect {
             "~/.openclaw/mcp-oauth/**",
         ],
     )],
+    runs_later: &[
+        RunsLater::review(
+            "OpenClaw: the person's plugins, which its Gateway loads and runs with the\n\
+             agent's rights",
+            &["~/.openclaw/extensions/**"],
+        ),
+        RunsLater::agent_config(
+            "OpenClaw: a project's plugins",
+            &["**/.openclaw/extensions/**"],
+        ),
+    ],
 };
 
 /// OpenClaw's command is `openclaw.mjs` (its package `bin`); `openclaw/dist`

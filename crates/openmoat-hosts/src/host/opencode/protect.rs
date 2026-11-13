@@ -1,7 +1,7 @@
 //! OpenCode's files the default policy and the taint list protect, and its
 //! processes.
 
-use crate::contract::{Paths, ProcessSpec, Protect};
+use crate::contract::{Paths, ProcessSpec, Protect, RunsLater};
 
 pub(super) const PROTECT: Protect = Protect {
     self_paths: &[
@@ -64,6 +64,64 @@ pub(super) const PROTECT: Protect = Protect {
             "~/.local/share/opencode/opencode*.db*",
         ],
     )],
+    runs_later: &[
+        RunsLater::review(
+            "OpenCode: the person's plugins and custom tools, which it loads into its own\n\
+             process with the agent's rights; commands, whose `` !`…` `` shell runs when\n\
+             the person types the command; and the package files and caches it loads\n\
+             plugin code from",
+            &[
+                "~/.config/opencode/plugins/**",
+                "~/.config/opencode/plugin/**",
+                "~/.config/opencode/tools/**",
+                "~/.config/opencode/tool/**",
+                "~/.config/opencode/commands/**",
+                "~/.config/opencode/command/**",
+                "~/.config/opencode/package.json",
+                "~/.config/opencode/node_modules/**",
+                "~/.cache/opencode/node_modules/**",
+            ],
+        ),
+        RunsLater::agent_config(
+            "OpenCode: a project's plugins, tools, commands, agents and skills (loaded at\n\
+             start, with no prompt), and its configuration, which adds plugins, MCP\n\
+             servers and permission rules (a write that removes OpenMoat's plugin is\n\
+             denied, `project-settings`)",
+            &[
+                "**/.opencode/plugins/**",
+                "**/.opencode/plugin/**",
+                "**/.opencode/tools/**",
+                "**/.opencode/tool/**",
+                "**/.opencode/commands/**",
+                "**/.opencode/command/**",
+                "**/.opencode/agents/**",
+                "**/.opencode/agent/**",
+                // the folder its skills docs name, searched from the working
+                // directory up to the project root (opencode.ai/docs/skills)
+                "**/.opencode/skills/**",
+                "**/.opencode/opencode.json",
+                "**/.opencode/opencode.jsonc",
+                "**/opencode.json",
+                "**/opencode.jsonc",
+            ],
+        ),
+        // OpenCode itself writes `package.json` in each configuration folder
+        // it uses, a project's `.opencode` included, when it installs its
+        // plugin dependencies at start (the file is in OpenCode's own
+        // `.opencode/.gitignore`), so `openmoat run -- opencode` must leave it
+        // writable: review only.
+        RunsLater::review(
+            "OpenCode: a project's package file, which OpenCode writes itself when it\n\
+             installs plugin dependencies at start, and the folders above a project's\n\
+             plugins (a rename away and back edits them)",
+            &[
+                "**/.opencode/package.json",
+                "**/.opencode",
+                "**/.opencode/plugins",
+                "**/.opencode/plugin",
+            ],
+        ),
+    ],
 };
 
 /// OpenCode 1 runs as `opencode`: the compiled binary, or the npm package's

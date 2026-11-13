@@ -219,6 +219,55 @@ fn missing_agent_configuration_folders_become_read_only_folders() {
     assert_eq!(each("/p/.copilot/hooks"), 1, "once: {folders:?}");
 }
 
+/// With the default policy, the folders each host's spec marks as its
+/// configuration (ADR-091) and that are missing where their holder exists
+/// become read-only folders for the session: Gemini CLI's commands, policies
+/// and subagents in an existing `.gemini`, Cline's hooks in an existing
+/// `.clinerules`. Under a missing holder (`.cline`) none is made, and a
+/// rules folder the policy leaves writable gets none.
+#[test]
+fn missing_folders_of_each_hosts_configuration_are_made_read_only() {
+    use hook_settings::{Found, plan};
+    use openmoat_core::AtomicAction;
+    use openmoat_core::ir::Effect;
+
+    let ir = super::super::without_runs_later(&session_ir("/p"));
+    let checker = ir.checker().unwrap();
+    let dir_below = |path: &str| {
+        let below = AtomicAction::FsWrite {
+            path: format!("{path}/x"),
+        };
+        checker.check_os(&below) != Some(Effect::Allow)
+    };
+    let found = |path: &str| match path.strip_prefix("/p/").unwrap_or(path) {
+        ".gemini" | ".clinerules" | ".claude" => Found::Dir,
+        _ => Found::Missing,
+    };
+    let out = plan(&ir, "/p", &found, &dir_below);
+    for made in [
+        "/p/.gemini/commands",
+        "/p/.gemini/policies",
+        "/p/.gemini/agents",
+        "/p/.clinerules/hooks",
+        "/p/.claude/skills",
+    ] {
+        assert!(
+            out.placeholders.iter().any(|p| p.dir && p.path == made),
+            "{made}: {:#?}",
+            out.placeholders
+        );
+        assert!(
+            out.mounts.contains(&Mount::ReadOnly(made.to_owned())),
+            "{made}: {:?}",
+            out.mounts
+        );
+    }
+    let paths: Vec<&str> = out.placeholders.iter().map(|p| p.path.as_str()).collect();
+    for left in ["/p/.cline", "/p/.cline/hooks", "/p/.clinerules/rules"] {
+        assert!(!paths.contains(&left), "{left}: {paths:?}");
+    }
+}
+
 /// Where the whole walk fails, the network namespace looks at the project's
 /// top and the folders directly in it only: what lies there is masked as
 /// before, what lies deeper is not looked at.

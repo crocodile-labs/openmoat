@@ -439,6 +439,51 @@ fn the_folders_above_agent_configuration_cannot_be_moved() {
     }
 }
 
+/// Every glob a host's spec marks as its configuration is denied to commands,
+/// Cline's workspace hooks and Gemini CLI's policy files, commands and
+/// subagents among them, with the folders above them; CI files stay open.
+#[test]
+fn every_hosts_configuration_is_denied_to_commands() {
+    let profile = generated(DEFAULT_POLICY, None).profile;
+    let rule = "; deny seatbelt.agent-config (fs.write)\n";
+    for entry in crate::sandbox::patterns::AGENT_CONFIG.iter() {
+        let rest = entry.trim_start_matches("**/");
+        let path = match rest.strip_suffix("/**") {
+            Some(dir) => format!("/Users/me/proj/sub/{dir}/x"),
+            None => format!("/Users/me/proj/sub/{rest}"),
+        };
+        assert!(rule_matches(&profile, rule, &path), "{path}: {profile}");
+    }
+    for path in [
+        ".cline/hooks/PreToolUse",
+        ".clinerules/hooks/PostToolUse",
+        ".gemini/policies/allow.toml",
+        ".gemini/commands/deploy.toml",
+        ".gemini/agents/helper.md",
+        ".claude/skills/deploy/SKILL.md",
+        ".opencode/agents/reviewer.md",
+        ".opencode/skills/deploy/SKILL.md",
+    ] {
+        let path = format!("/Users/me/proj/{path}");
+        assert!(rule_matches(&profile, rule, &path), "{path}: {profile}");
+    }
+    for folder in [".cline", ".clinerules", ".gemini"] {
+        let path = format!("(literal \"/Users/me/proj/{folder}\")");
+        assert!(profile.contains(&path), "{path}: {profile}");
+    }
+    // OpenCode writes its own `.opencode/package.json` when it installs its
+    // plugin dependencies at start, inside `openmoat run -- opencode` too
+    for open in [
+        ".clinerules/style.md",
+        ".github/workflows/ci.yml",
+        ".gemini2",
+        ".opencode/package.json",
+    ] {
+        let path = format!("/Users/me/proj/{open}");
+        assert!(!rule_matches(&profile, rule, &path), "{path}: {profile}");
+    }
+}
+
 /// On a case-insensitive disk a file or folder created in another case than
 /// a deny names is still denied: `.MCP.JSON` is the `.mcp.json` the agent
 /// loads, `.CLAUDE` its `.claude`. The exceptions of a deny stay as written.

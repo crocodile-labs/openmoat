@@ -35,6 +35,7 @@ pub(super) const PROTECT: Protect = Protect {
          sign-in is in the OS keyring (`/docs/install`), not a file",
         &["~/.gemini/antigravity/mcp_oauth_tokens.json"],
     )],
+    runs_later: &[],
 };
 
 pub(super) const PROCESS: ProcessSpec = ProcessSpec {

@@ -156,6 +156,23 @@ pub(crate) static SPEC: HostSpec = HostSpec {
              login` writes (docs: Authentication, Credential management)",
             &["~/.claude/.credentials.json", "~/.config/anthropic/**"],
         )],
+        runs_later: &[
+            crate::contract::RunsLater::agent_config(
+                "Claude Code: a project's hook scripts and MCP servers, and its subagents,\n\
+                 skills and slash commands, which carry their own hooks, allowed tools and shell",
+                &[
+                    "**/.claude/hooks/**",
+                    "**/.mcp.json",
+                    "**/.claude/agents/**",
+                    "**/.claude/skills/**",
+                    "**/.claude/commands/**",
+                ],
+            ),
+            crate::contract::RunsLater::review(
+                "Claude Code: the person's MCP servers and plugins",
+                &["~/.claude.json", "~/.claude/plugins/**"],
+            ),
+        ],
         ..crate::contract::Protect::BASE
     },
     advisories: advisories::ADVISORIES,

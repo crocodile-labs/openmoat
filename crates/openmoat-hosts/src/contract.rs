@@ -41,7 +41,7 @@ pub use mcp::{
     McpSyntax,
 };
 pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
-pub use protect::{Helper, Paths, ProcessSpec, Protect};
+pub use protect::{Helper, Paths, ProcessSpec, Protect, RunsLater};
 pub use relaxed::{KeyShape, RelaxedKey};
 pub use reviews::{Reviews, Unseen};
 pub(crate) use reviews::{answer, decided};

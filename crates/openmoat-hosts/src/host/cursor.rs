@@ -127,6 +127,21 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             name: "Cursor Helper",
         }),
     },
+    // `kernel-self`'s and the taint list's lines for Cursor stay hand-written
+    // among Claude Code's and Codex's.
+    protect: crate::contract::Protect {
+        runs_later: &[
+            crate::contract::RunsLater::agent_config(
+                "Cursor: a project's MCP servers",
+                &["**/.cursor/mcp.json"],
+            ),
+            crate::contract::RunsLater::review(
+                "Cursor: the person's MCP servers and the CLI's configuration",
+                &["~/.cursor/mcp.json", "~/.cursor/cli-config.json"],
+            ),
+        ],
+        ..crate::contract::Protect::BASE
+    },
     docs: doc::DOCS,
     tool_token: crate::ToolToken::NotWithheld {
         why: "Cursor documents neither how it starts tool commands nor a setting for them",

@@ -110,10 +110,9 @@ fn a_policy_from_the_previous_default_is_offered_the_proxy_ca_lines() {
 #[test]
 fn a_policy_from_the_previous_default_is_offered_the_project_settings_note() {
     let new = &openmoat_core::DEFAULT_POLICY.replace("\r\n", "\n");
-    let added = "      # a project's Codex, pi and OpenCode settings (here and below) need review;\n      \
-                 # a write whose content turns that host's hook off (`[features] hooks =\n      \
-                 # false`, a pi `extensions` entry or an OpenCode plugin entry that removes\n      \
-                 # OpenMoat's) is denied before the file changes (`project-settings`)\n";
+    let added = "      # Codex: a project's configuration, which can add MCP servers; a write whose\n      \
+                 # content turns its hook off (`[features] hooks = false`) is denied before the\n      \
+                 # file changes (`project-settings`)\n";
     assert!(new.contains(added));
     let old = new.replace(added, "");
     let mine = |text: &str| {

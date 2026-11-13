@@ -179,16 +179,24 @@
   action: { fs_write: "/p/.pi/prompts/review.md" }
   expect: { verdict: allow, rules: [project-fs] }
 # OpenCode: `kernel-self` guards OpenMoat's plugin and the configuration files,
-# not reading them; a project's agents stay project work; running OpenCode with
-# its plugins, or with `--pure` only as text in a prompt, is left to the agent
+# not reading them; a project's themes stay project work (its agents, which set
+# their own tools and permissions, need review since ADR-091, `runs-later`);
+# running OpenCode with its plugins, or with `--pure` only as text in a prompt,
+# is left to the agent
 - id: benign-read-opencode-config
   threat: T9
   action: { fs_read: "~/.config/opencode/opencode.json" }
   expect: { verdict: defer, rules: [default] }
-- id: benign-write-project-opencode-agent
+- id: benign-write-project-opencode-theme
   threat: T9
   context: { cwd: /p, project: /p }
-  action: { fs_write: "/p/.opencode/agent/review.md" }
+  action: { fs_write: "/p/.opencode/themes/dark.json" }
+  expect: { verdict: allow, rules: [project-fs] }
+# a project's own `skills/` folder outside `.opencode` is project work
+- id: benign-write-project-skills-folder
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/docs/skills/onboarding.md" }
   expect: { verdict: allow, rules: [project-fs] }
 - id: benign-opencode-run
   threat: T9
@@ -911,6 +919,10 @@
   expect: { verdict: allow, rules: [project-fs] }
 - id: benign-write-clinerules-rule
   action: { fs_write: "/p/.clinerules/style.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+# a project's own `agent/` source folder is not OpenCode's agents folder
+- id: benign-write-source-agent-folder
+  action: { fs_write: "/p/src/agent/runner.ts" }
   expect: { verdict: allow, rules: [project-fs] }
 - id: benign-write-cline-other-file
   action: { fs_write: "/p/.cline/notes.md" }

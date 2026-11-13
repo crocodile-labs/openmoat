@@ -85,15 +85,13 @@ fn the_project_is_granted_entry_by_entry_without_what_the_policy_denies() {
     for readable in [".env.example", ".git", "src", "sub", ".moat/policy.yaml"] {
         assert!(rules.read.contains(&at(readable)), "{readable}: {rules:?}");
     }
-    for writable in [
-        "src",
-        "sub",
-        ".github/workflows",
-        ".husky",
-        ".claude/commands",
-    ] {
+    for writable in ["src", "sub", ".github/workflows", ".husky"] {
         assert!(rules.write.contains(&at(writable)), "{writable}: {rules:?}");
     }
+    // Agent configuration a host runs later (ADR-091): readable, never writable.
+    let config = at(".claude/commands");
+    assert!(rules.read.contains(&config), "{rules:?}");
+    assert!(!rules.write.contains(&config), "{rules:?}");
     // No rule at all: unreadable, and a link's target is decided where it points.
     for hidden in [".env", ".moat/policy.lock", "link"] {
         let path = at(hidden);

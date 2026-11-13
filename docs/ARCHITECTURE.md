@@ -1539,7 +1539,8 @@ openmoat run ─► openmoat proxy (thread, 127.0.0.1:<ephemeral>, session mode)
     device number in `/dev` by `run/macos.rs`), never the person's other `/dev/ttys*`.
   - the IR's allow rules and the grants. The write allow rules keep their
     exclusions of an agent's own configuration in the project (`AGENT_CONFIG` in
-    `sandbox/patterns.rs`: `.claude/hooks/`, `.mcp.json`, …), and a deny of the same
+    `sandbox/patterns.rs`, the globs each host's spec marks in `Protect::runs_later`,
+    ADR-091: `.claude/hooks/`, `.mcp.json`, `.cline/hooks/`, …), and a deny of the same
     comes after every grant (`seatbelt.agent-config`, a loss), together with the
     folders directly in the project that hold them (`.github`, `.pi`, `.openclaw`, `.opencode`),
     which cannot be created, renamed or removed; the other `runs-later`
