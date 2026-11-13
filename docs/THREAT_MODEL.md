@@ -355,8 +355,11 @@ something OpenMoat claims to stop.
     at its top (commands cannot create a new file there either), `.env` there is
     unreadable and `.git` and `.moat` read-only, while a `.env` or nested `.git` in a
     subfolder stays readable and writable; `openmoat run` and `openmoat doctor` name
-    each such path. A match created after the start where nothing stood (`.env.local`)
-    stays open in every Linux tier. The hook still denies them for the agent's tool
+    each such path. The person's own policy can give the whole-project grant back in
+    that case (`sandbox.project_top: writable`), which opens `.env` and `.git/hooks` at
+    the top to commands; each such run is in the audit log (`run-project-top-open`) and
+    a repository policy cannot set it. A match created after the start where nothing
+    stood (`.env.local`) stays open in every Linux tier. The hook still denies them for the agent's tool
     calls. Without a network namespace, a `--write` path that holds what `kernel-self`
     protects (`--write ~/.claude` holds `settings.json`) refuses to start, since
     nothing could keep those paths from commands.

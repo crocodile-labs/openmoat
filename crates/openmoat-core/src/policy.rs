@@ -431,6 +431,36 @@ pub struct SandboxSettings {
     /// own policy alone: a repository policy or a pack has no `sandbox:`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub env_allow: Vec<String>,
+    /// What `openmoat run`'s Lightweight tier on Linux without a network
+    /// namespace grants at the top of the project (ADR-090): `protected`
+    /// grants it entry by entry, so nothing can be created there and `.env`,
+    /// `.git` and `.moat` stay covered; `writable` grants it whole, so new
+    /// entries and save-by-rename work there and those paths are open to the
+    /// agent's commands. Never read by the Isolated tier or the network
+    /// namespace. Read from the person's own policy alone: a repository policy
+    /// or a pack has no `sandbox:`.
+    #[serde(default, skip_serializing_if = "ProjectTop::is_protected")]
+    pub project_top: ProjectTop,
+}
+
+/// `sandbox.project_top` (ADR-090).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProjectTop {
+    /// Granted entry by entry: the policy's denies at the top hold.
+    #[default]
+    Protected,
+    /// Granted whole: the top is writable, and `.env` and `.git/hooks` there
+    /// are open to the agent's commands.
+    Writable,
+}
+
+impl ProjectTop {
+    /// Whether this is the default, [`ProjectTop::Protected`].
+    #[must_use]
+    pub fn is_protected(&self) -> bool {
+        *self == Self::Protected
+    }
 }
 
 /// The `mcp:` section (ADR-032).
@@ -481,6 +511,17 @@ impl Policy {
             .as_ref()
             .and_then(|s| s.package_min_release_age_days)
             .unwrap_or(DEFAULT_PACKAGE_MIN_RELEASE_AGE_DAYS)
+    }
+
+    /// What `openmoat run` without a network namespace grants at the project's
+    /// top (`sandbox.project_top`, ADR-090); [`ProjectTop::Protected`] unless
+    /// the person's own policy says otherwise.
+    #[must_use]
+    pub fn project_top(&self) -> ProjectTop {
+        self.sandbox
+            .as_ref()
+            .map(|s| s.project_top)
+            .unwrap_or_default()
     }
 
     /// Whether `moat mcp proxy` pins a new server's tools without a person

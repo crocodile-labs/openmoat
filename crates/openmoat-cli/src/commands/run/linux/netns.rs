@@ -224,6 +224,7 @@ pub fn namespaced(
         _session: Some(session),
         warning: None,
         project: None,
+        top_open: false,
         watch: Vec::new(),
     })
 }

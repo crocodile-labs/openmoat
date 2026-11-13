@@ -44,6 +44,7 @@ sandbox:                            # optional: what the host sandboxes may read
   proxy_serve_without_credential: false  # optional: let `openmoat proxy` serve requests with no session credential (§9)
   env_allow: []                     # optional, your own policy only: variables `openmoat run` passes on under `require.run` (§9.3)
   package_min_release_age_days: 7   # optional: `openmoat run` keeps npm and uv off versions newer than this; 0 is off (§9.1)
+  project_top: protected            # optional, your own policy only: `writable` opens the project's top without bubblewrap on Linux (§9.4)
 
 secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§2.1)
 
@@ -1868,6 +1869,29 @@ setting a local server left unprotected (not run through `openmoat mcp proxy`, o
 definition you have not accepted) fails the requirement, for the agents OpenMoat is set up
 for. This is a report: the agent starts its servers itself, so `openmoat run` cannot refuse
 one (ADR-077).
+
+### 9.4 The project's top without bubblewrap (`sandbox.project_top`)
+
+On Linux without a network namespace (no bubblewrap, or unprivileged user namespaces
+blocked), `openmoat run` grants the project entry by entry so that `.env`, `.git` and
+`.moat` at its top stay covered; the cost is that commands cannot create, rename or
+remove anything directly at the top ([SANDBOX.md](SANDBOX.md), ADR-090). Where you
+need that and cannot install bubblewrap, your own policy can give the old grant back:
+
+```yaml
+sandbox:
+  project_top: writable   # default: protected
+```
+
+With `writable`, that one case grants the project whole: new files at the top and
+saves through a new file and a rename work, and commands the agent starts can read and
+write `.env`, write `.git/hooks` and `.moat`, and create `.envrc` there. `openmoat run`
+says so before the agent starts, writes `run-project-top-open` to the audit log on every
+such run, and `openmoat doctor` and `openmoat policy check` warn. The hook still decides
+the agent's own tool calls. The setting changes nothing in the Isolated tier, in the
+Lightweight tier with a network namespace, or on macOS, and `require.run: full-boundary`
+still refuses to start without the namespace. Only your own policy can set it: a
+repository policy or a pack has no `sandbox:` section.
 
 ## 10. Repository policy
 

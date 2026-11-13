@@ -199,6 +199,10 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     // And the Landlock ABI the sandbox has, on Linux (ADR-082).
     let landlock = platform::landlock();
     isolation::record_landlock(&home, &run_session, &ctx.cwd, landlock.as_ref())?;
+    // And a project top the person's policy opened (`sandbox.project_top`, ADR-090).
+    if agent.project_top_open() {
+        isolation::record_project_top(&home, &run_session, &ctx.cwd)?;
+    }
     // Outside the sandbox, before the agent starts (ADR-085).
     let snapshots = RunSnapshots::start(&home, &ctx, args.no_snapshot, &run_session);
     // The hooks the agent starts run in its sandbox, without OpenMoat's home:

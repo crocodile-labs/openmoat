@@ -438,6 +438,14 @@ bubblewrap.
     rename); everything inside an existing folder works as before. Create what is
     needed before the run, or install bubblewrap. A `.env` in a subfolder, or a nested
     `.git`, lies in a folder granted whole and stays open.
+  - **Opting out, on record.** Where you need new entries at the top and cannot install
+    bubblewrap, `sandbox.project_top: writable` in your own policy
+    ([POLICY.md §9.4](POLICY.md#94-the-projects-top-without-bubblewrap-sandboxproject_top))
+    grants the project whole again in this case only: commands can then read and write
+    `.env`, write `.git/hooks` and `.moat`, and create `.envrc` at the top. `openmoat
+    run` says so before the agent starts, writes `run-project-top-open` to the audit log
+    on every such run, and `openmoat doctor` warns. A repository policy cannot set it,
+    and `require.run: full-boundary` still refuses to start without the namespace.
 
   ```text
   moat run: without bubblewrap the project is granted entry by entry: commands cannot create, rename or remove entries directly in it (create what they need before the run), `.env` files there stay unreadable and `.git` and `.moat` read-only. These paths the policy denies lie in a folder granted whole and stay open to commands: /home/me/proj/sub/.env. …

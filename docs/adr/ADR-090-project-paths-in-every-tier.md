@@ -107,7 +107,21 @@ common one.
    that only the top is covered and why. `openmoat doctor` on Linux without a
    namespace prints the same list for the current directory, or, where the project
    cannot be granted entry by entry, that `openmoat run` would refuse to start and why.
-5. **A test-only switch.** Debug builds start `openmoat run` without a namespace when
+5. **A deliberate opt-out, the person's own and on record.** `sandbox.project_top:
+   writable` (default `protected`) gives case 1 the whole-project grant back, for a
+   person who needs new entries at the project's top and cannot install bubblewrap. It
+   changes nothing else: not the Isolated tier, not case 2, not macOS. It sits in
+   `sandbox:`, which a repository policy and a pack cannot carry, so only the person's
+   own policy can set it, and `openmoat policy check` warns of it. With it, the start
+   notice says plainly that `.env`, `.git/hooks` and `.moat` at the top are open to the
+   agent's commands and that the setting is why; every such run writes
+   `run-project-top-open` to the audit log, as `--no-isolate` writes `run-no-isolate`;
+   `openmoat doctor` on Linux without a namespace shows it as a warning. Without it,
+   the strict notice and `doctor` name the setting as the alternative to installing
+   bubblewrap. `require.run: full-boundary` refuses to start without the namespace
+   whatever it says. Once the per-run boundary record lands, it carries this choice
+   too, beside the tier and the network.
+6. **A test-only switch.** Debug builds start `openmoat run` without a namespace when
    `MOAT_TEST_NO_NETNS` is set, so CI, which installs bubblewrap, runs the hostile
    scripts against case 1 too (`landlock-port-only` in `tests/differential/
    scenarios.yaml`). Release builds do not read it.
@@ -121,7 +135,8 @@ common one.
   rename fails there. The control row of the hostile scripts shows it (EACCES on
   `echo ok > out.txt`). Existing folders and everything below them work as before.
   The start notice says to create what is needed before the run, or to install
-  bubblewrap, which needs none of this. A `--write` path inside the project is still
+  bubblewrap, which needs none of this, or to set `sandbox.project_top: writable`
+  (decision 5) and accept what it opens. A `--write` path inside the project is still
   granted as given.
 - **Entries created later.** An entry created at the top of the project after the
   start by someone outside the sandbox has no rule, so commands cannot read it; a
@@ -184,6 +199,10 @@ and the project root must stay writable. The complete answer for unattended runs
   `script-writes-project-env`, `script-plants-envrc`, `script-writes-project-policy`,
   `script-plants-git-hook`), at the cost above, which the evidence table shows as a
   gap of the control row in that column.
+- A person who sets `sandbox.project_top: writable` gets case 1 as it was before this
+  ADR, `.env` and `.git/hooks` at the top open, with every such run in the audit log
+  and a warning in `doctor` and `policy check`; nothing a repository commits can turn
+  it on.
 - Case 2 now keeps `.git` and `.moat` read-only, as the Isolated tier and macOS do:
   `git commit` inside `openmoat run --no-isolate` fails there as it does under
   `--isolate` and on macOS; commit outside the run.

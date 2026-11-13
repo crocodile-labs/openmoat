@@ -118,6 +118,14 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
                 .to_owned(),
         });
     }
+    if policy.project_top() == crate::policy::ProjectTop::Writable {
+        out.push(Warning {
+            rule: "sandbox.project_top".to_owned(),
+            message: "`openmoat run` without bubblewrap grants the project's top whole: commands \
+                      the agent starts can read `.env` and write `.git/hooks` there"
+                .to_owned(),
+        });
+    }
     check_diff::turned_off(policy, &mut out);
     taint::metadata_tools(policy, &mut out);
     if policy.trust_mcp_first_sight() {
@@ -430,6 +438,17 @@ mod tests {
         assert!(w[0].contains("ECH"), "{w:?}");
         assert_eq!(
             warn("version: 1\nsandbox: { proxy_allow_ech: false }\n"),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn a_writable_project_top_is_reported() {
+        let w = warn("version: 1\nsandbox: { project_top: writable }\n");
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(w[0].contains("`.git/hooks`"), "{w:?}");
+        assert_eq!(
+            warn("version: 1\nsandbox: { project_top: protected }\n"),
             Vec::<String>::new()
         );
     }

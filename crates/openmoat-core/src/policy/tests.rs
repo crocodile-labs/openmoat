@@ -191,3 +191,29 @@ fn hook_only_is_for_deny_groups_that_name_files() {
 fn rejects_unknown_keys() {
     assert!(Policy::parse("version: 1\nbogus: 1\n").is_err());
 }
+
+/// `sandbox.project_top` (ADR-090): protected unless the person's own policy
+/// says `writable`; any other value is an error, and the default policy and
+/// one written back out leave it unsaid.
+#[test]
+fn the_project_top_is_protected_unless_the_policy_says_writable() {
+    let top = |yaml: &str| Policy::parse(yaml).map(|p| p.project_top());
+    assert_eq!(top("version: 1\n").unwrap(), ProjectTop::Protected);
+    assert_eq!(top(crate::DEFAULT_POLICY).unwrap(), ProjectTop::Protected);
+    assert_eq!(
+        top("version: 1\nsandbox: { project_top: protected }\n").unwrap(),
+        ProjectTop::Protected
+    );
+    assert_eq!(
+        top("version: 1\nsandbox: { project_top: writable }\n").unwrap(),
+        ProjectTop::Writable
+    );
+    for bad in ["open", "true", "Writable"] {
+        assert!(
+            top(&format!("version: 1\nsandbox: {{ project_top: {bad} }}\n")).is_err(),
+            "{bad}"
+        );
+    }
+    let written = crate::yaml::to_string(&SandboxSettings::default()).unwrap();
+    assert!(!written.contains("project_top"), "{written}");
+}
