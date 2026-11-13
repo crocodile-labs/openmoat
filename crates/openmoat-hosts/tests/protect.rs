@@ -29,8 +29,9 @@ use std::sync::{Mutex, PoisonError};
 
 use openmoat_hosts::{Host, Paths, Protect};
 
-#[path = "common/policy_blocks.rs"]
-mod policy_blocks;
+mod policy_blocks {
+    include!("common/policy_blocks.rs");
+}
 use policy_blocks::{
     BLOCKS, CREDENTIALS_AFTER, CREDENTIALS_BEFORE, POLICY, POLICY_AFTER, POLICY_BEFORE,
     PROJECT_FS_AFTER, PROJECT_FS_BEFORE, RUNS_LATER_AFTER, RUNS_LATER_BEFORE,

@@ -1,12 +1,15 @@
-//! The default policy's blocks that `tests/protect.rs` generates from each
-//! host's spec, as the lines just before and just after each block. One copy
-//! for every test that needs them: `protect.rs` writes the blocks between
-//! them, and the architecture test leaves the blocks out of its scan for host
-//! names. A new generated block is added here once and both tests see it.
-//!
-//! The policy's bytes are pinned (a lock pins its hash, and `openmoat policy
-//! upgrade` merges it line by line), so the blocks carry no markers of their
-//! own: each lies between two lines that are there anyway.
+// Included with `include!` by `protect.rs` and the architecture test (no
+// `#[path]` modules, AGENTS §4).
+//
+// The default policy's blocks that `tests/protect.rs` generates from each
+// host's spec, as the lines just before and just after each block. One copy
+// for every test that needs them: `protect.rs` writes the blocks between
+// them, and the architecture test leaves the blocks out of its scan for host
+// names. A new generated block is added here once and both tests see it.
+//
+// The policy's bytes are pinned (a lock pins its hash, and `openmoat policy
+// upgrade` merges it line by line), so the blocks carry no markers of their
+// own: each lies between two lines that are there anyway.
 
 /// The default policy, from the repository root.
 pub const POLICY: &str = "crates/openmoat-core/policies/default-v1.yaml";
