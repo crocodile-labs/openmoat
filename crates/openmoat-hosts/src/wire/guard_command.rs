@@ -99,6 +99,13 @@ impl GuardCommand {
     }
 }
 
+/// Whether the entries of the host `id` name their event
+/// ([`crate::HookSpec::names_event`]), so their commands end in [`EVENT_FLAG`].
+fn names_event(id: &str) -> bool {
+    id.parse::<crate::Host>()
+        .is_ok_and(crate::Host::entries_name_event)
+}
+
 /// Whether `word` can be an event name after [`EVENT_FLAG`]: ASCII letters
 /// and `_` only, so no shell reads anything into it.
 fn is_event_word(word: &str) -> bool {
@@ -149,19 +156,20 @@ pub fn decode_home(word: &str) -> Option<String> {
 
 /// A shell-string command of OpenMoat's guard for host `id`, split: what
 /// comes before ` guard --host <id>` (the quoted binary, trimmed) and the
-/// state directory's word after `--home`, if any. A trailing
-/// ` --event <event>` ([`EVENT_FLAG`]) belongs to the command. `None` when the
+/// state directory's word after `--home`, if any. For a host whose entries
+/// name their event ([`names_event`]), a trailing ` --event <event>`
+/// ([`EVENT_FLAG`]) after them belongs to the command too. `None` when the
 /// command is no guard command for `id`, or carries anything else after it.
 pub(crate) fn split_guard<'c>(command: &'c str, id: &str) -> Option<(&'c str, Option<&'c str>)> {
     let command = command.trim_end();
-    let command = match command.rsplit_once(&format!(" {EVENT_FLAG} ")) {
-        Some((before, event)) if is_event_word(event) => before,
-        Some(_) => return None,
-        None => command,
-    };
     let marker = format!(" guard --host {id}");
     let at = command.rfind(&marker)?;
     let (program, rest) = (&command[..at], &command[at + marker.len()..]);
+    let rest = match rest.rsplit_once(&format!(" {EVENT_FLAG} ")) {
+        Some((before, event)) if names_event(id) && is_event_word(event) => before,
+        Some(_) => return None,
+        None => rest,
+    };
     if rest.is_empty() {
         return Some((program.trim(), None));
     }
@@ -179,7 +187,12 @@ pub(crate) fn split_guard<'c>(command: &'c str, id: &str) -> Option<(&'c str, Op
 /// without the state directory.
 pub(crate) fn is_guard_list(args: &[&str], id: &str) -> bool {
     let args = match args {
-        [rest @ .., flag, event] if *flag == EVENT_FLAG && is_event_word(event) => rest,
+        [rest @ .., flag, event] if *flag == EVENT_FLAG => {
+            if !(names_event(id) && is_event_word(event)) {
+                return false;
+            }
+            rest
+        }
         _ => args,
     };
     match args {
@@ -284,6 +297,43 @@ mod tests {
         assert!(is_guard_list(&list, "copilot-cli"));
         let plain = crate::HookSpec::new("preToolUse", "", 60, false);
         assert_eq!(GuardCommand::new("/b/om").for_entry(&plain).event, None);
+        // A path holding the flag's text is still the binary's.
+        for (id, path) in [
+            ("cursor", "'/Users/a --event b/openmoat'"),
+            ("copilot-cli", "'/Users/a --event b/om'"),
+        ] {
+            let event = if id == "copilot-cli" {
+                " --event preToolUse"
+            } else {
+                ""
+            };
+            let command = format!("{path} guard --host {id} --home /h/.moat{event}");
+            assert_eq!(
+                split_guard(&command, id),
+                Some((path, Some("/h/.moat"))),
+                "{command}"
+            );
+        }
+        // Only a host whose entries name their event may carry the flag.
+        assert_eq!(
+            split_guard(
+                "'/b/om' guard --host cursor --home /h/.moat --event preToolUse",
+                "cursor"
+            ),
+            None
+        );
+        assert!(!is_guard_list(
+            &[
+                "guard",
+                "--host",
+                "pi",
+                "--home",
+                "/h/.moat",
+                "--event",
+                "tool_call"
+            ],
+            "pi"
+        ));
         for other in [
             "'/b/om' guard --host copilot-cli --home /h/.moat --event post;rm",
             "'/b/om' guard --host copilot-cli --home /h/.moat --event ",

@@ -241,7 +241,7 @@ impl Host {
 
     /// Whether this host's hook entries name their event
     /// ([`HookSpec::names_event`]): its payloads name none.
-    fn entries_name_event(self) -> bool {
+    pub(crate) fn entries_name_event(self) -> bool {
         self.spec()
             .install
             .as_ref()
