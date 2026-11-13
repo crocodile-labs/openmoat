@@ -229,28 +229,65 @@ fn a_hook_whose_binary_is_gone_is_not_protected() {
 }
 
 /// What each agent does with a call when the hook fails comes from its host
-/// facts (ADR-079), for every host in `Host::ALL`: `status --format json`
-/// carries them, each case reads `runs`, `blocks` or `not-documented` with
-/// its sources, and
-/// `doctor` notes exactly the agents that run a call in some case, naming
-/// those cases. The facts themselves are checked against each host's spec in
-/// the unit tests of `protection::hook_failure`.
+/// facts (ADR-079): installed one host at a time from `Host::ALL`, every
+/// agent `status --format json` lists with its hook in place carries them,
+/// each case reads `runs`, `blocks` or `not-documented` with its sources, and
+/// `doctor` notes exactly the agents that leave a call unchecked in some
+/// case, naming those cases. The facts themselves are checked against each
+/// host's spec in the unit tests of `protection::hook_failure`.
 #[test]
 fn doctor_names_an_agent_that_runs_the_call_when_the_hook_fails() {
     for host in Host::ALL {
         let sb = Sandbox::installed(&[&dir_of(host)]);
         let status = json(&sb.moat(&["status", "--format", "json"]));
-        let Some(agent) = status["agents"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|a| a["host"] == host.id())
-        else {
-            panic!("{host}: no status entry: {status}");
-        };
-        let facts = &agent["hook_failure"];
+        let agents: Vec<&Value> = status["agents"].as_array().into_iter().flatten().collect();
+        assert!(
+            agents.iter().any(|a| a["host"] == host.id()),
+            "{host}: no status entry: {status}"
+        );
+        // The agents that leave a call unchecked in some case, with those
+        // cases, from their own facts; the facts are given only for an agent
+        // whose hook is in place.
+        let mut expected: Vec<(String, String)> = Vec::new();
+        for agent in &agents {
+            let facts = &agent["hook_failure"];
+            if facts.is_null() {
+                continue;
+            }
+            let who = agent["host"].as_str().unwrap_or_default();
+            for case in ["cannot_start", "fails", "times_out"] {
+                assert!(
+                    matches!(
+                        facts[case].as_str(),
+                        Some("runs" | "blocks" | "not-documented")
+                    ),
+                    "{host}/{who} {case}: {facts}"
+                );
+            }
+            let sources = facts["sources"].as_array().cloned().unwrap_or_default();
+            assert!(!sources.is_empty(), "{host}/{who}: {facts}");
+            let open: Vec<&str> = facts["fails_open"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            // Only a case the host blocks is closed; one it runs, or does not
+            // document, leaves the call unchecked.
+            let unchecked = ["cannot_start", "fails", "times_out"]
+                .iter()
+                .any(|case| facts[*case] != "blocks");
+            assert_eq!(!open.is_empty(), unchecked, "{host}/{who}: {facts}");
+            if unchecked {
+                let name = agent["name"].as_str().unwrap_or_default().to_owned();
+                expected.push((name, open.join(" or ")));
+            }
+        }
+        expected.sort();
+
+        // A note, not a problem: the footer does not count it.
         let doctor = json(&sb.moat(&["doctor", "--format", "json"]));
-        let noted: Vec<&Value> = doctor["checks"]
+        let mut noted: Vec<(String, String)> = doctor["checks"]
             .as_array()
             .into_iter()
             .flatten()
@@ -259,55 +296,25 @@ fn doctor_names_an_agent_that_runs_the_call_when_the_hook_fails() {
                     .as_str()
                     .is_some_and(|d| d.starts_with("fails open"))
             })
+            .map(|c| {
+                assert_eq!(c["status"], "note", "{host}: {c}");
+                let detail = c["detail"].as_str().unwrap_or_default();
+                assert!(
+                    detail.contains("require.run: full-boundary"),
+                    "{host}: {detail}"
+                );
+                let cases = detail
+                    .strip_prefix("fails open: runs the call when the hook ")
+                    .and_then(|rest| rest.split_once(';'))
+                    .map_or("", |(cases, _)| cases);
+                (
+                    c["name"].as_str().unwrap_or_default().to_owned(),
+                    cases.to_owned(),
+                )
+            })
             .collect();
-        // The facts are given only for an agent whose hook is in place.
-        if facts.is_null() {
-            assert!(noted.is_empty(), "{host}: {doctor}");
-            continue;
-        }
-        for case in ["cannot_start", "fails", "times_out"] {
-            assert!(
-                matches!(
-                    facts[case].as_str(),
-                    Some("runs" | "blocks" | "not-documented")
-                ),
-                "{host} {case}: {facts}"
-            );
-        }
-        let sources = facts["sources"].as_array().cloned().unwrap_or_default();
-        assert!(!sources.is_empty(), "{host}: {facts}");
-        let open: Vec<&str> = facts["fails_open"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .collect();
-        // Only a case the host blocks is closed; one it runs, or does not
-        // document, leaves the call unchecked.
-        let runs_somewhere = ["cannot_start", "fails", "times_out"]
-            .iter()
-            .any(|case| facts[*case] != "blocks");
-        assert_eq!(!open.is_empty(), runs_somewhere, "{host}: {facts}");
-
-        // A note, not a problem: the footer does not count it.
-        if open.is_empty() {
-            assert!(noted.is_empty(), "{host}: {doctor}");
-            continue;
-        }
-        assert_eq!(noted.len(), 1, "{host}: {doctor}");
-        let note = noted[0];
-        assert_eq!(note["name"], host.spec().display_name, "{host}: {doctor}");
-        assert_eq!(note["status"], "note", "{host}: {doctor}");
-        let cases = format!(
-            "fails open: runs the call when the hook {};",
-            open.join(" or ")
-        );
-        let detail = note["detail"].as_str().unwrap_or_default();
-        assert!(detail.starts_with(&cases), "{host}: {detail}");
-        assert!(
-            detail.contains("require.run: full-boundary"),
-            "{host}: {detail}"
-        );
+        noted.sort();
+        assert_eq!(noted, expected, "{host}: {doctor}");
     }
 }
 
