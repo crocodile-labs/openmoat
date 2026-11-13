@@ -5,14 +5,14 @@ Host adapters: each supported agent's `HostSpec` (`host/<module>.rs`) and `HostA
 ## Rules
 - Translate, never decide: verdicts come from `openmoat-core`.
 - No file, environment or process access outside tests; the CLI reads and writes host files.
-- What differs per host goes in its spec or its folder. `tests/architecture.rs` allows no `Host::<Variant>` outside the host modules and keeps shrink-only allowlists of lines naming a host's module, id or directory there; never raise an entry.
+- What differs per host goes in its spec or its folder. `tests/architecture/` allows no `Host::<Variant>` outside the host modules and keeps shrink-only allowlists (`allowed.rs`) of the lines that name a host's module, or a fact of its spec (id, directory, program, display name, file name), in every crate's shared code (this crate's `wire/`, `contract/` and `request.rs` too), the shared end-to-end tests, `scripts/` and the default policy outside its generated blocks; never raise an entry.
 - A new spec field gets a default in `HostSpec::BASE` / `InstallSpec::BASE`; specs end with `..HostSpec::BASE`.
 - An adapter error is a deny in `guard`. A malformed or unknown payload never becomes an `allow`.
 - Every tool name an adapter matches has a `ToolRow` in its `doc.rs` (the docs test fails otherwise); ungoverned tools are listed, and `gaps` and `on_hook_failure` say what the host does not cover.
 - If the host fails open by default, its hook entries set its fail-closed flag.
 
 ## Test
-- `cargo test -p openmoat-hosts`: unit tests in `host/<module>/tests.rs`, `tests/contract.rs`, `tests/docs/`, `tests/protect.rs`, `tests/architecture.rs`, `tests/consistency/` (one intent, one verdict, whichever host sends it) and `tests/js_plugins/` (the JavaScript plugins under Node; skips without `node`).
+- `cargo test -p openmoat-hosts`: unit tests in `host/<module>/tests.rs`, `tests/contract.rs`, `tests/docs/`, `tests/protect.rs`, `tests/architecture/`, `tests/consistency/` (one intent, one verdict, whichever host sends it) and `tests/js_plugins/` (the JavaScript plugins under Node; skips without `node`).
 - `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs` regenerates the README, INSTALL, ARCHITECTURE §3 and THREAT_MODEL §5 blocks from the specs, and `docs/PROTECTION.md` from them, the e2e tests' `// protection: <claim> <agents> <oses>` marks and the weekly records' `proves` (ADR-079 decision 5): a claim with no evidence reads `no evidence yet`, never more; `OPENMOAT_TEST_UPDATE_PROTECT=1 cargo test -p openmoat-hosts --test protect` regenerates the policy and taint blocks. Review the diff.
 - Payloads come from `host/<module>/fixtures/` with a README naming each one's source. End-to-end tests are in `crates/openmoat-cli/tests/e2e/` (`hosts/` runs one table-driven suite over every host).
 

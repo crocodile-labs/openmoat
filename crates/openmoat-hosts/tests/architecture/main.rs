@@ -1,15 +1,26 @@
 //! Nothing outside a host's own module under `openmoat-hosts/src/host/` should
 //! name a host: what differs between hosts belongs in its `HostSpec` or its
 //! adapter. No `Host::<Variant>` is left outside them; the code that still
-//! names a host's id, directory or module is listed below with how many lines
-//! do. Those lists only shrink. A file that names a host on fewer lines than
-//! listed fails too, so a list is lowered with the change that fixes it.
+//! names a host's module is listed below, and the code, tests, scripts and
+//! policy lines that name a host by a fact of its spec (`names.rs`) are listed
+//! in `allowed.rs`, each with how many lines do. Those lists only shrink. A
+//! file that names a host on fewer lines than listed fails too, so a list is
+//! lowered with the change that fixes it.
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use openmoat_hosts::Host;
+
+mod allowed;
+mod facts;
+mod literals;
+mod names;
+
+/// What a scan found: each file, relative to the scan's root, and the lines
+/// of it that name a host, described.
+type Found = BTreeMap<String, Vec<String>>;
 
 /// Every crate's sources, relative to `crates/`.
 const SOURCE_ROOTS: &[&str] = &[
@@ -101,32 +112,30 @@ fn is_host_or_test_file(relative: &str) -> bool {
 }
 
 /// `found` against `allowed`: nothing over its count, no entry above what the
-/// code now has.
-fn check_only_shrinks(
-    found: &BTreeMap<String, usize>,
-    allowed: &[(&str, usize)],
-    what: &str,
-    list: &str,
-) {
-    let allowed: BTreeMap<String, usize> = allowed
-        .iter()
-        .map(|(file, lines)| ((*file).to_owned(), *lines))
-        .collect();
+/// code now has. Every file that differs is reported at once.
+fn check_only_shrinks(found: &Found, allowed: &[(&str, usize)], what: &str, list: &str) {
+    let allowed: BTreeMap<&str, usize> = allowed.iter().copied().collect();
+    let mut wrong = Vec::new();
     for (file, lines) in found {
-        let limit = allowed.get(file).copied().unwrap_or(0);
-        assert!(
-            *lines <= limit,
-            "{file} names {what} on {lines} lines (allowed {limit}): take it from the \
-             host's spec"
-        );
+        let limit = allowed.get(file.as_str()).copied().unwrap_or(0);
+        if lines.len() > limit {
+            wrong.push(format!(
+                "{file} names {what} on {} lines (allowed {limit}): take it from the host's \
+                 spec\n    {}",
+                lines.len(),
+                lines.join("\n    ")
+            ));
+        }
     }
     for (file, limit) in &allowed {
-        let lines = found.get(file).copied().unwrap_or(0);
-        assert_eq!(
-            lines, *limit,
-            "{file} now names {what} on {lines} lines: lower its entry in {list}"
-        );
+        let lines = found.get(*file).map_or(0, Vec::len);
+        if lines < *limit {
+            wrong.push(format!(
+                "{file} now names {what} on {lines} lines: lower its entry in {list} to {lines}"
+            ));
+        }
     }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
 /// Lines of every crate's source (relative to `crates/`, outside the host
@@ -199,18 +208,20 @@ fn only_host_modules_name_a_hosts_module() {
     ));
     assert!(names_module("pub mod codex;", "codex"));
     assert!(!names_module("x::claude_version::y()", "claude"));
-    let mut found = BTreeMap::new();
+    let mut found = Found::new();
     for file in files {
         let relative = relative_to(&file, &crates);
         if is_host_or_test_file(&relative) {
             continue;
         }
-        let lines = fs::read_to_string(&file)
+        let lines: Vec<String> = fs::read_to_string(&file)
             .unwrap()
             .lines()
-            .filter(|l| names.iter().any(|n| names_module(l, n)))
-            .count();
-        if lines > 0 {
+            .enumerate()
+            .filter(|(_, l)| names.iter().any(|n| names_module(l, n)))
+            .map(|(at, l)| format!("{}: {}", at + 1, l.trim()))
+            .collect();
+        if !lines.is_empty() {
             found.insert(relative, lines);
         }
     }
@@ -253,85 +264,4 @@ fn the_host_list_names_every_host_once_with_its_module() {
         .collect();
     files.sort();
     assert_eq!(modules, files, "a file under host/ is not on the list");
-}
-
-/// Lines of source outside `openmoat-hosts` (relative to `crates/`, outside
-/// test files and generated blocks) that name a host's id or configuration
-/// directory as a string (`"copilot-cli"`, `".copilot"`); the hosts crate's
-/// shared code takes ids as data. The list only shrinks, as
-/// [`ALLOWED_MODULES`] does.
-const ALLOWED_NAMES: &[(&str, usize)] = &[
-    // The sandbox backends, which stay in the CLI, and their inline tests.
-    ("openmoat-cli/src/sandbox/claude.rs", 1),
-    ("openmoat-cli/src/sandbox/codex/names.rs", 1),
-    ("openmoat-cli/src/sandbox/codex/own_binary.rs", 1),
-    ("openmoat-cli/src/sandbox/hook_only.rs", 2),
-    // The download tools' `--continue` option, not the host.
-    ("openmoat-core/src/shell/commands/fetch.rs", 1),
-    ("openmoat-core/src/shell/options/transfer.rs", 1),
-];
-
-/// Each host's id and configuration directory names, quoted as in source.
-fn quoted_names() -> Vec<String> {
-    let mut names = Vec::new();
-    for host in Host::EVERY {
-        let spec = host.spec();
-        names.push(spec.id);
-        let dirs = spec.install.as_ref().map(|i| i.dir_name);
-        for dir in dirs
-            .into_iter()
-            .chain(spec.detect.as_ref().map(|d| d.dir_name))
-        {
-            names.push(dir);
-            // `.pi` for `.pi/agent`; not `.config` for OpenCode's
-            // `.config/opencode`, a directory every XDG program shares
-            names.extend(
-                dir.split_once('/')
-                    .map(|(first, _)| first)
-                    .filter(|first| *first != ".config"),
-            );
-        }
-    }
-    names.sort_unstable();
-    names.dedup();
-    names.into_iter().map(|n| format!("\"{n}\"")).collect()
-}
-
-#[test]
-fn only_host_modules_name_a_hosts_id_or_directory() {
-    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let mut files = Vec::new();
-    for root in SOURCE_ROOTS.iter().filter(|r| **r != "openmoat-hosts/src") {
-        rust_files(&crates.join(root), &mut files);
-    }
-    let names = quoted_names();
-    assert!(names.contains(&"\".copilot\"".to_owned()), "{names:?}");
-    let mut found = BTreeMap::new();
-    for file in files {
-        let relative = relative_to(&file, &crates);
-        if is_host_or_test_file(&relative) {
-            continue;
-        }
-        let mut generated = false;
-        let mut lines = 0;
-        for line in fs::read_to_string(&file).unwrap().lines() {
-            let comment = line.trim_start();
-            if comment.starts_with("// generated:") {
-                generated = true;
-            } else if comment.starts_with("// /generated") {
-                generated = false;
-            } else if !generated && names.iter().any(|name| line.contains(name.as_str())) {
-                lines += 1;
-            }
-        }
-        if lines > 0 {
-            found.insert(relative, lines);
-        }
-    }
-    check_only_shrinks(
-        &found,
-        ALLOWED_NAMES,
-        "a host's id or directory",
-        "ALLOWED_NAMES",
-    );
 }

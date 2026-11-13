@@ -55,7 +55,7 @@ is pushed to `main` directly.
    - unit tests next to the code (`#[cfg(test)]`),
    - conformance fixtures in `tests/conformance/` for every rule or parser change,
    - end-to-end tests in `crates/openmoat-cli/tests/` for CLI and hook behaviour,
-   - architecture tests (`crates/*/tests/architecture.rs`) when crate boundaries move.
+   - architecture tests (`crates/*/tests/architecture.rs`, `crates/openmoat-hosts/tests/architecture/`) when crate boundaries move.
 4. **Run `scripts/ci/quality-gate.sh`.** It runs what CI's `lint` and `test` jobs run;
    CI runs the tests on macOS, Linux and Windows.
 5. **Open the PR with the template.** The title follows Conventional Commits
