@@ -3,8 +3,11 @@
 
 use std::path::Path;
 
+use anyhow::{Context as _, Result};
+use serde_json::{Map, Value};
+
 use openmoat_core::Policy;
-use openmoat_hosts::Host;
+use openmoat_hosts::{Host, Platform, WindowsSandboxLevel};
 
 use super::human::Place;
 use super::{Area, Report};
@@ -49,6 +52,7 @@ pub(super) fn sandboxes(
             with_sandbox.push(host);
         }
         let translation = host_sandbox::report(host, &plan);
+        windows_mode(report, home, host);
         match problems {
             Ok(None) => continue,
             Ok(Some(problems)) if problems.is_empty() => {
@@ -145,4 +149,54 @@ fn masks(
             MaskLevel::Unmasked => report.note(&text),
         }
     }
+}
+
+/// On Windows, which mode of its own sandbox the host's settings select, and
+/// whether that mode holds OpenMoat's read denies (Codex, ADR-083).
+fn windows_mode(report: &mut Report, home: &Home, host: Host) {
+    let Some(reader) = host.spec().sandbox.as_ref().and_then(|s| s.windows_modes) else {
+        return;
+    };
+    if crate::os_version::platform() != Platform::Windows {
+        return;
+    }
+    let name = host.display_name();
+    let root = host_sandbox::settings_path(home, host).and_then(|p| read_settings(&p));
+    let mode = match root {
+        Ok(root) => reader.mode(&root),
+        Err(e) => {
+            report.warn(&format!("{name:<16} Windows sandbox mode not read: {e:#}"));
+            return;
+        }
+    };
+    let text = format!("{name:<16} Windows sandbox: {}", mode.text);
+    match mode.level {
+        WindowsSandboxLevel::Holds => report.line(Area::Sandbox, true, text),
+        WindowsSandboxLevel::ReadsOpen => report.warn(&text),
+        _ => report.note(&text),
+    }
+}
+
+/// A host's settings file as one object: TOML read as JSON (`*.toml`), JSON
+/// otherwise; empty when the file is missing or blank.
+fn read_settings(path: &Path) -> Result<Map<String, Value>> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
+    };
+    let value = if path.extension().is_some_and(|e| e == "toml") {
+        let doc: toml_edit::DocumentMut = text
+            .parse()
+            .with_context(|| format!("parsing {}", path.display()))?;
+        crate::mcp::servers::toml_to_json(doc.as_item())
+    } else if text.trim().is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))?
+    };
+    Ok(match value {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    })
 }

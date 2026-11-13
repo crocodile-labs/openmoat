@@ -27,7 +27,8 @@ pub use contract::{
     McpServer, McpSpec, McpSyntax, OtherHooks, Paths, Platform, PluginDir, ProcessSpec,
     ProjectSettingsSpec, Protect, ProxySessions, RelaxedKey, Reviews, RunFacts, RunWrite,
     SandboxFormat, SandboxSpec, SessionDir, SettingsFile, SettingsReader, SystemFile,
-    SystemSettingsSpec, ToolRow, ToolToken, Unseen, Version,
+    SystemSettingsSpec, ToolRow, ToolToken, Unseen, Version, WindowsSandboxLevel,
+    WindowsSandboxMode, WindowsSandboxReader,
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::claude_code::project_settings::findings as claude_code_settings_findings;

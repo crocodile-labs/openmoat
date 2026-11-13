@@ -10,6 +10,7 @@
 //! | a decoder stage piped into an interpreter reading stdin (`decoders.rs`) | canonical `Pipeline { <decoder> -d \| <interpreter> }` |
 //! | any stages piped into an interpreter reading its program from stdin (`commands/pipelines.rs`) | canonical `Pipeline { <stages> \| <interpreter> }` |
 //! | a `pkill`/`killall` pattern that could match an OpenMoat process name (`kills.rs`) | `@kills <name>` `Shell` atom |
+//! | a WSL launcher (`wsl`, `C:\Windows\System32\bash.exe`, a distribution's), one handed to `cmd`/PowerShell, a word naming `\\wsl$` (`wsl.rs`) | `@wsl <launcher>`, `@wsl share` `Shell` atom |
 //! | leading `VAR=value`, `export`/`declare`/`set` assignments | `EnvSet` |
 //! | `$VAR` / `${VAR}` references, `printenv NAME` | `EnvRead` |
 //! | path-looking arguments, relative operands (`operands.rs`), `<` targets other than `/dev/null` and stdin, `source`/`.` files | `FsRead`, one per directory `cd` may have moved to (`cwd.rs`); also listed as a glob when unquoted `* ? [` make the shell expand it (`crate::expand`) |
@@ -81,6 +82,7 @@ mod tests;
 mod text;
 pub(crate) mod tokens;
 mod upload;
+mod wsl;
 
 pub(crate) use error::ClassifyError;
 

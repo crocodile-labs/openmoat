@@ -38,10 +38,13 @@ Then run `openmoat init` ([below](#set-up-with-openmoat-init)).
 > [!NOTE]
 > **Windows.** On Windows, OpenMoat applies the policy through the agents' hooks. It
 > sets up no OS sandbox for Claude Code or Cursor (Codex's own sandbox settings are
-> written as on other systems), `openmoat run` refuses to start, `openmoat proxy` cannot be
-> installed as a service, and OpenMoat sets no file permissions on its own files: it
-> relies on the access rules of the user profile. For OS confinement, run the agent
-> and `openmoat` inside WSL2 ([details below](#set-up-with-openmoat-init)).
+> written as on other systems), `openmoat run` refuses to start, and `openmoat proxy` cannot
+> be installed as a service. `openmoat init` gives the state directory an access list of
+> your account and `SYSTEM` only (on an NTFS drive; it refuses a folder another account
+> owns), which keeps other accounts out but not the agent, which runs as you: the hook's
+> rules keep the agent out of it. The hook denies commands and
+> paths that cross into WSL (`wsl`, `\\wsl$`), where no Windows path rule reaches. For OS
+> confinement, run the agent and `openmoat` inside WSL2 ([details below](#set-up-with-openmoat-init)).
 
 > [!NOTE]
 > **The `moat` name.** The command is `openmoat`. Releases up to 0.7.0 called it
@@ -163,6 +166,14 @@ applies the policy to Claude Code's tool calls, and `init`, `doctor` and `status
 confinement, run Claude Code and `openmoat` inside WSL2. Codex's sandbox is set up as on
 other systems; Cursor's `sandbox.json` is not written, because Cursor documents its
 sandbox for macOS and Linux only.
+
+On native Windows, `openmoat doctor` also shows which of its Windows sandbox modes Codex's
+`config.toml` selects (`[windows] sandbox`, `[features] prefer_mxc`). Codex's MXC and
+`elevated` modes enforce the read denies OpenMoat writes; its `unelevated` mode does not
+(Codex's documentation: it "doesn't support denied read paths"), so there they hold only
+through the hook, and `doctor` warns and names the stronger setting. With WSL installed,
+`doctor` names WSL2 as the way to OS confinement; inside WSL1 it says that `openmoat run`
+and the agents' sandboxes need WSL2 (ADR-083).
 
 Codex runs a new or changed hook only once you trust it: after `openmoat init`, open
 Codex, run `/hooks` and trust both OpenMoat hooks (OpenMoat supports Codex 0.160.1 to

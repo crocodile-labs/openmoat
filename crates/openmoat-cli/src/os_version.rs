@@ -77,6 +77,52 @@ pub fn platform() -> openmoat_hosts::Platform {
     }
 }
 
+/// What `openmoat doctor` says about the Windows Subsystem for Linux here
+/// (ADR-083): on native Windows with `wsl.exe` installed, where OS
+/// confinement is; under WSL1, that it has none. Nothing runs: the kernel
+/// release and the launcher's file are read.
+pub fn wsl_note() -> Option<String> {
+    let platform = platform();
+    let release = std::fs::read_to_string("/proc/sys/kernel/osrelease").ok();
+    let launcher = std::env::var_os("SystemRoot")
+        .map(std::path::PathBuf::from)
+        .is_some_and(|root| root.join("System32").join("wsl.exe").is_file());
+    wsl_note_for(platform, release.as_deref(), launcher)
+}
+
+/// [`wsl_note`] for `platform`, its kernel `release` and whether WSL's
+/// launcher is installed.
+fn wsl_note_for(
+    platform: openmoat_hosts::Platform,
+    release: Option<&str>,
+    launcher: bool,
+) -> Option<String> {
+    use openmoat_hosts::Platform;
+    match platform {
+        Platform::Windows if launcher => Some(
+            "WSL              installed: for OS confinement install OpenMoat inside a WSL2 \
+             distribution and run the agent there; from Windows the hook denies commands and \
+             paths that cross into WSL (`wsl-crossing`)"
+                .to_owned(),
+        ),
+        // WSL1 has no kernel: its release is `4.4.0-<Windows build>-Microsoft`.
+        // WSL2's real kernel, a custom one included, reads otherwise.
+        Platform::Wsl
+            if release.is_some_and(|r| {
+                let r = r.trim();
+                r.starts_with("4.4.0-") && r.ends_with("-Microsoft")
+            }) =>
+        {
+            Some(
+                "WSL              WSL1 has no Linux kernel of its own: `openmoat run` and the \
+                 agents' sandboxes need WSL2 (`wsl --set-version <distribution> 2`)"
+                    .to_owned(),
+            )
+        }
+        _ => None,
+    }
+}
+
 /// This system and its version in one line, for `openmoat bench --report`:
 /// `macOS 14.5 (aarch64)`, `Ubuntu 24.04.1 LTS, Linux 6.8.0-1017-azure
 /// (x86_64)`; read from files, so no program runs. Parts that cannot be read
@@ -115,6 +161,24 @@ mod tests {
         assert!(is_wsl_release("5.15.153.1-microsoft-standard-WSL2\n"));
         assert!(is_wsl_release("4.4.0-19041-Microsoft"));
         assert!(!is_wsl_release("6.8.0-45-generic"));
+    }
+
+    #[test]
+    fn wsl_is_named_where_it_changes_what_protects() {
+        use openmoat_hosts::Platform;
+        let windows = wsl_note_for(Platform::Windows, None, true).unwrap();
+        assert!(windows.contains("inside a WSL2"), "{windows}");
+        assert!(windows.contains("wsl-crossing"), "{windows}");
+        assert_eq!(wsl_note_for(Platform::Windows, None, false), None);
+        let wsl1 = wsl_note_for(Platform::Wsl, Some("4.4.0-19041-Microsoft\n"), false).unwrap();
+        assert!(wsl1.contains("need WSL2"), "{wsl1}");
+        let wsl2 = Some("5.15.153.1-microsoft-standard-WSL2\n");
+        assert_eq!(wsl_note_for(Platform::Wsl, wsl2, false), None);
+        assert_eq!(
+            wsl_note_for(Platform::Linux, Some("6.8.0-45-generic"), false),
+            None
+        );
+        assert_eq!(wsl_note_for(Platform::MacOs, None, true), None);
     }
 
     #[test]

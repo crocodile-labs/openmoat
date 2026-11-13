@@ -25,6 +25,7 @@ mod run_facts;
 mod settings;
 mod system_settings;
 mod tool_token;
+mod windows_sandbox;
 
 pub use advisory::{Advisories, Advisory, Platform, Version};
 pub use bundle::Bundle;
@@ -49,6 +50,7 @@ pub(crate) use settings::set;
 pub use settings::{SettingsFile, SettingsReader};
 pub use system_settings::{SystemFile, SystemSettingsSpec};
 pub use tool_token::ToolToken;
+pub use windows_sandbox::{WindowsSandboxLevel, WindowsSandboxMode, WindowsSandboxReader};
 
 /// The code each host format needs beyond its [`HostSpec`]: reading a payload
 /// and writing the response. One per format; a host that sends another's
@@ -546,6 +548,9 @@ pub struct SandboxSpec {
     /// Why the sandbox is not written on native Windows, as `init`, `sandbox`,
     /// `doctor` and `status` print it; `None` when it is written there.
     pub unavailable_on_windows: Option<&'static str>,
+    /// Which of the host's own Windows sandbox modes its settings select,
+    /// where they choose one of different strength (Codex, ADR-083).
+    pub windows_modes: Option<&'static dyn WindowsSandboxReader>,
     /// Whether the sandbox lets a command type into the terminal (`TIOCSTI`)
     /// on Linux, so only the kernel stops it, as `moat doctor` warns.
     pub tiocsti_open_on_linux: bool,

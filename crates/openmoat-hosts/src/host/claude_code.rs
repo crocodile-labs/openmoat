@@ -121,6 +121,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             "sandbox not available on native Windows; the hook still applies the policy \
              (use WSL2 for OS confinement)",
         ),
+        windows_modes: None,
         tiocsti_open_on_linux: false,
         // The hooks reference, "Persist environment variables": each Bash
         // command runs the file's lines first (ADR-044).

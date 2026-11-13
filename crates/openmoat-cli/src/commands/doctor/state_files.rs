@@ -7,8 +7,9 @@
 //! by someone who is not the person: that is a problem row, with the `chmod`
 //! or `chown` that fixes it. A file others may read gives away the policy and
 //! the log: a warning. Every file's mode and owner is listed with
-//! `--verbose`. Where files have no Unix modes (Windows), one note says the
-//! check does not run there.
+//! `--verbose`. On Windows, where files have access lists instead, the state
+//! directory's list is read (`crate::state_acl`, ADR-083) and one note says the
+//! files' own are not.
 
 use std::path::{Path, PathBuf};
 
@@ -17,15 +18,19 @@ use super::human::Place;
 use super::rows::Report;
 use crate::home::Home;
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 mod other;
 #[cfg(unix)]
 mod unix;
+#[cfg(windows)]
+mod windows;
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 use other as platform;
 #[cfg(unix)]
 use unix as platform;
+#[cfg(windows)]
+use windows as platform;
 
 /// What [`platform::inspect`] found of one file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,6 +68,7 @@ fn files(home: &Home) -> Vec<(&'static str, PathBuf, bool)> {
 
 /// The rows for `home`'s state files that exist.
 pub(super) fn rows(report: &mut Report, home: &Home) {
+    platform::directory(report, home);
     let Some(me) = platform::current_user() else {
         report.note_at(platform::NOT_CHECKED, Place::OpenMoat);
         return;
