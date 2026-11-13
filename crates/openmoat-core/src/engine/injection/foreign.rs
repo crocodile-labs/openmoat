@@ -7,19 +7,42 @@
 //! the text names counts as one the call may reach, and every path as one it
 //! may write; the policy's allow rules still answer for each. Its commands
 //! are not compared: PowerShell's words are not POSIX words. A host or a
-//! path the command builds at run time (`"ev" + "il.example"`, `$env:HOME`)
+//! path the command builds at run time (`"ev" + "il.example"`, `$env:TEMP`)
 //! is not seen, as `$H` is not in a POSIX command.
+//!
+//! Whether its output is untrusted is read more narrowly, so a local command
+//! that merely names a host (`npm install socket.io`) does not turn what it
+//! prints into untrusted content: only a URL, the target of a web client and
+//! the value of a parameter that names a remote host count, and a forge's
+//! client in any of its commands.
 
 use super::{Found, REMOTE_TEXT_PROGRAMS, host_tokens, probe, program_name};
 use crate::action::AtomicAction;
 use crate::engine::CompiledPolicy;
 use crate::injection::{self, InjectedLookup, Token, TokenKind};
 
+/// Programs, and their PowerShell aliases, that fetch what a word after them
+/// names.
+const WEB_PROGRAMS: [&str; 7] = [
+    "invoke-webrequest",
+    "invoke-restmethod",
+    "iwr",
+    "irm",
+    "curl",
+    "wget",
+    "start-bitstransfer",
+];
+
+/// Parameters whose value is a remote host or URL, for any command.
+const REMOTE_PARAMETERS: [&str; 5] = ["-uri", "-computername", "-smtpserver", "-source", "-proxy"];
+
 /// The hosts and paths the text of a foreign shell's command names.
 pub(super) struct Named {
-    /// Hosts, lowercase, as written.
+    /// Every host the text names, lowercase, as written.
     pub(super) hosts: Vec<String>,
-    /// Words that start with `/` or `~/`, as written.
+    /// The hosts it reads from ([`remote_hosts`]).
+    pub(super) remote: Vec<String>,
+    /// Paths [`injection::candidates`] places (absolute, drive and home).
     pub(super) paths: Vec<String>,
 }
 
@@ -30,23 +53,30 @@ pub(super) fn named(command: &str) -> Named {
     let unescaped = command.replace('`', "");
     let mut out = Named {
         hosts: Vec::new(),
+        remote: Vec::new(),
         paths: Vec::new(),
     };
     for text in [command, unescaped.as_str()] {
-        let found = injection::candidates(&parameter_values(text));
-        let hosts = found.url_hosts.into_iter().chain(found.word_hosts);
-        for host in hosts {
-            if !out.hosts.contains(&host) {
-                out.hosts.push(host);
-            }
-        }
-        for path in found.paths {
-            if !out.paths.contains(&path) {
-                out.paths.push(path);
-            }
-        }
+        let text = parameter_values(text);
+        let found = injection::candidates(&text);
+        let remote = found.url_hosts.iter().cloned().chain(remote_hosts(&text));
+        push_new(&mut out.remote, remote);
+        push_new(
+            &mut out.hosts,
+            found.url_hosts.into_iter().chain(found.word_hosts),
+        );
+        push_new(&mut out.paths, found.paths);
     }
     out
+}
+
+/// Add each of `items` that `list` does not hold yet.
+fn push_new(list: &mut Vec<String>, items: impl IntoIterator<Item = String>) {
+    for item in items {
+        if !list.contains(&item) {
+            list.push(item);
+        }
+    }
 }
 
 /// `text` with the value of each `-Name:value` word set apart from its
@@ -64,16 +94,73 @@ fn parameter_values(text: &str) -> String {
         .join(" ")
 }
 
+/// The commands of `text`, each as its words without quotes: split where
+/// PowerShell may start another command (`;`, `|`, `&&`, `||`, a line, a
+/// `( … )`, `{ … }` or `$( … )`), the call operators `&` and `.` taken off.
+/// Splitting inside a quoted string only adds commands, which only tightens.
+fn segments(text: &str) -> Vec<Vec<String>> {
+    text.split(['\n', ';', '|', '(', ')', '{', '}'])
+        .flat_map(|part| part.split("&&"))
+        .map(|segment| {
+            let mut words: Vec<String> = segment
+                .split_whitespace()
+                .map(|w| w.trim_matches(['\'', '"', ',']).to_owned())
+                .filter(|w| !w.is_empty())
+                .collect();
+            while words
+                .first()
+                .is_some_and(|w| w == "&" || w == "." || w == "$")
+            {
+                words.remove(0);
+            }
+            if let Some(first) = words.first_mut()
+                && let Some(rest) = first.strip_prefix('&')
+            {
+                *first = rest.trim_matches(['\'', '"']).to_owned();
+            }
+            words
+        })
+        .filter(|words| !words.is_empty())
+        .collect()
+}
+
+/// The program a command's first word names: its file name, lowercase,
+/// without `.exe` (`C:\tools\gh.exe` is `gh`).
+fn program_of(word: &str) -> String {
+    let name = program_name(word).to_ascii_lowercase();
+    name.strip_suffix(".exe").unwrap_or(&name).to_owned()
+}
+
+/// The hosts `text` reads from beyond its URLs: each word after a web client
+/// that names a host (`iwr evil.example/x`), and the value of a parameter
+/// that names a remote host (`-ComputerName srv.evil.example`).
+fn remote_hosts(text: &str) -> Vec<String> {
+    let mut hosts = Vec::new();
+    for words in segments(text) {
+        let web = WEB_PROGRAMS.contains(&program_of(&words[0]).as_str());
+        for (i, word) in words.iter().enumerate().skip(1) {
+            let after_parameter = REMOTE_PARAMETERS
+                .iter()
+                .any(|p| words[i - 1].eq_ignore_ascii_case(p));
+            if (web && !word.starts_with('-')) || after_parameter {
+                hosts.extend(crate::host::of_word(word));
+            }
+        }
+    }
+    hosts
+}
+
 impl CompiledPolicy<'_> {
     /// Whether the output of `command` is content an attacker may control:
-    /// its text names a host the policy does not allow, or it starts with a
-    /// forge's command-line client (`gh issue view 7`).
+    /// it reads from a host the policy does not allow ([`Named::remote`]), or
+    /// one of its commands is a forge's command-line client (`gh issue view
+    /// 7`, also after `;`, `|` or `&`).
     pub(super) fn foreign_reads_remote(&self, command: &str) -> bool {
-        let first = command.split_whitespace().next().unwrap_or_default();
-        let program = program_name(first).to_ascii_lowercase();
-        let program = program.strip_suffix(".exe").unwrap_or(&program);
-        REMOTE_TEXT_PROGRAMS.contains(&program)
-            || named(command).hosts.into_iter().any(|host| {
+        let forge = segments(&command.replace('`', ""))
+            .iter()
+            .any(|words| REMOTE_TEXT_PROGRAMS.contains(&program_of(&words[0]).as_str()));
+        forge
+            || named(command).remote.into_iter().any(|host| {
                 !crate::host::is_loopback(&host) && !self.allows(&AtomicAction::Net { host })
             })
     }

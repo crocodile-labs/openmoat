@@ -322,8 +322,10 @@ rest of each agent's protection on each OS, with the runs that back them.
   wrapped MCP servers' results are read by the gateway). A PowerShell command (every
   Gemini CLI shell command on Windows, the PowerShell tools of Claude Code and the Cline
   CLI) is not parsed, so it is linked by the hosts and paths its text names, not by its
-  commands, and a host or path it builds at run time (`"ev" + "il.example"`,
-  `$env:USERPROFILE`) is not seen. Another spelling of a planted
+  commands. Paths are read in the forms POLICY.md §4.1.2 lists (drive, `~\`,
+  `$env:USERPROFILE\`, `%USERPROFILE%\`, `$HOME\`); a UNC path, `${env:USERPROFILE}`,
+  another variable, and a host or path built at run time (`"ev" + "il.example"`) are not
+  seen. Another spelling of a planted
   address, a subdomain of a planted URL host and a planted command run through a wrapper
   are linked; a host by another name, a reworded command or a relative path is not
   ([POLICY.md §4.1.2](POLICY.md#412-injected-input)). Only the output of the shell,

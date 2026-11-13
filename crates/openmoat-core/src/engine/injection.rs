@@ -22,9 +22,6 @@ use crate::verdict::{Decision, Verdict};
 /// (`registries`), so they are named here.
 const REMOTE_TEXT_PROGRAMS: [&str; 3] = ["gh", "glab", "tea"];
 
-/// The longest source description kept with a token.
-const MAX_SOURCE_LEN: usize = 200;
-
 impl CompiledPolicy<'_> {
     /// What the output of `action`, run in `cwd`, is, when it is content an
     /// attacker may control (`fetch https://docs.example/page`): what session
@@ -33,7 +30,9 @@ impl CompiledPolicy<'_> {
     /// page sets the title and URL a tab list shows), and a shell command that
     /// reads from a network host the policy does not allow or from a forge's
     /// command-line client (`gh issue view`). `None` for everything else: a
-    /// read of a file, a local command.
+    /// read of a file, a local command. Never cut: a caller that keeps it
+    /// redacts the whole of it first, then shortens it (the audit store), so
+    /// a credential in the command is never split where no pattern sees it.
     #[must_use]
     pub fn output_source(
         &self,
@@ -55,14 +54,14 @@ impl CompiledPolicy<'_> {
                 Action::Shell { command } => format!("the output of `{command}`"),
                 _ => exposed.describe(),
             };
-            return Some(cut(source));
+            return Some(source);
         }
         let command = match action.shown() {
             Action::Shell { command } => command,
             Action::ForeignShell { command, .. } => {
                 return self
                     .foreign_reads_remote(command)
-                    .then(|| cut(format!("the output of `{command}`")));
+                    .then(|| format!("the output of `{command}`"));
             }
             _ => return None,
         };
@@ -75,7 +74,7 @@ impl CompiledPolicy<'_> {
                 .is_some_and(|p| REMOTE_TEXT_PROGRAMS.contains(&program_name(p))),
             _ => false,
         });
-        reads_remote.then(|| cut(format!("the output of `{command}`")))
+        reads_remote.then(|| format!("the output of `{command}`"))
     }
 
     /// The tokens of `output`, the output of `source` (an action
@@ -97,7 +96,7 @@ impl CompiledPolicy<'_> {
         // Never kept, so never a parent a later call links to (ADR-063 §4):
         // `docs.github.com` named by a page on `github.com` links nothing new.
         let foreign_hosts = match source.shown() {
-            Action::ForeignShell { command, .. } => foreign::named(command).hosts,
+            Action::ForeignShell { command, .. } => foreign::named(command).remote,
             _ => Vec::new(),
         };
         let own_hosts: Vec<String> = source_atoms
@@ -429,16 +428,6 @@ fn host_of(atom: &AtomicAction) -> Option<&str> {
 /// The file name of a program word (`/usr/bin/gh` → `gh`).
 fn program_name(word: &str) -> &str {
     word.rsplit(['/', '\\']).next().unwrap_or(word)
-}
-
-/// `text`, cut to [`MAX_SOURCE_LEN`] characters.
-fn cut(text: String) -> String {
-    if text.chars().count() <= MAX_SOURCE_LEN {
-        return text;
-    }
-    let mut short: String = text.chars().take(MAX_SOURCE_LEN).collect();
-    short.push('…');
-    short
 }
 
 mod foreign;

@@ -700,7 +700,7 @@ collect.evil.example may follow an instruction planted there
     result, a `tool.unknown`; a metadata tool's result too (a browser's tab list), which
     does not taint the session but names the titles and URLs pages set;
   - a shell command that reads from a host the policy does not allow on its own
-    (`curl -s https://evil.example/notes.txt`), or a PowerShell command whose text names
+    (`curl -s https://evil.example/notes.txt`), or a PowerShell command that reads from
     one (below);
   - a forge's client (`gh`, `glab`, `tea`), whose issue, pull-request and comment text
     anyone may write.
@@ -709,7 +709,11 @@ collect.evil.example may follow an instruction planted there
 - **What is kept.** Each output (its first 1 MiB) is reduced to at most 256 tokens:
   - the hosts of its URLs, an IPv6 address in brackets too (`http://[2001:db8::7]/`);
   - words that look like host names;
-  - absolute and `~/` paths outside the project;
+  - absolute and home paths outside the project: `/…`, `~/…`, and the Windows forms
+    `C:\…`, `C:/…`, `~\…`, `$env:USERPROFILE\…`, `%USERPROFILE%\…` and `$HOME\…`
+    (the last three read as `~`). A bare drive (`C:`), another PowerShell drive
+    (`HKLM:\…`, `Env:\…`), a UNC path (`\\server\share`), `${env:USERPROFILE}` and
+    any other variable are not read as paths;
   - the commands of its code spans (fenced blocks, backticks, `$ ` lines; 16 to 512
     characters, with arguments), read as the classifier reads a command.
 
@@ -751,11 +755,16 @@ collect.evil.example may follow an instruction planted there
 - **PowerShell.** A PowerShell command (Gemini CLI's shell on Windows, the PowerShell
   tools of Claude Code and the Cline CLI) is never parsed (`unparseable`), so its text is
   read the way untrusted output is: every host it names counts as reached and every path
-  outside the project as written, compared as above, after taking out PowerShell's escape
-  character (`` ` ``) and reading `-Uri:https://…` as `-Uri https://…`. Its output is
-  untrusted when its text names a host the policy does not allow, or it starts with
-  `gh`, `glab` or `tea`. Its commands are not compared, and a host or path it builds at
-  run time (`"ev" + "il.example"`, `$env:USERPROFILE`) is not seen.
+  outside the project, in the forms above, as written, compared as above, after taking
+  out PowerShell's escape character (`` ` ``) and reading `-Uri:https://…` as
+  `-Uri https://…`. Its output is untrusted when it reads from a host the policy does not
+  allow (a URL, a word after `Invoke-WebRequest`, `Invoke-RestMethod`, `iwr`, `irm`,
+  `curl`, `wget` or `Start-BitsTransfer`, or the value of `-Uri`, `-ComputerName`,
+  `-SmtpServer`, `-Source` or `-Proxy`; a word that only looks like a host, as in
+  `npm install socket.io`, does not count), or when any of its commands (after `;`, `|`,
+  `&&`, `||`, inside `( … )`, `{ … }` or `$( … )`, after the call operators `&` and `.`)
+  runs `gh`, `glab` or `tea`, by name or path. Its commands are not compared, and a host
+  or path it builds at run time (`"ev" + "il.example"`, `$env:TEMP`) is not seen.
 - **Not checked.** A fetch, a web search and an MCP call: following a link or a search
   result is reading, and the host's own prompt decides fetches (`fetch: defer`).
 - **Answered.** By the person in the agent's prompt, or with `openmoat allow` for that

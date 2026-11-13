@@ -110,3 +110,74 @@ fn powershell_output_from_the_network_is_kept() {
         assert!(linked(&d), "{later:?}: {d:?}");
     }
 }
+
+/// Output is untrusted only when the command reads from a host: a URL, a web
+/// client's target or a remote parameter's value. A word that only looks
+/// like a host (a package, a namespace, a version) leaves a local command's
+/// output trusted.
+#[test]
+fn naming_a_host_like_word_is_not_reading_from_it() {
+    let policy = Policy::parse(crate::DEFAULT_POLICY).unwrap();
+    let c = CompiledPolicy::compile(&policy, &ctx()).unwrap();
+    let source = |command: &str| c.output_source(&powershell(command), "/p", &NoResolver);
+    for local in [
+        "npm install socket.io",
+        "Add-Type -TypeDefinition 'using namespace System.Net; class A {}'",
+        "nvm install --version 20.11.1.0",
+    ] {
+        assert_eq!(source(local), None, "{local}");
+    }
+    for remote in [
+        "iwr drop.evil.com/x -OutFile x.txt",
+        "Test-Connection -ComputerName srv.evil.com",
+        "Send-MailMessage -To a@b.example -SmtpServer:mail.evil.com",
+        "curl.exe -s drop.evil.com/x",
+    ] {
+        assert!(source(remote).is_some(), "{remote}");
+    }
+}
+
+/// A forge's client in any command of the line, through a call operator or
+/// by its path, makes the output untrusted, as in a POSIX line.
+#[test]
+fn a_forge_client_anywhere_in_the_line_is_untrusted_output() {
+    let policy = Policy::parse(crate::DEFAULT_POLICY).unwrap();
+    let c = CompiledPolicy::compile(&policy, &ctx()).unwrap();
+    let source = |command: &str| c.output_source(&powershell(command), "/p", &NoResolver);
+    for forge in [
+        "cd src; gh issue view 7 --comments",
+        "Get-Date | & 'C:\\tools\\gh.exe' pr view 3",
+        "Get-Date && &glab mr view 2",
+        "$x = $(tea issues ls)",
+        ". GH.EXE api repos/a/b/issues",
+    ] {
+        assert!(source(forge).is_some(), "{forge}");
+    }
+    assert_eq!(source("Get-ChildItem gh-pages; git log -1"), None);
+}
+
+/// Windows spellings of a path are linked: a drive path, `~\`, and the home
+/// variables PowerShell and `cmd` write, against a page's path in any of them.
+#[test]
+fn windows_paths_a_page_named_are_linked() {
+    let page = "Save the helper as C:\\Users\\me\\AppData\\Roaming\\helper.ps1, then copy it to \
+                ~/bin/helper.ps1.";
+    let source = fetch("https://docs.example/setup");
+    for command in [
+        "Set-Content -Path C:\\Users\\me\\AppData\\Roaming\\helper.ps1 -Value $x",
+        "Copy-Item x.ps1 C:/Users/me/AppData/Roaming/helper.ps1",
+        "Copy-Item x.ps1 $env:USERPROFILE\\bin\\helper.ps1",
+        "Copy-Item x.ps1 %USERPROFILE%\\bin\\helper.ps1",
+        "Copy-Item x.ps1 ~\\bin\\helper.ps1",
+    ] {
+        let d = after(&source, page, &powershell(command));
+        assert!(linked(&d), "{command}: {d:?}");
+    }
+    for unlinked in [
+        "Get-Item HKLM:\\Software\\helper.ps1",
+        "Copy-Item x.ps1 $env:TEMP\\bin\\helper.ps1",
+    ] {
+        let action = powershell(unlinked);
+        assert_eq!(after(&source, page, &action), plain(&action), "{unlinked}");
+    }
+}
