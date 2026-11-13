@@ -338,11 +338,15 @@ mod tests {
             "**/.claude/skills/**",
             "**/.github/agents/**",
             "**/.opencode/commands/**",
+            "**/.opencode/agents/**",
         ] {
             assert!(AGENT_CONFIG.contains(&file), "{file}");
             let excepted = format!("{PROJECT}/{file}");
             assert!(agent_config_exclusion(&excepted), "{excepted}");
         }
+        // OpenCode writes it itself at start: held for review only
+        assert!(RUNS_LATER.contains(&"**/.opencode/package.json"));
+        assert!(!AGENT_CONFIG.contains(&"**/.opencode/package.json"));
         // home files are the hosts' own state, which `--write` may grant
         assert!(AGENT_CONFIG.iter().all(|f| f.starts_with("**/")));
         assert!(!NOT_AN_AGENTS.iter().any(|f| AGENT_CONFIG.contains(f)));

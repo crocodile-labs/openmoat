@@ -74,7 +74,9 @@ find-generic-password -w` or `secret-tool lookup`, which `secrets-paths` denies.
 `gemini mcp add`, `gemini mcp enable` and `gemini extensions install`/`link` need review
 (`runs-later`), and so does writing a project's policy files, custom commands and
 subagents (`.gemini/policies/`, `.gemini/commands/`, `.gemini/agents/`), which
-commands under `openmoat run` cannot write at all (ADR-091). `openmoat status` and `openmoat doctor` warn when the `gemini` on the
+commands under `openmoat run` cannot write either (on Linux within each tier's limits:
+a missing `.gemini/commands/` is covered only where `.gemini` exists at the project's
+top, ADR-091). `openmoat status` and `openmoat doctor` warn when the `gemini` on the
 search path is a version with a published advisory (`advisories.rs`).
 
 ## When the hook fails

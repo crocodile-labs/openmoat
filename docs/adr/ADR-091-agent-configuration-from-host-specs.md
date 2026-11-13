@@ -33,8 +33,9 @@ the rest: a command under `openmoat run` could write, on every tier,
 - Claude Code's subagents, skills and slash commands (`.claude/agents/`,
   `.claude/skills/`, `.claude/commands/`) and GitHub Copilot CLI's custom agents
   (`.github/agents/`), whose frontmatter can carry hooks and shell;
-- OpenCode's commands (`.opencode/commands/`, `.opencode/command/`) and the package
-  file it installs plugin code from (`.opencode/package.json`).
+- OpenCode's commands (`.opencode/commands/`, `.opencode/command/`); its project
+  agents (`.opencode/agents/`, and `.opencode/agent/`, which it also reads) were not
+  even held for review.
 
 The agent's own write of any of them was held for review; a command's was not, and
 the host loaded the file in its next session, outside the sandbox.
@@ -63,20 +64,50 @@ the host loaded the file in its next session, outside the sandbox.
    that a project path held for review only is a folder above the host's
    configuration.
 4. **All of an agent's configuration is protected under `openmoat run`.** Every
-   project glob a host loads as its configuration is marked, so every tier denies
-   commands writing it as it already did for `.claude/hooks/` and `.mcp.json`: the
-   Cline, Gemini CLI, Claude Code, Copilot CLI and OpenCode files above. A new host
+   project glob a host loads as its configuration is marked, so `openmoat run`
+   protects it as it already did `.claude/hooks/` and `.mcp.json`: the Cline, Gemini
+   CLI, Claude Code, Copilot CLI and OpenCode files above. On macOS Seatbelt denies
+   writing them wherever they are, existing or created later. On Linux (ADR-090) the
+   bubblewrap tiers bind read-only the configuration that exists when the session
+   starts, and create a missing configuration folder read-only for the session where
+   the folder that holds it exists directly in the project (`.gemini/commands/` in an
+   existing `.gemini`); one whose holder is missing (no `.gemini`), and a missing one
+   below the project's top (`sub/.gemini/commands/`), can still be created and
+   written. Without a network namespace, Landlock grants the folders that
+   hold them entry by entry, so nothing new is created directly in them. A new host
    gets the same by marking its entries; no edit elsewhere is needed.
+5. **A file the host writes itself stays review-only.** OpenCode writes
+   `package.json` in each configuration folder it uses, a project's `.opencode`
+   included, when it installs its plugin dependencies at start (the file is in
+   OpenCode's own `.opencode/.gitignore`). Marked, it would fail
+   `openmoat run -- opencode` at start, so `.opencode/package.json` is held for
+   review in the hook only, and the specs' test admits a review-only project file
+   only beside a host's marked configuration.
 
-The set of files the policy reviews and `project-fs` leaves out is unchanged; only
-the order of the policy's lines changed.
+The files the policy reviews and `project-fs` leaves out are those of before plus
+OpenCode's project agents (`.opencode/agents/`, `.opencode/agent/`); the other lines
+only changed order.
 
 ## Consequences
 
 - Commands under `openmoat run` can no longer write the files listed in the context,
   nor create, rename or remove the folders that hold them directly in the project
-  (`.cline`, `.clinerules`, `.gemini`). Change them outside `openmoat run`, or let the
-  agent write them with its own tools, where the hook holds the write for review.
+  (`.cline`, `.clinerules`, `.gemini`). When the agent itself runs under
+  `openmoat run -- <agent>`, its own file tools are inside the same sandbox: Claude
+  Code creating a subagent or a skill, or Gemini CLI writing a custom command, fails
+  there too, even after the hook's review was approved. Change these files outside
+  `openmoat run`, or run the agent with the hook only (no `openmoat run`), where the
+  hook holds its write for review.
+- Many repositories commit these folders (`.claude/commands/`, `.claude/skills/`,
+  `.claude/agents/`, `.github/agents/`, `.gemini/commands/`). Under `openmoat run`, a
+  `git pull`, `git checkout`, `git stash pop` or `git clone` into a subfolder that
+  changes or adds them, or an npm package that ships a `.claude/skills/` folder,
+  fails partway with a permission error (`EPERM` from Seatbelt; on Linux `EROFS`
+  where a bind mount makes it read-only, `EACCES` from Landlock).
+  This is the attack the deny exists for, so the globs stay as they are: run git
+  operations and installs that touch these folders outside `openmoat run`. Seatbelt
+  and the bind mounts report no denied path to `openmoat run`, so the run cannot name
+  the file afterwards; the failing command's own message does.
 - `.clinerules` itself is now a folder above agent configuration: under `openmoat
   run` a command cannot create, rename or remove it (on macOS a `.clinerules` file,
   the older single-file form, is not writable by commands either), and without a

@@ -461,6 +461,7 @@ fn every_hosts_configuration_is_denied_to_commands() {
         ".gemini/commands/deploy.toml",
         ".gemini/agents/helper.md",
         ".claude/skills/deploy/SKILL.md",
+        ".opencode/agents/reviewer.md",
     ] {
         let path = format!("/Users/me/proj/{path}");
         assert!(rule_matches(&profile, rule, &path), "{path}: {profile}");
@@ -469,10 +470,13 @@ fn every_hosts_configuration_is_denied_to_commands() {
         let path = format!("(literal \"/Users/me/proj/{folder}\")");
         assert!(profile.contains(&path), "{path}: {profile}");
     }
+    // OpenCode writes its own `.opencode/package.json` when it installs its
+    // plugin dependencies at start, inside `openmoat run -- opencode` too
     for open in [
         ".clinerules/style.md",
         ".github/workflows/ci.yml",
         ".gemini2",
+        ".opencode/package.json",
     ] {
         let path = format!("/Users/me/proj/{open}");
         assert!(!rule_matches(&profile, rule, &path), "{path}: {profile}");

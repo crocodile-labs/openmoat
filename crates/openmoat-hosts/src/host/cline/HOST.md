@@ -127,5 +127,5 @@ malformed (a deny). The full table is in
   `.cline` or their `hooks`) needs review (`runs-later`), and session taint protects
   every `.cline` and `.clinerules` file. Under `openmoat run`, commands cannot write
   those hooks nor create, rename or remove `.cline` and `.clinerules` in the project
-  (ADR-091).
+  (on Linux within each tier's limits, ADR-090 and ADR-091).
 - The VS Code extension, and native Windows, are not covered.

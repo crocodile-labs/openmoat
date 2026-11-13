@@ -530,9 +530,19 @@ bubblewrap.
   `.github/hooks/`, `.github/mcp.json`, `.github/agents/`, `.openclaw/extensions/`,
   `.pi/extensions/`, `.pi/mcp.json`, `.pi/settings.json`, Gemini CLI's
   `.gemini/policies/`, `.gemini/commands/` and `.gemini/agents/`, OpenCode's
-  `opencode.json[c]` and its `.opencode/` plugins, tools, commands, `package.json` and
-  `opencode.json[c]`, Hermes Agent's `.hermes/plugins/`, and Cline's `.cline/hooks/`
-  and `.clinerules/hooks/`, at any depth. On macOS Seatbelt denies them
+  `opencode.json[c]` and its `.opencode/` plugins, tools, commands, agents and
+  `opencode.json[c]` (not `.opencode/package.json`, which OpenCode writes itself at
+  start: the hook holds an agent's write of it for review), Hermes Agent's
+  `.hermes/plugins/`, and Cline's `.cline/hooks/` and `.clinerules/hooks/`, at any
+  depth. Repositories often commit some of these (`.claude/commands/`,
+  `.claude/skills/`, `.github/agents/`, `.gemini/commands/`): a `git pull`,
+  `git checkout`, `git stash pop` or clone that changes them, or a package that ships
+  a `.claude/skills/` folder, fails partway inside `openmoat run` with a permission
+  error, and so does the agent's own tool when the agent itself runs under
+  `openmoat run` (creating a subagent, a skill or a custom command), even after the
+  hook's review was approved. Run those outside `openmoat run`, or run the agent with
+  the hook only; `openmoat run` cannot name the refused file afterwards, the failing
+  command's message does. On macOS Seatbelt denies them
   after every grant, in either case on a case-insensitive disk (`.MCP.json` too), so
   this holds inside a `--write` path too, and also for a write the hook held for review
   and the person allowed: change one outside `openmoat run`. The folders that hold
@@ -553,9 +563,12 @@ bubblewrap.
   `.opencode/plugins/`, …) missing where the folder that holds it exists, or is made
   for the hook settings below (`.claude`, `.github`), is created empty for the session
   and bound read-only, so a hook written into it later is refused (`EROFS`); it is
-  removed when the last session in the project exits if it is still empty (ADR-090).
-  Where that folder is missing (`.pi`, `.opencode`, `.openclaw`, `.hermes`), a command
-  can still create it and write there. If the project is too large to walk (more than a
+  removed when the last session in the project exits if it is still empty (ADR-090;
+  `.gemini/commands/` in an existing `.gemini`, `.clinerules/hooks/` in an existing
+  `.clinerules`, ADR-091). Where the folder that holds it is missing (`.pi`,
+  `.opencode`, `.openclaw`, `.hermes`, `.gemini`, `.cline`), and for a missing folder
+  below the project's top (`sub/.gemini/commands/`), a command can still create it and
+  write there. If the project is too large to walk (more than a
   million entries) or holds a name that is not UTF-8, the namespace covers only the
   project's top and the folders directly in it, and `openmoat run` says so. Without a namespace the project is granted entry by entry (above): none
   of these can be created at its top or in `.claude`, `.github` and the other folders

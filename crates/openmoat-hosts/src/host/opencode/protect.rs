@@ -83,10 +83,10 @@ pub(super) const PROTECT: Protect = Protect {
             ],
         ),
         RunsLater::agent_config(
-            "OpenCode: a project's plugins, tools and commands (loaded at start, with no\n\
-             prompt), its configuration, which adds plugins, MCP servers and permission\n\
-             rules (a write that removes OpenMoat's plugin is denied, `project-settings`),\n\
-             and its package file",
+            "OpenCode: a project's plugins, tools, commands and agents (loaded at start,\n\
+             with no prompt), and its configuration, which adds plugins, MCP servers and\n\
+             permission rules (a write that removes OpenMoat's plugin is denied,\n\
+             `project-settings`)",
             &[
                 "**/.opencode/plugins/**",
                 "**/.opencode/plugin/**",
@@ -94,17 +94,29 @@ pub(super) const PROTECT: Protect = Protect {
                 "**/.opencode/tool/**",
                 "**/.opencode/commands/**",
                 "**/.opencode/command/**",
+                "**/.opencode/agents/**",
+                "**/.opencode/agent/**",
                 "**/.opencode/opencode.json",
                 "**/.opencode/opencode.jsonc",
-                "**/.opencode/package.json",
                 "**/opencode.json",
                 "**/opencode.jsonc",
             ],
         ),
+        // OpenCode itself writes `package.json` in each configuration folder
+        // it uses, a project's `.opencode` included, when it installs its
+        // plugin dependencies at start (the file is in OpenCode's own
+        // `.opencode/.gitignore`), so `openmoat run -- opencode` must leave it
+        // writable: review only.
         RunsLater::review(
-            "OpenCode: the folders above a project's plugins (a rename away and back edits\n\
-             them)",
-            &["**/.opencode", "**/.opencode/plugins", "**/.opencode/plugin"],
+            "OpenCode: a project's package file, which OpenCode writes itself when it\n\
+             installs plugin dependencies at start, and the folders above a project's\n\
+             plugins (a rename away and back edits them)",
+            &[
+                "**/.opencode/package.json",
+                "**/.opencode",
+                "**/.opencode/plugins",
+                "**/.opencode/plugin",
+            ],
         ),
     ],
 };

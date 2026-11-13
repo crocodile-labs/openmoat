@@ -342,15 +342,26 @@ fn agent_configuration_is_named_in_the_project() {
                     );
                 } else if let Some(rest) = rest {
                     // a project path held for review only is a folder above an
-                    // entry of the host's configuration
-                    let above = host.spec().protect.runs_later.iter().any(|e| {
-                        e.agent_config
-                            && e.paths
-                                .globs
-                                .iter()
-                                .any(|g| g.starts_with(&format!("**/{rest}/")))
-                    });
-                    assert!(above, "{host:?}: {glob} is above none of its configuration");
+                    // entry of the host's configuration, or a file the host
+                    // writes itself in such a folder (OpenCode's
+                    // `.opencode/package.json`), which `openmoat run` must
+                    // leave writable to the host
+                    let holds = |folder: &str| {
+                        host.spec().protect.runs_later.iter().any(|e| {
+                            e.agent_config
+                                && e.paths
+                                    .globs
+                                    .iter()
+                                    .any(|g| g.starts_with(&format!("**/{folder}/")))
+                        })
+                    };
+                    let beside = rest
+                        .rsplit_once('/')
+                        .is_some_and(|(folder, name)| holds(folder) && !name.contains('*'));
+                    assert!(
+                        holds(rest) || beside,
+                        "{host:?}: {glob} is neither above nor beside its configuration"
+                    );
                 } else {
                     assert!(glob.starts_with("~/"), "{host:?}: {glob}");
                 }

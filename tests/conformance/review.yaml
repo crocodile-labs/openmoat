@@ -1958,6 +1958,16 @@
   threat: T9
   action: { fs_write: "/p/.opencode/package.json" }
   expect: { verdict: review, rules: [runs-later] }
+# OpenCode's project agents (`.opencode/agents/`, and `.opencode/agent/` it also
+# reads) set their own prompt, tools and permissions
+- id: review-write-opencode-project-agent
+  threat: T9
+  action: { fs_write: "/p/.opencode/agents/reviewer.md" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-echo-into-opencode-agent
+  threat: T9
+  action: { shell: "echo 'permission: allow' > .opencode/agent/build.md" }
+  expect: { verdict: review, rules: [runs-later] }
 # A repository's GitHub Copilot CLI agents may carry hooks in their frontmatter
 - id: review-write-copilot-repo-agent
   threat: T9
