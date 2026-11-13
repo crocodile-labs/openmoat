@@ -20,6 +20,7 @@ use landlock::{
     ABI, Access, AccessFs, AccessNet, CompatLevel, Compatible, NetPort, Ruleset, RulesetAttr,
     RulesetCreated, RulesetCreatedAttr, RulesetError, Scope, path_beneath_rules,
 };
+use openmoat_core::boundary::LaunchCheck;
 use openmoat_core::{EvalContext, Policy, ProjectTop};
 use seccompiler::{
     BpfProgram, SeccompAction, SeccompCmpArgLen, SeccompCmpOp, SeccompCondition, SeccompFilter,
@@ -40,6 +41,8 @@ use crate::sandbox::{
 mod abi;
 /// `moat run --isolate`: bubblewrap around the same rules.
 mod isolate;
+/// The check after the agent starts, and its report from inside bubblewrap.
+mod launch;
 /// `moat run`: the agent's own network namespace, where bubblewrap runs.
 mod netns;
 
@@ -323,6 +326,7 @@ pub fn project_open(policy: &Policy, ctx: &EvalContext) -> Option<String> {
 }
 
 pub use isolate::{inside, isolate};
+pub use launch::{NETWORK, restrictions};
 
 /// The terminals this process's standard input, output and error are on, as
 /// `/proc` names them (`/dev/pts/3`, `/dev/tty1`); not `/dev/tty` itself.
@@ -577,11 +581,17 @@ impl Confined {
         self.top_open
     }
 
-    pub fn status(self) -> Result<ExitStatus> {
+    /// Start the agent, give the check of its start to `on_launch` (ADR-089)
+    /// and wait for it. Under bubblewrap the check comes from `moat isolated`
+    /// inside; `None` when bubblewrap ended before it reported.
+    pub fn status(
+        self,
+        on_launch: impl FnOnce(Option<LaunchCheck>) -> Result<()>,
+    ) -> Result<ExitStatus> {
         let Self {
-            mut command,
+            command,
             restrict,
-            _session,
+            _session: mut session,
             watch,
             ..
         } = self;
@@ -590,21 +600,12 @@ impl Confined {
         // the walk where `close_range` is missing reads `/proc`. Inside
         // bubblewrap (`isolate::inside`) this runs again before the agent.
         super::inherited::close_on_exec()?;
-        let Some((ruleset, filters)) = restrict else {
-            return command.status().context("starting bubblewrap");
+        let Some(restrict) = restrict else {
+            let reports = session.as_mut().and_then(isolate::Session::take_reports);
+            let reports = reports.context("no socket for the launch report")?;
+            return reports.start(command, on_launch);
         };
-        let status = std::thread::spawn(move || {
-            ruleset
-                .restrict_self()
-                .context("applying the Landlock rules")?;
-            for filter in &filters {
-                seccompiler::apply_filter(filter).context("applying the seccomp filter")?;
-            }
-            command.status().context("starting the agent")
-        })
-        .join()
-        .ok()
-        .context("the thread that starts the agent panicked")?;
+        let status = launch::restricted(command, restrict, false, on_launch);
         for line in netns::created_during_run(&watch, |path| Path::new(path).exists()) {
             eprintln!("{line}");
         }

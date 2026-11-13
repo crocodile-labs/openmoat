@@ -88,6 +88,28 @@ fn the_default_warns_records_and_starts_the_lightweight_tier() {
         super::default_tier::tier_rows(&sb),
         ["run-isolation-unavailable"]
     );
+    // The boundary row names both downgrades, forced, with bubblewrap's
+    // absence as the reason, and the check of the agent's start (ADR-089);
+    // `--print-boundary` says the same before any start.
+    let rows = super::boundary::boundary_rows(&sb);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    let printed = super::boundary::print_boundary(&sb, &project, &[]);
+    assert_eq!(printed.status.code(), Some(OK), "{}", text(&printed));
+    let plan: serde_json::Value = serde_json::from_slice(&printed.stdout).unwrap();
+    for record in [&rows[0], &plan] {
+        assert_eq!(record["requested"], "default", "{record}");
+        assert_eq!(record["tier"], "lightweight", "{record}");
+        assert_eq!(record["network"]["mode"], "port_only", "{record}");
+        let downgrades = record["downgrades"].as_array().unwrap();
+        assert_eq!(downgrades.len(), 2, "{record}");
+        for (downgrade, what) in downgrades.iter().zip(["tier", "network"]) {
+            assert_eq!(downgrade["what"], what, "{record}");
+            assert_eq!(downgrade["chosen"], false, "{record}");
+            let why = downgrade["why"].as_str().unwrap();
+            assert!(why.contains("bubblewrap is not installed"), "{record}");
+        }
+    }
+    super::boundary::assert_proc_checked(&rows[0]);
     let doctor = sb.moat(&["doctor"]);
     assert!(
         text(&doctor).contains("cannot start the Isolated tier here"),

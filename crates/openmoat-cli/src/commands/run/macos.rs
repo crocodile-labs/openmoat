@@ -12,7 +12,8 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 
-use anyhow::{Result, bail};
+use anyhow::{Context as _, Result, bail};
+use openmoat_core::boundary::{LaunchCheck, Mechanism, NetworkMode, Restriction};
 use openmoat_core::{EvalContext, Policy};
 
 use crate::cli::IsolatedArgs;
@@ -92,6 +93,21 @@ pub const BASE_ENV: &[&str] = &[
 /// Why `moat run` cannot sandbox on this Mac; `None` when it can.
 pub fn unavailable() -> Option<String> {
     os_version::run_floor(os_version::macos().as_deref()).map(|reason| refusal(&reason))
+}
+
+/// How macOS holds the network: the profile allows the proxy's address alone.
+pub const NETWORK: NetworkMode = NetworkMode::Profile;
+
+/// The restriction a macOS run plans (ADR-089): the Seatbelt profile.
+/// `sandbox-exec` reports nothing back and there is no `/proc`, so it is
+/// never marked applied or tested; the profile is what `openmoat sandbox
+/// show` prints.
+pub fn restrictions(
+    _isolated: bool,
+    _port_only: bool,
+    _kernel: Option<&crate::sandbox::landlock::abi::Kernel>,
+) -> Vec<Restriction> {
+    vec![Restriction::planned(Mechanism::Seatbelt, true, true)]
 }
 
 /// None: Landlock is Linux's (ADR-082).
@@ -207,10 +223,21 @@ impl Confined {
         false
     }
 
-    pub fn status(mut self) -> Result<ExitStatus> {
+    /// Start the agent under `sandbox-exec`, tell `on_launch` it started
+    /// (with no check to give: no `/proc` here), and wait for it.
+    pub fn status(
+        mut self,
+        on_launch: impl FnOnce(Option<LaunchCheck>) -> Result<()>,
+    ) -> Result<ExitStatus> {
         // Seatbelt does not check a file opened before the profile applies.
         super::inherited::close_on_exec()?;
-        Ok(self.command.status()?)
+        let mut child = self.command.spawn().context("starting sandbox-exec")?;
+        if let Err(error) = on_launch(None) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
+        Ok(child.wait()?)
     }
 }
 

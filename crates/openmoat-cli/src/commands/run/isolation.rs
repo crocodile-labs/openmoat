@@ -15,7 +15,6 @@ use openmoat_core::{Decision, Verdict};
 
 use crate::cli::RunArgs;
 use crate::home::Home;
-use crate::sandbox::landlock::abi::{self, Kernel};
 use crate::taint::run::LINK_HOST;
 
 /// The rule of the row a run started with `--no-isolate` writes.
@@ -188,11 +187,8 @@ pub fn record(home: &Home, session: &str, cwd: &str, tier: &Tier) -> Result<()> 
     let Some((rule, reason)) = row(tier) else {
         return Ok(());
     };
-    write_row(home, (session, cwd), (TOOL, rule), reason)
+    write_row(home, (session, cwd), (TOOL, rule), Verdict::Allow, reason)
 }
-
-/// The rule of the row that records the kernel's Landlock ABI (ADR-082).
-pub const LANDLOCK_RULE: &str = "run-landlock-abi";
 
 /// The rule of the row a run writes when the person's policy opened the
 /// project's top to commands (`sandbox.project_top: writable`, ADR-090).
@@ -206,32 +202,26 @@ pub fn record_project_top(home: &Home, session: &str, cwd: &str) -> Result<()> {
                   network namespace and granted the project's top whole, so commands could read \
                   `.env` and write `.git/hooks` and `.moat` there"
         .to_owned();
-    write_row(home, (session, cwd), (TOOL, PROJECT_TOP_RULE), reason)
+    write_row(
+        home,
+        (session, cwd),
+        (TOOL, PROJECT_TOP_RULE),
+        Verdict::Allow,
+        reason,
+    )
 }
 
-/// Write which Landlock ABI the run's sandbox has and what it applies from
-/// it (ADR-082), on Linux; `kernel` is `None` elsewhere. Its tool is
-/// `landlock`, apart from the tier's rows, and never a host id.
-pub fn record_landlock(
-    home: &Home,
-    session: &str,
-    cwd: &str,
-    kernel: Option<&Kernel>,
-) -> Result<()> {
-    let Some(kernel) = kernel else {
-        return Ok(());
-    };
-    let reason = abi::summary(kernel);
-    write_row(home, (session, cwd), ("landlock", LANDLOCK_RULE), reason)
-}
-
-fn write_row(
+/// Write one row of the run's sandbox in its audit session: this module's
+/// rows, and the boundary's (`boundary.rs`, ADR-089). `tool` is never a host
+/// id, so the run's taint lookup passes the row by.
+pub(super) fn write_row(
     home: &Home,
     (session, cwd): (&str, &str),
     (tool, rule): (&str, &str),
+    verdict: Verdict,
     reason: String,
 ) -> Result<()> {
-    let decision = Decision::single(Verdict::Allow, rule, reason);
+    let decision = Decision::single(verdict, rule, reason);
     let store = Store::open_existing(&home.audit_path())
         .context("opening the audit log to record the run's sandbox")?;
     store.record(&NewEvent {

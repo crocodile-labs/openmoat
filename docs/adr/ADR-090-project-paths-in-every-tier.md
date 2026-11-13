@@ -119,8 +119,9 @@ common one.
    `openmoat doctor` on Linux without a namespace shows it as a warning. Without it,
    the strict notice and `doctor` name the setting as the alternative to installing
    bubblewrap. `require.run: full-boundary` refuses to start without the namespace
-   whatever it says. Once the per-run boundary record lands, it carries this choice
-   too, beside the tier and the network.
+   whatever it says. The run's boundary record (ADR-089) carries the choice too, beside
+   the tier and the network: a downgrade `project_top`, chosen by the person, in its
+   `run-boundary` row and in `openmoat run --print-boundary`.
 6. **A test-only switch.** Debug builds start `openmoat run` without a namespace when
    `MOAT_TEST_NO_NETNS` is set, so CI, which installs bubblewrap, runs the hostile
    scripts against case 1 too (`landlock-port-only` in `tests/differential/

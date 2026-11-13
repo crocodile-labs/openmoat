@@ -1,14 +1,16 @@
 //! Linux: pathname Unix sockets outside the sandbox stay out of reach, and the
-//! kernel's Landlock ABI is shown and on record (ADR-082). Below ABI 9 the
+//! kernel's Landlock ABI is shown and on record (ADR-082, in the run's
+//! boundary row since ADR-089). Below ABI 9 the
 //! seccomp filter alone refuses the datagram socket pair that could send to
 //! one; at ABI 9 Landlock refuses the send as well.
 
 use std::io::ErrorKind;
 use std::os::unix::net::UnixDatagram;
 
+use super::boundary::{boundary_rows, restriction};
 use super::confined::ran;
 use super::{LIGHTWEIGHT, installed_with_secret, run_sh_flags};
-use crate::common::{Sandbox, stderr, stdout, text};
+use crate::common::{stderr, stdout, text};
 
 /// Makes a datagram, a stream and a sequenced-packet socket pair, then sends
 /// from a datagram pair to the socket at `{path}`. Prints each errno, 0 when
@@ -27,18 +29,6 @@ print("stream=" + errno(lambda: pair(socket.SOCK_STREAM)))
 print("seqpacket=" + errno(lambda: pair(socket.SOCK_SEQPACKET)))
 print("sent=" + errno(lambda: pair(socket.SOCK_DGRAM)[0].sendto(b"x", "{path}")))
 '"#;
-
-/// The rules of the run's `run-landlock-abi` rows.
-fn landlock_rows(sb: &Sandbox) -> Vec<String> {
-    let store = openmoat_audit::Store::open_read_only(&sb.home.join(".moat/audit.db")).unwrap();
-    store
-        .since(0, Some("moat-run"))
-        .unwrap()
-        .into_iter()
-        .filter(|event| event.tool == "landlock")
-        .flat_map(|event| event.rules)
-        .collect()
-}
 
 #[test]
 fn a_datagram_pair_is_refused_and_nothing_reaches_a_socket_outside() {
@@ -76,7 +66,13 @@ fn a_datagram_pair_is_refused_and_nothing_reaches_a_socket_outside() {
     // `--verbose` shows the ladder, and the run is on record with its ABI.
     assert!(stderr(&out).contains("Landlock ABI "), "{shown}");
     assert!(stderr(&out).contains("ABI 9 (Linux 7.1)"), "{shown}");
-    assert_eq!(landlock_rows(&sb), ["run-landlock-abi"]);
+    // The ABI `restrict_self` reported, and ABI 9's step applied exactly
+    // where the kernel has it.
+    let rows = boundary_rows(&sb);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    let abi = rows[0]["landlock"]["abi"].as_u64().unwrap();
+    let resolve_unix = restriction(&rows[0], "landlock_resolve_unix");
+    assert_eq!(resolve_unix["applied"], abi >= 9, "{}", rows[0]);
 }
 
 #[test]

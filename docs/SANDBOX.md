@@ -320,6 +320,53 @@ openmoat run --no-isolate --write ~/.claude --write ~/.claude.json -- claude
 The rows are in the audit log under the run's own session (`openmoat show`, host
 `moat-run`, tool `isolation`). On macOS `--no-isolate` changes nothing and writes nothing.
 
+## The run's boundary record
+
+Every `openmoat run` that starts an agent writes one more row to its audit session:
+tool `boundary`, rule `run-boundary`, its reason the whole record as JSON (ADR-089).
+It names the tier asked for and the tier that started, every downgrade (the tier, the
+network, and the project's top when `sandbox.project_top: writable` opened it) with why
+and whether the person chose it, how the network is held
+(`namespace`, `port_only`, or Seatbelt's `profile`), the Landlock ABI, whether tool
+commands get the hook relay token, and for each restriction whether the system has it
+(`available`), the run asks for it (`configured`), it is in force (`applied`) and a
+check after the agent started confirmed it (`tested`).
+
+```bash
+openmoat run --print-boundary -- claude                 # what a run here would start with
+openmoat run --print-boundary --format json -- claude | jq '.tier, .downgrades'
+openmoat show --format json | jq 'select(.tool == "boundary") | .reasons[0] | fromjson'
+```
+
+`--print-boundary` makes the same choices as a run (flags, policy, bubblewrap, kernel)
+and starts nothing. It refuses, with the run's words and exit 64, where a run would
+refuse before building its sandbox (no sandbox here, Landlock below ABI 4, a policy's
+`require.run: full-boundary` or `--netns=require` that cannot be met); a refusal that
+depends on the generated grants (a grant over OpenMoat's state directory, a `--write`
+path holding protected files without a namespace) only a start finds.
+
+**The check after the start, on Linux.** The thread that starts the agent applies the
+Landlock rules and seccomp filters, keeps what Landlock's `restrict_self` reports (the
+kernel's ABI and whether the ruleset is enforced: the row's ABI is this one, not a
+probe's), starts the agent and reads its `/proc/<pid>/status`: `NoNewPrivs: 1`, and
+`Seccomp: 2` with `Seccomp_filters` grown by exactly this run's filters (a container's
+or service manager's own filter does not count), and the ruleset enforced. Anything
+missing or unknown stops the agent and every process it started at once; the run says
+why, exits 64, and the row is a `deny` naming what was missing. So does a row that
+cannot be written. Under bubblewrap (the Isolated tier, and the Lightweight tier's
+network namespace) the check runs in `openmoat isolated` inside, which reports it on a
+Unix socket in the run's private session directory, connected before the agent starts
+and authenticated by a nonce only it was given, and then waits for the run's go: no
+go, or no reply within a minute, and it stops the agent. A run that gets no report
+while bubblewrap keeps running, or that cannot record one, stops bubblewrap and every
+process below it. Landlock's rules cannot be read back from the kernel, so Landlock's rows are
+`applied` from `restrict_self` and never `tested`; the access tests are the end-to-end
+suite's.
+
+**On macOS** the row names the Seatbelt profile, configured; `sandbox-exec` reports
+nothing back and macOS has no `/proc`, so it is neither `applied` nor `tested`, and the
+row has no `launch` part. The profile is the one `openmoat sandbox show` prints.
+
 ## `openmoat run` (Lightweight tier)
 
 Without a container or VM runtime, `openmoat run` puts a whole agent in a sandbox generated
@@ -380,7 +427,8 @@ bubblewrap.
 
   `openmoat doctor` shows the kernel's ABI and what applies (each step with
   `--verbose`), as do `openmoat sandbox show` and `openmoat run --verbose`, and every
-  run writes it to the audit log (rule `run-landlock-abi`):
+  run writes the ABI Landlock reported when the agent's rules applied to the audit log,
+  in its boundary row (rule `run-boundary`, [above](#the-runs-boundary-record)):
 
   ```bash
   openmoat doctor --verbose          # landlock  Landlock ABI 6 here: `openmoat run` applies ABI 4, 6; …

@@ -7,6 +7,9 @@ use std::process::Output;
 
 use crate::common::{OK, Sandbox, USAGE, output, stderr, text};
 
+/// The run's boundary record: `--print-boundary` and one row per run (ADR-089).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod boundary;
 /// Files open in the launcher stay out of the sandbox (ADR-088).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod inherited_fds;
