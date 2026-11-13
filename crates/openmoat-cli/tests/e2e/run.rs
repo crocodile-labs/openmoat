@@ -32,6 +32,10 @@ mod isolate_path;
 /// What an MCP server can reach under `openmoat mcp proxy --sandbox`, on disk.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod mcp_boundary;
+/// Linux: the project's denied paths hold in every tier, late ones included
+/// (ADR-089).
+#[cfg(target_os = "linux")]
+mod project_paths;
 /// Linux without bubblewrap: the port-only path a stock system takes.
 #[cfg(target_os = "linux")]
 mod stock_linux;
@@ -180,20 +184,32 @@ fn isolate_is_refused_on_macos() {
     assert!(!text(&out).contains("ran\n"), "{}", text(&out));
 }
 
-/// The Lightweight tier on Linux says, before the agent starts, what Landlock
-/// leaves open inside the project and that `--isolate` closes it; macOS's
-/// Seatbelt denies those paths, so it says nothing of the kind.
+/// The Lightweight tier on Linux says, before the agent starts, how it covers
+/// the paths the policy denies inside the project and what stays open there
+/// (ADR-089); macOS's Seatbelt denies those paths, so it says nothing of the kind.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
 fn the_lightweight_tier_names_what_it_leaves_open_inside_the_project_on_linux() {
     let (sb, project) = installed_with_secret();
     let out = run_sh(&sb, &project, "echo ran");
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    let named = stderr(&out).contains("`openmoat run --isolate` closes this");
+    let named = lightweight_notice(&out);
     assert_eq!(named, cfg!(target_os = "linux"), "{}", text(&out));
     if named {
-        assert!(stderr(&out).contains("`.git/hooks`"), "{}", text(&out));
+        let said = stderr(&out);
+        assert!(
+            said.contains("`.git`") && said.contains("`.moat`"),
+            "{said}"
+        );
     }
+}
+
+/// Whether `moat run` said how the Lightweight tier on Linux covers the
+/// project: with a network namespace or entry by entry (ADR-089).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) fn lightweight_notice(out: &Output) -> bool {
+    let said = stderr(out);
+    said.contains("as under `--isolate`") || said.contains("granted entry by entry")
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
@@ -325,12 +341,15 @@ pub mod confined {
             .current_dir(&project)
             .status();
         assert!(git_init.is_ok_and(|s| s.success()));
+        // In a folder that exists: without a network namespace on Linux nothing
+        // new can be made at the project's top (ADR-089, `project_paths.rs`).
+        std::fs::create_dir_all(project.join("work")).unwrap();
         let out = run_sh(
             &sb,
             &project,
             "cat \"$HOME/.ssh/id_rsa\"; echo \"read=$?\"
              echo x > \"$HOME/outside.txt\"; echo \"write=$?\"
-             echo y > inside.txt; echo \"project=$?\"
+             echo y > work/inside.txt; echo \"project=$?\"
              git status --short > /dev/null; echo \"git=$?\"",
         );
         if !ran(&out) {
@@ -349,7 +368,7 @@ pub mod confined {
         );
         assert!(!shown.contains("FAKE-SSH-KEY"), "{shown}");
         assert!(!sb.home.join("outside.txt").exists());
-        assert!(project.join("inside.txt").exists());
+        assert!(project.join("work/inside.txt").exists());
         assert!(
             stderr(&out).contains("turn the agent's own sandbox off"),
             "{shown}"

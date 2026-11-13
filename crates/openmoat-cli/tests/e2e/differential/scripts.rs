@@ -91,8 +91,13 @@ pub struct Script {
     pub terminal: bool,
     /// The outcome under `moat run` on macOS.
     pub seatbelt: Outcome,
-    /// The outcome under `moat run` on Linux.
+    /// The outcome under `moat run --no-isolate` on Linux, with a network
+    /// namespace (bubblewrap installed).
     pub landlock: Outcome,
+    /// The outcome under `moat run --no-isolate` on Linux without a network
+    /// namespace, where the project is granted entry by entry (ADR-089).
+    #[serde(rename = "landlock-port-only")]
+    pub landlock_port_only: Outcome,
     /// The outcome under `moat run --isolate` on Linux.
     #[serde(rename = "isolate-linux")]
     pub isolate_linux: Outcome,
@@ -114,11 +119,15 @@ pub struct Script {
 }
 
 /// The executing layers: id (as `gap.layer` names it) and the column heading.
-const LAYERS: [(&str, &str); 7] = [
+const LAYERS: [(&str, &str); 8] = [
     ("seatbelt", "`openmoat run`, macOS (Seatbelt)"),
     (
         "landlock",
-        "`openmoat run --no-isolate`, Linux (Landlock + seccomp)",
+        "`openmoat run --no-isolate`, Linux (Landlock + seccomp, network namespace)",
+    ),
+    (
+        "landlock-port-only",
+        "`openmoat run --no-isolate`, Linux without bubblewrap (Landlock + seccomp)",
     ),
     (
         "isolate-linux",
@@ -135,6 +144,7 @@ impl Script {
         match layer {
             "seatbelt" => self.seatbelt,
             "landlock" => self.landlock,
+            "landlock-port-only" => self.landlock_port_only,
             "isolate-linux" => self.isolate_linux,
             "claude-macos" => self.claude_macos,
             "claude-linux" => self.claude_linux,
@@ -250,7 +260,8 @@ fn evidence_table_is_current() {
     doc.push_str(
         "\n## Layers\n\n| Layer | Status |\n|---|---|\n\
          | `openmoat run`, macOS (Seatbelt) | verified by the `test (macos-15)` CI job |\n\
-         | `openmoat run --no-isolate`, Linux (Landlock + seccomp) | verified, with a network namespace, by the `test (ubuntu-latest)` CI job (Linux 6.7 or later); not run in CI as on a stock Ubuntu (no bubblewrap, unprivileged user namespaces restricted) |\n\
+         | `openmoat run --no-isolate`, Linux (Landlock + seccomp, network namespace) | verified by the `test (ubuntu-latest)` CI job (Linux 6.7 or later, bubblewrap installed) |\n\
+         | `openmoat run --no-isolate`, Linux without bubblewrap (Landlock + seccomp) | verified by the `test (ubuntu-latest)` CI job with the namespace turned off in a test build (`MOAT_TEST_NO_NETNS`), and by hand on a stock Ubuntu (no bubblewrap, unprivileged user namespaces restricted) |\n\
          | `openmoat run --isolate`, Linux (bubblewrap; the default where it works) | verified by the `test (ubuntu-latest)` CI job (bubblewrap installed) |\n\
          | `openmoat run --isolate`, macOS | not run: refused until the Isolated tier has a virtual machine there (#175) |\n\
          | Claude Code sandbox and Codex profile, macOS | verified with the pinned host binaries (`scripts/ci/host-binaries.sh`); CI does not fetch them |\n\
@@ -462,10 +473,27 @@ pub mod executing {
     fn hostile_scripts_meet_the_os_layer() {
         let layer = if OS == "macos" {
             "seatbelt"
+        } else if crate::run::stock_linux() {
+            // no bubblewrap: no network namespace either
+            "landlock-port-only"
         } else {
             "landlock"
         };
-        under_moat_run(layer, &["--no-isolate"]);
+        under_moat_run(layer, &["--no-isolate"], &[]);
+    }
+
+    /// The Lightweight tier on Linux without a network namespace, where the
+    /// project is granted entry by entry (ADR-089): a test build turns the
+    /// namespace off on a machine that has bubblewrap.
+    // protection: run every linux
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn hostile_scripts_meet_the_lightweight_tier_without_a_namespace() {
+        under_moat_run(
+            "landlock-port-only",
+            &["--no-isolate"],
+            &[("MOAT_TEST_NO_NETNS", "1")],
+        );
     }
 
     /// The Isolated tier, where bubblewrap can run (CI's Linux job installs it).
@@ -473,11 +501,12 @@ pub mod executing {
     #[cfg(target_os = "linux")]
     #[test]
     fn hostile_scripts_meet_the_isolated_tier() {
-        under_moat_run("isolate-linux", &["--isolate"]);
+        under_moat_run("isolate-linux", &["--isolate"], &[]);
     }
 
-    /// Every script under `moat run <flags>`, as the layer `layer`.
-    fn under_moat_run(layer: &str, flags: &[&str]) {
+    /// Every script under `moat run <flags>` with `env` set for it, as the
+    /// layer `layer`.
+    fn under_moat_run(layer: &str, flags: &[&str], env: &[(&str, &str)]) {
         let fx = fixtures();
         let project = fx.tree(Project::Evil);
         // The temp directory is outside the home, so a home write is not a
@@ -494,12 +523,25 @@ pub mod executing {
                         .current_dir(project)
                         .env("PATH", format!("{}/bin:/usr/bin:/bin", project.display()))
                         .env("TMPDIR", &tmp)
+                        .envs(env.iter().copied())
                         .arg("run")
                         .args(flags)
                         .args(["--", "/bin/sh", "-c", NPM_TEST]),
                     None,
                 )
             });
+            // The two Linux Lightweight columns differ by the network namespace.
+            let port_only = text(&out).contains("restricted by port only");
+            let lightweight = OS == "linux" && layer != "isolate-linux";
+            if lightweight && ran(&out) && port_only != (layer == "landlock-port-only") {
+                assert!(
+                    !crate::run::netns_required(),
+                    "{layer} without the network it is about: {}",
+                    text(&out)
+                );
+                eprintln!("skipped: {layer} needs bubblewrap's network namespace here");
+                return None;
+            }
             (ran(&out) && isolated(&out)).then(|| Run {
                 completed: out.status.success(),
                 shown: text(&out),

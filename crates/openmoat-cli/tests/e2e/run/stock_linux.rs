@@ -80,7 +80,7 @@ fn the_default_warns_records_and_starts_the_lightweight_tier() {
         "the Isolated tier, `openmoat run`'s default on Linux, cannot start here",
         "bubblewrap is not installed",
         "restricted by port only",
-        "closes this",
+        "granted entry by entry",
     ] {
         assert!(shown.contains(expected), "{expected}: {}", text(&out));
     }

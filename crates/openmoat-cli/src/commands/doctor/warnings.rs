@@ -78,6 +78,14 @@ pub(super) fn state_in_grant(home: &Home, policy: &Policy, linux: bool) -> Optio
     Some(format!("openmoat run     {why}"))
 }
 
+/// On Linux where `moat run` would get no network namespace, a warning that
+/// it grants this directory's project entry by entry, naming the paths the
+/// policy denies there that would still be open to commands (ADR-089).
+pub(super) fn project_open(home: &Home, policy: &Policy) -> Option<String> {
+    let ctx = crate::context::eval_context(home, None, None).ok()?;
+    crate::commands::run::project_open(policy, &ctx)
+}
+
 /// A warning on the standing grants that `--for` ended or ends within a day
 /// ([`crate::approvals::expiry_summary`]); an unreadable overlay has its own row.
 pub(super) fn grant_expiry(home: &Home, now_ms: i64) -> Option<String> {

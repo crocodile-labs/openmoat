@@ -188,6 +188,7 @@ fn the_refusal_names_the_root_and_offers_isolate_only_where_it_hides() {
     let rules = Rules {
         read: vec!["/usr".into()],
         write: vec![tmp.clone(), project.clone()],
+        list: Vec::new(),
         connect_port: None,
     };
     let in_project = Path::new(&project).join("state");

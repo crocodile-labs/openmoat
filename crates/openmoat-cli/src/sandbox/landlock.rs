@@ -17,6 +17,9 @@
 //!   ([`abi`], ADR-082).
 
 pub mod abi;
+/// The project granted entry by entry where no mount can cover inside it.
+#[cfg(any(target_os = "linux", all(test, unix)))]
+pub mod entries;
 
 use openmoat_core::ir::{Access, Checker, Effect, Enforcement};
 use openmoat_core::{AtomicAction, Kind};
@@ -51,6 +54,11 @@ pub struct Rules {
     pub read: Vec<String>,
     /// Read, write, create and remove below these.
     pub write: Vec<String>,
+    /// List the entries of these directories and of every directory below
+    /// them, and nothing else: the project and the folders above it where
+    /// they are granted entry by entry ([`entries`], ADR-089).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub list: Vec<String>,
     /// The only TCP port connections may go to.
     pub connect_port: Option<u16>,
 }

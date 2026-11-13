@@ -76,7 +76,7 @@ fn linux_starts_the_isolated_tier_by_default() {
     assert!(!stdout(&out).contains("hook=0"), "{shown}");
     assert!(!project.join(".git/hooks/pre-commit").exists(), "{shown}");
     // What the Lightweight tier says it leaves open is not said here.
-    assert!(!stderr(&out).contains("closes this"), "{shown}");
+    assert!(!super::lightweight_notice(&out), "{shown}");
     assert_eq!(tier_rows(&sb), [] as [String; 0]);
     let doctor = sb.moat(&["doctor"]);
     assert!(
@@ -101,7 +101,7 @@ fn no_isolate_starts_the_lightweight_tier_on_record() {
     assert!(stdout(&out).contains("started"), "{shown}");
     assert!(!stderr(&out).contains("cannot start here"), "{shown}");
     let linux = cfg!(target_os = "linux");
-    assert_eq!(stderr(&out).contains("closes this"), linux, "{shown}");
+    assert_eq!(super::lightweight_notice(&out), linux, "{shown}");
     let expected: &[&str] = if linux { &["run-no-isolate"] } else { &[] };
     assert_eq!(tier_rows(&sb), expected, "{shown}");
 }

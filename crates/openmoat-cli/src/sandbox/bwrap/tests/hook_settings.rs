@@ -167,3 +167,54 @@ fn the_network_namespace_plans_the_missing_hook_settings_of_a_project() {
     );
     assert_eq!(missing_hook_settings(&ir, &[]), Vec::<String>::new());
 }
+
+/// A folder of an agent's configuration missing where its holder exists, or
+/// is made for the hook settings, is planned as an empty read-only folder
+/// (ADR-089): a mount over a folder covers a hook written in it after the
+/// start. None where the policy lets commands write below it, where it
+/// exists, or where its holder is missing and not made anyway.
+#[test]
+fn missing_agent_configuration_folders_become_read_only_folders() {
+    use hook_settings::{Found, plan};
+
+    let ir = session_ir("/p");
+    let found = |path: &str| match path.strip_prefix("/p/").unwrap_or(path) {
+        ".claude" | ".github" | ".opencode" | ".opencode/tools" => Found::Dir,
+        _ => Found::Missing,
+    };
+    let denied = [
+        "/p/.claude/hooks",
+        "/p/.github/hooks",
+        "/p/.pi/extensions",
+        "/p/.opencode/tools",
+        "/p/.copilot/hooks",
+    ];
+    let dir_below = |path: &str| denied.contains(&path);
+    let out = plan(&ir, "/p", &found, &dir_below);
+    let folders: Vec<&str> = out
+        .placeholders
+        .iter()
+        .filter(|p| p.dir)
+        .map(|p| p.path.as_str())
+        .collect();
+    for made in ["/p/.claude/hooks", "/p/.github/hooks"] {
+        assert!(folders.contains(&made), "{made}: {folders:?}");
+        assert!(
+            out.mounts.contains(&Mount::ReadOnly(made.to_owned())),
+            "{made}: {:?}",
+            out.mounts
+        );
+    }
+    // `.pi` is missing and nothing makes it; `.opencode/tools` exists;
+    // `.opencode/plugins` is not denied below here.
+    for left in [
+        "/p/.pi",
+        "/p/.pi/extensions",
+        "/p/.opencode/tools",
+        "/p/.opencode/plugins",
+    ] {
+        assert!(!folders.contains(&left), "{left}: {folders:?}");
+    }
+    let each = |p: &str| folders.iter().filter(|x| **x == p).count();
+    assert_eq!(each("/p/.copilot/hooks"), 1, "once: {folders:?}");
+}

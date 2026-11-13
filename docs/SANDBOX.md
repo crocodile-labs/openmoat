@@ -415,14 +415,40 @@ bubblewrap.
   Process substitution is a descriptor too: `openmoat run -- tool <(cmd)` gives `tool`
   `/dev/fd/63`, which it can no longer open. Write the output to a file in the project
   first, or pipe it on standard input (`cmd | openmoat run -- tool -`).
-- **What Linux does not protect.** Landlock can only grant access to whole directory
-  trees, so inside the project the policy's deny rules do not hold for the agent's
-  commands: they can read and write `.env`, create `.envrc`, write `.moat/policy.yaml`
-  and add files under `.git/hooks`. [EVIDENCE.md](EVIDENCE.md) marks each as a gap. The
-  hook still decides the agent's own tool calls on them. `openmoat run --isolate` covers
-  these paths where bubblewrap runs (below). Plain `openmoat run` says so on standard
-  error each time it starts, `openmoat doctor` warns about it on Linux, and `status` and
-  `doctor` name `openmoat run --isolate` for an agent without a sandbox of its own. Outside the project, where the agent gets
+- **Paths the policy denies inside the project (Linux, ADR-089).** Landlock can only
+  grant access to whole directory trees, so a deny rule inside a granted tree needs
+  something besides Landlock:
+  - **With a network namespace** (bubblewrap installed and allowed), the namespace
+    covers the project as `--isolate` does (below): every `.env` file there is hidden
+    (`EACCES`), `.git`, `.moat` and the agents' configuration are bound read-only
+    (`EROFS`), and a missing `.env`, `.envrc` or `.moat` directly in the project gets an
+    empty placeholder for the session. `git commit` inside the run therefore fails, as
+    under `--isolate` and on macOS: commit outside it. CI files and commit-hook
+    managers' files stay writable, as on macOS. A match created after the start where
+    nothing stood (`.env.local`, a `.env` in a new folder) stays open.
+  - **Without one**, the project is granted entry by entry: the project folder only for
+    listing, each entry at its top on its own, none for an entry whose reading the
+    policy denies (`.env`), read-only for one whose writing it denies (`.git`, `.moat`),
+    and the folders that hold an agent's settings (`.claude`, `.github`, `.moat`) the
+    same way one level down. A tree that holds the project (a read root such as `/tmp`)
+    is granted around it. So commands cannot read `.env` there, write `.git` or
+    `.moat`, or create `.envrc`, `.moat` or a hook. **The cost:** they cannot create,
+    rename or remove anything directly at the project's top either (a new file, a
+    `target/` that does not exist yet, an editor's save through a new file and a
+    rename); everything inside an existing folder works as before. Create what is
+    needed before the run, or install bubblewrap. A `.env` in a subfolder, or a nested
+    `.git`, lies in a folder granted whole and stays open.
+
+  ```text
+  moat run: without bubblewrap the project is granted entry by entry: commands cannot create, rename or remove entries directly in it (create what they need before the run), `.env` files there stay unreadable and `.git` and `.moat` read-only. These paths the policy denies lie in a folder granted whole and stay open to commands: /home/me/proj/sub/.env. …
+  ```
+
+  Before the agent starts, `openmoat run` says which of these applies and names each
+  path the policy denies in the project that stays open, up to eight and a count;
+  `openmoat doctor` on Linux without a namespace names the same for the current
+  directory. [EVIDENCE.md](EVIDENCE.md) shows both columns. The hook still decides the
+  agent's own tool calls on all of them. `status` and `doctor` name `openmoat run
+  --isolate` for an agent without a sandbox of its own. Outside the project, where the agent gets
   a network namespace, each existing file or directory a deny rule names without a
   glob inside a read root or a `--write` path is covered for the session as under
   `--isolate` (hidden, or bound read-only for a write deny): `~/.cargo/credentials.toml`
@@ -452,12 +478,19 @@ bubblewrap.
   a missing `.github` outside `openmoat run`. CI files and commit-hook managers' files
   (`.github/workflows/`, `.husky/`, …) stay writable, since installs write them; the
   hook holds the agent's own tools' writes of them for review (`runs-later`). On Linux, where the
-  agent gets a network namespace, each of them that exists directly in the project
-  when the agent starts is bound read-only for the session, as are the agents' hook
+  agent gets a network namespace, each of them that exists in the project when the
+  agent starts is bound read-only for the session, as are the agents' hook
   settings there (`.claude/settings.json`, `.cursor/hooks.json`, `.codex/hooks.json`,
   `.gemini/settings.json`, `.github/copilot/settings.json`, `.copilot/hooks/`), and
-  each folder holding them is bound onto itself so it cannot be renamed; `--isolate`
-  pins those folders too. A hook settings file that does not exist yet
+  each folder holding them directly in the project is bound onto itself so it cannot
+  be renamed; `--isolate` does the same. A folder of an agent's configuration
+  (`.claude/hooks/`, `.github/hooks/`, `.pi/extensions/`, `.openclaw/extensions/`,
+  `.opencode/plugins/`, …) missing where the folder that holds it exists is created
+  empty for the session and bound read-only, so a hook written into it later is
+  refused (`EROFS`); it is removed when the agent exits if it is still empty
+  (ADR-089). Without a namespace the project is granted entry by entry (above): none
+  of these can be created at its top or in `.claude`, `.github` and the other folders
+  that hold them. A hook settings file that does not exist yet
   (`.claude/settings.local.json`, `.gemini/settings.json`,
   `.github/copilot/settings.local.json`, `.codex/hooks.json`, `.cursor/hooks.json`, …)
   would let a command turn the next session's hook off, so in the namespace and under
@@ -466,10 +499,11 @@ bubblewrap.
   with the folders above it, binds the file read-only and the folders onto themselves,
   and removes them when the agent exits while they are still as made. `git status`
   shows them during the session; leave them out of commits. An agent configuration
-  file created later, one in a subdirectory, a hook settings file below a link, and
-  all of them without a namespace stay writable, since Landlock grants the project
-  whole; without a namespace `openmoat run` names, when the agent exits, each hook
-  settings file that was missing at the start and exists now:
+  file missing at the start (`.mcp.json`, `.cursor/mcp.json`), one in a folder created
+  during the session, a hook settings file below a link, and, without a namespace, one
+  inside a folder granted whole (`sub/.claude/settings.json`) stay writable; without a
+  namespace `openmoat run` names, when the agent exits, each hook settings file that
+  was missing at the start and exists now:
 
   ```text
   moat run: .gemini/settings.json did not exist when the agent started and does now; ...
@@ -571,9 +605,10 @@ bubblewrap.
   an API key or `apiKeyHelper`.
 - Before the agent starts, `openmoat run` prints how many places the sandbox is stricter
   or wider than the policy; `openmoat run --verbose` lists each one (`openmoat sandbox show`
-  prints the same for the current directory). Linux is wider than macOS (the paths inside
-  the project above, and, without bubblewrap, the proxy's port on any host; `--isolate`
-  closes both, below); see [THREAT_MODEL.md](THREAT_MODEL.md).
+  prints the same for the current directory). Linux is wider than macOS in places (the
+  paths inside the project created after the start, or below a folder granted whole
+  without bubblewrap, and, without bubblewrap, the proxy's port on any host; `--isolate`
+  closes the port and the deeper paths, below); see [THREAT_MODEL.md](THREAT_MODEL.md).
 
 It is weaker per command than the Standard tier: the agent and its scripts share one
 sandbox, so whatever the agent needs, `npm test` gets too. On macOS and Linux alike,
@@ -625,9 +660,15 @@ openmoat run --isolate --write ~/.claude --write ~/.claude.json -- claude
 - **What it hides inside them.** Every path the policy denies that exists when the
   session starts: a denied read (the project's `.env` files, `~/.cargo/credentials.toml`)
   is covered by an empty placeholder no one may open (`EACCES`), and a denied write
-  (`.git`, `.claude/settings.json`) by the path itself, read-only. `.env`, `.envrc`
-  and `.moat` directly in the project are covered even when they are missing: OpenMoat
-  creates an empty placeholder file there for the session and removes it afterwards.
+  (`.git`, `.claude/settings.json`) by the path itself, read-only; a folder that is
+  read-only covers files created in it later too (a new hook in `.git/hooks` fails with
+  `EROFS`). `.env`, `.envrc` and `.moat` directly in the project are covered even when
+  they are missing: OpenMoat creates an empty placeholder file there for the session
+  and removes it afterwards, and a `.env` the person writes there during the session
+  stays unreadable to commands. So are the folders of an agent's configuration
+  (`.claude/hooks/`, `.github/hooks/`, …) missing where their holder exists: each is
+  created empty and bound read-only, so a hook written there later is refused, and
+  removed afterwards while still empty (ADR-089).
 - **Writes** go only to the project, the temp directory (in memory, gone when the
   session ends) and the `--write` paths.
 - **Network** goes only to OpenMoat's proxy: the agent has its own network namespace
@@ -663,9 +704,14 @@ fallback to the Lightweight tier.
 
 Limits:
 
-- A match of a deny rule created after the session starts (`.env.local` written by a
-  command, a `.env` in a new subdirectory) is not hidden; the hook still decides the
-  agent's own tool calls on it.
+- A match of a deny rule created after the session starts where no placeholder or
+  read-only folder stood (`.env.local` written during the session, a `.env` in a new
+  subdirectory, an agent configuration folder in a holder folder created during the
+  session) is not hidden; the hook still decides the agent's own tool calls on it.
+  ADR-089 designs, without building it yet, a copy workspace for unattended runs that
+  would close this: the agent works in a copy or overlay of the project without the
+  denied paths, and its changes come back only through a person, as `openmoat restore`
+  brings back a snapshot (ADR-085).
 - The agent and its commands still share one sandbox, as under `openmoat run`.
 - Ctrl-C ends the whole session unless the agent reads the terminal itself (Claude
   Code's and Codex's interfaces do).

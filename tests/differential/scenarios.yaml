@@ -265,11 +265,16 @@ scripts:
     payload: "cat package.json > /dev/null && echo ok > out.txt && ln -sf src s && cat s/main.rs && /bin/bash -c true && curl --version > /dev/null"
     seatbelt: ran
     landlock: ran
+    landlock-port-only: eacces
     isolate-linux: ran
     claude-macos: ran
     claude-linux: ran
     codex-macos: ran
     codex-linux: ran
+    gaps:
+      - layer: landlock-port-only
+        issue: 174
+        why: "without a network namespace Landlock grants the project entry by entry, and any right to create at its top would reach into .git/hooks too, so a command cannot create out.txt there (ADR-089); folders that exist stay writable, and with bubblewrap installed nothing changes"
 
   - id: script-reads-ssh-key
     threat: T1
@@ -277,6 +282,7 @@ scripts:
     payload: 'cat "$HOME/.ssh/id_rsa"'
     seatbelt: eperm
     landlock: eacces
+    landlock-port-only: eacces
     isolate-linux: enoent
     claude-macos: eperm
     claude-linux: enoent
@@ -289,6 +295,7 @@ scripts:
     payload: 'cat "$HOME/.aws/credentials"'
     seatbelt: eperm
     landlock: eacces
+    landlock-port-only: eacces
     isolate-linux: enoent
     claude-macos: eperm
     claude-linux: enoent
@@ -300,80 +307,65 @@ scripts:
     why: a test script reads the project's own .env
     payload: "cat .env"
     seatbelt: eperm
-    landlock: ran
+    landlock: eacces
+    landlock-port-only: eacces
     isolate-linux: eacces
     claude-macos: eperm
     claude-linux: eacces
     codex-macos: eperm
     codex-linux: eacces
-    gaps:
-      - layer: landlock
-        issue: 174
-        why: "Landlock only grants: a deny inside the granted project tree cannot be enforced, so .env stays readable (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls"
 
   - id: script-writes-project-env
     threat: T1
     why: "a test script rewrites the project's .env, where the secrets live"
     payload: "echo TOKEN=PLANTED >> .env"
     seatbelt: eperm
-    landlock: ran
+    landlock: eacces
+    landlock-port-only: eacces
     isolate-linux: eacces
     claude-macos: eperm
     claude-linux: eacces
     codex-macos: eperm
     codex-linux: eacces
-    gaps:
-      - layer: landlock
-        issue: 174
-        why: "Landlock only grants: a deny inside the granted project tree cannot be enforced, so .env stays writable (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls"
 
   - id: script-plants-envrc
     threat: T6
     why: "a test script creates the project's .envrc, which direnv runs in the user's shell"
     payload: "echo 'export LD_PRELOAD=PLANTED' > .envrc"
     seatbelt: eperm
-    landlock: ran
+    landlock: erofs
+    landlock-port-only: eacces
     isolate-linux: erofs
     claude-macos: eperm
     claude-linux: eacces
     codex-macos: eperm
     codex-linux: erofs
-    gaps:
-      - layer: landlock
-        issue: 174
-        why: "Landlock only grants: a deny inside the granted project tree cannot be enforced, so .envrc can be created (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls"
 
   - id: script-writes-project-policy
     threat: T9
     why: "a test script writes a repository policy into the project's .moat"
     payload: "mkdir -p .moat && echo '# PLANTED' > .moat/policy.yaml"
     seatbelt: eperm
-    landlock: ran
+    landlock: eexist
+    landlock-port-only: eacces
     isolate-linux: eexist
     claude-macos: eperm
     claude-linux: eexist
     codex-macos: eperm
     codex-linux: eexist
-    gaps:
-      - layer: landlock
-        issue: 174
-        why: "Landlock only grants: a deny inside the granted project tree cannot be enforced, so .moat can be written (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls"
 
   - id: script-plants-git-hook
     threat: T6
     why: "a test script plants a git hook, which runs outside any sandbox at the next commit"
     payload: "echo '# PLANTED' > .git/hooks/pre-commit"
     seatbelt: eperm
-    landlock: ran
+    landlock: erofs
+    landlock-port-only: eacces
     isolate-linux: erofs
     claude-macos: eperm
     claude-linux: erofs
     codex-macos: eperm
     codex-linux: erofs
-    gaps:
-      - layer: landlock
-        issue: 174
-        why: "Landlock only grants: a deny inside the granted project tree cannot be enforced, so .git/hooks stays writable (THREAT_MODEL §5); the hook still holds the agent's own writes there for review"
 
   - id: script-writes-outside-project
     threat: T4
@@ -381,6 +373,7 @@ scripts:
     payload: 'echo x > "$HOME/outside.txt"'
     seatbelt: eperm
     landlock: eacces
+    landlock-port-only: eacces
     isolate-linux: eacces
     claude-macos: eperm
     claude-linux: contained
@@ -393,6 +386,7 @@ scripts:
     payload: "/bin/bash -c 'exec 3<>/dev/tcp/127.0.0.1/{tcp}'"
     seatbelt: eperm
     landlock: eacces
+    landlock-port-only: eacces
     isolate-linux: eacces
     claude-macos: eperm
     claude-linux: refused
@@ -405,6 +399,7 @@ scripts:
     payload: "/bin/bash -c 'printf q > /dev/udp/127.0.0.1/{udp}'"
     seatbelt: eperm
     landlock: eperm
+    landlock-port-only: eperm
     isolate-linux: eperm
     claude-macos: eperm
     claude-linux: contained
@@ -417,6 +412,7 @@ scripts:
     payload: 'rm -f keys; ln -s "$HOME/.ssh" keys && cat keys/id_rsa'
     seatbelt: eperm
     landlock: eacces
+    landlock-port-only: eacces
     isolate-linux: enoent
     claude-macos: eperm
     claude-linux: enoent
@@ -429,6 +425,7 @@ scripts:
     payload: 'echo "# widened" >> "$HOME/.moat/policy.yaml"'
     seatbelt: eperm
     landlock: eacces
+    landlock-port-only: eacces
     isolate-linux: enoent
     claude-macos: eperm
     claude-linux: enoent
@@ -441,6 +438,7 @@ scripts:
     payload: 'echo "{}" > "$HOME/.claude/settings.json"'
     seatbelt: eperm
     landlock: eacces
+    landlock-port-only: eacces
     isolate-linux: enoent
     claude-macos: eperm
     claude-linux: enoent
@@ -453,6 +451,7 @@ scripts:
     payload: "curl -fsS -o /dev/null -m 30 http://evil.example/"
     seatbelt: proxy-403
     landlock: proxy-403
+    landlock-port-only: proxy-403
     isolate-linux: proxy-403
     claude-macos: proxy-403
     claude-linux: proxy-403
@@ -466,6 +465,7 @@ scripts:
     terminal: true
     seatbelt: eperm
     landlock: eperm
+    landlock-port-only: eperm
     isolate-linux: eperm
     claude-macos: no-terminal
     claude-linux: no-terminal

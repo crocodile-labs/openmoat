@@ -113,14 +113,19 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         .and_then(|policy| warnings::state_in_grant(&home, policy, linux));
     let macos = warnings::old_macos(crate::os_version::macos().as_deref());
     let network = super::run::port_only_network();
+    let project = policy
+        .as_ref()
+        .and_then(|policy| warnings::project_open(&home, policy));
     let alias = warnings::alias_hooks(&home, &binary);
     let expiring = warnings::grant_expiry(&home, crate::time::now_ms());
     let keys = warnings::key_modes(&home);
-    for warning in [tiocsti, hangs, undecided, state, macos, network, expiring]
-        .into_iter()
-        .flatten()
-        .chain(alias)
-        .chain(keys)
+    for warning in [
+        tiocsti, hangs, undecided, state, macos, network, project, expiring,
+    ]
+    .into_iter()
+    .flatten()
+    .chain(alias)
+    .chain(keys)
     {
         report.warn(&warning);
     }

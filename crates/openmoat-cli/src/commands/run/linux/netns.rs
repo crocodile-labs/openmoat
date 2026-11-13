@@ -54,7 +54,24 @@ pub enum Network {
 
 /// This machine's choice.
 pub fn network() -> Network {
+    if without_namespace_for_tests() {
+        return Network::PortOnly(format!("{NO_NETNS_ENV} is set (a test build)"));
+    }
     decide(system_bwrap(), refused)
+}
+
+/// Debug builds start `moat run` without a network namespace where this
+/// variable is set, so the end-to-end tests can assert on a machine with
+/// bubblewrap what a machine without it does (the project granted entry by
+/// entry, ADR-089). Release builds do not read it.
+#[cfg(debug_assertions)]
+const NO_NETNS_ENV: &str = "MOAT_TEST_NO_NETNS";
+#[cfg(not(debug_assertions))]
+const NO_NETNS_ENV: &str = "";
+
+/// Whether [`NO_NETNS_ENV`] is set in a debug build.
+fn without_namespace_for_tests() -> bool {
+    cfg!(debug_assertions) && std::env::var_os(NO_NETNS_ENV).is_some()
 }
 
 /// A namespace where `bwrap` exists and `refused` finds no reason it cannot
@@ -205,6 +222,7 @@ pub fn namespaced(
         restrict: None,
         _session: Some(session),
         warning: None,
+        project: None,
         watch: Vec::new(),
     })
 }

@@ -135,6 +135,7 @@ pub fn isolate(
         restrict: None,
         _session: Some(session),
         warning: None,
+        project: None,
         watch: Vec::new(),
     })
 }
