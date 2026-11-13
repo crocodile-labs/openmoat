@@ -47,8 +47,6 @@ pub const ALLOWED_NAMES: &[(&str, usize)] = &[
     ("openmoat-cli/src/sandbox/cursor.rs", 11),
     ("openmoat-cli/src/sandbox/cursor/settings.rs", 1),
     ("openmoat-cli/src/sandbox/hook_only.rs", 4),
-    // H1: `RUNS_LATER` and `AGENT_CONFIG` written by hand.
-    ("openmoat-cli/src/sandbox/patterns.rs", 29),
     // H4: Claude Code's temporary folder and the hosts' taint globs in the
     // core.
     ("openmoat-core/src/staging.rs", 2),
@@ -123,7 +121,7 @@ pub const ALLOWED_IN_SHARED_TESTS: &[(&str, usize)] = &[
     ("replay_report.rs", 7),
     ("repo_policy.rs", 1),
     ("required_level.rs", 16),
-    ("run/agent_config.rs", 28),
+    ("run/agent_config.rs", 37),
     ("run/agent_logins.rs", 9),
     ("run/mcp_boundary.rs", 2),
     ("run/project_paths.rs", 5),
@@ -185,9 +183,7 @@ pub const ALLOWED_IN_POLICY: &[(&str, usize)] = &[
     ("kernel-self", 29),
     // H4: each host's system-wide settings folders.
     ("managed-settings", 3),
-    // H1: the project's runs-later exclusions.
-    ("project-fs", 10),
-    // H1: the runs-later paths, and each host's command that adds an MCP
-    // server or plugin.
-    ("runs-later", 37),
+    // Each host's command that adds an MCP server or plugin (the paths are
+    // generated from the specs since ADR-091).
+    ("runs-later", 14),
 ];

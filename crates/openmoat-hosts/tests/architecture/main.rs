@@ -17,6 +17,8 @@ mod allowed;
 mod facts;
 mod literals;
 mod names;
+#[path = "../common/policy_blocks.rs"]
+mod policy_blocks;
 
 /// What a scan found: each file, relative to the scan's root, and the lines
 /// of it that name a host, described.

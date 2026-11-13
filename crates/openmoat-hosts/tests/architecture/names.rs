@@ -18,20 +18,6 @@ use crate::{
     rust_files,
 };
 
-/// The default policy's blocks `tests/protect.rs` generates from the specs,
-/// each the lines between a line ending in the first text and the line that
-/// is the second (the same anchors as there).
-const POLICY_BLOCKS: &[(&str, &str)] = &[
-    (
-        "      - \"**/.codex/hooks.json\"\n",
-        "      - \"**/.moat/**\"\n",
-    ),
-    (
-        "    fs.read: &agent-credentials\n",
-        "    fs.write: *agent-credentials\n",
-    ),
-];
-
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -316,11 +302,11 @@ fn scripts_name_a_host_only_where_listed() {
     check_only_shrinks(&found, ALLOWED_IN_SCRIPTS, "a host", "ALLOWED_IN_SCRIPTS");
 }
 
-/// The lines of `text` inside the blocks of [`POLICY_BLOCKS`].
+/// The lines of `text` inside the blocks of [`crate::policy_blocks::BLOCKS`].
 fn policy_blocks(text: &str) -> Vec<bool> {
     let lines: Vec<&str> = text.split_inclusive('\n').collect();
     let mut skip = vec![false; lines.len()];
-    for (before, after) in POLICY_BLOCKS {
+    for (before, after) in crate::policy_blocks::BLOCKS {
         let starts: Vec<usize> = (0..lines.len())
             .filter(|i| lines[*i].ends_with(before))
             .collect();
@@ -339,7 +325,7 @@ fn policy_blocks(text: &str) -> Vec<bool> {
 /// rule each line is in (`kernel-self`).
 #[test]
 fn the_default_policy_names_a_host_only_where_listed() {
-    let text = fs::read_to_string(repo().join("crates/openmoat-core/policies/default-v1.yaml"))
+    let text = fs::read_to_string(repo().join(crate::policy_blocks::POLICY))
         .unwrap()
         .replace("\r\n", "\n");
     let skip = policy_blocks(&text);
