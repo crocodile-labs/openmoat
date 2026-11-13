@@ -13,26 +13,67 @@ fn os(args: &[OsString]) -> Vec<String> {
 }
 
 #[test]
-fn the_sid_is_the_last_field_of_whoami() {
-    let line = format!("\"desktop-1\\me\",\"{ME}\"\r\n");
-    assert_eq!(parse_sid(&line).as_deref(), Some(ME));
+fn what_windows_returns_reads_as_full_sid_sddl() {
+    let descriptor = Descriptor {
+        owner: ME.to_owned(),
+        protected: true,
+        aces: Some(vec![
+            RawAce {
+                allows: true,
+                flags: 3,
+                mask: 0x1F_01FF,
+                sid: SYSTEM.to_owned(),
+            },
+            RawAce {
+                allows: true,
+                flags: 3,
+                mask: 0x1F_01FF,
+                sid: ME.to_owned(),
+            },
+        ]),
+    };
+    let sddl = sddl_of(&descriptor);
     assert_eq!(
-        parse_sid("\n\"pc\\me\",\"S-1-5-18\"\n").as_deref(),
-        Some(SYSTEM)
+        sddl,
+        format!("O:{ME}D:P(A;OICI;0x1f01ff;;;S-1-5-18)(A;OICI;0x1f01ff;;;{ME})")
     );
-    assert_eq!(parse_sid("\"pc\\me\",\"not a sid\""), None);
-    assert_eq!(parse_sid("\"pc\\me\",\"S-1-\""), None);
-    assert_eq!(parse_sid(""), None);
-}
-
-#[test]
-fn the_read_prints_the_account_then_the_list() {
-    let printed = format!("{ME}\r\nO:{ME}D:PAI(A;OICI;FA;;;SY)\r\n");
-    let (me, sddl) = parse_read(&printed).unwrap();
-    assert_eq!(me, ME);
-    assert!(sddl.starts_with("O:"), "{sddl}");
-    assert_eq!(parse_read("oops\r\nO:BAD:P"), None);
-    assert_eq!(parse_read(&format!("{ME}\r\n")), None);
+    assert_eq!(verify(&sddl, ME), Ok(()));
+    // inherited, inherit-only and deny entries, and a null DACL
+    let widened = Descriptor {
+        protected: false,
+        aces: Some(vec![
+            RawAce {
+                allows: true,
+                flags: 3,
+                mask: 0x1F_01FF,
+                sid: ME.to_owned(),
+            },
+            RawAce {
+                allows: true,
+                flags: 0x1B,
+                mask: 0x0013_01BF,
+                sid: "S-1-1-0".to_owned(),
+            },
+            RawAce {
+                allows: false,
+                flags: 0,
+                mask: 0x1F_01FF,
+                sid: ME.to_owned(),
+            },
+        ]),
+        ..descriptor.clone()
+    };
+    let sddl = sddl_of(&widened);
+    assert!(
+        sddl.contains("(A;OICIIOID;0x1301bf;;;S-1-1-0)(D;;0x1f01ff;;;"),
+        "{sddl}"
+    );
+    assert_eq!(judge(&sddl, ME).writers, ["Everyone"]);
+    let null = sddl_of(&Descriptor {
+        aces: None,
+        ..descriptor
+    });
+    assert_eq!(judge(&null, ME).writers.len(), 1, "{null}");
 }
 
 #[test]

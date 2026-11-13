@@ -57,6 +57,17 @@ rustix.workspace = true
 # Already built on every Unix through rustix and getrandom.
 libc.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+# The state directory's access list through Win32 calls, not `icacls` or
+# PowerShell, whose start-up cost seconds per `init` (ADR-083,
+# `state_acl/windows/win32.rs`).
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Threading",
+] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 landlock.workspace = true
 seccompiler.workspace = true

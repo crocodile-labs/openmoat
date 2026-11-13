@@ -3,14 +3,16 @@
 //!
 //! On Unix the directory is `0700`. On Windows `init` gives it exactly two
 //! entries, full control for the person's account and for `SYSTEM`, both
-//! handed on to everything inside: `icacls <dir> /inheritance:r /grant:r …`
-//! drops the inherited entries and sets those two, then `icacls <dir> /remove
-//! *<sid>` takes out every other account an explicit entry names
-//! (<https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/icacls>).
-//! The owner of a folder may change its list without being an administrator.
-//! `init` refuses a directory another account owns. Programs run from
-//! `%SystemRoot%\System32` by absolute path: the crate forbids `unsafe`, and
-//! every Win32 security call is foreign code.
+//! handed on to everything inside, with inheritance off: one
+//! `SetNamedSecurityInfoW` call with a new DACL of those two entries and
+//! `PROTECTED_DACL_SECURITY_INFORMATION`, which replaces whatever the list
+//! held (an explicit Administrators entry on a folder an administrator made
+//! included). The owner of a folder may change its list without being an
+//! administrator. `init` refuses a directory another account owns, reads the
+//! list back and refuses one that holds anything else. No program runs:
+//! starting `icacls`, `whoami` or PowerShell for each `init` cost seconds on
+//! every call, and the Win32 calls (`state_acl/windows/win32.rs`, the one
+//! file of this code with `unsafe`) read and write the same data.
 //!
 //! The list keeps other accounts out (a second user, a sandbox's own account,
 //! `Authenticated Users` on a drive whose root grants them a change). It does
@@ -18,19 +20,15 @@
 //! always change the list of a folder it owns. That is the hook's
 //! `kernel-self` rule's job, and a sandbox's.
 //!
-//! `init` reads the list back after setting it, removes what stayed (an
-//! explicit Administrators entry survives `/inheritance:r` on a folder an
-//! administrator made) and reads it again: anything but the two entries is
-//! an error.
-//!
-//! This file reads the owner and DACL in SDDL (`O:…D:P(A;OICI;FA;;;SY)…`),
-//! compares every SID in full (the Windows read prints them so, and an SDDL
-//! alias such as `LA`, the built-in Administrator, is resolved against the
-//! person's SID), plans the `icacls` calls and checks the result, on every
-//! system, so its tests run everywhere; the programs run only on Windows
-//! (`state_acl/windows.rs`).
+//! This file reads the owner and DACL as SDDL with every SID in full
+//! (`O:S-1-5-21-…D:P(A;OICI;0x1f01ff;;;S-1-5-18)…`, [`sddl_of`] builds it from
+//! what Windows returns; an SDDL alias such as `LA`, the built-in
+//! Administrator, is resolved against the person's SID), judges and checks
+//! it, and plans the `icacls` calls `doctor` prints as a person's fix, on
+//! every system, so its tests run everywhere.
 
 use std::ffi::{OsStr, OsString};
+use std::fmt::Write as _;
 use std::path::Path;
 
 #[cfg(windows)]
@@ -38,6 +36,54 @@ mod windows;
 
 #[cfg(windows)]
 pub use windows::{icacls, protect, read};
+
+/// One entry of a DACL as Windows returns it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RawAce {
+    /// An allow entry; otherwise a deny entry.
+    pub allows: bool,
+    /// The ACE flags: object inherit 1, container inherit 2, no propagate 4,
+    /// inherit only 8, inherited 16.
+    pub flags: u8,
+    /// The access mask.
+    pub mask: u32,
+    /// The account, as a full SID (`S-1-5-18`).
+    pub sid: String,
+}
+
+/// A folder's owner and DACL as Windows returns them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Descriptor {
+    /// The owner, as a full SID.
+    pub owner: String,
+    /// Inheritance is off (`SE_DACL_PROTECTED`).
+    pub protected: bool,
+    /// The entries; `None` for a null DACL, which lets everyone in.
+    pub aces: Option<Vec<RawAce>>,
+}
+
+/// `descriptor` as SDDL, every SID in full, for [`judge`], [`plan`] and
+/// [`verify`].
+pub fn sddl_of(descriptor: &Descriptor) -> String {
+    let mut sddl = format!("O:{}D:", descriptor.owner);
+    let Some(aces) = &descriptor.aces else {
+        sddl.push_str("NO_ACCESS_CONTROL");
+        return sddl;
+    };
+    if descriptor.protected {
+        sddl.push('P');
+    }
+    for ace in aces {
+        let kind = if ace.allows { "A" } else { "D" };
+        let flags: String = [(1, "OI"), (2, "CI"), (4, "NP"), (8, "IO"), (16, "ID")]
+            .iter()
+            .filter(|(bit, _)| ace.flags & bit != 0)
+            .map(|(_, name)| *name)
+            .collect();
+        let _ = write!(sddl, "({kind};{flags};0x{:x};;;{})", ace.mask, ace.sid);
+    }
+    sddl
+}
 
 /// `SYSTEM`'s SID, in SDDL and as `icacls` takes it.
 pub const SYSTEM: &str = "S-1-5-18";
@@ -108,24 +154,6 @@ pub struct Plan {
     pub remove: Vec<String>,
     /// The person's or `SYSTEM`'s SID whose deny entries go (`/remove:d`).
     pub remove_denies: Vec<String>,
-}
-
-/// The SID in `whoami /user /fo csv /nh`'s line (`"pc\me","S-1-5-21-…"`).
-pub fn parse_sid(whoami: &str) -> Option<String> {
-    let line = whoami.lines().find(|l| !l.trim().is_empty())?;
-    let sid = line.rsplit(',').next()?.trim().trim_matches('"');
-    is_sid(sid).then(|| sid.to_owned())
-}
-
-/// The account's SID and the folder's SDDL, as the PowerShell read in
-/// `state_acl/windows.rs` prints them, one per line.
-pub fn parse_read(printed: &str) -> Option<(String, String)> {
-    let mut lines = printed.lines().map(str::trim).filter(|l| !l.is_empty());
-    let me = lines.next().filter(|l| is_sid(l))?;
-    let sddl = lines
-        .next()
-        .filter(|l| l.starts_with("O:") || l.starts_with("D:"))?;
-    Some((me.to_owned(), sddl.to_owned()))
 }
 
 /// `S-1-` followed by numbers and dashes.
