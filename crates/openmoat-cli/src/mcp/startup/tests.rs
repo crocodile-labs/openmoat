@@ -22,6 +22,7 @@ fn server(file: &str, name: &str, entry: Value) -> Server {
         name: name.to_owned(),
         entry,
         form: McpCommandForm::CommandArgs,
+        runs_in_host: false,
     }
 }
 

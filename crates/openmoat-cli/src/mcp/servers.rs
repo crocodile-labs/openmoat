@@ -60,6 +60,9 @@ pub struct Server {
     /// How the file's reader says this definition names its program and its
     /// environment.
     pub form: McpCommandForm,
+    /// Whether the host runs it inside its own process, so no server process
+    /// starts for it (`McpReader::runs_in_host`).
+    pub runs_in_host: bool,
 }
 
 /// What reading a set of sources found.
@@ -210,6 +213,7 @@ pub fn parse(source: &Source, text: &str) -> Result<Vec<Server>> {
             file: source.path.clone(),
             pointer: server.pointer,
             name: server.name,
+            runs_in_host: source.reader.runs_in_host(&server.entry),
             entry: server.entry,
             form: source.reader.command_form(),
         })

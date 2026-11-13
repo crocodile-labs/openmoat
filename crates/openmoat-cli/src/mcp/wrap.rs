@@ -553,6 +553,7 @@ mod tests {
             name: "docs".to_owned(),
             entry: json!({}),
             form: FORM,
+            runs_in_host: false,
         };
         let done = Done {
             entry: wrapped(
@@ -587,6 +588,7 @@ mod tests {
             name: name.to_owned(),
             entry: json!({}),
             form: FORM,
+            runs_in_host: false,
         };
         let entry = wrapped(&json!({"command": "gh"}), Path::new("/b/moat"), name, false).unwrap();
         let line = by_hand(&[&Done { server, entry }]);

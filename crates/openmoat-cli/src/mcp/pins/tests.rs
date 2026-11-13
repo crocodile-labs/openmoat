@@ -12,6 +12,7 @@ fn server(name: &str, entry: Value) -> Server {
         name: name.to_owned(),
         entry,
         form: openmoat_hosts::McpCommandForm::CommandArgs,
+        runs_in_host: false,
     }
 }
 

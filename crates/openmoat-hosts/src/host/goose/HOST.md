@@ -57,7 +57,10 @@ approve it (`openmoat`, or `openmoat allow --last`), and the audit log keeps the
 - MCP servers: `extensions` in `config.yaml`, pinned without their `enabled` switch;
   their tools are `<extension>__<tool>`. `openmoat mcp wrap` reads a `stdio` extension's
   `cmd` and `args`, does not rewrite the YAML and names what to set by hand; an
-  `inline_python` extension has no command to wrap and is named.
+  `inline_python` extension has no command to wrap and is named. A `builtin` extension
+  (served over in-memory streams inside goose, `extension_manager/builtin.rs`) and a
+  `platform` one run inside goose's own process, not as a separate server: `openmoat
+  status` says so, there is nothing to wrap, and the hook checks their tools.
 - Plugin settings: `disabledPlugins` in `~/.config/goose/settings.json`, or in a
   project's `.config/goose/settings.json` or `settings.local.json`, turns a plugin off;
   `openmoat status` and `openmoat doctor` report OpenMoat's plugin turned off. goose

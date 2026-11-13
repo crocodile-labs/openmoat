@@ -67,6 +67,9 @@ enum Shape {
     },
     /// A server at an address, which runs nothing on this machine.
     Remote,
+    /// Part of the agent itself, run inside its own process: no server
+    /// process starts, so there is nothing to wrap (goose's `builtin`).
+    InHost,
     /// Neither: OpenMoat does not know how the host starts it.
     Unknown,
 }
@@ -143,7 +146,14 @@ fn judged(shape: Shape, name: &str, accepted: bool, set_up: bool, agent: &str) -
              checked"
                 .to_owned(),
         ),
-        (Shape::Remote, false) => (
+        (Shape::InHost, true) => (
+            true,
+            format!(
+                "built into {agent}; runs inside {agent}'s process, not as a separate server \
+                 OpenMoat can wrap, and its definition is accepted, so its tool calls are checked"
+            ),
+        ),
+        (Shape::Remote | Shape::InHost, false) => (
             false,
             format!("its definition is new or changed, so its tool calls are refused; {accept}"),
         ),
@@ -195,7 +205,11 @@ fn accepted(review: &Review, id: &str) -> bool {
 }
 
 fn status_of(host: Host, server: servers::Server, accepted: bool, set_up: bool) -> ServerStatus {
-    let shape = shape_of(&server.entry, server.form);
+    let shape = if server.runs_in_host {
+        Shape::InHost
+    } else {
+        shape_of(&server.entry, server.form)
+    };
     let agent = host.display_name();
     let (protected, why) = judged(shape, &server.name, accepted, set_up, agent);
     let local = matches!(

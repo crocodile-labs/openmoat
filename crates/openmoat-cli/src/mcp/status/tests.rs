@@ -118,6 +118,33 @@ fn inline_python_is_unprotected_and_not_told_to_wrap() {
     assert!(status.fails_requirement, "still counted as unprotected");
 }
 
+/// goose's `builtin` extension is served inside goose, as its reader says:
+/// never called a server that runs nothing on this machine, never told to
+/// wrap, and not a local server the full-boundary requirement counts.
+#[test]
+fn a_builtin_goose_extension_is_said_to_run_inside_goose() {
+    let entry = json!({"type": "builtin", "name": "developer", "timeout": 300});
+    let reader = Host::Goose.spec().mcp.as_ref().unwrap().user_reader;
+    let mut developer = server(entry.clone());
+    developer.form = reader.command_form();
+    developer.runs_in_host = reader.runs_in_host(&entry);
+    let status = status_of(Host::Goose, developer.clone(), true, true);
+    assert!(status.protected, "{status:?}");
+    assert_eq!(
+        status.why,
+        "built into goose; runs inside goose's process, not as a separate server OpenMoat \
+         can wrap, and its definition is accepted, so its tool calls are checked"
+    );
+    assert!(!status.local && !status.fails_requirement, "{status:?}");
+    let changed = status_of(Host::Goose, developer, false, true);
+    assert!(!changed.protected, "{changed:?}");
+    assert!(
+        changed.why.contains("openmoat mcp accept gh"),
+        "{}",
+        changed.why
+    );
+}
+
 #[test]
 fn a_server_of_an_agent_not_set_up_is_unprotected() {
     let (protected, why) = judge(&wrapped(true), true, false);
@@ -134,6 +161,7 @@ fn server(entry: Value) -> servers::Server {
         name: "gh".to_owned(),
         entry,
         form: McpCommandForm::CommandArgs,
+        runs_in_host: false,
     }
 }
 
