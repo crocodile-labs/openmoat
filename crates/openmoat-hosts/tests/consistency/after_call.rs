@@ -41,11 +41,41 @@ fn claude_shaped(host: Host, pre_event: &str, post_event: &str, response: Value)
 
 /// The events the pre-call and the after-call entry of `host` name on their
 /// command line (`guard --event`); `None` where the payload names its own.
+/// Read from the host's spec: its entries with `names_event`, the after-call
+/// one being the entry whose event the host answers as `PostToolUse`.
 fn entries(host: Host) -> (Option<&'static str>, Option<&'static str>) {
-    if host == Host::CopilotCli {
-        (Some("preToolUse"), Some("postToolUse"))
-    } else {
-        (None, None)
+    let named = host
+        .spec()
+        .install
+        .as_ref()
+        .map_or(&[][..], |install| install.hooks)
+        .iter()
+        .filter(|hook| hook.names_event)
+        .map(|hook| hook.event);
+    let (mut pre, mut post) = (None, None);
+    for event in named {
+        match host.event_of_as("{}", Some(event)) {
+            HookEvent::PostToolUse { .. } => post = Some(event),
+            HookEvent::PreToolUse => pre = Some(event),
+            other => panic!("{host:?}: {event} is {other:?}"),
+        }
+    }
+    (pre, post)
+}
+
+/// Every host whose entries name their event has a row here, so a new one is
+/// checked as Copilot CLI is.
+#[test]
+fn every_host_whose_entries_name_their_event_is_covered() {
+    let covered: Vec<Host> = reports().iter().map(|r| r.host).collect();
+    for host in Host::EVERY {
+        if entries(host) != (None, None) {
+            assert!(covered.contains(&host), "{host:?} needs a row in reports()");
+            assert!(
+                entries(host).0.is_some() && entries(host).1.is_some(),
+                "{host:?}"
+            );
+        }
     }
 }
 
