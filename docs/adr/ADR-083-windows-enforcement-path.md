@@ -163,21 +163,34 @@ administrator and without `unsafe`:
    *<sid>` for every other account an explicit entry names and `/remove:d` for a deny entry
    naming the person or `SYSTEM`
    (<https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/icacls>;
-   a folder's owner may change its list without being an administrator). A new directory
-   has only inherited entries, which `/inheritance:r` drops (`init` tells one it made
+   a folder's owner may change its list without being an administrator). The list is
+   always read back after the grant, because explicit entries survive `/inheritance:r` (on
+   windows-latest, a folder the built-in Administrator made kept an explicit
+   Administrators entry), every entry but the two is removed, and the list is read again:
+   anything but inheritance off, the two entries and an owner that is the person, `SYSTEM`
+   or the Administrators group is an error naming what stayed, so a list `init` could not
+   set never passes as set. An existing directory is read first too, and one another
+   account owns is refused: OpenMoat does not take it over (`init` tells a directory it made
    itself by `create_dir`, which fails when anything is already there, so a folder another
-   account made a moment before is read like any existing one); an existing one is read first
-   (owner and DACL in SDDL, through Windows PowerShell's .NET
-   `Directory.GetAccessControl`, so no account name is translated), and one another account
-   owns is refused: OpenMoat does not take it over. Every program runs from
+   account made a moment before is read like any existing one). The read goes through
+   Windows PowerShell's .NET `Directory.GetAccessControl` and `RawSecurityDescriptor`, and
+   prints the owner and every entry's SID in full: SDDL writes some accounts as aliases,
+   machine-relative ones too (the built-in Administrator, RID 500, is `LA`, the person's own
+   account on such a machine), and comparing full SIDs needs no alias table. An alias in an
+   SDDL string read some other way is resolved against the person's SID (`LA` is the person
+   when the person's RID is 500, otherwise the account of RID 500 beside the person's). Every program runs from
    `%SystemRoot%\System32` by absolute path, never from the search path. A drive without
    access lists (FAT, exFAT) fails with that said, and MOAT_HOME on an NTFS drive as the fix.
    `doctor` reads the owner and list back and shows a problem row for another owner or any
    other account that may change it or what is created inside, a warning for one that may
    read it or a list still inherited, each with `openmoat init` and the exact `icacls` calls
-   that fix it. Administrators count as trusted: their group applies only in an elevated
-   process, which can take ownership of the folder anyway. A state file given a list of its
-   own is not read.
+   that fix it; an Administrators entry is one of these. The Administrators group is
+   trusted only as the owner (an administrator's new folders are owned by the group, and
+   the group counts only in an elevated process, which can take ownership anyway), never in
+   the list. A state file given a list of its own is not read. `init` on Windows starts
+   `whoami`, `icacls` and one Windows PowerShell read for a new state directory (two more
+   calls when something has to be removed), and one PowerShell read more for an existing
+   one.
 7. **What the access list cannot do is said, not hidden.** The agent runs as the person, an
    account may always change the list of a folder it owns, and OpenMoat itself must write
    there, so no list holds against the person's own account. `doctor` prints that beside the
@@ -246,8 +259,9 @@ stays "keep refusing, point to WSL2".
   under `/mnt/c` through interop), and the Windows profile (`/mnt/c/Users/<name>/` secrets,
   `.wslconfig`, the Startup folder) as seen from inside WSL. Both are phase-1 items of the
   plan below still to build, with WSL2 evidence from a real machine.
-- `openmoat init` on Windows starts `whoami` and `icacls` for a new state directory, and
-  Windows PowerShell once more for an existing one; `doctor` starts PowerShell once.
+- `openmoat init` on Windows starts `whoami`, `icacls` and Windows PowerShell for a new
+  state directory, and PowerShell once more for an existing one, plus an `icacls` call for
+  each entry it removes and then one more read; `doctor` starts PowerShell once.
 - Only Windows CI runs the code that sets and reads the list; its parsing is tested on every
   system.
 
