@@ -5,7 +5,7 @@
 use crate::contract::{HostDocs, ToolRow};
 
 pub(super) const DOCS: HostDocs = HostDocs {
-    hooked_by: "`BeforeTool` hook in `settings.json`",
+    hooked_by: "`BeforeTool` and `AfterTool` hooks in `settings.json`",
     protection: "hook only",
     tools: TOOLS,
 };

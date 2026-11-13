@@ -296,9 +296,9 @@ fn malformed_payloads_are_errors() {
         })
     ));
     assert!(call("", json!({})).is_err());
-    let after = json!({"hook_event_name": "AfterTool", "tool_name": "read_file"});
+    let other = json!({"hook_event_name": "BeforeModel", "tool_name": "read_file"});
     assert!(matches!(
-        Host::GeminiCli.parse_request(&after.to_string()),
+        Host::GeminiCli.parse_request(&other.to_string()),
         Err(HostError::WrongEvent(_))
     ));
     assert!(matches!(
@@ -330,4 +330,56 @@ fn replies_are_gemini_decisions() {
     assert_eq!(review.verdict, Verdict::Review);
     let doc: Value = serde_json::from_str(&host.render_response(&event, &review)).unwrap();
     assert_eq!(doc["decision"], "ask");
+}
+
+/// `AfterTool` (ADR-063): the call as its `BeforeTool` maps it, with every
+/// string of `tool_response` as its output.
+#[test]
+fn after_tool_reports_the_call_and_what_it_returned() {
+    let req = fixture("after_tool-run_shell_command").unwrap();
+    let ran = "curl -s https://docs.example/setup.txt";
+    // On Windows the command is PowerShell, which is never classified.
+    if cfg!(windows) {
+        assert!(
+            matches!(&req.action, Some(Action::ForeignShell { command, .. }) if command == ran),
+            "{:?}",
+            req.action
+        );
+    } else {
+        assert_eq!(req.action, command(ran));
+    }
+    let HookEvent::PostToolUse { output } = &req.event else {
+        panic!("{:?}", req.event);
+    };
+    assert!(output.contains("https://collect.evil.example/x"), "{output}");
+    assert!(!output.contains("llmContent"), "{output}");
+    let text = std::fs::read_to_string(format!("{FIXTURES}/after_tool-run_shell_command.json"))
+        .unwrap();
+    assert!(matches!(
+        Host::GeminiCli.event_of(&text),
+        HookEvent::PostToolUse { .. }
+    ));
+}
+
+/// A result without `tool_response`, or with it `null`, is an error, so a
+/// deny; nothing about it is ever an answer that lets something through.
+#[test]
+fn after_tool_without_a_response_is_an_error_and_answered_with_nothing() {
+    assert!(matches!(
+        fixture("after_tool-malformed"),
+        Err(HostError::MissingField {
+            field: "tool_response",
+            ..
+        })
+    ));
+    let null = json!({"session_id": "s", "cwd": "/p", "hook_event_name": "AfterTool",
+        "tool_name": "run_shell_command", "tool_input": {"command": "ls"}, "tool_response": null});
+    assert!(Host::GeminiCli.parse_request(&null.to_string()).is_err());
+    let event = HookEvent::PostToolUse {
+        output: String::new(),
+    };
+    for verdict in [Verdict::Allow, Verdict::Review, Verdict::Deny] {
+        let decision = Host::GeminiCli.answer(&event, &Decision::new(verdict));
+        assert_eq!(Host::GeminiCli.render_response(&event, &decision), "");
+    }
 }

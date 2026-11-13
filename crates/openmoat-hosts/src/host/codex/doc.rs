@@ -5,7 +5,7 @@
 use crate::contract::{HostDocs, ToolRow};
 
 pub(super) const DOCS: HostDocs = HostDocs {
-    hooked_by: "`PreToolUse` hook in `hooks.json`; a `review` becomes a deny you approve with \
+    hooked_by: "`PreToolUse` and `PostToolUse` hooks in `hooks.json`; a `review` becomes a deny you approve with \
          `openmoat allow --last`",
     protection: "hook + OS sandbox",
     tools: TOOLS,

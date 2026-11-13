@@ -2,7 +2,9 @@
 //!
 //! Uninstall: `uninstall.rs`; a review: `codex.rs`.
 
-use super::{HooksOff, PRE_TOOL_USE, Row, post_tool_use, pre_tool_use};
+use serde_json::json;
+
+use super::{HooksOff, PRE_TOOL_USE, Row, pre_tool_use};
 
 pub fn row() -> Row {
     Row {
@@ -10,7 +12,11 @@ pub fn row() -> Row {
         hook: "codex",
         governed: "codex/pretooluse-shell.json",
         unknown_tool: || pre_tool_use("future_tool"),
-        unknown_event: post_tool_use,
+        // `PostToolUse` is handled since ADR-063 (`codex.rs`).
+        unknown_event: || {
+            json!({"session_id": "s", "hook_event_name": "UserPromptSubmit",
+                "prompt": "list the files"})
+        },
         hooks_off: Some(HooksOff {
             file: "config.toml",
             change: |config| {

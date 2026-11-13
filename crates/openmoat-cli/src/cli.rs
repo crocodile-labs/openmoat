@@ -628,6 +628,11 @@ pub struct GuardArgs {
     /// names another directory makes the guard deny.
     #[arg(long, value_name = "DIR")]
     pub home: Option<String>,
+    /// The hook event the entry was installed for, as `openmoat init` writes
+    /// it for an agent whose payloads name none (GitHub Copilot CLI): the
+    /// payload is read as that event's, never as another's.
+    #[arg(long, value_name = "EVENT")]
+    pub event: Option<String>,
 }
 
 #[derive(Debug, Args)]

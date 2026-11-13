@@ -1,12 +1,13 @@
 //! The Codex CLI: `PreToolUse` in Claude Code's format
-//! ([`crate::wire::pre_tool_use`]).
+//! ([`crate::wire::pre_tool_use`]), and `PostToolUse` for what a call
+//! returned ([`post_tool_use`]).
 
 use openmoat_core::{Decision, Verdict};
 use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
-    Reviews, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, Prefixed,
+    Reviews, CONFIG_HOOK_TIMEOUT_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, Prefixed,
     ProjectSettingsSpec, ProxySessions, SandboxFormat, SandboxSpec,
     TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
@@ -17,6 +18,7 @@ mod advisories;
 mod doc;
 mod hook_file;
 mod mcp;
+mod post_tool_use;
 mod project_settings;
 mod tools;
 mod trust;
@@ -31,12 +33,24 @@ mod tests;
 /// call whose hook fails: "a failed `PreToolUse` hook marks that hook run as
 /// failed, reports the error, and continues the tool call"
 /// (<https://learn.chatgpt.com/docs/hooks>), so `guard` itself must answer.
-const HOOKS: &[HookSpec] = &[HookSpec::new(
-    "PreToolUse",
-    "Bash|apply_patch|read_mcp_resource|view_image|mcp__.*",
-    TOOL_HOOK_TIMEOUT_S,
-    false,
-)];
+/// `PostToolUse` reports what a call returned (ADR-063), for the tools whose
+/// output may be content an attacker controls: a shell command (`curl`, `gh
+/// issue view`) and an MCP result. It runs after the call and has nothing to
+/// block.
+const HOOKS: &[HookSpec] = &[
+    HookSpec::new(
+        "PreToolUse",
+        "Bash|apply_patch|read_mcp_resource|view_image|mcp__.*",
+        TOOL_HOOK_TIMEOUT_S,
+        false,
+    ),
+    HookSpec::new(
+        post_tool_use::EVENT,
+        "Bash|read_mcp_resource|mcp__.*",
+        CONFIG_HOOK_TIMEOUT_S,
+        false,
+    ),
+];
 
 /// Codex's `PreToolUse` rejects `permissionDecision: "ask"` as unsupported and
 /// then runs the call.
@@ -82,7 +96,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         // Codex runs a new or changed user hook only once the person trusts it
         // in `/hooks` (Codex's hooks documentation).
         trust_step: Some(
-            "open Codex and trust OpenMoat's hook in /hooks; Codex runs a changed hook only then",
+            "open Codex and trust OpenMoat's hooks in /hooks; Codex runs a changed hook only then",
         ),
         ..InstallSpec::BASE
     }),
@@ -167,7 +181,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     ..HostSpec::BASE
 };
 
-/// Codex sends only `PreToolUse`.
+/// Codex sends `PreToolUse`, and `PostToolUse` once `init` installed it.
 pub(crate) struct Adapter;
 
 pub(crate) static ADAPTER: Adapter = Adapter;
@@ -190,11 +204,27 @@ impl HostAdapter for Adapter {
                 request.action = request.action.map(tools::held);
                 Ok(request)
             }
+            Some(post_tool_use::EVENT) => post_tool_use::parse(host, payload),
             other => Err(wrong_event(other)),
         }
     }
 
-    fn render(&self, _event: &HookEvent, decision: &Decision) -> String {
+    /// `PostToolUse` is what a call returned (ADR-057).
+    fn event_of(&self, event: &str) -> HookEvent {
+        match event {
+            post_tool_use::EVENT => HookEvent::PostToolUse {
+                output: String::new(),
+            },
+            _ => HookEvent::PreToolUse,
+        }
+    }
+
+    fn render(&self, event: &HookEvent, decision: &Decision) -> String {
+        // Nothing for what a call returned, whatever was decided: a
+        // `decision: "block"` there replaces the result the model sees.
+        if matches!(event, HookEvent::PostToolUse { .. }) {
+            return String::new();
+        }
         // Codex accepts `permissionDecision: "allow"` only with `updatedInput`;
         // a bare allow is "unsupported", reported as a failed hook (rust-v0.163.0
         // and rust-v0.166.0 hooks/src/engine/output_parser.rs). No output is

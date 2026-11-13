@@ -1,13 +1,23 @@
 # Codex (`codex`)
 
-The Codex CLI. It sends `PreToolUse` in Claude Code's format. Every fact here comes from
-[`codex.rs`](../codex.rs) and [`doc.rs`](doc.rs); if they disagree, the code wins.
+The Codex CLI. It sends `PreToolUse` in Claude Code's format, and `PostToolUse` with what
+a call returned. Every fact here comes from [`codex.rs`](../codex.rs) and
+[`doc.rs`](doc.rs); if they disagree, the code wins.
 
 ## Hooks OpenMoat installs
 
 | Event | Matcher | Timeout |
 |---|---|---|
 | `PreToolUse` | `Bash\|apply_patch\|read_mcp_resource\|view_image\|mcp__.*` | 600 s |
+| `PostToolUse` | `Bash\|read_mcp_resource\|mcp__.*` | 60 s |
+
+`PostToolUse` carries the `PreToolUse` fields plus `tool_response`: a string for a shell
+call, as the weekly latest-agents run 42853181916 (2026-11-10) recorded from a real Codex,
+and the MCP call result for an MCP tool ([hooks](https://learn.chatgpt.com/docs/hooks)).
+Codex waits for it before its next model request (the same run). OpenMoat answers it with
+nothing; only a failure of `openmoat guard` (a broken lock, an audit log it cannot write)
+exits 2, and then Codex gives the model OpenMoat's reason in place of the call's output.
+The call itself is not undone.
 
 Supported hook schema: Codex 0.160.1 through 0.166.0, checked at both endpoints.
 Codex ignores `args`: OpenMoat writes one POSIX shell-quoted `command`, plus
@@ -19,7 +29,7 @@ expansion; PowerShell propagates the guard's exit code. Custom command shells mu
 support the corresponding invocation.
 
 Codex runs a new or changed user hook only once the person trusts it: after
-`openmoat init`, open Codex, run `/hooks` and trust the OpenMoat hook.
+`openmoat init`, open Codex, run `/hooks` and trust both OpenMoat hooks.
 `openmoat init`, `openmoat policy upgrade` and `openmoat sandbox sync` replace legacy
 args-style entries and re-pin the lock; repeat the trust step after the replacement.
 `status` and `doctor` fail for legacy entries. They only warn about an installed but
@@ -95,9 +105,12 @@ Codex runs the call when the hook is missing, cannot start, exits non-zero other
 
 ## Known gaps
 
-Injected input (ADR-057): OpenMoat does not install Codex's `PostToolUse` hook, so it never
-sees what a call returned. A host, path or command a fetched page, issue or MCP result named
-is not linked to the later call that uses it; only session taint applies.
+Injected input (ADR-057, ADR-063): OpenMoat's `PostToolUse` entry reads what a shell or
+MCP call returned, so a host, path or command a fetched page, issue or MCP result named
+makes a later call that uses it need review (`injected-input`, a deny you approve with
+`openmoat allow --last`). Web search has no hook, so what it returned is not read. Codex
+runs the entry only once the person trusts it in `/hooks`; until then, and on an install
+from before the entry (run `openmoat init` once), only session taint applies.
 
 Web search, hosted tools, code mode's `exec`/`wait` and `request_permissions` are not
 hooked; what `write_stdin` types into a running command is not hooked, so a command that

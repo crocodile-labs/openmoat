@@ -20,6 +20,7 @@ use serde::Deserialize;
 use serde::de::IgnoredAny;
 use serde_json::{Value, json};
 
+mod after_call;
 mod attacks;
 mod mcp;
 mod payloads;

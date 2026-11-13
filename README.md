@@ -162,12 +162,12 @@ sets up each:
 | Agent | How OpenMoat is hooked | Protection | `openmoat init --hosts` |
 |---|---|---|---|
 | Claude Code | `PreToolUse`, `PostToolUse`, `ConfigChange` and `SessionStart` hooks in `settings.json` | hook + OS sandbox (macOS, Linux, WSL2); hook only on native Windows | `claude-code` |
-| Codex | `PreToolUse` hook in `hooks.json`; a `review` becomes a deny you approve with `openmoat allow --last` | hook + OS sandbox | `codex` |
+| Codex | `PreToolUse` and `PostToolUse` hooks in `hooks.json`; a `review` becomes a deny you approve with `openmoat allow --last` | hook + OS sandbox | `codex` |
 | Cursor | `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` and `beforeTabFileRead` hooks, fail-closed | hook + OS sandbox (macOS, Linux); hook only on Windows | `cursor` |
 | OpenClaw | OpenMoat's plugin on OpenClaw's `before_tool_call` hook | hook only | `openclaw` |
-| GitHub Copilot CLI | `preToolUse` hook in a hook file of OpenMoat's own | hook only | `copilot-cli` |
+| GitHub Copilot CLI | `preToolUse` and `postToolUse` hooks in a hook file of OpenMoat's own | hook only | `copilot-cli` |
 | pi | OpenMoat's extension on pi's `tool_call` event | hook only | `pi` |
-| Gemini CLI | `BeforeTool` hook in `settings.json` | hook only | `gemini-cli` |
+| Gemini CLI | `BeforeTool` and `AfterTool` hooks in `settings.json` | hook only | `gemini-cli` |
 | OpenCode | OpenMoat's plugin on OpenCode 1's `tool.execute.before` (1.3.4 and later) and OpenCode 2's `execute.before` hook | hook only | `opencode` |
 | Hermes Agent | `pre_tool_call` shell hook in `config.yaml`, allowlisted in `shell-hooks-allowlist.json` | hook only | `hermes` |
 | Cline CLI | OpenMoat's `PreToolUse` and `PostToolUse` hook scripts in `~/.cline/hooks` | hook only | `cline` |
@@ -370,8 +370,8 @@ The most important gaps:
   plugin), and agent settings can turn hooks off. `openmoat status` reports what it can see.
 - **Tools no hook exposes are not seen**, and a repository's git configuration can run a
   program before any hook.
-- **Injected input is linked only with Claude Code, the Cline CLI and wrapped MCP
-  servers**; a host by another name or a reworded command is not linked.
+- **Injected input is linked only with Claude Code, the Continue CLI, Codex, Gemini CLI,
+  GitHub Copilot CLI, the Cline CLI and wrapped MCP servers**; a host by another name or a reworded command is not linked.
 - **A program running as you outside any sandbox** can change the policy and the lock.
 
 The full list, per area: [docs/LIMITS.md](docs/LIMITS.md). Per agent:

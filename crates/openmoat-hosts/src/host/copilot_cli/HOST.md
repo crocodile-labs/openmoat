@@ -1,7 +1,7 @@
 # GitHub Copilot CLI (`copilot-cli`)
 
 GitHub Copilot CLI (`copilot`, npm `@github/copilot`), through its `preToolUse` command
-hook in the camelCase format, checked against `@github/copilot` 1.0.101. Every fact here
+hook in the camelCase format (and `postToolUse` for what a call returned), checked against `@github/copilot` 1.0.101. Every fact here
 comes from [`copilot_cli.rs`](../copilot_cli.rs) and [`doc.rs`](doc.rs); if they disagree,
 the code wins.
 
@@ -10,9 +10,27 @@ the code wins.
 | Event | Matcher | Timeout |
 |---|---|---|
 | `preToolUse` | none: every tool (the payload does not mark MCP tools) | 600 s (`timeoutSec`) |
+| `postToolUse` | none: every tool, for the same reason | 60 s (`timeoutSec`) |
 
 Input is `sessionId`, `timestamp`, `cwd`, `toolName` and `toolArgs` (a JSON string).
 Empty output leaves the call to Copilot's own permission flow (`defer`).
+
+`postToolUse` adds `toolCallId` and `toolResult` (`resultType`, `textResultForLlm`: what
+the model gets), with `toolArgs` as an object: the weekly latest-agents run 42853181916
+(2026-11-10) recorded these fields from a real Copilot CLI, and the
+[CLI hooks reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference)
+lists `toolResult` for `postToolUse` only. Neither payload names its event, so each entry
+names its own on the guard's command line (`openmoat guard --host copilot-cli --event
+preToolUse` or `--event postToolUse`): the entry, never the payload, says whether a
+payload is a call. A `preToolUse` payload is decided as a call whatever it carries, a
+`toolResult` included; a `postToolUse` payload without a `toolResult` holding the strings
+`resultType` and `textResultForLlm` is an error (exit 2). An entry from before `--event`
+is decided as a call, and `openmoat status` and `doctor` report the hook as needing
+`openmoat init`. A report of a tool whose output never comes from outside (a file view or
+edit, a search over files, an ungoverned tool) is answered at once, with no other work. Copilot waits for the
+hook before its next model request (the same run). OpenMoat answers it with nothing; a
+non-zero exit or a timeout is logged and the run goes on. It fires only after a call that
+succeeded: `postToolUseFailure`, for a failed one, is not installed.
 
 ## Tools OpenMoat sees
 
@@ -59,9 +77,11 @@ gone.
 
 ## Known gaps
 
-Injected input (ADR-057): OpenMoat does not install Copilot's `postToolUse` hook, so it
-never sees what a call returned. A host, path or command untrusted output named is not
-linked to the later call that uses it; only session taint applies.
+Injected input (ADR-057, ADR-063): OpenMoat's `postToolUse` entry reads what a call
+returned, so a host, path or command untrusted output named makes a later call that uses
+it need review (`injected-input`). The output of a call that failed (`postToolUseFailure`)
+is not read, and an install from before the entry links nothing until `openmoat init`
+runs once; only session taint applies there.
 
 A hook that times out lets the call run; `disableAllHooks` in Copilot's user or a
 repository's `settings.json` turns the hook off (`openmoat status` and `doctor` report it);

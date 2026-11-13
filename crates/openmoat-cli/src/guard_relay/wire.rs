@@ -1,7 +1,7 @@
 //! The bytes on the wire between a sandboxed `moat guard` and `moat run`.
 //!
-//! A request is [`REQUEST_MAGIC`] and six fields, a reply [`REPLY_MAGIC`] and
-//! four. Each field is its length as four big-endian bytes, then the bytes.
+//! A request is [`REQUEST_MAGIC`] and six fields (seven when its flags say the
+//! hook's entry named its event), a reply [`REPLY_MAGIC`] and four. Each field is its length as four big-endian bytes, then the bytes.
 //! Every field has a limit, checked before anything is allocated for it, so a
 //! peer cannot make the other side read or hold more than that.
 
@@ -25,6 +25,12 @@ const MAX_HOST: usize = 64;
 const MAX_CWD: usize = 4096;
 /// Bit of the flags field: `Host::caller_variable` is set for the hook.
 const FLAG_CALLER_SET: u8 = 1;
+/// Bit of the flags field: the hook's entry named its event (`guard
+/// --event`), which follows the payload as one more field. A run from before
+/// the bit reads no further than the payload.
+const FLAG_EVENT: u8 = 2;
+/// The longest event name a request carries.
+const MAX_EVENT: usize = 64;
 
 /// One hook call, as the sandboxed guard read it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +47,8 @@ pub struct Request {
     pub caller_set: bool,
     /// The hook payload, unchanged.
     pub payload: String,
+    /// The event the hook's entry named (`guard --event`), if any.
+    pub event: Option<String>,
 }
 
 /// What the guard outside the sandbox answered.
@@ -58,7 +66,10 @@ pub struct Reply {
 
 impl Request {
     pub fn write_to(&self, out: &mut impl Write) -> Result<()> {
-        let flags = if self.caller_set { FLAG_CALLER_SET } else { 0 };
+        let mut flags = if self.caller_set { FLAG_CALLER_SET } else { 0 };
+        if self.event.is_some() {
+            flags |= FLAG_EVENT;
+        }
         let mut frame = Zeroizing::new(REQUEST_MAGIC.to_vec());
         for field in [
             &self.token[..],
@@ -69,6 +80,13 @@ impl Request {
             self.payload.as_bytes(),
         ] {
             push_field(&mut frame, field)?;
+        }
+        if let Some(event) = &self.event {
+            ensure!(
+                event.len() <= MAX_EVENT,
+                "the hook's event name is too long"
+            );
+            push_field(&mut frame, event.as_bytes())?;
         }
         out.write_all(&frame)?;
         Ok(out.flush()?)
@@ -91,13 +109,20 @@ impl Request {
             "the tool call is larger than OpenMoat reads, so it is refused; ask the agent to \
              write the file in smaller parts",
         )?;
+        let payload = text(payload, "payload")?;
+        let event = if flags[0] & FLAG_EVENT == 0 {
+            None
+        } else {
+            Some(text(field(input, MAX_EVENT, "event")?, "event")?)
+        };
         Ok(Self {
             token,
             nonce,
             host,
             cwd,
             caller_set: flags[0] & FLAG_CALLER_SET != 0,
-            payload: text(payload, "payload")?,
+            payload,
+            event,
         })
     }
 }

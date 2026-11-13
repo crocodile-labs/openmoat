@@ -211,6 +211,20 @@ Verify from the agent's documentation or source code what it does with each answ
 When the documentation and the agent disagree, trust the agent, and say which you
 checked in the fixtures `README.md`.
 
+## What a call returned (after-call events)
+
+If the agent reports what a call returned after it ran (Claude Code's and Codex's
+`PostToolUse`, Gemini CLI's `AfterTool`, GitHub Copilot CLI's `postToolUse`, the Cline
+CLI's `tool_result`), read it into `HookEvent::PostToolUse { output }` (ADR-057,
+ADR-063): the call mapped as its pre-call event maps it, and the text of the result field
+through `wire::output::text_of`. Return the same event from `event_of` (or, for a payload
+that names no event, `unnamed_event`), render nothing for it whatever was decided, and
+refuse a payload without its result field, so `guard` fails it rather than keeping
+nothing. Add a second `HookSpec` for it, matched to the tools whose output can be
+untrusted where the agent has matchers. Build it only from a payload the weekly
+latest-agents job recorded (`scripts/ci/latest-agents/after_call.py`), and say in the
+fixtures `README.md` which run.
+
 ## Install, uninstall and the lock
 
 `openmoat init` calls `HostConfig::install`, which adds one entry per `HookSpec` (event,
@@ -218,7 +232,9 @@ matcher, timeout) of the spec's `install.hooks` to the agent's hook file, in the
 layout `install.hook_file` names. It must stay idempotent (invariant 8):
 
 - Our entries are recognised by their command, `guard --host <id>` and then
-  `--home <state directory>` (ADR-071); re-running `init` updates them in place and
+  `--home <state directory>` (ADR-071), and `--event <event>` for an entry whose
+  `HookSpec` is `naming_event()` (an agent whose payloads name no event, so the entry
+  says which event a payload is for); re-running `init` updates them in place and
   never adds a second one. Build the command from `GuardCommand`
   (`wire/guard_command.rs`) and recognise it with its functions, never by hand: the
   guard trusts the state directory on its command line, not its environment.

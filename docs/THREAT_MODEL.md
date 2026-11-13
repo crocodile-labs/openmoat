@@ -92,8 +92,9 @@ something OpenMoat claims to stop.
 
 - **Injected input is linked only where the host reports output, and only for the same
   request.**
-  - Claude Code (and the Continue CLI, which runs Claude Code's hooks) and the Cline CLI
-    report what a call returned; the MCP gateway keeps what a wrapped server's tool
+  - Claude Code (and the Continue CLI, which runs Claude Code's hooks), Codex
+    (`PostToolUse`), Gemini CLI (`AfterTool`), GitHub Copilot CLI (`postToolUse`, calls
+    that succeeded only) and the Cline CLI report what a call returned; the MCP gateway keeps what a wrapped server's tool
     returned for every agent (ADR-063, proposed), its result or its error answer (the
     error's `message` and `data` reach the model too). Claude Code reports a tool call
     that failed in `PostToolUseFailure`, which OpenMoat's hook does not handle yet: a
@@ -112,8 +113,8 @@ something OpenMoat claims to stop.
   - Content that floods the bounds with decoys pushes a planted token out: 256 tokens per
     output, 4096 per session, the first 1 MiB.
   - A fetch, search or MCP call to a planted host is the host's prompt to decide.
-  - Until `openmoat init` adds the `PostToolUse` entry after an upgrade, nothing is kept
-    (ADR-057).
+  - Until `openmoat init` adds the after-call entry after an upgrade, nothing is kept
+    (ADR-057); Codex runs a new entry only once the person trusts it in `/hooks`.
 
 - **The block message tells the agent what was stopped.** A deny or review names the
   rule or built-in check, its title and the call (ADR-059), as the one `moat:` line

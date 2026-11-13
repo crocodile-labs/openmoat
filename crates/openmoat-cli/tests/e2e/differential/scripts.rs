@@ -442,7 +442,9 @@ pub mod executing {
             Some(Outcome::Erofs)
         } else if shows("No such file or directory") || shows("Directory nonexistent") {
             Some(Outcome::Enoent)
-        } else if shows("File exists") {
+        } else if shows("File exists") || shows("mkdir: Already exists") {
+            // GNU coreutils says "File exists"; the Rust coreutils newer Ubuntu
+            // runner images ship say "Already exists" for the same EEXIST.
             Some(Outcome::Eexist)
         } else if shows("Input/output error") {
             Some(Outcome::Eio)

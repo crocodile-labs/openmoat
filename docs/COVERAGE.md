@@ -30,7 +30,7 @@ All ten risks of the list. `covered` means fixtures or end-to-end tests test it,
 
 | Risk | Name | Status | Reason | Classes | Attacks | Reviews | End-to-end tests |
 |---|---|---|---|---|---|---|---|
-| ASI01 | Agent Goal Hijack | partial | Does not detect the hijack: it limits the calls that follow, and links a later call to what untrusted output named only on Claude Code, the Continue CLI, the Cline CLI and wrapped MCP servers. | — | — | — | 2 |
+| ASI01 | Agent Goal Hijack | partial | Does not detect the hijack: it limits the calls that follow, and links a later call to what untrusted output named only on Claude Code, the Continue CLI, Codex, Gemini CLI, GitHub Copilot CLI, the Cline CLI and wrapped MCP servers. | — | — | — | 4 |
 | ASI02 | Tool Misuse and Exploitation | covered | Each tool call a hook reports is decided by the policy. Not covered: tools no hook exposes, a deferred call an auto-approve mode runs, and misuse through an allowed command or host. | T1, T2, T4, T8, T11, T12 | 468 | 169 | 0 |
 | ASI03 | Identity and Privilege Abuse | covered | Secret paths, secret-shaped variables, agent logins and OpenMoat's own state are guarded. Not covered: what a credential can do on a remote service, and the agent's own login, which commands under `openmoat run` can read. | T1, T2, T3, T9 | 830 | 239 | 0 |
 | ASI04 | Agentic Supply Chain Vulnerabilities | covered | Downloads piped into a shell, near-miss package names, MCP server definitions and the hook binary are checked. Not covered: other installs, left to the agent's own prompt, and the command of an MCP server `openmoat init` was not allowed to wrap, or a project's own, which runs before any check. | T5, T8, T10 | 94 | 100 | 0 |
@@ -47,7 +47,7 @@ What each risk above is tested by: the end-to-end tests marked for it (`// cover
 
 ### ASI01: Agent Goal Hijack
 
-- End-to-end tests (2): `injected::a_host_a_fetched_page_named_makes_a_later_curl_to_it_need_review`, `taint::fetched_content_makes_a_later_workflow_write_need_review`
+- End-to-end tests (4): `copilot_cli::a_tool_result_in_a_call_s_payload_never_skips_the_decision`, `injected::a_host_a_fetched_page_named_makes_a_later_curl_to_it_need_review`, `injected_hosts::a_host_a_fetched_page_named_makes_a_later_curl_to_it_need_review_on_each_agent`, `taint::fetched_content_makes_a_later_workflow_write_need_review`
 - Fixtures (0): none
 
 ### ASI02: Tool Misuse and Exploitation

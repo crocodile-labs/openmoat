@@ -683,7 +683,8 @@ tighten as in §4.1.
 #### 4.1.2 Injected input
 
 Session taint knows that untrusted content came in. Injected input (since 0.16.0) also
-knows what it said (ADR-057). Where the host reports what a call returned (Claude Code's `PostToolUse`), a later
+knows what it said (ADR-057). Where the host reports what a call returned (Claude Code's `PostToolUse`, and the
+after-call hooks of the hosts listed under "Hosts" below), a later
 shell command or write that uses a host, path or command from untrusted output needs review,
 with rule id `injected-input` and a reason that names the source:
 
@@ -750,10 +751,12 @@ collect.evil.example may follow an instruction planted there
   exact call.
 - **Hosts.** Claude Code reports output, and so do the Continue CLI, which runs Claude
   Code's hooks, and, since 0.17.0, the Cline CLI, whose `PostToolUse` file is OpenMoat's
-  script too. Since 0.17.0 the MCP gateway (`openmoat mcp proxy`) keeps what a wrapped
+  script too, Codex (`PostToolUse`), Gemini CLI (`AfterTool`) and GitHub Copilot CLI
+  (`postToolUse`), whose after-call entries `openmoat init` writes beside the pre-call
+  ones (ADR-063 steps 4 to 6). Since 0.17.0 the MCP gateway (`openmoat mcp proxy`) keeps what a wrapped
   server's tool returned for every agent, under the session of the hook's decision for
-  that call (the first steps of ADR-063, proposed). After an upgrade, run `openmoat init` once to add the `PostToolUse` entry
-  or file; `openmoat doctor` and `openmoat status` report the hook as needing it until
+  that call (the first steps of ADR-063, proposed). After an upgrade, run `openmoat init` once to add the after-call entry
+  or file (Codex runs a new entry only once the person trusts it in `/hooks`); `openmoat doctor` and `openmoat status` report the hook as needing it until
   then. Every other host keeps §4.1 alone for calls that are not wrapped MCP tools; its
   HOST.md says so.
 - **Limits.** Beyond the spellings above, matches are exact: a host under another name, a

@@ -163,7 +163,7 @@ impl Service {
                 }));
             }
         }
-        let Ok(parsed) = sender.parse_request(&request.payload) else {
+        let Ok(parsed) = sender.parse_request_as(&request.payload, request.event.as_deref()) else {
             return Ok(Ok(()));
         };
         let session = parsed.session_id;
@@ -211,6 +211,13 @@ impl Service {
                 openmoat_hosts::HOME_FLAG.to_owned(),
                 openmoat_hosts::encode_home(&crate::home::arg_form(self.home.root())),
             ])
+            // The event the hook's entry named, as it named it.
+            .args(
+                request
+                    .event
+                    .iter()
+                    .flat_map(|event| [openmoat_hosts::EVENT_FLAG, event.as_str()]),
+            )
             .env(RUN_SESSION_ENV, &self.run)
             .env_remove(SOCKET_ENV)
             .env_remove(TOKEN_ENV)

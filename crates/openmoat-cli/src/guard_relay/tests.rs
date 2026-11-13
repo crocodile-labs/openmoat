@@ -47,6 +47,7 @@ fn request(token: &str, payload: &str) -> Request {
         cwd: "/p".to_owned(),
         caller_set: true,
         payload: payload.to_owned(),
+        event: None,
     }
 }
 
@@ -76,6 +77,18 @@ fn a_request_and_a_reply_read_back_as_written() {
     assert!(wire.starts_with(REPLY_MAGIC));
     let read = Reply::read_from(&mut Cursor::new(&wire), &sent.nonce).unwrap();
     assert_eq!(read, answer);
+}
+
+/// The event a hook's entry named (`guard --event`) reaches the run with the
+/// payload, so the run reads the payload as that event's.
+#[test]
+fn the_entry_s_event_reads_back_and_a_request_without_one_has_none() {
+    let mut sent = request(token(), "{\"toolName\":\"bash\"}");
+    sent.event = Some("postToolUse".to_owned());
+    let wire = bytes_of(|out| sent.write_to(out).unwrap());
+    assert_eq!(Request::read_from(&mut Cursor::new(&wire)).unwrap(), sent);
+    sent.event = Some("x".repeat(65));
+    assert!(sent.write_to(&mut Vec::new()).is_err());
 }
 
 #[test]
@@ -383,3 +396,32 @@ fn random_hex_is_hex_of_the_length_asked_and_differs() {
 }
 
 mod scope;
+
+/// The event a Copilot CLI entry named (`--event postToolUse`) reaches the
+/// guard the run starts on its command line, so that guard reads the payload
+/// as an after-call report and not as a call.
+#[test]
+fn the_entry_s_event_is_passed_on_to_the_guard_the_run_starts() {
+    let (_dir, _home, service) = service_for(0, Some(Host::CopilotCli));
+    let payload = serde_json::json!({"sessionId": "cp-1", "cwd": "/p", "toolName": "bash",
+        "toolArgs": {"command": "ls"},
+        "toolResult": {"resultType": "success", "textResultForLlm": "ok"}})
+    .to_string();
+    let mut sent = request(token(), &payload);
+    Host::CopilotCli.id().clone_into(&mut sent.host);
+    sent.caller_set = false;
+    sent.event = Some("postToolUse".to_owned());
+    let reply = ask(&service, &sent).unwrap();
+    let out = String::from_utf8(reply.stdout).unwrap();
+    let args = out.lines().find(|l| l.starts_with("args=")).unwrap();
+    assert!(
+        args.starts_with("args=guard --host copilot-cli --relayed --home "),
+        "{args}"
+    );
+    assert!(args.ends_with(" --event postToolUse"), "{args}");
+    // Without an event, none is passed on.
+    sent.event = None;
+    let reply = ask(&service, &sent).unwrap();
+    let out = String::from_utf8(reply.stdout).unwrap();
+    assert!(!out.contains("--event"), "{out}");
+}
