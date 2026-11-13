@@ -128,14 +128,12 @@ fn another_owner_is_named() {
 }
 
 #[test]
-fn a_profile_folder_inherits_and_trusts_only_admins() {
+fn a_profile_folder_inherits_and_lets_administrators_in() {
     let sddl = format!("O:{ME}D:AI(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;FA;;;{ME})");
     let judged = judge(&sddl, ME);
     assert!(!judged.protected);
-    assert!(
-        judged.writers.is_empty() && judged.readers.is_empty(),
-        "{judged:?}"
-    );
+    assert_eq!(judged.writers, ["Administrators"]);
+    assert!(verify(&sddl, ME).is_err());
 }
 
 #[test]
@@ -172,5 +170,91 @@ fn rights_not_read_here_count_as_every_right() {
     assert_eq!(judged.writers, [OTHER, "Users"]);
     for none in [format!("O:{ME}"), format!("O:{ME}D:NO_ACCESS_CONTROL")] {
         assert_eq!(judge(&none, ME).writers.len(), 1, "{none}");
+    }
+}
+
+/// The built-in Administrator's and Guest's SIDs end in 500 and 501; SDDL
+/// writes them `LA` and `LG`.
+const ADMIN: &str = "S-1-5-21-1004336348-1177238915-682003330-500";
+const GUEST: &str = "S-1-5-21-1004336348-1177238915-682003330-501";
+
+#[test]
+fn the_windows_runner_list_after_the_grant_needs_only_administrators_removed() {
+    // what windows-latest, as the built-in Administrator, showed after
+    // `/inheritance:r /grant:r`
+    let sddl = "O:LAD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;LA)";
+    let judged = judge(sddl, ADMIN);
+    assert_eq!(judged.foreign_owner, None);
+    assert_eq!(judged.writers, ["Administrators"]);
+    assert_eq!(
+        plan(sddl, ADMIN),
+        Ok(Plan {
+            remove: vec!["S-1-5-32-544".to_owned()],
+            remove_denies: vec![],
+        })
+    );
+    let err = verify(sddl, ADMIN).unwrap_err();
+    assert!(err.contains("S-1-5-32-544"), "{err}");
+    // after the removal
+    assert_eq!(
+        verify("O:LAD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;LA)", ADMIN),
+        Ok(())
+    );
+}
+
+#[test]
+fn machine_relative_aliases_are_the_person_only_by_their_rid() {
+    // the person is the built-in Guest
+    let sddl = "O:LGD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;LG)";
+    assert_eq!(verify(sddl, GUEST), Ok(()));
+    // for another account, LA is the built-in Administrator beside it
+    let sddl = format!("O:LAD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;{ME})(A;OICI;FA;;;LA)");
+    let judged = judge(&sddl, ME);
+    assert_eq!(
+        judged.foreign_owner.as_deref(),
+        Some("the built-in Administrator")
+    );
+    assert_eq!(judged.writers, ["the built-in Administrator"]);
+    assert_eq!(plan(&sddl, ME).unwrap().remove, [ADMIN]);
+    // the same in full form, as the Windows read prints it
+    let full = format!("O:{ADMIN}D:P(A;OICI;0x1f01ff;;;{SYSTEM})(A;OICI;0x1f01ff;;;{ME})");
+    assert_eq!(judge(&full, ME).foreign_owner.as_deref(), Some(ADMIN));
+    assert_eq!(
+        verify(
+            &format!("O:{ME}D:P(A;OICI;0x1f01ff;;;{SYSTEM})(A;OICI;0x1f01ff;;;{ME})"),
+            ME
+        ),
+        Ok(())
+    );
+    // a domain account's `LA` is the RID 500 beside it: if that is not the
+    // machine's, the removal leaves the entry and `protect`'s check refuses
+    assert_eq!(
+        plan("D:P(A;;FA;;;LA)", "S-1-5-21-9-9-9-1104")
+            .unwrap()
+            .remove,
+        ["S-1-5-21-9-9-9-500"]
+    );
+    // with no SID beside it to name (an Entra ID account), it is the error
+    assert_eq!(
+        plan("D:P(A;;FA;;;LA)", "S-1-12-1-2-3"),
+        Err("LA".to_owned())
+    );
+    assert_eq!(
+        judge("D:P(A;;FA;;;LA)", "S-1-12-1-2-3").writers,
+        ["the built-in Administrator"]
+    );
+}
+
+#[test]
+fn verify_names_what_stayed() {
+    let sddl = format!("O:{OTHER}D:AI(A;OICI;FA;;;{ME})(A;;FR;;;WD)(D;;FA;;;{ME})");
+    let err = verify(&sddl, ME).unwrap_err();
+    for part in [
+        "the owner",
+        "inherited",
+        "Everyone, who may read it",
+        "a deny entry",
+    ] {
+        assert!(err.contains(part), "{part}: {err}");
     }
 }

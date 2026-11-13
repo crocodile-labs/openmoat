@@ -18,9 +18,17 @@
 //! always change the list of a folder it owns. That is the hook's
 //! `kernel-self` rule's job, and a sandbox's.
 //!
-//! This file reads the owner and DACL in SDDL (`O:…D:P(A;OICI;FA;;;SY)…`) and
-//! plans the `icacls` calls, on every system, so its tests run everywhere; the
-//! programs run only on Windows (`state_acl/windows.rs`).
+//! `init` reads the list back after setting it, removes what stayed (an
+//! explicit Administrators entry survives `/inheritance:r` on a folder an
+//! administrator made) and reads it again: anything but the two entries is
+//! an error.
+//!
+//! This file reads the owner and DACL in SDDL (`O:…D:P(A;OICI;FA;;;SY)…`),
+//! compares every SID in full (the Windows read prints them so, and an SDDL
+//! alias such as `LA`, the built-in Administrator, is resolved against the
+//! person's SID), plans the `icacls` calls and checks the result, on every
+//! system, so its tests run everywhere; the programs run only on Windows
+//! (`state_acl/windows.rs`).
 
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
@@ -43,6 +51,17 @@ const WRITE_MASK: u32 =
 /// Access rights that read a file's data or list a folder: read data / list,
 /// generic read, generic all.
 const READ_MASK: u32 = 0x1 | 0x8000_0000 | 0x1000_0000;
+
+/// The Administrators group, trusted as an owner only.
+const ADMINISTRATORS: &str = "S-1-5-32-544";
+
+/// `CREATOR OWNER` and `OWNER RIGHTS`, which stand for the owner.
+const OWNER_STANDINS: &[&str] = &["S-1-3-0", "S-1-3-4"];
+
+/// SDDL's machine-relative aliases, by the RID of the account they name:
+/// the built-in Administrator (`LA`) and Guest (`LG`). SDDL writes these
+/// accounts' SIDs this way, so the person's own account may appear as `LA`.
+const LOCAL_ACCOUNTS: &[(&str, &str)] = &[("LA", "500"), ("LG", "501")];
 
 /// SDDL's aliases for well-known accounts, with their SIDs (`icacls` takes a
 /// SID, not an alias).
@@ -72,10 +91,11 @@ pub struct Judged {
     /// Inheritance is off (`D:P…`): the folder above cannot widen it.
     pub protected: bool,
     /// The owner, when it is another account than the person, `SYSTEM` or
-    /// the administrators; it may change the list at any time.
+    /// the Administrators group (which counts only in an elevated process,
+    /// which can take ownership anyway); it may change the list at any time.
     pub foreign_owner: Option<String>,
-    /// Accounts other than the person, `SYSTEM` and the administrators that
-    /// may change it or what is created inside, by name where SDDL has one.
+    /// Accounts other than the person and `SYSTEM` that may change it or what
+    /// is created inside, by name where one is known.
     pub writers: Vec<String>,
     /// Accounts other than those that may read it without changing it.
     pub readers: Vec<String>,
@@ -216,10 +236,12 @@ fn aces(dacl: &str) -> impl Iterator<Item = (bool, &str, &str, &str)> {
 /// Read the owner and DACL in `sddl` for `me` (the person's SID). Deny entries
 /// only narrow and are left out; an entry that passes only to what is created
 /// inside (`IO`) counts, since the state files are created there. A right
-/// SDDL spells in a way not read here counts as able to change and read.
+/// SDDL spells in a way not read here counts as able to change and read. Every
+/// SID is compared in full ([`sid_of`]), so the person's own account written
+/// as `LA` is the person.
 pub fn judge(sddl: &str, me: &str) -> Judged {
     let foreign_owner = match owner(sddl) {
-        Some(owner) if trusted(owner, me) => None,
+        Some(owner) if sid_of(owner, me).is_some_and(|sid| owner_trusted(&sid, me)) => None,
         Some(owner) => Some(name_of(owner)),
         None => Some("an account that could not be read".to_owned()),
     };
@@ -238,7 +260,11 @@ pub fn judge(sddl: &str, me: &str) -> Judged {
         ..Judged::default()
     };
     for (allows, _, rights, sid) in aces(dacl) {
-        if !allows || trusted(sid, me) || matches!(sid, "CO" | "OW") {
+        let full = sid_of(sid, me);
+        let own = full
+            .as_deref()
+            .is_some_and(|f| is_own(f, me) || OWNER_STANDINS.contains(&f));
+        if !allows || own {
             continue;
         }
         let mask = rights_mask(rights);
@@ -261,9 +287,8 @@ pub fn plan(sddl: &str, me: &str) -> Result<Plan, String> {
         if flags.as_bytes().chunks(2).any(|flag| flag == b"ID") {
             continue;
         }
-        let sid = sid_of(sid).ok_or_else(|| sid.to_owned())?;
-        let own = sid.eq_ignore_ascii_case(me) || sid == SYSTEM;
-        let list = match (own, allows) {
+        let sid = sid_of(sid, me).ok_or_else(|| sid.to_owned())?;
+        let list = match (is_own(&sid, me), allows) {
             (true, true) => continue,
             (true, false) => &mut plan.remove_denies,
             (false, _) => &mut plan.remove,
@@ -275,10 +300,68 @@ pub fn plan(sddl: &str, me: &str) -> Result<Plan, String> {
     Ok(plan)
 }
 
-/// A SID, or the SID of an SDDL alias.
-fn sid_of(sid: &str) -> Option<String> {
+/// Whether `sddl` is the list `protect` sets: inheritance off, only `me` and
+/// `SYSTEM` in it, owned by one of them or the Administrators group; or what
+/// stayed, as the error.
+pub fn verify(sddl: &str, me: &str) -> Result<(), String> {
+    let judged = judge(sddl, me);
+    let mut stayed: Vec<String> = Vec::new();
+    if let Some(owner) = &judged.foreign_owner {
+        stayed.push(format!("the owner {owner}"));
+    }
+    if !judged.protected {
+        stayed.push("entries inherited from the folder above".to_owned());
+    }
+    stayed.extend(
+        judged
+            .writers
+            .iter()
+            .map(|w| format!("{w}, who may change it")),
+    );
+    stayed.extend(
+        judged
+            .readers
+            .iter()
+            .map(|r| format!("{r}, who may read it")),
+    );
+    match plan(sddl, me) {
+        Ok(plan) => {
+            stayed.extend(plan.remove.iter().map(|sid| format!("an entry for {sid}")));
+            stayed.extend(
+                plan.remove_denies
+                    .iter()
+                    .map(|sid| format!("a deny entry for {sid}")),
+            );
+        }
+        Err(alias) => stayed.push(format!("an entry for `{alias}`")),
+    }
+    stayed.dedup();
+    if stayed.is_empty() {
+        Ok(())
+    } else {
+        Err(stayed.join("; "))
+    }
+}
+
+/// The full SID `sid` stands for: a SID as it is, an SDDL alias of a
+/// well-known account, or a machine-relative alias (`LA`, `LG`): `me` when
+/// `me` has that RID, otherwise the account of that RID beside `me` when
+/// `me` is a local account. `None` for an alias not known here. A
+/// machine-relative alias read against a domain account may name the wrong
+/// account; `protect` reads the list again after its changes and refuses
+/// what stayed, so that fails closed.
+fn sid_of(sid: &str, me: &str) -> Option<String> {
     if is_sid(sid) {
         return Some(sid.to_owned());
+    }
+    if let Some((_, rid)) = LOCAL_ACCOUNTS.iter().find(|(alias, _)| *alias == sid) {
+        let (domain, own_rid) = me.rsplit_once('-')?;
+        if own_rid == *rid {
+            return Some(me.to_owned());
+        }
+        return me
+            .starts_with("S-1-5-21-")
+            .then(|| format!("{domain}-{rid}"));
     }
     ALIASES
         .iter()
@@ -286,21 +369,31 @@ fn sid_of(sid: &str) -> Option<String> {
         .map(|(_, full)| (*full).to_owned())
 }
 
-/// The person, `SYSTEM`, and the administrators, whose group counts only in
-/// an elevated process, which can take ownership of the folder anyway.
-fn trusted(sid: &str, me: &str) -> bool {
-    sid.eq_ignore_ascii_case(me) || matches!(sid, "SY" | "BA" | SYSTEM | "S-1-5-32-544")
+/// The person or `SYSTEM`: the only entries the list should hold.
+fn is_own(sid: &str, me: &str) -> bool {
+    sid.eq_ignore_ascii_case(me) || sid == SYSTEM
 }
 
-/// A name for the SDDL aliases a profile's folders commonly carry.
+/// An owner that is the person, `SYSTEM` or the Administrators group, whose
+/// rights count only in an elevated process, which can take ownership of the
+/// folder anyway.
+fn owner_trusted(sid: &str, me: &str) -> bool {
+    is_own(sid, me) || sid == ADMINISTRATORS
+}
+
+/// A name for the accounts a profile's folders commonly carry, by SDDL alias
+/// or SID.
 fn name_of(sid: &str) -> String {
     match sid {
-        "WD" => "Everyone",
-        "AU" => "Authenticated Users",
-        "BU" => "Users",
-        "IU" => "interactive users",
-        "AN" => "anonymous logons",
-        "AC" => "all app containers",
+        "WD" | "S-1-1-0" => "Everyone",
+        "AU" | "S-1-5-11" => "Authenticated Users",
+        "BU" | "S-1-5-32-545" => "Users",
+        "BA" | ADMINISTRATORS => "Administrators",
+        "IU" | "S-1-5-4" => "interactive users",
+        "AN" | "S-1-5-7" => "anonymous logons",
+        "AC" | "S-1-15-2-1" => "all app containers",
+        "LA" => "the built-in Administrator",
+        "LG" => "the built-in Guest",
         other => other,
     }
     .to_owned()

@@ -19,12 +19,34 @@ const NO_ACCESS_LISTS: &str =
 /// never part of the script's text.
 const DIR_VARIABLE: &str = "OPENMOAT_ACL_DIR";
 
-/// This account's SID, then the folder's owner and DACL in SDDL, one per
-/// line. `System.IO.Directory.GetAccessControl` is .NET Framework's, which
-/// Windows PowerShell runs on; no module has to load.
+/// This account's SID, then the folder's owner and DACL in SDDL with every
+/// SID in full, one per line. SDDL itself writes some accounts as aliases,
+/// machine-relative ones too (the built-in Administrator, RID 500, is `LA`),
+/// so the script rebuilds the string from .NET's `RawSecurityDescriptor`:
+/// the owner's and each entry's `SecurityIdentifier.Value`, the entry's
+/// type, flags (`OI`, `CI`, `NP`, `IO`, `ID`) and access mask in hex, and `P`
+/// when inheritance is off. Then no alias has to be read to compare an
+/// account with this one. An entry of a kind without these fields stops the
+/// script, which is an error. `System.IO.Directory.GetAccessControl` is .NET
+/// Framework's, which Windows PowerShell runs on; no module has to load.
 const READ_SCRIPT: &str = "$ErrorActionPreference = 'Stop'; \
      [Security.Principal.WindowsIdentity]::GetCurrent().User.Value; \
-     [IO.Directory]::GetAccessControl($env:OPENMOAT_ACL_DIR).GetSecurityDescriptorSddlForm('Owner, Access')";
+     $sddl = [IO.Directory]::GetAccessControl($env:OPENMOAT_ACL_DIR).GetSecurityDescriptorSddlForm('Owner, Access'); \
+     $sd = New-Object Security.AccessControl.RawSecurityDescriptor -ArgumentList $sddl; \
+     $out = 'O:' + $sd.Owner.Value + 'D:'; \
+     if ($null -eq $sd.DiscretionaryAcl) { $out += 'NO_ACCESS_CONTROL' } else { \
+       if (([int]$sd.ControlFlags -band 0x1000) -ne 0) { $out += 'P' }; \
+       foreach ($ace in $sd.DiscretionaryAcl) { \
+         $kind = 'A'; \
+         if ($ace.AceQualifier -eq [Security.AccessControl.AceQualifier]::AccessDenied) { $kind = 'D' }; \
+         $f = [int]$ace.AceFlags; $flags = ''; \
+         if ($f -band 1) { $flags += 'OI' }; if ($f -band 2) { $flags += 'CI' }; \
+         if ($f -band 4) { $flags += 'NP' }; if ($f -band 8) { $flags += 'IO' }; \
+         if ($f -band 16) { $flags += 'ID' }; \
+         $out += '(' + $kind + ';' + $flags + ';0x' + $ace.AccessMask.ToString('x') + ';;;' + $ace.SecurityIdentifier.Value + ')' \
+       } \
+     }; \
+     $out";
 
 /// `<SystemRoot>\<relative>`. `SystemRoot` is taken only when it is an
 /// absolute path.
@@ -92,12 +114,15 @@ pub fn read(dir: &Path) -> Result<(String, String)> {
 }
 
 /// Give `dir` exactly two entries, full control for this account and
-/// `SYSTEM` (ADR-083). A folder that `existed` before is read first: one
-/// another account owns is refused, and every other account's entry is
-/// taken out; a new one has only the entries it inherited, which
-/// `/inheritance:r` drops.
+/// `SYSTEM` (ADR-083), and check that it holds. A folder that `existed`
+/// before is read first and refused when another account owns it. Then
+/// `/inheritance:r /grant:r` sets the two entries, the list is read back
+/// (explicit entries survive `/inheritance:r`: the Administrators group's,
+/// on a folder an administrator made), every other entry is removed, and
+/// the result is read again: anything but the two entries is an error, so a
+/// list `protect` could not set never passes as set.
 pub fn protect(dir: &Path, existed: bool) -> Result<()> {
-    let (me, plan) = if existed {
+    let me = if existed {
         let (me, sddl) = read(dir)?;
         if let Some(owner) = super::judge(&sddl, &me).foreign_owner {
             bail!(
@@ -106,39 +131,59 @@ pub fn protect(dir: &Path, existed: bool) -> Result<()> {
                 dir.display()
             );
         }
-        match super::plan(&sddl, &me) {
-            Ok(plan) => (me, plan),
-            Err(alias) => bail!(
-                "the access list of {} names `{alias}`, an account OpenMoat cannot name to \
-                 icacls: remove that entry, then run `openmoat init` again",
-                dir.display()
-            ),
-        }
+        me
     } else {
-        (current_sid()?, super::Plan::default())
+        current_sid()?
     };
     let icacls = icacls();
     let dir_os = dir.as_os_str();
-    let calls = std::iter::once(super::grant_args(dir_os, &me))
-        .chain(
-            plan.remove
-                .iter()
-                .map(|sid| super::remove_args(dir_os, sid, false)),
-        )
+    set(&icacls, dir, &super::grant_args(dir_os, &me))?;
+    let (_, granted) = read(dir)?;
+    let plan = match super::plan(&granted, &me) {
+        Ok(plan) => plan,
+        Err(alias) => bail!(
+            "the access list of {} names `{alias}`, an account OpenMoat cannot name to icacls: \
+             remove that entry, then run `openmoat init` again",
+            dir.display()
+        ),
+    };
+    let removals = plan
+        .remove
+        .iter()
+        .map(|sid| super::remove_args(dir_os, sid, false))
         .chain(
             plan.remove_denies
                 .iter()
                 .map(|sid| super::remove_args(dir_os, sid, true)),
-        );
-    for args in calls {
-        run(&icacls, &args, None).with_context(|| {
-            format!(
-                "setting the access list of {}; {}",
-                dir.display(),
-                NO_ACCESS_LISTS
-            )
-        })?;
+        )
+        .collect::<Vec<_>>();
+    for args in &removals {
+        set(&icacls, dir, args)?;
     }
+    // nothing removed: the list read after the grant is the one to check
+    let after = if removals.is_empty() {
+        granted
+    } else {
+        read(dir)?.1
+    };
+    if let Err(stayed) = super::verify(&after, &me) {
+        bail!(
+            "the access list of {} still holds more than your account and SYSTEM after \
+             `openmoat init` set it: {stayed}",
+            dir.display()
+        );
+    }
+    Ok(())
+}
+
+/// One `icacls` call that changes `dir`'s list.
+fn set(icacls: &Path, dir: &Path, args: &[OsString]) -> Result<()> {
+    run(icacls, args, None).with_context(|| {
+        format!(
+            "setting the access list of {}; {NO_ACCESS_LISTS}",
+            dir.display()
+        )
+    })?;
     Ok(())
 }
 
@@ -158,17 +203,7 @@ mod tests {
         std::fs::write(&before, "x").unwrap();
         protect(&state, false).unwrap();
         let (me, sddl) = read(&state).unwrap();
-        let judged = super::super::judge(&sddl, &me);
-        assert!(judged.protected, "{sddl}");
-        assert!(
-            judged.writers.is_empty() && judged.readers.is_empty(),
-            "{sddl}"
-        );
-        assert_eq!(
-            super::super::plan(&sddl, &me),
-            Ok(super::super::Plan::default()),
-            "{sddl}"
-        );
+        assert_eq!(super::super::verify(&sddl, &me), Ok(()), "{sddl}");
 
         let everyone = ["/grant", "*S-1-1-0:(OI)(CI)M", "/q"].map(OsString::from);
         let mut widen = vec![state.as_os_str().to_owned()];
@@ -182,11 +217,7 @@ mod tests {
         );
         protect(&state, true).unwrap();
         let (_, sddl) = read(&state).unwrap();
-        let judged = super::super::judge(&sddl, &me);
-        assert!(
-            judged.writers.is_empty() && judged.readers.is_empty(),
-            "{sddl}"
-        );
+        assert_eq!(super::super::verify(&sddl, &me), Ok(()), "{sddl}");
         // OpenMoat itself still writes there
         std::fs::write(state.join("audit.db"), "y").unwrap();
         std::fs::write(&before, "z").unwrap();
