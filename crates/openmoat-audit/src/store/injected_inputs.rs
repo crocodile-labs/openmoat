@@ -27,7 +27,12 @@ pub(super) const MAX_ROWS: i64 = 200_000;
 /// Rows past the bounds are removed when a new row's id passes a multiple of this.
 pub(super) const PRUNE_EVERY: i64 = 64;
 
-/// One fingerprint to keep. The source is redacted as an event's texts are.
+/// The longest source kept with a row, in characters, after redaction.
+pub const MAX_SOURCE_LEN: usize = 200;
+
+/// One fingerprint to keep. The source is redacted as an event's texts are,
+/// then cut to [`MAX_SOURCE_LEN`]: redaction sees the whole of it, so a
+/// credential the cut would split (`Authorization="Bearer …"`) is still found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewInjected {
     /// The caller's keyed fingerprint of one token (lowercase hex).
@@ -69,7 +74,7 @@ impl Store {
             let changed = tx.execute(
                 "INSERT OR IGNORE INTO injected_inputs (ts_ms, host, session_id, fingerprint, source)
                  VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![ts_ms, host, session_id, row.fingerprint, secrets.redact(&row.source)],
+                params![ts_ms, host, session_id, row.fingerprint, cut(&secrets.redact(&row.source))],
             )?;
             if changed > 0 {
                 room -= 1;
@@ -137,4 +142,14 @@ impl Store {
             .optional()?;
         Ok(source)
     }
+}
+
+/// `text`, cut to [`MAX_SOURCE_LEN`] characters with `…` after a cut.
+fn cut(text: &str) -> String {
+    if text.chars().count() <= MAX_SOURCE_LEN {
+        return text.to_owned();
+    }
+    let mut short: String = text.chars().take(MAX_SOURCE_LEN).collect();
+    short.push('…');
+    short
 }
