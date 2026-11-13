@@ -337,7 +337,17 @@ fn replies_are_gemini_decisions() {
 #[test]
 fn after_tool_reports_the_call_and_what_it_returned() {
     let req = fixture("after_tool-run_shell_command").unwrap();
-    assert_eq!(req.action, command("curl -s https://docs.example/setup.txt"));
+    let ran = "curl -s https://docs.example/setup.txt";
+    // On Windows the command is PowerShell, which is never classified.
+    if cfg!(windows) {
+        assert!(
+            matches!(&req.action, Some(Action::ForeignShell { command, .. }) if command == ran),
+            "{:?}",
+            req.action
+        );
+    } else {
+        assert_eq!(req.action, command(ran));
+    }
     let HookEvent::PostToolUse { output } = &req.event else {
         panic!("{:?}", req.event);
     };
