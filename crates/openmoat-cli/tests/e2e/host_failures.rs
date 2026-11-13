@@ -230,10 +230,11 @@ fn a_hook_whose_binary_is_gone_is_not_protected() {
 /// (ADR-079): `status --format json` carries them for each agent whose hook is
 /// in place, and `doctor` names the one that runs the call then (Codex), with
 /// what to do; an agent that blocks (Cursor's `failClosed`, Claude Code's
-/// `onFailure` at the version the tests report) gets no such row.
+/// `onFailure` at the version the tests report) gets no such row. Gemini CLI
+/// blocks a hook that cannot start and runs the call when it crashes.
 #[test]
 fn doctor_names_an_agent_that_runs_the_call_when_the_hook_fails() {
-    let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);
+    let sb = Sandbox::installed(&[".claude", ".codex", ".cursor", ".gemini"]);
     let status = json(&sb.moat(&["status", "--format", "json"]));
     let agents = status["agents"].as_array().cloned().unwrap_or_default();
     let of = |id: &str| {
@@ -247,6 +248,9 @@ fn doctor_names_an_agent_that_runs_the_call_when_the_hook_fails() {
     assert_eq!(of("codex")["fails"], "runs", "{status}");
     assert_eq!(of("codex")["times_out"], "runs", "{status}");
     assert_eq!(open("codex"), 2, "{status}");
+    assert_eq!(of("codex")["cannot_start"], "runs", "{status}");
+    assert_eq!(of("gemini-cli")["cannot_start"], "blocks", "{status}");
+    assert_eq!(of("gemini-cli")["fails"], "runs", "{status}");
     for blocking in ["claude-code", "cursor"] {
         assert_eq!(of(blocking)["fails"], "blocks", "{blocking}: {status}");
         assert_eq!(of(blocking)["times_out"], "blocks", "{blocking}: {status}");
@@ -261,6 +265,9 @@ fn doctor_names_an_agent_that_runs_the_call_when_the_hook_fails() {
     let row = "Codex fails open: runs the call when the hook cannot start, crashes or exits \
                non-zero or times out; start it with `openmoat run`";
     assert!(doctor.contains(row), "{doctor}");
+    let gemini = "Gemini CLI fails open: runs the call when the hook crashes or exits non-zero \
+                  or times out;";
+    assert!(doctor.contains(gemini), "{doctor}");
     assert!(doctor.contains("require.run: full-boundary"), "{doctor}");
     for blocking in ["Claude Code fails open", "Cursor fails open"] {
         assert!(!doctor.contains(blocking), "{doctor}");

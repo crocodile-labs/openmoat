@@ -38,7 +38,7 @@ read JSON, and the agent records they come from (agents.json beside this file).
     check.py openclaw-inspect <report.json>  OpenClaw's own validator and plugin inspector agree
     check.py opencode-settled <report.json>  OpenCode 2's plugin inventory is applied (exit 0/1, silent)
     check.py opencode-active <report.json>   OpenCode 2 reports OpenMoat's plugin active
-    check.py hook-failure-fact <host> <status.json> fails|times_out|timeout_s
+    check.py hook-failure-fact <host> <status.json> fails|cannot_start|times_out|timeout_s
                                              one hook-failure fact of the host (ADR-079)
     check.py hook-failure <agent> <mode> <fact> <marker> <ran file> <calls log> <agent output>
                           <api log> <out.json>
@@ -587,7 +587,7 @@ def cmd_opencode_active(report):
     return 0
 
 
-FACT_KEYS = ("fails", "times_out", "timeout_s")
+FACT_KEYS = ("fails", "cannot_start", "times_out", "timeout_s")
 
 
 def cmd_hook_failure_fact(host, status_path, key):

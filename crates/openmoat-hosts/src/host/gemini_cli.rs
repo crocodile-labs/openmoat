@@ -75,15 +75,22 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          (Gemini CLI has no fail-closed setting); blocks it when the hook exits 2, or exits \
          with any other code and prints something, as a missing `openmoat` does",
     // Exit 1, a signal or a timeout is a warning and the call runs; another
-    // non-zero exit with output blocks (a missing `openmoat` prints one), a
-    // silent crash does not. Gemini CLI has no fail-closed setting.
+    // non-zero exit with output blocks (`convertPlainTextToHookOutput` in
+    // `hookRunner.ts`, 0.65.0; the reference page calls every other code a
+    // warning, the source decides). A missing `openmoat` prints one: bash
+    // exits 127 with its message, and on Windows the entry exits 2 itself
+    // (`hook_file.rs`). A silent crash blocks nothing. Gemini CLI has no
+    // fail-closed setting.
     hook_failure: crate::HookFailure {
-        fails: crate::FailureOutcome::Runs,
+        fails: crate::FailureOutcome::BlocksWhenMissing,
         times_out: crate::FailureOutcome::Runs,
         timeout_s: Some(600),
         turned_off_by: "`hooks` turned off in the user's or a project's `settings.json`, or a \
                         folder Gemini CLI does not trust (which runs no settings hooks)",
-        sources: &["https://geminicli.com/docs/hooks/reference/"],
+        sources: &[
+            "https://geminicli.com/docs/hooks/reference/",
+            "https://github.com/google-gemini/gemini-cli/blob/v0.65.0/packages/core/src/hooks/hookRunner.ts",
+        ],
     },
     gaps: "no OS sandbox from OpenMoat; in a folder Gemini CLI does not trust it runs no \
          settings hooks at all and asks the person before every tool instead; a project's \

@@ -16,9 +16,12 @@ pub const FIX: &str = "start it with `openmoat run`, whose OS sandbox holds when
 /// One agent's hook-failure facts as they hold on this machine.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Failure {
-    /// The hook cannot start, crashes or exits non-zero: `blocks`, `runs` or
+    /// The hook crashes or exits non-zero: `blocks`, `runs` or
     /// `not-documented` (which OpenMoat takes as `runs`).
     pub fails: &'static str,
+    /// The hook cannot start (its binary is gone): the same words; differs
+    /// from [`Self::fails`] where the host blocks only that case.
+    pub cannot_start: &'static str,
     /// The hook does not answer within [`Self::timeout_s`].
     pub times_out: &'static str,
     /// The time limit as `openmoat init` installs it, in seconds.
@@ -52,11 +55,17 @@ pub fn of(host: Host, blocks_from: bool) -> Failure {
     let word = |outcome: FailureOutcome| match outcome {
         FailureOutcome::Blocks => "blocks",
         FailureOutcome::BlocksFrom(_) if blocks_from => "blocks",
-        FailureOutcome::BlocksFrom(_) | FailureOutcome::Runs => "runs",
+        FailureOutcome::BlocksFrom(_)
+        | FailureOutcome::BlocksWhenMissing
+        | FailureOutcome::Runs => "runs",
         FailureOutcome::NotDocumented => "not-documented",
     };
     Failure {
         fails: word(facts.fails),
+        cannot_start: match facts.fails {
+            FailureOutcome::BlocksWhenMissing => "blocks",
+            other => word(other),
+        },
         times_out: word(facts.times_out),
         timeout_s: facts.timeout_s,
         turned_off_by: facts.turned_off_by,
@@ -101,6 +110,23 @@ mod tests {
         assert_eq!(of(host, true).fails, "blocks");
         assert_eq!(of(host, false).fails, "runs");
         assert!(of(host, false).line().is_some());
+    }
+
+    /// A host that blocks only a hook that cannot start reports that case as
+    /// `blocks` and a crash as `runs`, which still fails open.
+    #[test]
+    fn a_block_when_missing_reports_each_case() {
+        for host in Host::EVERY {
+            let failure = of(host, true);
+            if host.spec().hook_failure.fails == FailureOutcome::BlocksWhenMissing {
+                assert_eq!((failure.cannot_start, failure.fails), ("blocks", "runs"));
+                let line = failure.line().unwrap_or_default();
+                assert!(line.contains("crashes or exits non-zero"), "{line}");
+                assert!(!line.contains("cannot start"), "{line}");
+            } else {
+                assert_eq!(failure.cannot_start, failure.fails, "{host:?}");
+            }
+        }
     }
 
     /// Not documented is reported as such, and counted as failing open.
