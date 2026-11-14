@@ -21,19 +21,35 @@ person is usually looking at the phone when the request arrives.
 
 ## Decision 1: wait only while a listener runs
 
-1. `openmoat approvals listen` writes `~/.moat/remote/listening.json` after every round
-   that reached the channel: the connected channel's name and the time, signed with the
+1. `openmoat approvals listen` writes `~/.moat/remote/listening.json` every 3 s while
+   its channel answers: the connected channel's name and the time, signed with the
    approval key under its own domain (`openmoat-remote-listening-v1`). It removes the
-   file when it returns; after Ctrl-C the beat goes stale.
+   file when it stops, Ctrl-C included.
 2. A beat is **live** when its signature verifies with the key, it names the connected
    channel, and it is at most 15 s old (`LIVE_MS`) and at most 2 s ahead of the guard's
    clock. Anything else (no file, another key, another channel, an edited time) is no
    listener.
 3. With no live listener the guard does not wait at all: the gate behaves exactly as
    ADR-078 describes.
-4. While the wait is on, `listen` polls the channel every 2 s instead of 25 s, so a
-   request the guard writes during a poll is sent within about 2 s. With the wait off
-   (0) it keeps the 25 s poll.
+4. `listen` has two halves on two threads, each with its own channel
+   (`remote/listen/run.rs`, channel-neutral):
+   - **sending** looks at `requests/` every second and sends each new request to the
+     approvers at once, expires old ones, and writes the beat every 3 s while the
+     channel is healthy;
+   - **answering** long-polls the channel. How long a poll may wait on the server is a
+     channel capability, `Capabilities::poll_wait` (Telegram: 25 s, `getUpdates`'
+     `timeout`; the server answers as soon as an update arrives); a channel whose poll
+     returns at once (`poll_wait` zero) is polled every 2 s. A failed poll marks the
+     channel unhealthy, which stops the beat, until a poll succeeds; a poll that hangs
+     ends at the transport's own time limit as a failure.
+
+   So a request reaches the approver within about a second, an answer is seen the moment
+   it is given, and an idle Telegram listener makes about 144 calls an hour. A poll in
+   flight does not age the beat: the sending half writes it.
+5. **Ctrl-C** (`signal-hook`, as `openmoat watch` uses) stops both halves: the sending
+   half waits for any reply being answered to finish, removes the beat and returns. A
+   poll still waiting on the server is dropped with the process; its replies were not
+   confirmed to the server, so the next `listen` gets them again.
 
 The beat cannot loosen a decision. It decides only *whether the guard waits*. An
 agent cannot write it (`kernel-self` denies writes under `~/.moat`) or sign one (it
@@ -101,8 +117,8 @@ A unit test checks the bound for every host in the registry; today every host ge
   the terminal waits too; `openmoat approvals wait 0` turns that off.
 - On agents that cannot prompt (Codex, the Continue CLI), the wait turns a deny that
   asks for a retry into an allow when the approver answers in time.
-- `listen` makes a request to the channel every 2 s while the wait is on (one
-  `getUpdates` long poll each for Telegram), not every 25 s.
+- `listen` opens its channel twice (one for sending, one for polling); `Channel` is now
+  `Send`.
 - Every limit of ADR-078 holds: the guard still answers within its budget, nothing but
   a `review` is touched, and every failure keeps the `review`.
 
@@ -115,6 +131,8 @@ A unit test checks the bound for every host in the registry; today every host ge
 | An approval used twice by a waiting guard and a retry | the create-new `used/<id>` marker | `remote::tests::wait::two_waiting_guards_use_one_approval_once` |
 | An approver removed while a guard waits | settings read again when the answer arrives | `remote::tests::wait::an_approver_removed_during_the_wait_no_longer_counts` |
 | The wait makes the host time the hook out and run the call | the wait ends inside the guard's budget less a margin, and inside a quarter of a fail-open host's timeout, from the spec | `remote::tests::wait::every_host_s_wait_ends_safely_before_its_hook_times_out` |
+| A listener whose channel is down still counted live | the beat is written only while polls succeed | `remote::tests::run::a_new_request_is_sent_within_a_second_and_the_beat_is_kept_then_removed` |
+| A request sent too late to answer within the wait, or an answer seen late | the sending half looks every second; the answering half long-polls and returns at the first reply | `remote::tests::run::a_new_request_is_sent_within_a_second_and_the_beat_is_kept_then_removed`, `remote::tests::run::a_long_poll_answers_the_moment_a_reply_arrives` |
 | Under `openmoat run` the inner guard gives up first | the relayed guard keeps another 5 s | `remote::tests::wait::the_wait_is_capped_by_the_host_the_budget_and_the_time_already_spent`, e2e `remote_approvals::the_guard_openmoat_run_relays_to_waits_too` |
 
 ## Rejected
@@ -125,5 +143,7 @@ A unit test checks the bound for every host in the registry; today every host ge
   slower.
 - **The wait in the policy file**: a repository policy or a pack could then set it; it
   is the person's, like the expiry and the approvers.
-- **A separate thread in `listen` for the beat**: it would report a listener whose
-  channel is stuck; the beat follows rounds that reached the channel.
+- **A short poll loop** (every 2 s) to send requests sooner: about 1800 calls an hour
+  where long polling needs about 144, and still up to 2 s late.
+- **A beat that ignores the channel's health**: it would report a listener whose
+  channel is down; the beat stops while polls fail.

@@ -1,9 +1,11 @@
 //! The loop behind `openmoat approvals listen`, channel-neutral (ADR-078):
 //! send each waiting request to every approver, turn each button press from
 //! an approver into a signed answer, and record and clear what expired.
+//! [`run`] runs the two halves, sending and answering, on their own threads.
+
+pub mod run;
 
 use std::collections::HashSet;
-use std::time::Duration;
 
 use anyhow::Result;
 use openmoat_core::Verdict;
@@ -75,15 +77,32 @@ impl<'a> Listener<'a> {
         }
     }
 
-    /// One round: send what is new, expire what is old, then wait up to
-    /// `wait` for replies and answer them. `now` reads the clock.
+    /// The connected channel's spec.
+    pub fn spec(&self) -> &'a Spec {
+        self.spec
+    }
+
+    /// One round, as the two halves of `listen` take turns in tests: send
+    /// what is new and expire what is old ([`Self::send_round`]), then wait
+    /// up to `wait` for replies and answer them ([`Self::answer`]), then
+    /// beat. `now` reads the clock.
+    #[cfg(test)]
     pub fn step(
         &mut self,
         channel: &mut dyn Channel,
         records: &mut dyn Records,
-        wait: Duration,
+        wait: std::time::Duration,
         now: &dyn Fn() -> i64,
     ) -> Result<()> {
+        self.send_round(channel, records, now)?;
+        let replies = channel.poll(wait)?;
+        self.answer(channel, records, &replies, now)?;
+        self.beat(now());
+        Ok(())
+    }
+
+    /// Refused once another channel is connected than the one listened on.
+    fn check_channel(&self) -> Result<()> {
         if self.settings.channel != self.spec.name {
             anyhow::bail!(
                 "the connected channel is now {}, not {}",
@@ -91,12 +110,35 @@ impl<'a> Listener<'a> {
                 self.spec.name
             );
         }
-        self.sweep(channel, records, now())?;
-        // Every reply of the poll is handled: one that fails is logged, and
-        // the next is still answered. Only then does the channel move past
-        // them, so none is dropped unread.
-        for reply in channel.poll(wait)? {
-            if let Err(error) = self.reply(channel, records, &reply, now()) {
+        Ok(())
+    }
+
+    /// Send every request not sent yet, expire what is old and tell the
+    /// approvers of approvals refused after all: the local half of `listen`.
+    pub fn send_round(
+        &mut self,
+        channel: &mut dyn Channel,
+        records: &mut dyn Records,
+        now: &dyn Fn() -> i64,
+    ) -> Result<()> {
+        self.check_channel()?;
+        self.sweep(channel, records, now())
+    }
+
+    /// Answer `replies`, one poll's: the channel half of `listen`. Every one
+    /// is handled (one that fails is logged, and the next is still
+    /// answered); only then does the channel move past them, so none is
+    /// dropped unread.
+    pub fn answer(
+        &mut self,
+        channel: &mut dyn Channel,
+        records: &mut dyn Records,
+        replies: &[Reply],
+        now: &dyn Fn() -> i64,
+    ) -> Result<()> {
+        self.check_channel()?;
+        for reply in replies {
+            if let Err(error) = self.reply(channel, records, reply, now()) {
                 self.log.push(format!(
                     "a reply from {} could not be handled: {error:#}",
                     crate::render::clean(&reply.from)
@@ -104,11 +146,13 @@ impl<'a> Listener<'a> {
             }
         }
         channel.handled();
-        // The beat that lets a guard wait for an answer (ADR-093), only after
-        // a round that reached the channel. One not written only means the
-        // guard does not wait, as with no listener.
-        let _ = super::live::beat(self.store, self.key, self.spec.name, now());
         Ok(())
+    }
+
+    /// The beat that lets a guard wait for an answer (ADR-093). One not
+    /// written only means the guard does not wait, as with no listener.
+    pub fn beat(&self, now_ms: i64) {
+        let _ = super::live::beat(self.store, self.key, self.spec.name, now_ms);
     }
 
     fn sweep(

@@ -17,7 +17,7 @@ pub mod channels;
 mod connect;
 mod gate;
 mod https;
-mod listen;
+pub mod listen;
 pub mod live;
 mod prompt;
 mod refused;

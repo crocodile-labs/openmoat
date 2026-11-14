@@ -29,6 +29,10 @@ pub const SPEC: Spec = Spec {
         buttons: true,
         button_bytes: 64,
         max_text: MAX_TEXT,
+        // `getUpdates`' `timeout`: the server answers as soon as an update
+        // arrives, so answers are seen at once and an idle listener asks
+        // about 144 times an hour.
+        poll_wait: Duration::from_secs(25),
     },
     fields: &[Field {
         key: TOKEN,
@@ -67,7 +71,7 @@ fn next_steps(bot: &str) -> String {
 
 /// One Bot API call: the method, its JSON body and how long to wait; the
 /// parsed answer. The real one is HTTPS; tests give a fake.
-pub trait Api {
+pub trait Api: Send {
     fn call(&mut self, method: &str, body: &Value, timeout: Duration) -> Result<Value>;
 }
 

@@ -91,7 +91,7 @@ From now on, every call held for review is also sent to you while `listen` runs.
 | `openmoat approvals connect <channel> [--credential-file FILE] [--set KEY=VALUE] [--expires 5m]` | checks the credential with the channel, stores it, makes the approval key, keeps approvers you already allowed on that channel; `--set` gives a channel's other settings, never a secret (Telegram has none) | a person at a terminal |
 | `openmoat approvals allow <channel>:<user-id>` | lets that user approve (a bare user id means the connected channel) | a person at a terminal |
 | `openmoat approvals remove <channel>:<user-id>` | takes that back; answers they gave that are not used yet stop counting | a person at a terminal |
-| `openmoat approvals listen` | sends waiting requests and takes answers, until Ctrl-C; while the hook's wait is on it asks the channel every 2 seconds, so a new request reaches you within about 2 seconds | a person at a terminal |
+| `openmoat approvals listen` | sends each new request within about a second and takes answers the moment you give them (it waits on Telegram's server for them), until Ctrl-C | a person at a terminal |
 | `openmoat approvals wait <seconds>` | how long the hook waits for your answer while `listen` runs: 0 to 25 seconds, 20 when never set, 0 turns the wait off | a person at a terminal |
 | `openmoat approvals test` | sends a test message to every approver | a person at a terminal |
 | `openmoat approvals status [--format json]` | shows the channel and its account, the approvers, the expiry, the hook's wait and whether a listener runs, and how many requests wait; never the credential | anyone |
@@ -145,7 +145,7 @@ reading any of it and writing anywhere under `~/.moat`.
 |---|---|
 | `approval.key` | the key every request, answer, button and settings file is signed with |
 | `settings.json` | the connected channel, the approver ids, the expiry and the hook's wait, signed |
-| `listening.json` | the listener's beat while it runs, signed; the hook waits only while it is at most 15 seconds old |
+| `listening.json` | the listener's beat, rewritten every 3 seconds while its channel answers, signed; the hook waits only while it is at most 15 seconds old |
 | `<channel>/credential` | the channel's secrets, one JSON object (for Telegram, the bot token) |
 | `<channel>/settings.json` | the channel's account (the bot's name) and its other settings, signed |
 | `requests/`, `answers/`, `used/` | calls waiting, answers given, approvals used |
@@ -164,9 +164,9 @@ reading any of it and writing anywhere under `~/.moat`.
   again.
 - **Every held call waits while `listen` runs.** A person at the agent's own terminal
   waits too before the prompt appears. `openmoat approvals wait 0` turns the wait off.
-- **A listener that stopped can still cost one wait.** Ctrl-C leaves its last beat, which
-  counts for up to 15 seconds; a call held in that time waits for nothing, then gets the
-  review as before.
+- **A listener that cannot reach its channel stops counting.** While polls fail, the
+  listener's beat stops and goes stale within 15 seconds; a call held meanwhile may
+  wait for nothing, then gets the review as before. Ctrl-C removes the beat at once.
 - **Your Telegram account approves.** Anyone who controls an approver's Telegram account
   can approve. Do not stay signed in to Telegram in a browser or on a screen an agent can
   control.

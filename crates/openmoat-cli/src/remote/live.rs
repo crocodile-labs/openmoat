@@ -1,7 +1,8 @@
-//! Whether `openmoat approvals listen` is running (ADR-093): after every round
-//! that polled the channel without an error, the listener writes
-//! `~/.moat/remote/listening.json`, the connected channel's name and the time,
-//! signed with the approval key. The guard waits for an answer only while
+//! Whether `openmoat approvals listen` is running (ADR-093): while its last
+//! poll of the channel did not fail, the listener rewrites
+//! `~/.moat/remote/listening.json` every few seconds
+//! ([`super::listen::run::BEAT_EVERY`]), the connected channel's name and the
+//! time, signed with the approval key. The guard waits for an answer only while
 //! that beat is fresh, so with no listener it never waits.
 //!
 //! The beat cannot loosen anything: it only decides whether the guard waits,
@@ -24,8 +25,8 @@ const DOMAIN: &[u8] = b"openmoat-remote-listening-v1\n";
 const VERSION: u32 = 1;
 const FILE: &str = "listening.json";
 /// A beat older than this says nothing: the listener stopped or cannot reach
-/// its channel. Several of its rounds fit in it (`listen` polls every 2 s
-/// while the wait is on, each round bounded by the channel's own time limit).
+/// its channel. Several beats fit in it; a long poll in flight does not age
+/// it, since the listener's sending half writes it.
 pub const LIVE_MS: i64 = 15_000;
 /// How far ahead of the guard's clock a beat may be, for two processes
 /// reading the same clock a moment apart; a beat further ahead is not trusted.

@@ -7,7 +7,8 @@
 //! ([`crate::remote::REGISTRY`]) and the settings.
 
 use std::io::Write as _;
-use std::time::Duration;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use anyhow::{Context as _, Result, bail};
 
@@ -15,23 +16,12 @@ use crate::cli::{ApprovalsStatusArgs, ApproverArgs, ConnectArgs, Format, WaitArg
 use crate::exit::Code;
 use crate::home::Home;
 use crate::proxy_session::Key;
+use crate::remote::listen::run::{self, Shared};
 use crate::remote::{
     AuditRecords, Credential, DEFAULT_EXPIRY_S, Listener, MAX_EXPIRY_S, MIN_EXPIRY_S, Options,
     REGISTRY, Secrets, Settings, Spec, Store,
 };
 use crate::render::Deferred;
-
-/// How long one poll of the channel waits for a reply.
-const POLL: Duration = Duration::from_secs(25);
-/// The same while the hook waits for answers (ADR-093): a request the guard
-/// writes during a poll is sent when the poll ends, so polls are short.
-const POLL_WHILE_WAITING: Duration = Duration::from_secs(2);
-const _: () = assert!(
-    POLL_WHILE_WAITING.as_secs() * 4 < crate::remote::live::LIVE_MS.unsigned_abs() / 1000,
-    "several rounds fit in a beat's life"
-);
-/// The pause after a failed round, so a channel that is down is not hammered.
-const BACKOFF: Duration = Duration::from_secs(5);
 
 fn person(command: &str) -> Result<()> {
     crate::terminal::refuse_agent(command)?;
@@ -356,61 +346,79 @@ pub fn test() -> Result<Code> {
     Ok(if failed { Code::Failed } else { Code::Ok })
 }
 
-/// `openmoat approvals listen`: until Ctrl-C.
+/// `openmoat approvals listen`: until Ctrl-C. Two halves (ADR-093,
+/// [`crate::remote::listen::run`]): this thread sends requests as they
+/// appear and keeps the beat; another long-polls the channel for answers,
+/// with a channel of its own. Ctrl-C stops both and removes the beat; a
+/// poll still in flight is dropped with the process, unconfirmed, so its
+/// replies come again on the next `listen`.
 pub fn listen() -> Result<Code> {
     person("openmoat approvals listen")?;
     let (home, store) = store()?;
     let (key, settings) = connected(&store)?;
-    let (spec, mut channel) = crate::remote::open(&store, &REGISTRY, &key, &settings)?;
-    let mut records = AuditRecords { home: &home };
-    let mut listener = Listener::new(&store, &key, spec, settings);
-    // A listener that stops says so at once, not when its beat is stale
-    // (Ctrl-C ends the process without this, and the beat goes stale).
-    let _stopped = Stopped(&store);
+    let (spec, mut sender) = crate::remote::open(&store, &REGISTRY, &key, &settings)?;
+    let (_, poller) = crate::remote::open(&store, &REGISTRY, &key, &settings)?;
+    let stop = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&stop))
+        .context("stopping on Ctrl-C")?;
+    let shared = Arc::new(Shared::new(stop));
     eprintln!(
         "listening for answers over {}; Ctrl-C stops (requests then wait unanswered and expire)",
         spec.title
     );
-    loop {
-        // Approvers a person changed meanwhile, and a channel disconnected.
-        let poll = match connected(&store) {
-            Ok((_, settings)) if settings.channel != spec.name => {
-                bail!("stopped: another channel was connected; run `listen` again")
-            }
-            Ok((_, settings)) => {
-                let poll = poll_for(&settings);
-                listener.update(settings);
-                poll
-            }
-            Err(error) => bail!("stopped: {error:#}"),
-        };
-        let round = listener.step(channel.as_mut(), &mut records, poll, &crate::time::now_ms);
-        for line in listener.log.drain(..) {
-            eprintln!("{} {line}", crate::time::clock(crate::time::now_ms()));
-        }
-        if let Err(error) = round {
-            eprintln!("moat: {error:#}; trying again in {} s", BACKOFF.as_secs());
-            std::thread::sleep(BACKOFF);
-        }
+    {
+        let (home, store, settings, shared) = (
+            home.clone(),
+            store.clone(),
+            settings.clone(),
+            Arc::clone(&shared),
+        );
+        let mut poller = poller;
+        // Detached: it may be waiting on the channel's server when Ctrl-C
+        // comes, and nothing it holds needs more than the process's end.
+        std::thread::spawn(move || {
+            let Ok(key) = Key::load(&store.key_path()) else {
+                return;
+            };
+            let mut records = AuditRecords { home: &home };
+            let mut listener = Listener::new(&store, &key, spec, settings);
+            let refresh = || refresh(&store, spec);
+            run::answering(
+                &mut listener,
+                (poller.as_mut(), &mut records),
+                &shared,
+                &refresh,
+                &print,
+            );
+        });
     }
+    let mut records = AuditRecords { home: &home };
+    let mut listener = Listener::new(&store, &key, spec, settings);
+    run::sending(
+        &mut listener,
+        (sender.as_mut(), &mut records),
+        &shared,
+        &|| refresh(&store, spec),
+        &print,
+    )
+    .context("stopped")?;
+    eprintln!("stopped; requests now wait unanswered and expire");
+    Ok(Code::Ok)
 }
 
-/// How long each poll of the channel waits under `settings`.
-fn poll_for(settings: &Settings) -> Duration {
-    if settings.wait().is_zero() {
-        POLL
-    } else {
-        POLL_WHILE_WAITING
-    }
+/// One line of `listen`'s, with the time.
+fn print(line: &str) {
+    eprintln!("{} {line}", crate::time::clock(crate::time::now_ms()));
 }
 
-/// Removes the listener's beat when `listen` returns.
-struct Stopped<'a>(&'a Store);
-
-impl Drop for Stopped<'_> {
-    fn drop(&mut self) {
-        crate::remote::live::stop(self.0);
+/// The settings as a person left them, refused once another channel than
+/// `spec` is connected or none is.
+fn refresh(store: &Store, spec: &Spec) -> Result<Settings> {
+    let (_, settings) = connected(store)?;
+    if settings.channel != spec.name {
+        bail!("another channel was connected; run `listen` again");
     }
+    Ok(settings)
 }
 
 /// `openmoat approvals wait <seconds>`: how long the hook waits for an answer

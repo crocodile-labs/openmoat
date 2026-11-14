@@ -19,6 +19,7 @@ use crate::proxy_session::Key;
 
 mod another;
 mod listen;
+mod run;
 mod text;
 mod wait;
 
@@ -36,6 +37,7 @@ static FAKE: Spec = Spec {
         buttons: true,
         button_bytes: 64,
         max_text: 4096,
+        poll_wait: Duration::ZERO,
     },
     fields: &[],
     user_id: "a number",
