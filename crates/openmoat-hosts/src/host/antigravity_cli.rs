@@ -50,6 +50,7 @@ mod project_settings;
 mod protect;
 mod settings;
 mod tools;
+mod weekly;
 
 /// The one event OpenMoat answers.
 pub(crate) const EVENT: &str = "PreToolUse";
@@ -166,6 +167,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         args: &[],
         writes: &[crate::RunWrite::Home(".gemini/antigravity-cli")],
     },
+    weekly: weekly::WEEKLY,
     ..HostSpec::BASE
 };
 

@@ -9,6 +9,18 @@ account, and one allowed and one denied payload in the agent's format through
 `openmoat guard`. No job has a secret or an account; the fake model APIs listen on
 loopback only. CONTRIBUTING "Latest agents, weekly" describes the workflow.
 
+`agents.json` is generated: each host's spec says how the job runs it (`weekly`, in
+`crates/openmoat-hosts/src/host/<module>/weekly.rs`: the install, the checked
+release, the files that must parse, the golden payload, `proves`, the runners and the
+variables the job sets), and `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts
+--test docs` writes the file; the same test fails when it is stale. Every host in the
+host list has a record or its spec says why the job does not run it. What no fact can
+say is in the record's own script, [`hosts/<agent>.sh`](hosts), which
+`latest-agents.sh` sources: `load_hook` (the real agent loading the hook), and as its
+record needs `install_agent`, `prepare_agent`, `check_config_format` and
+`probe_agent` (the hook-failure step), or `canary` for a package that is only read;
+`tests/docs/weekly.rs` checks each script defines exactly what its record needs.
+
 ## What each agent's run proves
 
 Claude Code's run also sets `CLAUDE_CODE_SHELL` and `SHELL` to a shell that records each
@@ -182,5 +194,5 @@ The `report` job opens or updates one issue per agent, `latest <agent> <version>
 OpenMoat`, with the failed step; the `latest-agent-<agent>-<OS>` artefact holds every
 log. Re-run one agent from Actions → latest agents → Run workflow. When an adapter is
 then checked against the new release, change the version in the file its record names
-and in `agents.json` in the same pull request (`python3 -I
-scripts/ci/latest-agents/check.py records` fails otherwise).
+and in the host's `weekly.rs` in the same pull request, and regenerate `agents.json`
+(`python3 -I scripts/ci/latest-agents/check.py records` fails otherwise).

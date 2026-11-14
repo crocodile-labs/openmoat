@@ -49,6 +49,7 @@ mod mcp;
 mod project_settings;
 mod protect;
 mod tools;
+mod weekly;
 
 /// The one event OpenMoat answers.
 pub(crate) const EVENT: &str = "PreToolUse";
@@ -155,6 +156,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         ],
     },
     run_env: &["GOOSE_PROVIDER", "GOOSE_MODEL", "GOOSE_PROVIDER__API_KEY"],
+    weekly: weekly::WEEKLY,
     ..HostSpec::BASE
 };
 

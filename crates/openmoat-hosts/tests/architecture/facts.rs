@@ -37,6 +37,28 @@ fn is_name_char(c: char) -> bool {
 
 impl Facts {
     pub fn from_specs() -> Facts {
+        Facts::of_hosts(Host::EVERY)
+    }
+
+    /// What names a host other than `own` in a file of `own`'s (its weekly
+    /// script): every other host's names, less those `own` shares with one
+    /// (`settings.json`, Claude Code's and Gemini CLI's).
+    pub fn of_others_than(own: Host) -> Facts {
+        let mine = Facts::of_hosts([own]);
+        let mut others = Facts::of_hosts(Host::EVERY.into_iter().filter(|host| *host != own));
+        for (list, own_list) in [
+            (&mut others.ids, &mine.ids),
+            (&mut others.dirs, &mine.dirs),
+            (&mut others.programs, &mine.programs),
+            (&mut others.display_names, &mine.display_names),
+            (&mut others.files, &mine.files),
+        ] {
+            list.retain(|name| !own_list.contains(name));
+        }
+        others
+    }
+
+    fn of_hosts(hosts: impl IntoIterator<Item = Host>) -> Facts {
         let mut facts = Facts {
             ids: Vec::new(),
             dirs: Vec::new(),
@@ -44,7 +66,7 @@ impl Facts {
             display_names: Vec::new(),
             files: Vec::new(),
         };
-        for host in Host::EVERY {
+        for host in hosts {
             facts.add(host.spec());
         }
         // A name without an extension (Cline's hook file `PreToolUse`) is

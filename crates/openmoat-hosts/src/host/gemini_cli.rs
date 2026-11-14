@@ -40,6 +40,7 @@ mod project_settings;
 mod protect;
 mod settings;
 mod tools;
+mod weekly;
 
 /// The event OpenMoat decides calls on.
 pub(crate) const EVENT: &str = "BeforeTool";
@@ -211,6 +212,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         "GOOGLE_CLOUD_PROJECT",
         "GOOGLE_CLOUD_LOCATION",
     ],
+    weekly: weekly::WEEKLY,
     ..HostSpec::BASE
 };
 

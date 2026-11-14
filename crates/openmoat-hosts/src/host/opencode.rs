@@ -50,6 +50,7 @@ mod mcp;
 mod project_settings;
 mod protect;
 mod tools;
+mod weekly;
 
 /// Seconds OpenMoat's plugin waits for `moat guard` before it blocks the call
 /// (`GUARD_TIMEOUT_MS` in `opencode/integration/openmoat.js`, which
@@ -226,6 +227,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         writes: &[crate::RunWrite::Home(".local/share/opencode")],
     },
     run_env: &["OPENROUTER_API_KEY", "OPENCODE_CONFIG_DIR"],
+    weekly: weekly::WEEKLY,
     ..HostSpec::BASE
 };
 

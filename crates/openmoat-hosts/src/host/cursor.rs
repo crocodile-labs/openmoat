@@ -26,6 +26,7 @@ pub(crate) mod hook_file;
 mod project_settings;
 mod pre_tool;
 mod tab;
+mod weekly;
 
 use pre_tool::pre_tool_action;
 
@@ -153,6 +154,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         why: "Cursor documents neither how it starts tool commands nor a setting for them",
     },
     run_env: &["CURSOR_API_KEY"],
+    weekly: weekly::WEEKLY,
     ..HostSpec::BASE
 };
 

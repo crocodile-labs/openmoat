@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use openmoat_hosts::{Host, WeeklyRuns};
+
 use crate::allowed::{
     ALLOWED_IN_POLICY, ALLOWED_IN_SCRIPTS, ALLOWED_IN_SHARED_TESTS, ALLOWED_NAMES,
 };
@@ -329,8 +331,27 @@ fn script_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// The weekly job's records, generated from the specs (`tests/docs/`), and
+/// the directory of each record's own script, relative to `scripts/`.
+const WEEKLY_RECORDS: &str = "ci/latest-agents/agents.json";
+const WEEKLY_SCRIPTS: &str = "ci/latest-agents/hosts/";
+
+/// The host whose weekly record names `relative` (`ci/latest-agents/hosts/
+/// <agent>.sh`) as its script, if one does.
+fn weekly_script_host(relative: &str) -> Option<Host> {
+    let agent = relative.strip_prefix(WEEKLY_SCRIPTS)?.strip_suffix(".sh")?;
+    Host::EVERY
+        .into_iter()
+        .find(|host| match host.spec().weekly.runs {
+            WeeklyRuns::Runs(runs) => runs.iter().any(|run| run.agent == agent),
+            WeeklyRuns::NotRun(_) => false,
+        })
+}
+
 /// `scripts/`: the shell and Python tools and their data, which CI and
-/// people run against real agents.
+/// people run against real agents. The weekly records are generated from the
+/// specs and not scanned; a record's own script names its host, as a host's
+/// module does, and no other.
 #[test]
 fn scripts_name_a_host_only_where_listed() {
     let scripts = repo().join("scripts");
@@ -338,11 +359,30 @@ fn scripts_name_a_host_only_where_listed() {
     let mut files = Vec::new();
     script_files(&scripts, &mut files);
     let mut found = Found::new();
+    let mut own_scripts = 0;
     for file in files {
-        let lines = text_lines(&fs::read_to_string(&file).unwrap(), &[], &facts);
-        record(&mut found, relative_to(&file, &scripts), lines);
+        let relative = relative_to(&file, &scripts);
+        if relative == WEEKLY_RECORDS {
+            continue;
+        }
+        let text = fs::read_to_string(&file).unwrap();
+        let lines = match weekly_script_host(&relative) {
+            Some(host) => {
+                own_scripts += 1;
+                text_lines(&text, &[], &Facts::of_others_than(host))
+            }
+            None => text_lines(&text, &[], &facts),
+        };
+        record(&mut found, relative, lines);
     }
     assert!(found.len() > 2, "the scan found too little: {found:?}");
+    assert!(
+        own_scripts > 10,
+        "the scan found {own_scripts} weekly scripts"
+    );
+    let pi = Facts::of_others_than(Host::Pi);
+    assert!(pi.named_in("\"~/.codex/config.toml\"").is_some());
+    assert!(pi.named_in("\"pi\"").is_none());
     check_only_shrinks(&found, ALLOWED_IN_SCRIPTS, "a host", "ALLOWED_IN_SCRIPTS");
 }
 

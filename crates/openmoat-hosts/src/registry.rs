@@ -161,6 +161,18 @@ mod tests {
                 }
                 assert!(!install.hooks.is_empty(), "{host:?} installs no hook");
             }
+            // The weekly job runs every host, or its spec says why not.
+            match spec.weekly.runs {
+                crate::WeeklyRuns::Runs(runs) => {
+                    assert!(!runs.is_empty(), "{host:?} has no weekly record");
+                }
+                crate::WeeklyRuns::NotRun(why) => {
+                    assert!(
+                        !why.is_empty(),
+                        "{host:?} is not run weekly and says not why"
+                    );
+                }
+            }
         }
     }
 

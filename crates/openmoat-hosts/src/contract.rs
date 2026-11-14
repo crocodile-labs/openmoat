@@ -25,6 +25,7 @@ mod run_facts;
 mod settings;
 mod system_settings;
 mod tool_token;
+mod weekly;
 mod windows_sandbox;
 mod workspace;
 
@@ -51,6 +52,10 @@ pub(crate) use settings::set;
 pub use settings::{SettingsFile, SettingsReader};
 pub use system_settings::{SystemFile, SystemSettingsSpec};
 pub use tool_token::ToolToken;
+pub use weekly::{
+    Checked, ConfigFormat, Proves, Runner, Weekly, WeeklyInstall, WeeklyPayload, WeeklyRun,
+    WeeklyRuns,
+};
 pub use windows_sandbox::{WindowsSandboxLevel, WindowsSandboxMode, WindowsSandboxReader};
 pub(crate) use workspace::Unchecked;
 pub use workspace::WorkspaceSpec;
@@ -210,6 +215,9 @@ pub struct HostSpec {
     /// documentation states; never a cloud provider's credentials, which the
     /// allowlist exists to withhold and a person can add by name.
     pub run_env: &'static [&'static str],
+    /// How CI's weekly check of the latest release runs the host, or why it
+    /// does not (`scripts/ci/latest-agents/agents.json` is written from it).
+    pub weekly: Weekly,
 }
 
 /// Where a host finds hook files for OpenMoat's event besides OpenMoat's own

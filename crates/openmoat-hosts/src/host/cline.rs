@@ -51,6 +51,7 @@ mod mcp;
 mod protect;
 mod result;
 mod tools;
+mod weekly;
 
 /// The event name Cline's payload carries for a `PreToolUse` file.
 pub(crate) const EVENT: &str = "tool_call";
@@ -171,6 +172,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         writes: &[crate::RunWrite::ConfigDir],
     },
     run_env: &["CLINE_DATA_DIR"],
+    weekly: weekly::WEEKLY,
     ..HostSpec::BASE
 };
 

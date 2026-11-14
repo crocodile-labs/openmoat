@@ -75,6 +75,7 @@ mod mcp;
 mod plugin_config;
 mod protect;
 mod tools;
+mod weekly;
 
 /// OpenClaw puts a `review` to the person itself (`requireApproval`).
 pub(crate) static SPEC: HostSpec = HostSpec {
@@ -173,6 +174,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         "OPENCLAW_WORKSPACE_DIR",
         "OPENCLAW_PROFILE",
     ],
+    weekly: weekly::WEEKLY,
     ..HostSpec::BASE
 };
 

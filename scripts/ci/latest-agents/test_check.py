@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Tests of check.py's hook-failure commands (ADR-079), the part of the weekly
 job's hook-failure step that can be proved without an agent, how a failed audit
-check lists the new rows, `tool-failures`, and the records' `proves` (ADR-079
-decision 5). Run by hand:
+check lists the new rows, `tool-failures`, the records' `proves` (ADR-079
+decision 5), and the record data latest-agents.sh reads (`dir`, `proves`,
+`env`). Run by hand:
 
     python3 -I scripts/ci/latest-agents/test_check.py
 """
@@ -14,6 +15,7 @@ import json
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -247,6 +249,47 @@ class Proves(unittest.TestCase):
     def test_every_record_in_the_file_is_consistent(self):
         for agent, rec in check.records().items():
             self.assertEqual(check.proves_problems(rec), [], agent)
+
+
+class Data(unittest.TestCase):
+    """What latest-agents.sh reads from a record instead of a case arm per
+    agent: the directory to make, whether to run the hook-failure steps, and
+    the variables every run sets."""
+
+    def setUp(self):
+        self.records = check.records
+        fake = {"a": {"dir": "{MOAT_TEST_DIR}/a", "proves": ["hook", "hook-failure"]},
+                "b": {"proves": [], "why": "no model call"}}
+        check.records = lambda: fake
+
+    def tearDown(self):
+        check.records = self.records
+
+    def run_cmd(self, *args):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = check.main(list(args))
+        return code, out.getvalue()
+
+    def test_the_directory_is_expanded_and_none_prints_nothing(self):
+        with unittest.mock.patch.dict("os.environ", {"MOAT_TEST_DIR": "/tmp/x"}):
+            self.assertEqual(self.run_cmd("dir", "a"), (0, "/tmp/x/a\n"))
+        self.assertEqual(self.run_cmd("dir", "b"), (0, ""))
+
+    def test_proves_is_an_exit_code(self):
+        self.assertEqual(self.run_cmd("proves", "a", "hook-failure")[0], 0)
+        self.assertEqual(self.run_cmd("proves", "b", "hook-failure")[0], 1)
+
+    def test_every_variable_is_one_line_with_only_the_shells_placeholders(self):
+        check.records = self.records
+        code, printed = self.run_cmd("env")
+        self.assertEqual(code, 0)
+        lines = printed.splitlines()
+        self.assertGreater(len(lines), 3)
+        for line in lines:
+            name, value = line.split("\t")
+            self.assertRegex(name, r"^[A-Z_]+$")
+            self.assertRegex(value, r"^\{(HOME|ROOT)\}")
 
 
 if __name__ == "__main__":

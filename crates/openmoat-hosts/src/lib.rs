@@ -20,15 +20,16 @@ mod wire;
 
 pub use block::{NEVER_SUGGESTED, RULE_PAGE, rule_page};
 pub use contract::{
-    Activity, Advisories, Advisory, AlsoDir, AutoStart, BuiltinMcp, Bundle, ConsentFile, Detect,
-    ExtraFile, FailureOutcome, GUARD_BUDGET_S, HEARTBEAT_FLAG, Heartbeat, Helper, HookDir,
-    HookFailure, HookLayout, HookSpec, HookTrust, HookVersions, HostDocs, HostSpec, InstallSpec,
-    KeyShape, Locate, Located, Location, McpAutoStart, McpCommandForm, McpFile, McpNames,
-    McpReader, McpServer, McpSpec, McpSyntax, OtherHooks, Paths, Platform, PluginDir, ProcessSpec,
-    ProjectSettingsSpec, Protect, ProxySessions, RelaxedCheck, RelaxedKey, Reviews, RunFacts,
-    RunWrite, RunsLater, SandboxFormat, SandboxSpec, SessionDir, SettingsFile, SettingsReader,
-    SystemFile, SystemSettingsSpec, ToolRow, ToolToken, Unseen, Version, WindowsSandboxLevel,
-    WindowsSandboxMode, WindowsSandboxReader, WorkspaceSpec,
+    Activity, Advisories, Advisory, AlsoDir, AutoStart, BuiltinMcp, Bundle, Checked, ConfigFormat,
+    ConsentFile, Detect, ExtraFile, FailureOutcome, GUARD_BUDGET_S, HEARTBEAT_FLAG, Heartbeat,
+    Helper, HookDir, HookFailure, HookLayout, HookSpec, HookTrust, HookVersions, HostDocs,
+    HostSpec, InstallSpec, KeyShape, Locate, Located, Location, McpAutoStart, McpCommandForm,
+    McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax, OtherHooks, Paths, Platform,
+    PluginDir, ProcessSpec, ProjectSettingsSpec, Protect, Proves, ProxySessions, RelaxedCheck,
+    RelaxedKey, Reviews, RunFacts, RunWrite, Runner, RunsLater, SandboxFormat, SandboxSpec,
+    SessionDir, SettingsFile, SettingsReader, SystemFile, SystemSettingsSpec, ToolRow, ToolToken,
+    Unseen, Version, Weekly, WeeklyInstall, WeeklyPayload, WeeklyRun, WeeklyRuns,
+    WindowsSandboxLevel, WindowsSandboxMode, WindowsSandboxReader, WorkspaceSpec,
 };
 pub use wire::guard_command::{EVENT_FLAG, GuardCommand, HOME_FLAG, decode_home, encode_home};
 pub use wire::hook_file::yaml as yaml_hooks;

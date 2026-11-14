@@ -22,6 +22,7 @@ mod post_tool_use;
 mod project_settings;
 mod tools;
 mod trust;
+mod weekly;
 mod windows_sandbox;
 
 #[cfg(test)]
@@ -193,6 +194,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
               not yet confirmed to leave the person's own exclusions in place",
     },
     run_env: &["OPENAI_API_KEY", "CODEX_ACCESS_TOKEN"],
+    weekly: weekly::WEEKLY,
     ..HostSpec::BASE
 };
 

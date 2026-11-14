@@ -236,7 +236,8 @@ against; a newer one is reported, not failed. A failure opens one issue per agen
 the only one with a write permission: `issues: write`). No job has a secret. What each
 agent's run proves and what it cannot is in `scripts/ci/latest-agents/README.md`; when an
 adapter is checked against a new release, update the version in its `HOST.md` (or the
-file its record names) and in `agents.json` together:
+file its record names) and in the host's `weekly.rs` together, and regenerate
+`agents.json` (`OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs`):
 `python3 -I scripts/ci/latest-agents/check.py records` fails when they disagree.
 
 ### By hand, with your own keys

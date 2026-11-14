@@ -13,6 +13,8 @@ use serde::Deserialize;
 use crate::Host;
 use crate::contract::{Reviews, Detect, HostDocs, HostSpec};
 
+mod weekly;
+
 /// `cn` sends Claude Code's hooks, ignores `"ask"` and runs the call.
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "continue",
@@ -86,6 +88,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     run: crate::RunFacts::Unknown {
         why: "which directories `cn` writes outside the project was not checked",
     },
+    weekly: weekly::WEEKLY,
     ..HostSpec::BASE
 };
 

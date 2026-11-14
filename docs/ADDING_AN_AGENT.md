@@ -337,8 +337,12 @@ runs the hook. Test at least:
 - **Its row in [PROTECTION.md](PROTECTION.md) starts as preview.** The page is generated
   from the spec. A claim becomes more than preview only with evidence: a test marked
   `// protection: <claim> <agent-id> <oses>` above its `#[test]` (a real run of the agent
-  for `hook`), or a weekly record in `scripts/ci/latest-agents/agents.json` whose
-  `proves` names it. Regenerate with `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p
+  for `hook`), or a weekly record (the spec's `weekly`, written into
+  `scripts/ci/latest-agents/agents.json`) whose `proves` names it.
+- **Its weekly record.** The spec's `weekly` (`host/<module>/weekly.rs`) says how CI's
+  weekly latest-release check installs and runs the agent, with its own steps in
+  `scripts/ci/latest-agents/hosts/<agent>.sh`, or why the job does not run it
+  (`WeeklyRuns::NotRun`); `scripts/ci/latest-agents/README.md` has the details. Regenerate with `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p
   openmoat-hosts --test docs`.
 
 ## The pull request

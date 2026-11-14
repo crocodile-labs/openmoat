@@ -123,12 +123,12 @@ pub const ALLOWED_IN_SHARED_TESTS: &[(&str, usize)] = &[
 
 /// `scripts/` (relative to it).
 pub const ALLOWED_IN_SCRIPTS: &[(&str, usize)] = &[
-    // H6: the weekly latest-agents check, the pinned agent binaries and the
-    // real-agent smoke test keep a host list of their own.
+    // H6: the weekly latest-agents check's helpers, the pinned agent binaries
+    // and the real-agent smoke test keep a host list of their own. The check
+    // itself reads its records, written from the specs, and each record's
+    // own script (`ci/latest-agents/hosts/<agent>.sh`) names only its host.
     ("ci/host-binaries.sh", 6),
-    ("ci/latest-agents.sh", 82),
     ("ci/latest-agents/after_call.py", 12),
-    ("ci/latest-agents/agents.json", 95),
     ("ci/latest-agents/agy_probe.py", 12),
     ("ci/latest-agents/check.py", 26),
     ("ci/latest-agents/fake_gemini.py", 3),

@@ -48,6 +48,7 @@ mod mcp;
 mod protect;
 mod settings;
 mod tools;
+mod weekly;
 
 /// The one event OpenMoat answers.
 pub(crate) const EVENT: &str = "pre_tool_call";
@@ -162,6 +163,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         args: &[],
         writes: &[crate::RunWrite::ConfigDir],
     },
+    weekly: weekly::WEEKLY,
     ..HostSpec::BASE
 };
 

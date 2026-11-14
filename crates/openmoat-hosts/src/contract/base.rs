@@ -40,6 +40,7 @@ impl HostSpec {
         tool_token: super::ToolToken::BASE,
         run: super::RunFacts::BASE,
         run_env: &[],
+        weekly: super::Weekly::BASE,
     };
 }
 

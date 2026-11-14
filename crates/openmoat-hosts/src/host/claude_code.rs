@@ -23,6 +23,7 @@ mod post_tool_use;
 pub(crate) mod project_settings;
 mod session_start;
 mod settings;
+mod weekly;
 
 /// Every Claude Code tool `openmoat-hosts` maps to an action; a tool missing here
 /// never reaches `moat guard`.
@@ -247,6 +248,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             "tabs_create_mcp",
         ],
     }),
+    weekly: weekly::WEEKLY,
     ..HostSpec::BASE
 };
 

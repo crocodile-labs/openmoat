@@ -37,6 +37,7 @@ mod mcp;
 mod project_settings;
 mod protect;
 mod tools;
+mod weekly;
 
 /// Seconds OpenMoat's extension waits for `moat guard` before it blocks the
 /// call (`GUARD_TIMEOUT_MS` in `pi/integration/openmoat.js`, which the CLI's
@@ -200,6 +201,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         "XIAOMI_TOKEN_PLAN_AMS_API_KEY",
         "XIAOMI_TOKEN_PLAN_SGP_API_KEY",
     ],
+    weekly: weekly::WEEKLY,
     ..HostSpec::BASE
 };
 

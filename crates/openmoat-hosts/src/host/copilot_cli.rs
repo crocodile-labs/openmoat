@@ -39,6 +39,7 @@ mod mcp;
 mod post_tool_use;
 mod protect;
 mod tools;
+mod weekly;
 
 /// The event name in camel case, whose payload has camel-case fields.
 /// `PreToolUse` sends Claude Code's field and tool names instead, which this
@@ -145,6 +146,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         writes: &[crate::RunWrite::ConfigDir, crate::RunWrite::Cache("copilot")],
     },
     run_env: &["COPILOT_GITHUB_TOKEN"],
+    weekly: weekly::WEEKLY,
     ..HostSpec::BASE
 };
 

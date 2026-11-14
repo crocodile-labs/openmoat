@@ -7,6 +7,9 @@ read JSON, and the agent records they come from (agents.json beside this file).
     check.py get <agent> <key>               one field of a record (`checked.version`)
     check.py version <agent> <installed>     the installed version against the checked one
     check.py configs <agent>                 "<path>\\t<format>" of each config file, env expanded
+    check.py env                             "<name>\\t<value>" of each variable the job sets
+    check.py dir <agent>                     the directory the agent's first start makes, if any
+    check.py proves <agent> <claim>          exit 0 when the record proves <claim>, else 1
     check.py json <file>                     the file parses as JSON
     check.py payload <agent> allow|deny <home> <project>
                                              the host's golden shell payload, made one
@@ -167,6 +170,8 @@ def cmd_records():
                 problems.append(f"{agent}: {checked['source']} does not name {checked['version']}")
         elif not checked.get("note"):
             problems.append(f"{agent}: no checked.version and no note saying why")
+        if not (ROOT / rec.get("script", "")).is_file():
+            problems.append(f"{agent}: script {rec.get('script')!r} is not a file")
         payload = rec.get("payload")
         if payload:
             fixture = HOSTS / payload["fixture"]
@@ -234,6 +239,29 @@ def cmd_configs(agent):
     for path, fmt in record(agent).get("config", []):
         print(f"{expand(path)}\t{fmt}")
     return 0
+
+
+def cmd_env():
+    """What the job exports for every agent, from the specs (`_env`): its
+    `{HOME}` and `{ROOT}` are the shell's to fill in."""
+    data = json.loads((HERE / "agents.json").read_text(encoding="utf-8"))
+    for name, value in data.get("_env", []):
+        print(f"{name}\t{value}")
+    return 0
+
+
+def cmd_dir(agent):
+    """The directory the agent's first start makes, env expanded; nothing
+    when its record names none."""
+    found = record(agent).get("dir")
+    if found:
+        print(expand(found))
+    return 0
+
+
+def cmd_proves(agent, claim):
+    """Exit 0 when the record proves the claim, 1 when it does not."""
+    return 0 if claim in (record(agent).get("proves") or []) else 1
 
 
 def cmd_json(path):
@@ -745,6 +773,7 @@ COMMANDS = {
     "openclaw-valid": (cmd_openclaw_valid, 2), "openclaw-inspect": (cmd_openclaw_inspect, 1),
     "records": (cmd_records, 0), "matrix": (cmd_matrix, 0), "get": (cmd_get, 2),
     "version": (cmd_version, 2), "configs": (cmd_configs, 1), "json": (cmd_json, 1),
+    "env": (cmd_env, 0), "dir": (cmd_dir, 1), "proves": (cmd_proves, 2),
     "payload": (cmd_payload, 4), "reply": (cmd_reply, 4), "protected": (cmd_protected, 3),
     "session-start": (cmd_session_start, 3), "injected": (cmd_injected, 4),
     "scrub": (cmd_scrub, 7), "resumed": (cmd_resumed, 1),
