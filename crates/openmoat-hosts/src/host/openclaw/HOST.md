@@ -29,12 +29,22 @@ read at openclaw/openclaw `bd6a4e4`). So the plugin registers two handlers
 ([ADR-041](../../../../../docs/adr/ADR-041-openclaw-decides-first-and-last.md)):
 
 - at the highest priority (`Number.MAX_SAFE_INTEGER`) it runs `moat guard` on the call
-  as it came; a deny blocks before any other plugin runs, and after its review no later
-  plugin can change what the person approves;
+  as OpenClaw's trusted tool policies left it; a deny blocks before any other ordinary
+  plugin runs, and after its review no later plugin can change what the person approves;
 - at the lowest (`Number.MIN_SAFE_INTEGER`) it returns the parameters it decided on,
   so a change another plugin returned in between is undone and the call that runs is
   the one OpenMoat checked. A change another plugin meant (a rewritten path, an added
   flag) is undone too: OpenMoat decides only on what it has seen.
+
+Trusted tool policies run before every `before_tool_call` handler: the bundled ones, then
+those of an enabled installed plugin that declares each in `contracts.trustedToolPolicies`
+(<https://docs.openclaw.ai/plugins/hooks/tool-policy>). A policy can only block, rewrite
+the parameters or ask for approval, never allow, and its block ends the call; the ordinary
+handlers get the parameters it left, still run after an approval it got, and their block
+still holds; one that changes the parameters after a trusted approval is blocked
+(`src/agents/agent-tools.before-tool-call.policy.ts`, `src/plugins/trusted-tool-policy.ts`
+at `v2026.11.3`). So ADR-041 holds: no policy runs after the lowest handler, and the call
+that runs is the one OpenMoat checked.
 
 When OpenClaw loads the plugin to run (`registrationMode` `full`, not for listing the
 CLI's commands), it runs `moat guard --heartbeat --host openclaw`
@@ -105,6 +115,10 @@ from one that has not run: the note stays a note. `openclaw plugins inspect open
 --runtime` shows OpenClaw's own error.
 
 ## Known gaps
+
+A trusted tool policy's parameter rewrite is not undone: OpenMoat checks the rewritten
+call, which is the one that runs, and a policy's block or approval comes before OpenMoat's
+decision.
 
 Injected input (ADR-057): OpenMoat's plugin does not handle `after_tool_call`, so it never
 sees what a call returned. A host, path or command untrusted output named is not linked to
