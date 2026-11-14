@@ -259,7 +259,10 @@ fn the_core_names_no_host() {
         .collect();
     assert_eq!(allowed, Vec::<&str>::new(), "the core gets no allowance");
     // The skipped blocks are the generated ones, each opened once and closed.
-    let taint = fs::read_to_string(repo().join(crate::policy_blocks::TAINT)).unwrap();
+    // A Windows checkout may hold the file with `\r\n` line ends.
+    let taint = fs::read_to_string(repo().join(crate::policy_blocks::TAINT))
+        .unwrap()
+        .replace("\r\n", "\n");
     for before in [
         crate::policy_blocks::TAINT_BEFORE,
         crate::policy_blocks::METADATA_BEFORE,
