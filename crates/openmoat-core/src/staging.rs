@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::pattern::GlobPattern;
-use crate::policy::PolicyError;
+use crate::policy::{Policy, PolicyError};
 
 /// Outside reads after which a send with a body carries the atom, by default.
 pub const DEFAULT_OUTSIDE_READS: u32 = 25;
@@ -15,10 +15,14 @@ pub const DEFAULT_OUTSIDE_READS: u32 = 25;
 /// Outside folders read after which a send with a body carries the atom, by default.
 pub const DEFAULT_OUTSIDE_FOLDERS: u32 = 2;
 
+/// The `allow` rule naming each agent's own temporary folders, which the
+/// default policy generates from the host specs: reads there never count
+/// either. Not the whole of `/tmp`: a home or a project can be below a
+/// temporary folder, and what is read there is no less collected.
+pub(crate) const AGENT_TEMP: &str = "agent-temp";
+
 /// Where reads never count as collection: dependency caches and toolchains an
-/// agent reads to build, and the agent's own temporary folder (Claude Code's
-/// `/tmp/claude-<uid>`). Not the whole of `/tmp`: a home or a project can be
-/// below a temporary folder, and what is read there is no less collected.
+/// agent reads to build, besides the policy's [`AGENT_TEMP`] rule.
 pub(crate) const IGNORED: &[&str] = &[
     "~/.cargo/registry/**",
     "~/.cargo/git/**",
@@ -31,8 +35,6 @@ pub(crate) const IGNORED: &[&str] = &[
     "/opt/homebrew/**",
     "/usr/local/Cellar/**",
     "/home/linuxbrew/.linuxbrew/**",
-    "/tmp/claude-*/**",
-    "/private/tmp/claude-*/**",
 ];
 
 /// The `staging:` section. Absent in policies written before it existed.
@@ -74,11 +76,18 @@ impl StagingSettings {
     }
 }
 
-/// The built-in ignored paths followed by the ones `settings` adds.
-pub(crate) fn ignored(settings: Option<&StagingSettings>) -> impl Iterator<Item = &str> {
-    IGNORED.iter().copied().chain(
-        settings
-            .into_iter()
+/// The built-in ignored paths, the reads `policy`'s [`AGENT_TEMP`] rule
+/// allows, and the paths its `staging:` section adds.
+pub(crate) fn ignored(policy: &Policy) -> impl Iterator<Item = &str> {
+    let agent_temp = policy
+        .allow
+        .iter()
+        .filter(|group| group.id == AGENT_TEMP)
+        .flat_map(|group| group.fs_read.iter().map(String::as_str));
+    IGNORED.iter().copied().chain(agent_temp).chain(
+        policy
+            .staging
+            .iter()
             .flat_map(|s| s.ignore.iter().map(String::as_str)),
     )
 }
@@ -127,5 +136,26 @@ mod tests {
         assert!(check(Some(&with(&["~/code/**"]))).is_ok());
         assert!(check(Some(&with(&["!~/.cargo/registry/**"]))).is_err());
         assert!(check(None).is_ok());
+    }
+
+    /// The agents' temporary folders come from the policy's `agent-temp`
+    /// rule, which the default policy generates from the host specs.
+    #[test]
+    fn the_agent_temp_rule_is_ignored() {
+        let policy = crate::Policy::parse(crate::DEFAULT_POLICY).unwrap();
+        let temp = &policy
+            .allow
+            .iter()
+            .find(|g| g.id == super::AGENT_TEMP)
+            .unwrap()
+            .fs_read;
+        assert_ne!(*temp, Vec::<String>::new());
+        let ignored: Vec<&str> = super::ignored(&policy).collect();
+        assert!(
+            temp.iter().all(|p| ignored.contains(&p.as_str())),
+            "{ignored:?}"
+        );
+        let bare = crate::Policy::parse("version: 1\n").unwrap();
+        assert_eq!(super::ignored(&bare).count(), super::IGNORED.len());
     }
 }

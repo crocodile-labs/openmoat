@@ -858,7 +858,10 @@ claude-code)
     CLAUDE_CODE_SHELL="$tool_shell/bash" SHELL="$tool_shell/bash" claude_interrupted
     cat "$out/agent.txt"
     expect_denied "$out/agent.txt"
-    # Reported at the end, so the checks below still run and say what they find.
+    # Printed before the audit checks, so a shell or sandbox that never started
+    # the Bash calls is the first FAIL in the log, not a missing audit row it
+    # caused; the job still fails at the end, after the checks below said what
+    # they find.
     tool_shell_failure=
     if [ ! -s "$tool_shell_log" ]; then
         tool_shell_failure="the shell CLAUDE_CODE_SHELL names never started (ADR-075)"
@@ -868,14 +871,20 @@ claude-code)
         tool_shell_failure="the named shell started, but not for the Bash tool's command (ADR-075)"
     elif grep -q 'guard --host' "$tool_shell_log"; then
         tool_shell_failure="a hook started through the tool shell, so it would lose the relay token (ADR-075)"
-    elif grep -l 'execvp' "$out/captured"/*PostToolUseFailure* 2>/dev/null; then
+    elif grep -lq 'execvp' "$out/captured"/*PostToolUseFailure* 2>/dev/null; then
         tool_shell_failure="Claude Code's sandbox could not start the named shell (execvp), so its Bash calls failed"
     fi
+    if [ -n "$tool_shell_failure" ]; then
+        echo "FAIL  $tool_shell_failure"
+    fi
+    # Only the `ls` call is meant to fail; any other failure's own error text
+    # (bwrap, socat, execvp) is quoted here.
+    tool_failures=0
+    check tool-failures "$out/captured" claude-code moat-ci-no-such-path || tool_failures=1
     check session-start "$host" "$out/audit-before.json" "$out/audit-after.json"
     check injected "$host" "$out/audit-before.json" "$out/audit-after.json" "$injected_host"
     claude_resumed
-    if [ -n "$tool_shell_failure" ]; then
-        echo "FAIL  $tool_shell_failure"
+    if [ -n "$tool_shell_failure" ] || [ "$tool_failures" -ne 0 ]; then
         exit 1
     fi
     ;;

@@ -17,7 +17,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use openmoat_core::{BUILTIN_METADATA_SERVER, Decision, Verdict};
+use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::Host;
 
 use crate::home::Home;
@@ -40,49 +40,56 @@ pub use pins::{Change, Pins};
 /// one a person accepted.
 pub const SERVER_RULE: &str = "mcp-server-changed";
 
-/// Whether a server named `name` in `host`'s configuration takes the name of
-/// the server the host provides itself, whose tab lists are metadata
-/// ([`BUILTIN_METADATA_SERVER`], ADR-069): its tools would be named as that
-/// server's are.
-pub fn takes_builtin_name(host: Host, name: &str) -> bool {
-    tool_of(host, &format!("mcp__{BUILTIN_METADATA_SERVER}__tool"), name)
+/// The MCP servers some host provides itself, which no MCP configuration file
+/// defines, each with that host ([`openmoat_hosts::HostSpec::builtin_mcp`]).
+fn builtin_servers() -> impl Iterator<Item = (Host, &'static str)> {
+    Host::EVERY.into_iter().filter_map(|provider| {
+        let builtin = provider.spec().builtin_mcp.as_ref()?;
+        Some((provider, builtin.server))
+    })
 }
 
-/// Name [`BUILTIN_METADATA_SERVER`] in `policy`'s `taint.defined_servers`
-/// when a definition the lock at `home` pins takes that name, so the built-in
-/// metadata exemption does not apply to another program that took it
-/// (ADR-069). The real Claude in Chrome is provided by Claude Code itself and
+/// The server a host provides itself, and that host, whose name a server
+/// named `name` in `host`'s configuration takes: its tools would be named as
+/// that server's are, whose listed tools return metadata (ADR-069). `None`
+/// when it takes none.
+pub fn builtin_name_taken(host: Host, name: &str) -> Option<(Host, &'static str)> {
+    builtin_servers().find(|(_, server)| tool_of(host, &format!("mcp__{server}__tool"), name))
+}
+
+/// Name each server a host provides itself in `policy`'s
+/// `taint.defined_servers` when a definition the lock at `home` pins takes
+/// its name, so the built-in metadata exemption does not apply to another
+/// program that took it (ADR-069). The real one is provided by its host and
 /// no MCP configuration file defines it. A definition no one accepted has its
 /// calls denied (`mcp-server-changed`), so none of its results is read; a lock
-/// that cannot be read leaves the exemption off.
+/// that cannot be read leaves every exemption off.
 pub fn mark_defined_servers(home: &Home, policy: &mut openmoat_core::Policy) {
     let path = home.lock_path();
     if !path.exists() {
         // Nothing is pinned, and the guard denies every call without a lock.
         return;
     }
-    let taken = match Lock::load(&path) {
-        Ok(lock) => lock.mcp_servers.as_ref().is_some_and(|pins| {
-            pins.values().any(|pin| {
-                pin.host
-                    .parse::<Host>()
-                    .is_ok_and(|host| takes_builtin_name(host, &pin.name))
+    let taken: Vec<&str> = match Lock::load(&path) {
+        Ok(lock) => lock
+            .mcp_servers
+            .iter()
+            .flat_map(|pins| pins.values())
+            .filter_map(|pin| {
+                let host = pin.host.parse::<Host>().ok()?;
+                builtin_name_taken(host, &pin.name).map(|(_, server)| server)
             })
-        }),
-        Err(_) => true,
+            .collect(),
+        Err(_) => builtin_servers().map(|(_, server)| server).collect(),
     };
-    if !taken {
+    if taken.is_empty() {
         return;
     }
     let taint = policy.taint.get_or_insert_with(Default::default);
-    if !taint
-        .defined_servers
-        .iter()
-        .any(|s| s == BUILTIN_METADATA_SERVER)
-    {
-        taint
-            .defined_servers
-            .push(BUILTIN_METADATA_SERVER.to_owned());
+    for server in taken {
+        if !taint.defined_servers.iter().any(|s| s == server) {
+            taint.defined_servers.push(server.to_owned());
+        }
     }
 }
 

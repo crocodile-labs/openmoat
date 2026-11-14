@@ -9,6 +9,7 @@ use super::super::REFUSED_RULE;
 use super::super::channel::Reply;
 use super::super::gate::{MAX_WAITING, gate_used};
 use super::super::listen::{Listener, Records, Row};
+use super::super::wait::Hold;
 use super::{
     APPROVER, FAKE, Fake, NOW, Rows, approve_button, call, gated, only_request, press, review,
     setup,
@@ -150,8 +151,13 @@ fn an_approved_call_refused_after_all_is_told_to_the_approver() {
     listener
         .step(&mut fake, &mut rows, Duration::ZERO, &|| NOW + 1)
         .unwrap();
-    let (decision, approved) =
-        gate_used(&s.store, &req, review(), &KnownSecrets::default(), NOW + 2);
+    let (decision, approved) = gate_used(
+        &s.store,
+        &req,
+        review(),
+        &KnownSecrets::default(),
+        (NOW + 2, &Hold::none()),
+    );
     assert_eq!(decision.verdict, Verdict::Allow, "{decision:?}");
     let line = approved
         .expect("the approval was used")
@@ -190,7 +196,7 @@ fn an_approved_call_refused_after_all_is_told_to_the_approver() {
         &call("s1", "ls"),
         review(),
         &KnownSecrets::default(),
-        NOW + 5,
+        (NOW + 5, &Hold::none()),
     );
     assert!(none.is_none());
 }

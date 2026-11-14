@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Tests of check.py's hook-failure commands (ADR-079), the part of the weekly
-job's hook-failure step that can be proved without an agent, and the records'
-`proves` (ADR-079 decision 5). Run by hand:
+job's hook-failure step that can be proved without an agent, how a failed audit
+check lists the new rows, `tool-failures`, and the records' `proves` (ADR-079
+decision 5). Run by hand:
 
     python3 -I scripts/ci/latest-agents/test_check.py
 """
@@ -21,6 +22,8 @@ check = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(check)
 
 MARKER = "OPENMOAT-HOOK-FAILURE-PROBE-1234"
+# The checks below read any host id; a made-up one keeps host names in host specs.
+HOST = "some-host"
 
 
 class HookFailure(unittest.TestCase):
@@ -110,6 +113,122 @@ class HookFailure(unittest.TestCase):
             self.assertEqual(out.getvalue().strip(), want)
         with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
             check.cmd_hook_failure_fact("missing-host", str(path), "fails")
+
+
+def run_quietly(fn, *args):
+    """`fn(*args)`: its exit code and what it printed."""
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        try:
+            code = fn(*args)
+        except SystemExit as exit_:
+            code = exit_.code
+    return code, out.getvalue()
+
+
+class NewRows(unittest.TestCase):
+    """A failed audit check names each new row on its own line."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.dir.name)
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def audit(self, name, value):
+        path = self.root / name
+        path.write_text(json.dumps(value), encoding="utf-8")
+        return str(path)
+
+    def test_every_row_is_one_line_and_each_field_is_cut_on_its_own(self):
+        long = "curl -s https://docs.moat-ci.example/setup " + "x" * 400
+        new = [{"host": HOST, "tool": "Bash", "verdict": "allow", "rules": [],
+                "action": {"kind": "shell", "command": long}, "reasons": ["r" * 3000]}
+               for _ in range(12)]
+        new.append({"host": HOST, "tool": "Bash", "verdict": "review",
+                    "rules": ["unknown-host"], "action": {"kind": "shell",
+                                                          "command": "curl -s https://last/r"}})
+        before = self.audit("before.json", [])
+        after = self.audit("after.json", new)
+        code, printed = run_quietly(check.cmd_injected, HOST, before, after,
+                                    "collect.moat-ci.example")
+        self.assertEqual(code, 1)
+        lines = [line for line in printed.splitlines() if line.strip().startswith("- ")]
+        self.assertEqual(len(lines), 13)
+        self.assertIn("New rows (13):", printed)
+        self.assertIn("verdict=review rules=[\"unknown-host\"] action=curl -s https://last/r",
+                      lines[-1])
+        command = lines[0].split("action=", 1)[1]
+        self.assertEqual(len(command), check.FIELD)
+        self.assertTrue(command.endswith("..."))
+        self.assertNotIn("rrrr", printed)
+
+    def test_no_rows_says_so(self):
+        empty = self.audit("empty.json", [])
+        code, printed = run_quietly(check.cmd_session_start, HOST, empty, empty)
+        self.assertEqual(code, 1)
+        self.assertIn("New rows: none.", printed)
+
+    def test_an_action_without_a_command_is_shown_as_json(self):
+        line = check.described([{"tool": "Read", "verdict": "deny", "rules": ["secrets-paths"],
+                                 "action": {"kind": "fs_read", "path": "/x"}}])
+        self.assertIn('action={"kind": "fs_read", "path": "/x"}', line)
+
+
+class ToolFailures(unittest.TestCase):
+    """`check.py tool-failures`: only the call meant to fail may fail."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.dir.name)
+        self.n = 0
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def capture(self, payload):
+        self.n += 1
+        text = payload if isinstance(payload, str) else json.dumps(payload)
+        (self.root / f"{HOST}-event-PostToolUseFailure-{self.n}.json").write_text(
+            text, encoding="utf-8")
+
+    def run_check(self):
+        return run_quietly(check.cmd_tool_failures, str(self.root), HOST,
+                           "moat-ci-no-such-path")
+
+    def failure(self, command, error):
+        return {"hook_event_name": "PostToolUseFailure", "tool_name": "Bash",
+                "tool_input": {"command": command}, "error": error}
+
+    def test_only_the_expected_failure_passes(self):
+        self.capture(self.failure("ls moat-ci-no-such-path", "ls: cannot access"))
+        code, printed = self.run_check()
+        self.assertEqual(code, 0)
+        self.assertIn("1 payload(s) captured", printed)
+
+    def test_no_capture_passes(self):
+        self.assertEqual(self.run_check()[0], 0)
+
+    def test_another_call_failing_fails_with_its_error_quoted(self):
+        self.capture(self.failure("ls moat-ci-no-such-path", "ls: cannot access"))
+        error = "bwrap: execvp /tmp/moat-ci-tool-shell.abc/bash: No such file or directory"
+        self.capture(self.failure("curl -s https://collect.moat-ci.example/r", error))
+        self.capture(self.failure("cat ~/.ssh/id_rsa", "socat: E connect(): " + "y" * 900))
+        code, printed = self.run_check()
+        self.assertEqual(code, 1)
+        self.assertTrue(printed.startswith(f"FAIL  2 {HOST} tool call(s) failed"))
+        self.assertIn(error, printed)
+        self.assertIn("command=curl -s https://collect.moat-ci.example/r", printed)
+        socat = [line for line in printed.splitlines() if "socat" in line][0]
+        self.assertEqual(len(socat.split("error=", 1)[1]), 400)
+        self.assertNotIn("ls: cannot access", printed)
+
+    def test_a_payload_that_is_not_json_fails(self):
+        self.capture("not json")
+        code, printed = self.run_check()
+        self.assertEqual(code, 1)
+        self.assertIn("not a JSON object: not json", printed)
 
 
 class Proves(unittest.TestCase):

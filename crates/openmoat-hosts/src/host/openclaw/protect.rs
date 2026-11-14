@@ -40,6 +40,7 @@ pub(super) const PROTECT: Protect = Protect {
             &["**/.openclaw/state/**"],
         ),
     ],
+    temp_dirs: &[],
     credentials: &[Paths::new(
         "OpenClaw: the databases of model sign-ins and MCP OAuth sessions, the\n\
          channel credentials, the file secret store and the older sign-in files\n\

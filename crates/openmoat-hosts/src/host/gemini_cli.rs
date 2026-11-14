@@ -61,6 +61,16 @@ const HOOKS: &[HookSpec] = &[
     ),
 ];
 
+/// A search with no `dir_path` reads every workspace directory
+/// (`workspaceContext.getDirectories()` in `packages/core/src/tools/grep.ts`,
+/// `glob.ts` and `read-many-files.ts`, 0.65.0), and the hook names only the
+/// working directory; the settings' `context.includeDirectories` add them.
+pub(crate) const WORKSPACE: crate::contract::WorkspaceSpec = crate::contract::WorkspaceSpec {
+    dirs: settings::include_directories,
+    unnamed: "without a `dir_path` Gemini CLI searches every workspace directory, and the hook \
+              names only the working directory",
+};
+
 /// Gemini CLI puts a `review` to the person itself.
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "gemini-cli",
@@ -144,7 +154,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     process: protect::PROCESS,
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
-    workspace_dirs: Some(settings::include_directories),
+    workspace: Some(WORKSPACE),
     // System settings outrank the person's own, and system defaults sit
     // under them; each has a variable that moves it
     // (`packages/cli/src/config/settings.ts`). `hooksConfig` there turns

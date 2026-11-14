@@ -35,10 +35,32 @@ pub const PROJECT_FS_BEFORE: &str = "      # each agent's files in a project tha
 pub const PROJECT_FS_AFTER: &str =
     "      # a virtual environment's interpreter and a dev container's host command\n";
 
+/// The `agent-temp` rule's comment line just before the hosts' temporary
+/// folders, and the rule that follows it.
+pub const AGENT_TEMP_BEFORE: &str = "      # each agent's temporary folders, generated from its spec\n";
+pub const AGENT_TEMP_AFTER: &str = "  - id: dev-shell\n";
+
+/// The `managed-settings` rule's comment line just before the folders of the
+/// hosts' system-wide settings, and the comment of the rule that follows it.
+pub const MANAGED_BEFORE: &str =
+    "      # the folders of each agent's system-wide settings, generated from its spec\n";
+pub const MANAGED_AFTER: &str =
+    "  # Windows: work handed to the Windows Subsystem for Linux. A command inside a\n";
+
 /// Every generated block of the default policy, as (before, after).
 pub const BLOCKS: &[(&str, &str)] = &[
     (POLICY_BEFORE, POLICY_AFTER),
     (CREDENTIALS_BEFORE, CREDENTIALS_AFTER),
     (RUNS_LATER_BEFORE, RUNS_LATER_AFTER),
     (PROJECT_FS_BEFORE, PROJECT_FS_AFTER),
+    (AGENT_TEMP_BEFORE, AGENT_TEMP_AFTER),
+    (MANAGED_BEFORE, MANAGED_AFTER),
 ];
+
+/// The core's file whose lists `protect.rs` generates, and the lines that
+/// open each of its blocks (`// generated:` … `// /generated` lines, which
+/// the architecture test leaves out of its scan on their own).
+pub const TAINT: &str = "crates/openmoat-core/src/taint.rs";
+pub const TAINT_BEFORE: &str = "// generated:taint ";
+pub const METADATA_BEFORE: &str = "// generated:metadata-tools ";
+pub const CORE_AFTER: &str = "    // /generated\n";

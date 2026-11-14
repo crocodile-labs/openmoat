@@ -33,14 +33,6 @@ pub const RULE: &str = "project-settings";
 /// A settings file larger than this is refused unread rather than parsed.
 const MAX_BYTES: u64 = 1024 * 1024;
 
-/// What a Claude Code settings file sets that could switch OpenMoat off, run
-/// a program or redirect the agent (`openmoat-hosts`, `host/claude_code`):
-/// `ConfigChange` is Claude Code's hook, also sent by the Continue CLI.
-#[must_use]
-pub fn findings(root: &Map<String, Value>) -> Vec<String> {
-    openmoat_hosts::claude_code_settings_findings(root)
-}
-
 /// How to read one settings file of a host: its reader, the directory its
 /// relative entries resolve from, and OpenMoat's hook file, which an entry
 /// may name to turn it off (pi).
@@ -61,7 +53,8 @@ impl Reading<'_> {
         SettingsFile::new(root, self.base, self.hook_file, home)
     }
 
-    /// What a project's file `root` sets that [`findings`] names, in this format.
+    /// What a project's file `root` sets that could switch OpenMoat off, run a
+    /// program or redirect the agent, in this format.
     fn findings(&self, root: &Map<String, Value>) -> Vec<String> {
         let home = crate::home::user_home().ok();
         self.reader.findings(&self.file(root, home.as_deref()))
@@ -156,10 +149,12 @@ fn parse(path: &Path, bytes: &[u8], comments: bool) -> Result<Map<String, Value>
     }
 }
 
-/// What the bytes of one Claude Code file set that [`findings`] names, or why
-/// they could not be read; `None` when the file is absent or sets nothing risky.
-fn judge(path: &Path, bytes: Option<&[u8]>) -> Option<String> {
-    judge_with(path, bytes, false, findings)
+/// What the bytes of one settings file set that `reading` names, or why they
+/// could not be read; `None` when the file is absent or sets nothing risky.
+fn judge(path: &Path, bytes: Option<&[u8]>, reading: &Reading<'_>) -> Option<String> {
+    judge_with(path, bytes, reading.reader.reads_comments(), |root| {
+        reading.findings(root)
+    })
 }
 
 /// [`judge`] with `found` naming what is risky, in JSON with comments when
@@ -180,13 +175,6 @@ fn judge_with(
     }
 }
 
-/// What reading one Claude Code file found: the risky keys it sets, or why it
-/// could not be read. `None` when the file is absent or sets nothing risky.
-#[cfg(test)]
-fn check(path: &Path) -> Option<String> {
-    check_as(path, false, findings)
-}
-
 /// What reading one file found, `found` naming what is risky in its format
 /// (JSON with comments when `comments`): what it sets, or why it could not be
 /// read; `None` when the file is absent or sets nothing risky.
@@ -201,21 +189,39 @@ fn check_as(
     }
 }
 
-/// What reading one Claude Code file found, for a decision: a file that passes is read once more just before
-/// the decision, and one whose bytes changed in between (or that appeared or
-/// went) is reported, since what the host loads may not be what was checked.
+/// What reading one project settings file of `spec`'s found, for a
+/// decision: the risky keys it sets in `spec`'s format, or why it could not be
+/// read. A file that passes is read once more just before the decision, and
+/// one whose bytes changed in between (or that appeared or went) is reported,
+/// since what the host loads may not be what was checked. `hook_file` is
+/// OpenMoat's own, which an entry may name to turn it off.
 #[must_use]
-pub fn check_unchanged(path: &Path) -> Option<String> {
-    check_between(path, || {})
+pub fn check_unchanged(
+    path: &Path,
+    spec: &ProjectSettingsSpec,
+    hook_file: &Path,
+) -> Option<String> {
+    check_between(path, spec, hook_file, || {})
 }
 
 /// [`check_unchanged`] with `between` run after the first read.
-fn check_between(path: &Path, between: impl FnOnce()) -> Option<String> {
+fn check_between(
+    path: &Path,
+    spec: &ProjectSettingsSpec,
+    hook_file: &Path,
+    between: impl FnOnce(),
+) -> Option<String> {
+    let base = path.parent().unwrap_or(path);
+    let reading = Reading {
+        reader: spec.reader,
+        base,
+        hook_file,
+    };
     let first = match read_bytes(path) {
         Ok(bytes) => bytes,
         Err(e) => return Some(format!("cannot be checked: {e:#}")),
     };
-    if let Some(found) = judge(path, first.as_deref()) {
+    if let Some(found) = judge(path, first.as_deref(), &reading) {
         return Some(found);
     }
     between();
@@ -282,7 +288,7 @@ fn hook_files(dir: &Path, extensions: &[&str]) -> Vec<PathBuf> {
 }
 
 /// One warning per project settings file `host`'s spec names for `cwd` that
-/// sets something [`findings`] names or cannot be read, and one per hook file
+/// sets something its reader names or cannot be read, and one per hook file
 /// in its project hook directory, for `moat doctor` and `moat status`. The
 /// host loads these when a session starts, where no `ConfigChange` fires, so
 /// OpenMoat can only point at them. `hook_file` is OpenMoat's own, which a

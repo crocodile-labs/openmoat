@@ -127,9 +127,14 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             name: "Cursor Helper",
         }),
     },
-    // `kernel-self`'s and the taint list's lines for Cursor stay hand-written
-    // among Claude Code's and Codex's.
+    // `kernel-self`'s lines for Cursor stay hand-written among Claude Code's
+    // and Codex's.
     protect: crate::contract::Protect {
+        taint: &[crate::contract::Paths::new(
+            "Cursor: its directory (hooks, MCP servers, rules) and a project's, and the\n\
+             rules file it loads into every session",
+            &["**/.cursor/**", "**/.cursorrules"],
+        )],
         runs_later: &[
             crate::contract::RunsLater::agent_config(
                 "Cursor: a project's MCP servers",

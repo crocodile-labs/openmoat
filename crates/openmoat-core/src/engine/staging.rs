@@ -125,7 +125,7 @@ pub(super) fn compile_inside(
     ["${project}".to_owned(), "${project}/**".to_owned()]
         .into_iter()
         .chain(roots)
-        .chain(crate::staging::ignored(policy.staging.as_ref()).map(str::to_owned))
+        .chain(crate::staging::ignored(policy).map(str::to_owned))
         .flat_map(|p| ctx.spellings(&p))
         .map(|p| GlobPattern::compile(&p, ctx.case_insensitive_paths))
         .collect()

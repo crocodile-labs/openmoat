@@ -342,7 +342,13 @@ fn a_pinned_server_named_like_claude_in_chrome_turns_the_tab_list_exemption_off(
     );
     assert!(denied(&home, "mcp__claude-in-chrome__tabs_context_mcp").is_some());
     accept_all(&home);
-    assert_eq!(policy(&home), [openmoat_core::BUILTIN_METADATA_SERVER]);
-    assert!(takes_builtin_name(Host::ClaudeCode, "claude-in-chrome"));
-    assert!(!takes_builtin_name(Host::ClaudeCode, "claude-in-chrome-2"));
+    assert_eq!(policy(&home), ["claude-in-chrome"]);
+    assert_eq!(
+        builtin_name_taken(Host::ClaudeCode, "claude-in-chrome"),
+        Some((Host::ClaudeCode, "claude-in-chrome"))
+    );
+    assert_eq!(
+        builtin_name_taken(Host::ClaudeCode, "claude-in-chrome-2"),
+        None
+    );
 }

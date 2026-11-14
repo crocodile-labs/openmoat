@@ -25,6 +25,10 @@ pub enum ApprovalsCommand {
     /// Send waiting requests to the approvers and take their answers, until Ctrl-C. Run
     /// it in a terminal of your own. Refused unless run from an interactive terminal.
     Listen,
+    /// How long the hook waits for an answer while `listen` runs, so an approval runs the
+    /// call at once: 0 to 25 seconds, 0 never waits; 20 when not set. Refused unless run
+    /// from an interactive terminal.
+    Wait(WaitArgs),
     /// Remove the channel's credential and settings; reviews are answered only where
     /// the agent runs again. Refused unless run from an interactive terminal.
     Disconnect,
@@ -60,6 +64,12 @@ pub struct ApproverArgs {
     /// The approver's id: `<channel>:<user id>` as `openmoat approvals listen` prints it
     /// when they message the channel, or the bare user id on the connected channel.
     pub user_id: String,
+}
+
+#[derive(Debug, Args)]
+pub struct WaitArgs {
+    /// Seconds, 0 to 25; 0 turns the wait off.
+    pub seconds: u64,
 }
 
 #[derive(Debug, Args)]

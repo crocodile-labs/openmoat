@@ -1,5 +1,28 @@
 use super::*;
 
+/// Claude Code's project settings, whose files these tests write.
+fn claude() -> &'static ProjectSettingsSpec {
+    Host::ClaudeCode.spec().project_settings.as_ref().unwrap()
+}
+
+/// What reading one Claude Code file found: the risky keys it sets, or why it
+/// could not be read. `None` when the file is absent or sets nothing risky.
+fn check(path: &Path) -> Option<String> {
+    check_as(path, false, |root| {
+        claude()
+            .reader
+            .findings(&SettingsFile::new(root, path, path, None))
+    })
+}
+
+fn check_unchanged(path: &Path) -> Option<String> {
+    super::check_unchanged(path, claude(), path)
+}
+
+fn check_between(path: &Path, between: impl FnOnce()) -> Option<String> {
+    super::check_between(path, claude(), path, between)
+}
+
 fn warnings(cwd: &Path, user_home: &Path) -> Vec<String> {
     super::warnings(
         cwd,

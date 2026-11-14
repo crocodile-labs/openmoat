@@ -30,7 +30,7 @@ pub const MIN_EXPIRY_S: u64 = 60;
 pub const MAX_EXPIRY_S: u64 = 60 * 60;
 
 /// A record signed with the approval key: its `mac` covers every other field.
-trait Signed: Serialize + DeserializeOwned + Clone {
+pub(super) trait Signed: Serialize + DeserializeOwned + Clone {
     const DOMAIN: &'static [u8];
     fn version(&self) -> u32;
     fn mac(&mut self) -> &mut String;
@@ -78,6 +78,12 @@ pub struct Settings {
     /// the connected channel; empty approves nothing.
     pub approvers: Vec<String>,
     pub expiry_s: u64,
+    /// How long the hook waits for an answer while `listen` runs (ADR-093),
+    /// in seconds; `None` is [`super::wait::DEFAULT_WAIT_S`] and `0` never
+    /// waits. Left out when `None`, so settings signed before it existed
+    /// still verify.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait_s: Option<u64>,
     #[serde(default)]
     pub mac: String,
 }
@@ -107,8 +113,28 @@ impl Settings {
             channel: channel.to_owned(),
             approvers: Vec::new(),
             expiry_s,
+            wait_s: None,
             mac: String::new(),
         })
+    }
+
+    /// How long the hook may wait for an answer, before the host's and the
+    /// guard's own limits ([`super::wait::room`]).
+    pub fn wait(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.wait_s.unwrap_or(super::wait::DEFAULT_WAIT_S))
+    }
+
+    /// Set the hook's wait to `seconds`, refused outside
+    /// `0..=`[`super::wait::MAX_WAIT_S`].
+    pub fn set_wait(&mut self, seconds: u64) -> Result<()> {
+        if seconds > super::wait::MAX_WAIT_S {
+            bail!(
+                "the hook waits at most {} seconds for an answer (0 turns the wait off)",
+                super::wait::MAX_WAIT_S
+            );
+        }
+        self.wait_s = Some(seconds);
+        Ok(())
     }
 
     /// Whether the approver id `id` may approve.
@@ -122,6 +148,9 @@ impl Settings {
         let settings = <Self as Signed>::load(path, key)?;
         if !(MIN_EXPIRY_S..=MAX_EXPIRY_S).contains(&settings.expiry_s) {
             bail!("{} sets an expiry out of range", path.display());
+        }
+        if settings.wait_s.is_some_and(|s| s > super::wait::MAX_WAIT_S) {
+            bail!("{} sets a wait out of range", path.display());
         }
         settings.check_approvers()?;
         Ok(settings)

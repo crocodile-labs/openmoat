@@ -48,6 +48,8 @@ pub enum Phase {
     Compile,
     /// Reading the session's earlier calls from the audit log.
     Taint,
+    /// Waiting for an approver's answer from another device (ADR-093).
+    Approval,
     /// Writing the session cache.
     Cache,
     /// Recording the decision in the audit log.
@@ -56,13 +58,14 @@ pub enum Phase {
     Answer,
 }
 
-const PHASES: [Phase; 9] = [
+const PHASES: [Phase; 10] = [
     Phase::Stdin,
     Phase::Relay,
     Phase::Lock,
     Phase::Context,
     Phase::Compile,
     Phase::Taint,
+    Phase::Approval,
     Phase::Cache,
     Phase::Record,
     Phase::Answer,
@@ -78,6 +81,7 @@ impl Phase {
             Self::Context => "context",
             Self::Compile => "compile",
             Self::Taint => "taint",
+            Self::Approval => "approval",
             Self::Cache => "cache",
             Self::Record => "record",
             Self::Answer => "answer",
@@ -93,6 +97,7 @@ impl Phase {
             Self::Context => "loading the policy",
             Self::Compile => "deciding",
             Self::Taint => "reading the session's earlier calls",
+            Self::Approval => "waiting for an approver's answer",
             Self::Cache => "writing the session cache",
             Self::Record => "writing the audit log",
             Self::Answer => "answering the host",

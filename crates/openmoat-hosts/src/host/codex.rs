@@ -153,6 +153,11 @@ pub(crate) static SPEC: HostSpec = HostSpec {
              file changes (`project-settings`)",
             &["**/.codex/config.toml"],
         )],
+        taint: &[crate::contract::Paths::new(
+            "Codex: its directory (configuration, hooks, skills) and a project's, and the\n\
+             shared `.agents/skills` folder it and several other agents load skills from",
+            &["**/.codex/**", "**/.agents/skills", "**/.agents/skills/**"],
+        )],
         ..crate::contract::Protect::BASE
     },
     advisories: advisories::ADVISORIES,

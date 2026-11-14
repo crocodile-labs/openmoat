@@ -149,8 +149,6 @@ fn check_only_shrinks(found: &Found, allowed: &[(&str, usize)], what: &str, list
 const ALLOWED_MODULES: &[(&str, usize)] = &[
     // The one list of sandbox backends: each format's module and its arm.
     ("openmoat-cli/src/sandbox.rs", 6),
-    // Re-exports the guard needs: Claude Code's `ConfigChange` helpers.
-    ("openmoat-hosts/src/lib.rs", 2),
 ];
 
 /// Each host's module name, and its first word for the short forms the CLI

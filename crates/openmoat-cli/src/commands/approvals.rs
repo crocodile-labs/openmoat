@@ -7,24 +7,21 @@
 //! ([`crate::remote::REGISTRY`]) and the settings.
 
 use std::io::Write as _;
-use std::time::Duration;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use anyhow::{Context as _, Result, bail};
 
-use crate::cli::{ApprovalsStatusArgs, ApproverArgs, ConnectArgs, Format};
+use crate::cli::{ApprovalsStatusArgs, ApproverArgs, ConnectArgs, Format, WaitArgs};
 use crate::exit::Code;
 use crate::home::Home;
 use crate::proxy_session::Key;
+use crate::remote::listen::run::{self, Shared};
 use crate::remote::{
     AuditRecords, Credential, DEFAULT_EXPIRY_S, Listener, MAX_EXPIRY_S, MIN_EXPIRY_S, Options,
     REGISTRY, Secrets, Settings, Spec, Store,
 };
 use crate::render::Deferred;
-
-/// How long one poll of the channel waits for a reply.
-const POLL: Duration = Duration::from_secs(25);
-/// The pause after a failed round, so a channel that is down is not hammered.
-const BACKOFF: Duration = Duration::from_secs(5);
 
 fn person(command: &str) -> Result<()> {
     crate::terminal::refuse_agent(command)?;
@@ -203,6 +200,8 @@ struct State {
     settings: Settings,
     account: Option<String>,
     waiting: usize,
+    /// Whether a listener's beat is fresh ([`crate::remote::live`]).
+    listening: bool,
     problem: Option<String>,
 }
 
@@ -216,6 +215,7 @@ fn state(store: &Store) -> Result<State> {
         .flatten()
         .filter(|r| r.verified(&key) && !r.expired(now))
         .count();
+    let listening = crate::remote::live::live(store, &key, &settings.channel, now);
     let (account, problem) = match REGISTRY.find(&settings.channel) {
         Ok(spec) => (
             crate::remote::account(store, &REGISTRY, &key, &settings),
@@ -227,6 +227,7 @@ fn state(store: &Store) -> Result<State> {
         settings,
         account,
         waiting,
+        listening,
         problem,
     })
 }
@@ -247,6 +248,8 @@ pub fn status(args: &ApprovalsStatusArgs) -> Result<Code> {
                 "account": s.account,
                 "approvers": s.settings.approvers,
                 "expiry_s": s.settings.expiry_s,
+                "wait_s": s.settings.wait().as_secs(),
+                "listening": s.listening,
                 "waiting": s.waiting,
                 "problem": s.problem,
             }),
@@ -274,6 +277,21 @@ pub fn status(args: &ApprovalsStatusArgs) -> Result<Code> {
                 writeln!(out, "approvers: {}", s.settings.approvers.join(", "))?;
             }
             writeln!(out, "requests wait: {} minute(s)", s.settings.expiry_s / 60)?;
+            match s.settings.wait().as_secs() {
+                0 => writeln!(
+                    out,
+                    "the hook waits: no (`openmoat approvals wait <seconds>`)"
+                )?,
+                wait => writeln!(
+                    out,
+                    "the hook waits: up to {wait} s while the listener runs ({})",
+                    if s.listening {
+                        "running now"
+                    } else {
+                        "not running now"
+                    }
+                )?,
+            }
             writeln!(out, "waiting now: {}", s.waiting)?;
             if let Some(problem) = s.problem {
                 writeln!(out, "problem: {problem}")?;
@@ -328,36 +346,111 @@ pub fn test() -> Result<Code> {
     Ok(if failed { Code::Failed } else { Code::Ok })
 }
 
-/// `openmoat approvals listen`: until Ctrl-C.
+/// `openmoat approvals listen`: until Ctrl-C. Two halves (ADR-093,
+/// [`crate::remote::listen::run`]): this thread sends requests as they
+/// appear and keeps the beat; another long-polls the channel for answers,
+/// with a channel of its own. Ctrl-C stops both and removes the beat; a
+/// poll still in flight is dropped with the process, unconfirmed, so its
+/// replies come again on the next `listen`.
 pub fn listen() -> Result<Code> {
     person("openmoat approvals listen")?;
     let (home, store) = store()?;
     let (key, settings) = connected(&store)?;
-    let (spec, mut channel) = crate::remote::open(&store, &REGISTRY, &key, &settings)?;
-    let mut records = AuditRecords { home: &home };
-    let mut listener = Listener::new(&store, &key, spec, settings);
+    let (spec, mut sender) = crate::remote::open(&store, &REGISTRY, &key, &settings)?;
+    let (_, poller) = crate::remote::open(&store, &REGISTRY, &key, &settings)?;
+    let stop = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&stop))
+        .context("stopping on Ctrl-C")?;
+    let shared = Arc::new(Shared::new(stop));
     eprintln!(
         "listening for answers over {}; Ctrl-C stops (requests then wait unanswered and expire)",
         spec.title
     );
-    loop {
-        // Approvers a person changed meanwhile, and a channel disconnected.
-        match connected(&store) {
-            Ok((_, settings)) if settings.channel != spec.name => {
-                bail!("stopped: another channel was connected; run `listen` again")
-            }
-            Ok((_, settings)) => listener.update(settings),
-            Err(error) => bail!("stopped: {error:#}"),
-        }
-        let round = listener.step(channel.as_mut(), &mut records, POLL, &crate::time::now_ms);
-        for line in listener.log.drain(..) {
-            eprintln!("{} {line}", crate::time::clock(crate::time::now_ms()));
-        }
-        if let Err(error) = round {
-            eprintln!("moat: {error:#}; trying again in {} s", BACKOFF.as_secs());
-            std::thread::sleep(BACKOFF);
-        }
+    {
+        let (home, store, settings, shared) = (
+            home.clone(),
+            store.clone(),
+            settings.clone(),
+            Arc::clone(&shared),
+        );
+        let mut poller = poller;
+        // Detached: it may be waiting on the channel's server when Ctrl-C
+        // comes, and nothing it holds needs more than the process's end.
+        std::thread::spawn(move || {
+            let key = match Key::load(&store.key_path()) {
+                Ok(key) => key,
+                Err(error) => {
+                    print(&format!("cannot take answers: {error:#}"));
+                    shared.halt();
+                    return;
+                }
+            };
+            let mut records = AuditRecords { home: &home };
+            let mut listener = Listener::new(&store, &key, spec, settings);
+            let refresh = || refresh(&store, spec);
+            run::answering(
+                &mut listener,
+                (poller.as_mut(), &mut records),
+                &shared,
+                &refresh,
+                &print,
+            );
+        });
     }
+    let mut records = AuditRecords { home: &home };
+    let mut listener = Listener::new(&store, &key, spec, settings);
+    run::sending(
+        &mut listener,
+        (sender.as_mut(), &mut records),
+        &shared,
+        &|| refresh(&store, spec),
+        &print,
+    )
+    .context("stopped")?;
+    eprintln!("stopped; requests now wait unanswered and expire");
+    Ok(Code::Ok)
+}
+
+/// One line of `listen`'s, with the time.
+fn print(line: &str) {
+    eprintln!("{} {line}", crate::time::clock(crate::time::now_ms()));
+}
+
+/// The settings as a person left them, refused once another channel than
+/// `spec` is connected or none is.
+fn refresh(store: &Store, spec: &Spec) -> Result<Settings> {
+    let (_, settings) = connected(store)?;
+    if settings.channel != spec.name {
+        bail!("another channel was connected; run `listen` again");
+    }
+    Ok(settings)
+}
+
+/// `openmoat approvals wait <seconds>`: how long the hook waits for an answer
+/// while `listen` runs (ADR-093); `0` never waits.
+pub fn wait(args: &WaitArgs) -> Result<Code> {
+    person("openmoat approvals wait")?;
+    let (_home, store) = store()?;
+    let (key, mut settings) = connected(&store)?;
+    settings.set_wait(args.seconds)?;
+    settings.save(&store.settings_path(), &key)?;
+    let mut out = Deferred::default();
+    if args.seconds == 0 {
+        writeln!(
+            out,
+            "the hook no longer waits: an approval from {} runs the call on its next try",
+            settings.channel
+        )?;
+    } else {
+        writeln!(
+            out,
+            "while `openmoat approvals listen` runs, the hook waits up to {} s for an answer \
+             (less where the agent's hook time limit or the guard's own budget leaves less)",
+            args.seconds
+        )?;
+    }
+    out.finish()?;
+    Ok(Code::Ok)
 }
 
 /// `openmoat approvals disconnect`.

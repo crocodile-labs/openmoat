@@ -30,6 +30,10 @@ read JSON, and the agent records they come from (agents.json beside this file).
     check.py capture-event <host> <event>    a hook: copies its payload to OPENMOAT_CAPTURE_DIR
     check.py event-captured <dir> <host> <event>
                                              says whether that event sent a payload (never fails)
+    check.py tool-failures <dir> <host> <text>
+                                             every captured PostToolUseFailure is for the call
+                                             whose command holds <text>; any other fails, with
+                                             its error quoted
     check.py scrub <host> <version> <captured dir> <root> <home> <project> <out dir>
                                              each payload `openmoat guard` copied for <host> written
                                              as `captured-<version>-<n>.json`, with the throwaway
@@ -341,6 +345,32 @@ def rows(path):
     return value if isinstance(value, list) else []
 
 
+FIELD = 160
+
+
+def cut(value, limit=FIELD):
+    """`value` on one line, a string as it is and anything else as JSON, cut
+    to `limit` characters: each field is cut on its own, never a whole list."""
+    text = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit - 3] + "..."
+
+
+def described(new):
+    """The audit rows `new`, one line each: tool, verdict, rules and the
+    action's command (or the action), so no row hides behind another."""
+    if not new:
+        return " New rows: none."
+    lines = [f" New rows ({len(new)}):"]
+    for row in new:
+        action = row.get("action")
+        if isinstance(action, dict) and isinstance(action.get("command"), str):
+            action = action["command"]
+        lines.append(f"      - tool={cut(row.get('tool'))} verdict={cut(row.get('verdict'))} "
+                     f"rules={cut(row.get('rules') or [])} action={cut(action)}")
+    return "\n".join(lines)
+
+
 def cmd_denied(host, before, after, markers):
     seen = {json.dumps(r, sort_keys=True) for r in rows(before)}
     new = [r for r in rows(after) if json.dumps(r, sort_keys=True) not in seen]
@@ -348,7 +378,7 @@ def cmd_denied(host, before, after, markers):
             and "secrets-paths" in (r.get("rules") or [])]
     if not hits:
         fail(f"no new {host} deny [secrets-paths] in the audit log: the agent never ran "
-             f"OpenMoat's hook for the call. New rows: {json.dumps(new)[:1500]}")
+             f"OpenMoat's hook for the call.{described(new)}")
     for marker in markers:
         path, _, secret = marker.partition("=")
         if secret and secret in Path(path).read_text(encoding="utf-8", errors="replace"):
@@ -379,7 +409,7 @@ def cmd_session_start(host, before, after):
             if {"session-start", "proxy-credential"} & set(r.get("rules") or [])]
     if not hits:
         fail(f"no new {host} SessionStart row in the audit log: the agent never ran "
-             f"OpenMoat's SessionStart hook. New rows: {json.dumps(new)[:1500]}")
+             f"OpenMoat's SessionStart hook.{described(new)}")
     print(f"ok    the real agent ran OpenMoat's SessionStart hook: {hits[0].get('rules')}")
     return 0
 
@@ -392,7 +422,7 @@ def cmd_injected(host, before, after, text):
             and r.get("verdict") in ("review", "deny") and text in json.dumps(r)]
     if not hits:
         fail(f"no new {host} row naming {text} held by injected-input: the agent never ran "
-             f"OpenMoat's PostToolUse hook, or it kept nothing. New rows: {json.dumps(new)[:1500]}")
+             f"OpenMoat's PostToolUse hook, or it kept nothing.{described(new)}")
     print(f"ok    the real agent ran OpenMoat's PostToolUse hook: {text} "
           f"{hits[0].get('verdict')} [injected-input]")
     return 0
@@ -472,6 +502,44 @@ def cmd_event_captured(captured, host, event):
               f"({found[0].name}); no adapter is written from it yet")
     else:
         print(f"warn  no {event} payload captured for {host}: the event did not fire in this run")
+    return 0
+
+
+def failure_text(payload):
+    """What a captured PostToolUseFailure payload says failed: its error (bwrap,
+    socat or execvp text, where the sandbox could not start the call)."""
+    for key in ("error", "tool_error", "message", "tool_response"):
+        if payload.get(key):
+            return payload[key]
+    return "(no error field)"
+
+
+def cmd_tool_failures(captured, host, expected):
+    """Every captured PostToolUseFailure belongs to the one call meant to fail
+    (its command holds `expected`). Any other means a call that should have run
+    did not start, and the payload's own error says why."""
+    found = sorted(Path(captured).glob(f"{host}-event-PostToolUseFailure-*.json"))
+    other = []
+    for path in found:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        try:
+            payload = json.loads(text)
+        except ValueError:
+            payload = None
+        if not isinstance(payload, dict):
+            other.append(f"      - {path.name}: not a JSON object: {cut(text)}")
+            continue
+        tool_input = payload.get("tool_input")
+        command = tool_input.get("command") if isinstance(tool_input, dict) else tool_input
+        if isinstance(command, str) and expected in command:
+            continue
+        other.append(f"      - tool={cut(payload.get('tool_name'))} command={cut(command)} "
+                     f"error={cut(failure_text(payload), 400)}")
+    if other:
+        fail(f"{len(other)} {host} tool call(s) failed that should have run (PostToolUseFailure "
+             f"for a call other than the one with {expected}):\n" + "\n".join(other))
+    print(f"ok    no {host} PostToolUseFailure but the expected one "
+          f"({len(found)} payload(s) captured)")
     return 0
 
 
@@ -681,7 +749,7 @@ COMMANDS = {
     "session-start": (cmd_session_start, 3), "injected": (cmd_injected, 4),
     "scrub": (cmd_scrub, 7), "resumed": (cmd_resumed, 1),
     "background-mcp": (cmd_background_mcp, 5), "capture-event": (cmd_capture_event, 2),
-    "event-captured": (cmd_event_captured, 3),
+    "event-captured": (cmd_event_captured, 3), "tool-failures": (cmd_tool_failures, 3),
 }
 
 

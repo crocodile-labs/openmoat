@@ -32,6 +32,11 @@ pub struct Capabilities {
     pub button_bytes: usize,
     /// The longest message text, in characters. At least [`MIN_TEXT`].
     pub max_text: usize,
+    /// The longest a [`Channel::poll`] may wait on the channel's server for
+    /// a reply (long polling), returning as soon as one arrives. Zero for a
+    /// channel whose poll returns at once: the listener then polls it every
+    /// few seconds ([`super::listen::run`]).
+    pub poll_wait: std::time::Duration,
 }
 
 impl Capabilities {
@@ -129,8 +134,9 @@ pub struct Reply {
 }
 
 /// A way to reach approvers. Only a channel does network I/O; the core
-/// decides what is sent and what an answer means.
-pub trait Channel {
+/// decides what is sent and what an answer means. `Send`: `listen` sends
+/// from one thread and polls from another, each with its own channel.
+pub trait Channel: Send {
     /// The account the credential belongs to (a bot's name), which also
     /// proves the credential works.
     fn account(&mut self) -> Result<String>;

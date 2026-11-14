@@ -35,6 +35,7 @@ static PAGER: Spec = Spec {
         buttons: false,
         button_bytes: 0,
         max_text: 1200,
+        poll_wait: Duration::ZERO,
     },
     fields: &[
         Field {

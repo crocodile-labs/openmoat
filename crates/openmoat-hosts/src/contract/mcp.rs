@@ -26,6 +26,26 @@ pub struct McpSpec {
     pub auto_start: Option<&'static dyn McpAutoStart>,
 }
 
+/// An MCP server the host provides itself, which no MCP configuration file
+/// defines ([`crate::HostSpec::builtin_mcp`]), and its tools whose result is
+/// the server's own bookkeeping, not content an attacker writes: their
+/// results do not taint the session (ADR-057), and are still read for
+/// injected input. The core's built-in list is generated from these
+/// (`tests/protect.rs`); a server a configuration or a pin defines under the
+/// same name is another program, and the list does not apply to it
+/// (ADR-069).
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct BuiltinMcp {
+    /// The server's name, as its tools carry it (`mcp__<server>__<tool>`).
+    pub server: &'static str,
+    /// The comment above its tools in the generated list, one line per
+    /// `\n`-separated line.
+    pub why: &'static str,
+    /// Its tools whose result is metadata, by their own names (`<tool>`).
+    pub metadata_tools: &'static [&'static str],
+}
+
 /// The settings that make a host start servers a project's own MCP files
 /// define as soon as a session opens the project, without asking the person.
 /// A started server has run its command before any tool call reaches a hook.

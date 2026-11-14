@@ -10,7 +10,9 @@
 //! - `answers/<id>.json`: answers, written by `openmoat approvals listen`;
 //! - `used/<id>`: the replay store, one empty file per approval used;
 //! - `refused/<id>.json`: an approval used for a call the guard then refused,
-//!   signed, for the listener to tell the approver ([`Refused`]).
+//!   signed, for the listener to tell the approver ([`Refused`]);
+//! - `listening.json`: the listener's signed beat, while it runs
+//!   ([`super::live`]).
 //!
 //! A channel's folder is named by its registered [`Spec`], never by text
 //! read from a file, so no setting can point a path elsewhere.
@@ -218,7 +220,46 @@ impl Store {
         serde_json::from_str(&text).ok()
     }
 
+    /// Whether a file stands where the answer to request `id` goes: one
+    /// `stat`, for the guard that waits for it.
+    pub fn has_answer(&self, id: &str) -> bool {
+        plain_id(id) && self.answer_path(id).exists()
+    }
+
+    /// Write `answer` under a name no guard reads, run `record` (its audit
+    /// row), and only once that succeeded put it where guards look, unless
+    /// its request has an answer already: whether it was put there. When
+    /// `record` fails nothing is left and its error is returned.
+    pub fn put_answer_once_recorded(
+        &self,
+        answer: &Answer,
+        record: impl FnOnce() -> Result<()>,
+    ) -> Result<bool> {
+        if !plain_id(&answer.id) {
+            bail!("not a request id");
+        }
+        let text = serde_json::to_vec(answer).context("encoding an answer")?;
+        let staged = self
+            .dir
+            .join(ANSWERS)
+            .join(format!(".staged-{}", answer.id));
+        write_private(&staged, &text)?;
+        if let Err(error) = record() {
+            let _ = fs::remove_file(&staged);
+            return Err(error);
+        }
+        // A hard link never replaces an answer already there.
+        let placed = match fs::hard_link(&staged, self.answer_path(&answer.id)) {
+            Ok(()) => Ok(true),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+            Err(e) => Err(e).context("placing an answer"),
+        };
+        let _ = fs::remove_file(&staged);
+        placed
+    }
+
     /// Write `answer` unless its request has one already; whether it was written.
+    #[cfg(test)]
     pub fn put_answer(&self, answer: &Answer) -> Result<bool> {
         let text = serde_json::to_vec(answer).context("encoding an answer")?;
         write_private_new(&self.answer_path(&answer.id), &text)
@@ -236,6 +277,7 @@ impl Store {
     }
 
     /// Remove the answer to request `id`.
+    #[cfg(test)]
     pub fn forget_answer(&self, id: &str) {
         let _ = fs::remove_file(self.answer_path(id));
     }

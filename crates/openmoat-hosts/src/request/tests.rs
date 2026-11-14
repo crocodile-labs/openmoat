@@ -1,6 +1,6 @@
 use openmoat_core::Action;
 
-use super::{EVERY_WORKSPACE_DIRECTORY, is_inside};
+use super::is_inside;
 use crate::{HookEvent, HookRequest, Host};
 
 fn request(cwd: &str, action: Action) -> HookRequest {
@@ -89,20 +89,33 @@ fn inside_is_by_whole_segments_and_never_through_dot_dot() {
 }
 
 /// A workspace-wide search reads the directories the settings add, or the
-/// working directory alone, instead of needing review.
+/// working directory alone, instead of needing review. The mark is the
+/// sending host's own: the same reason from a host without a workspace, or
+/// another reason, stays.
 #[test]
 fn a_workspace_search_reads_the_directories_the_settings_add() {
-    let search = || {
-        request(
-            "/p",
-            Action::unchecked(
-                Action::FsRead {
-                    path: "/p".to_owned(),
-                },
-                EVERY_WORKSPACE_DIRECTORY,
-            ),
+    let workspace = Host::GeminiCli.spec().workspace.as_ref().unwrap();
+    let marked = || {
+        Action::unchecked(
+            Action::FsRead {
+                path: "/p".to_owned(),
+            },
+            workspace.unnamed,
         )
     };
+    let search = || HookRequest {
+        host: Host::GeminiCli,
+        ..request("/p", marked())
+    };
+    let elsewhere = request("/p", marked());
+    assert!(!elsewhere.searches_workspace());
+    assert_eq!(
+        elsewhere
+            .clone()
+            .with_workspace_dirs(&["/x".to_owned()])
+            .action,
+        elsewhere.action
+    );
     assert!(search().searches_workspace());
     let alone = search().with_workspace_dirs(&[]);
     assert_eq!(
@@ -120,7 +133,10 @@ fn a_workspace_search_reads_the_directories_the_settings_add() {
         })
     );
     // Another mark stays.
-    let other = request("/p", Action::unchecked(shell("ls"), "typed input"));
+    let other = HookRequest {
+        host: Host::GeminiCli,
+        ..request("/p", Action::unchecked(shell("ls"), "typed input"))
+    };
     assert!(!other.searches_workspace());
     assert_eq!(other.clone().with_workspace_dirs(&[]).action, other.action);
 }

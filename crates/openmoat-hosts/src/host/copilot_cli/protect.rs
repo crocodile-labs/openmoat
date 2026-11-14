@@ -44,6 +44,7 @@ pub(super) const PROTECT: Protect = Protect {
             "**/.github/copilot-instructions.md",
         ],
     )],
+    temp_dirs: &[],
     credentials: &[Paths::new(
         "GitHub Copilot CLI: `config.json`, where its login goes when there is no\n\
          keychain, and the fallback stores of MCP sign-ins and MCP secrets\n\

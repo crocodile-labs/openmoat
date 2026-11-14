@@ -228,6 +228,50 @@ fn only_host_modules_name_a_host_by_its_spec_facts() {
     check_only_shrinks(&found, ALLOWED_NAMES, "a host", "ALLOWED_NAMES");
 }
 
+/// The core decides for every host and knows none: outside the blocks
+/// `tests/protect.rs` writes from the specs and its inline tests, no line of
+/// `openmoat-core/src` names a host by a fact of its spec (a directory, a
+/// program, a file, an id or a name), and no allowance may let one in.
+#[test]
+fn the_core_names_no_host() {
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let facts = Facts::from_specs();
+    let mut files = Vec::new();
+    rust_files(&crates.join("openmoat-core/src"), &mut files);
+    assert!(files.len() > 50, "the scan found too little");
+    let mut found = Found::new();
+    for file in files {
+        let relative = relative_to(&file, &crates);
+        if !is_host_or_test_file(&relative) {
+            let lines = rust_lines(&fs::read_to_string(&file).unwrap(), &facts);
+            record(&mut found, relative, lines);
+        }
+    }
+    assert_eq!(
+        found,
+        Found::new(),
+        "take what differs per host from its spec"
+    );
+    let allowed: Vec<&str> = ALLOWED_NAMES
+        .iter()
+        .map(|(file, _)| *file)
+        .filter(|file| file.starts_with("openmoat-core/"))
+        .collect();
+    assert_eq!(allowed, Vec::<&str>::new(), "the core gets no allowance");
+    // The skipped blocks are the generated ones, each opened once and closed.
+    // A Windows checkout may hold the file with `\r\n` line ends.
+    let taint = fs::read_to_string(repo().join(crate::policy_blocks::TAINT))
+        .unwrap()
+        .replace("\r\n", "\n");
+    for before in [
+        crate::policy_blocks::TAINT_BEFORE,
+        crate::policy_blocks::METADATA_BEFORE,
+    ] {
+        assert_eq!(taint.matches(before).count(), 1, "{before}");
+    }
+    assert_eq!(taint.matches(crate::policy_blocks::CORE_AFTER).count(), 2);
+}
+
 /// Whether `relative` (under `e2e/`) is one host's own test file or folder
 /// (`codex.rs`, `cursor_sandbox.rs`, `differential/claude.rs`, named by a
 /// host's module as [`module_names`] gives them) or a host's row of the

@@ -53,6 +53,7 @@ pub(super) const PROTECT: Protect = Protect {
             "**/.cache/opencode/node_modules/**",
         ],
     )],
+    temp_dirs: &[],
     credentials: &[Paths::new(
         "OpenCode: its provider keys and OAuth tokens, its MCP sign-ins and the\n\
          database holding its account tokens, in its data directory on every OS\n\

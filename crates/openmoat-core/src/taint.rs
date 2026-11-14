@@ -9,31 +9,28 @@ use serde::{Deserialize, Serialize};
 use crate::pattern::GlobPattern;
 use crate::policy::PolicyError;
 
-/// The MCP server whose tab and window tools are the built-in metadata tools:
-/// Claude in Chrome, which Claude Code provides itself (`claude --chrome`, the
-/// browser extension), not a server any MCP configuration file defines. A server a configuration or a
-/// pin defines under this name is another program that took the name, and the
-/// built-in list does not apply to it ([`TaintSettings::defined_servers`],
-/// ADR-069).
-pub const BUILTIN_METADATA_SERVER: &str = "claude-in-chrome";
-
-/// MCP tools whose result is the browser's own bookkeeping, not the content of
-/// a page: Claude in Chrome's tab, window, browser and shortcut lists (tab ids,
-/// titles, URLs). Their results do not taint the session (ADR-057 amendment of
-/// 2026-11-07), and are still read for injected input: a host, path or command
-/// in a tab's title or URL is kept with the tool as its source. Every tool that
-/// returns what a page says (`get_page_text`, `read_page`, `find`, `navigate`,
-/// `javascript_tool`, the console and network logs, screenshots) is not listed.
-/// They apply only while no configured server takes [`BUILTIN_METADATA_SERVER`].
-const METADATA_TOOLS: [&str; 8] = [
-    "mcp__claude-in-chrome__list_connected_browsers",
-    "mcp__claude-in-chrome__resize_window",
-    "mcp__claude-in-chrome__select_browser",
-    "mcp__claude-in-chrome__shortcuts_list",
-    "mcp__claude-in-chrome__switch_browser",
-    "mcp__claude-in-chrome__tabs_close_mcp",
-    "mcp__claude-in-chrome__tabs_context_mcp",
-    "mcp__claude-in-chrome__tabs_create_mcp",
+/// MCP tools, as `(server, tool)`, of a server an agent provides itself, which
+/// no MCP configuration file defines, whose result is the server's own
+/// bookkeeping, not content an attacker writes (a browser's tab, window and
+/// shortcut lists). Their results do not taint the session (ADR-057 amendment
+/// of 2026-11-07), and are still read for injected input: a host, path or
+/// command in a tab's title or URL is kept with the tool as its source. A tool
+/// counts only while no configured server takes its server's name
+/// ([`TaintSettings::defined_servers`], ADR-069). Generated from each host's
+/// spec, which names the sources.
+const BUILTIN_METADATA_TOOLS: &[(&str, &str)] = &[
+    // generated:metadata-tools from each host spec's `builtin_mcp` (openmoat-hosts `tests/protect.rs`)
+    // Claude Code: Claude in Chrome's tab, window, browser and shortcut lists (tab ids,
+    // titles, URLs), the browser's own bookkeeping
+    ("claude-in-chrome", "list_connected_browsers"),
+    ("claude-in-chrome", "resize_window"),
+    ("claude-in-chrome", "select_browser"),
+    ("claude-in-chrome", "shortcuts_list"),
+    ("claude-in-chrome", "switch_browser"),
+    ("claude-in-chrome", "tabs_close_mcp"),
+    ("claude-in-chrome", "tabs_context_mcp"),
+    ("claude-in-chrome", "tabs_create_mcp"),
+    // /generated
 ];
 
 /// How every MCP tool's name starts (`mcp__<server>__<tool>`).
@@ -47,7 +44,7 @@ const MCP_PREFIX: &str = "mcp__";
 /// written in JavaScript (`jest.config.js`), are not listed: they are code the run
 /// executes like any other file, and the command that runs them is named in a
 /// listed file (`package.json`).
-const PROTECTED_WRITES: [&str; 166] = [
+const PROTECTED_WRITES: &[&str] = &[
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
     "**/.circleci/**",
@@ -162,24 +159,30 @@ const PROTECTED_WRITES: [&str; 166] = [
     "**/docker-compose*.yaml",
     "**/compose*.yml",
     "**/compose*.yaml",
-    // agents
-    "**/CLAUDE.md",
+    // instruction files the next session of an agent obeys (ADR-057): the
+    // `AGENTS.md` several agents load, Windsurf's rules, and GitHub Copilot's
+    // path-scoped instructions
     "**/AGENTS.md",
-    "**/.claude/**",
-    "**/.claude.json",
-    "**/.codex/**",
-    "**/.cursor/**",
-    "**/.cursorrules",
-    "**/.mcp.json",
-    // instruction files and skills the next session of an agent obeys
-    // (ADR-057): the shared `.agents/skills` folder several agents load,
-    // Windsurf's rules, and GitHub Copilot's path-scoped instructions
-    "**/.agents/skills",
-    "**/.agents/skills/**",
     "**/.windsurfrules",
     "**/.windsurf/rules/**",
     "**/.github/instructions/**",
     // generated:taint from each host spec's `protect.taint` (openmoat-hosts `tests/protect.rs`)
+    // Claude Code: the memory file it loads into every session, its directory
+    // (settings, hooks, skills, agents, memory) and a project's, the person's MCP
+    // servers and a project's
+    "**/CLAUDE.md",
+    "**/.claude/**",
+    "**/.claude.json",
+    "**/.mcp.json",
+    // Codex: its directory (configuration, hooks, skills) and a project's, and the
+    // shared `.agents/skills` folder it and several other agents load skills from
+    "**/.codex/**",
+    "**/.agents/skills",
+    "**/.agents/skills/**",
+    // Cursor: its directory (hooks, MCP servers, rules) and a project's, and the
+    // rules file it loads into every session
+    "**/.cursor/**",
+    "**/.cursorrules",
     // Continue CLI: its configuration, whose MCP servers it starts
     "**/.continue/config.yaml",
     // OpenClaw: its configuration, OpenMoat's plugin and the plugin directories the
@@ -276,9 +279,9 @@ pub struct TaintSettings {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub metadata_tools: Vec<String>,
     /// MCP servers, by name, that an agent's MCP configuration or OpenMoat's
-    /// pins define. The built-in metadata tools are those of a server the
-    /// host provides itself ([`BUILTIN_METADATA_SERVER`]); one defined here
-    /// under that name is not it, and every tool of it taints the session.
+    /// pins define. The built-in metadata tools are those of servers an agent
+    /// provides itself; one defined here under such a name is not it, and
+    /// every tool of it taints the session.
     /// The CLI adds the names it finds pinned; a policy may list more, which
     /// can only make more results taint. `metadata_tools` still counts: a
     /// person who lists a tool there trusts it by its full name.
@@ -302,7 +305,7 @@ impl TaintSettings {
 
 /// The built-in protected paths followed by the ones `settings` adds.
 pub(crate) fn protected_writes(settings: Option<&TaintSettings>) -> impl Iterator<Item = &str> {
-    PROTECTED_WRITES.into_iter().chain(
+    PROTECTED_WRITES.iter().copied().chain(
         settings
             .into_iter()
             .flat_map(|s| s.protected_writes.iter().map(String::as_str)),
@@ -313,13 +316,15 @@ pub(crate) fn protected_writes(settings: Option<&TaintSettings>) -> impl Iterato
 /// configured server took its server's name, and the ones `settings` adds),
 /// whose result does not taint the session.
 pub(crate) fn is_metadata_tool(settings: Option<&TaintSettings>, name: &str) -> bool {
-    let impostor = settings.is_some_and(|s| {
-        s.defined_servers
-            .iter()
-            .any(|server| server == BUILTIN_METADATA_SERVER)
-    });
-    (METADATA_TOOLS.contains(&name) && !impostor)
-        || settings.is_some_and(|s| s.metadata_tools.iter().any(|tool| tool == name))
+    let defined =
+        |server: &str| settings.is_some_and(|s| s.defined_servers.iter().any(|d| d == server));
+    let built_in = name
+        .strip_prefix(MCP_PREFIX)
+        .and_then(|rest| rest.split_once("__"))
+        .is_some_and(|(server, tool)| {
+            BUILTIN_METADATA_TOOLS.contains(&(server, tool)) && !defined(server)
+        });
+    built_in || settings.is_some_and(|s| s.metadata_tools.iter().any(|tool| tool == name))
 }
 
 /// Each added path is a glob that compiles and is not an exclusion, which
@@ -456,7 +461,50 @@ mod tests {
             let name = format!("mcp__claude-in-chrome__{tool}");
             assert!(!super::is_metadata_tool(None, &name), "{name}");
         }
-        assert!(super::METADATA_TOOLS.iter().all(|t| super::is_tool_name(t)));
+        assert_ne!(super::BUILTIN_METADATA_TOOLS.len(), 0);
+        for (server, tool) in super::BUILTIN_METADATA_TOOLS {
+            let name = format!("mcp__{server}__{tool}");
+            assert!(super::is_tool_name(&name), "{name}");
+            assert!(super::is_metadata_tool(None, &name), "{name}");
+            // a configured server that took the name is another program
+            let defined = super::TaintSettings {
+                defined_servers: vec![(*server).to_owned()],
+                ..super::TaintSettings::default()
+            };
+            assert!(!super::is_metadata_tool(Some(&defined), &name), "{name}");
+        }
+    }
+
+    /// The list's hand-written paths, outside the block generated from the
+    /// host specs (which `openmoat-hosts` `tests/protect.rs` checks against
+    /// them). A path removed or added by hand changes this count, so the
+    /// change is made on purpose, here too.
+    const HAND_WRITTEN: usize = 104;
+
+    #[test]
+    fn the_hand_written_protected_writes_keep_their_count() {
+        let source = include_str!("taint.rs");
+        let list = source
+            .split_once("const PROTECTED_WRITES")
+            .and_then(|(_, rest)| rest.split_once("\n];"))
+            .unwrap()
+            .0;
+        let (mut hand, mut generated, mut inside) = (0, 0, false);
+        for line in list.lines().map(str::trim) {
+            if line.starts_with("// generated:") {
+                inside = true;
+            } else if line.starts_with("// /generated") {
+                inside = false;
+            } else if line.starts_with('"') {
+                *(if inside { &mut generated } else { &mut hand }) += 1;
+            }
+        }
+        assert_eq!(
+            hand, HAND_WRITTEN,
+            "a hand-written path was added or removed"
+        );
+        assert_ne!(generated, 0, "the generated block is empty");
+        assert_eq!(hand + generated, super::PROTECTED_WRITES.len());
     }
 
     #[test]

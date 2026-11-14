@@ -101,12 +101,15 @@ fn below_the_threshold_or_without_a_body_nothing_is_recorded() {
 
 #[test]
 fn reads_in_the_project_caches_and_temp_folders_are_no_collection() {
-    let policy = policy(OPEN);
-    let p = CompiledPolicy::compile(&policy, &ctx()).unwrap();
+    // An agent's temporary folders are the policy's `agent-temp` reads.
+    let with_temp = policy(&format!(
+        "{OPEN}  - id: agent-temp\n    fs.read: ['/tmp/agent-*/**']\n"
+    ));
+    let p = CompiledPolicy::compile(&with_temp, &ctx()).unwrap();
     for path in [
         "/p/src/main.rs",
         "/h/.cargo/registry/src/serde/lib.rs",
-        "/tmp/claude-501/build.log",
+        "/tmp/agent-501/build.log",
     ] {
         assert_eq!(
             p.collection(&read(path), "/p", &NoResolver, &files),
@@ -114,6 +117,13 @@ fn reads_in_the_project_caches_and_temp_folders_are_no_collection() {
             "{path}"
         );
     }
+    let without = policy(OPEN);
+    let bare = CompiledPolicy::compile(&without, &ctx()).unwrap();
+    assert_ne!(
+        bare.collection(&read("/tmp/agent-501/build.log"), "/p", &NoResolver, &files),
+        Staging::default(),
+        "a temporary folder no rule names is collected"
+    );
     let ignored = policy_with_ignore();
     let q = CompiledPolicy::compile(&ignored, &ctx()).unwrap();
     assert_eq!(

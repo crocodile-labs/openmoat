@@ -7,7 +7,8 @@ The trusted core: the policy model and lint, the POSIX lexer (`lexer/`), the she
 - Dependencies are only `serde`, `serde-saphyr`, `globset`, `thiserror`; a new one needs an ADR. No `unsafe`. Builds for `wasm32-unknown-unknown`.
 - Invariants 1–3 live here: deny is absolute, strictest wins, unparseable is never `allow` (ADR-002, ADR-025).
 - The classifier is triage, not the boundary (ADR-013). A bypass gets an attack fixture and the smallest change that makes it `review`: emit an atom a default `review`/`deny` rule names, never an atom no rule names for a common command.
-- Rule ids in `default-v1.yaml` are stable: they appear in audit logs and user output. The agents' lines in `kernel-self`, `agent-credentials`, `runs-later` and `project-fs`'s exceptions and the taint list are generated from each host's spec (`crates/openmoat-hosts/tests/protect.rs`).
+- Rule ids in `default-v1.yaml` are stable: they appear in audit logs and user output. The agents' lines in `kernel-self`, `agent-credentials`, `runs-later`, `project-fs`'s exceptions, `agent-temp` and `managed-settings`, the taint list and the built-in metadata tools are generated from each host's spec (`crates/openmoat-hosts/tests/protect.rs`).
+- No host knowledge: outside those generated blocks and inline tests the core names no agent's directory, program, file, id or name (`the_core_names_no_host`, `openmoat-hosts/tests/architecture/`); a fact that differs per agent goes in its spec, or reaches the core through the policy (`staging` reads `agent-temp`).
 - `thiserror` errors; no `unwrap`/`expect`/`panic!` outside tests.
 
 ## Test

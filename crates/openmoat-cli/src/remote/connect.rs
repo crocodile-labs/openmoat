@@ -64,11 +64,12 @@ pub fn connect(
     let files = store.channel(spec);
     files.put_secrets(secrets)?;
     ChannelSettings::new(spec.name, account.clone(), options).save(&files.settings_path(), &key)?;
-    // Approvers stay when the same channel is connected again.
+    // Approvers, and the hook's wait, stay when the same channel is connected again.
     if let Ok(old) = Settings::load(&store.settings_path(), &key)
         && old.channel == settings.channel
     {
         settings.approvers = old.approvers;
+        settings.wait_s = old.wait_s;
     }
     settings.save(&store.settings_path(), &key)?;
     Ok(account)

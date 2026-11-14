@@ -19,7 +19,9 @@ use crate::proxy_session::Key;
 
 mod another;
 mod listen;
+mod run;
 mod text;
+mod wait;
 
 /// 2026-11-10 12:00:00 UTC.
 const NOW: i64 = 1_794_312_000_000;
@@ -35,6 +37,7 @@ static FAKE: Spec = Spec {
         buttons: true,
         button_bytes: 64,
         max_text: 4096,
+        poll_wait: Duration::ZERO,
     },
     fields: &[],
     user_id: "a number",

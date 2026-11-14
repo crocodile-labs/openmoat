@@ -66,7 +66,13 @@ unknown claim and a record without `hook` and without `why`.
   script writes into the throwaway `settings.json` before `init` copies each payload to
   `captured/` (`claude-code-event-PostToolUseFailure-*.json`, scrubbed like the rest).
   `check.py event-captured` reports whether it arrived and never fails: the adapter is
-  to be written from such a capture, not from the documentation.
+  to be written from such a capture, not from the documentation. `check.py
+  tool-failures` does fail, before the audit checks, when a payload belongs to any call
+  but the `ls` meant to fail, and quotes its `error` (a sandbox that could not start the
+  shell prints `bwrap`, `socat` or `execvp` text there). A tool shell that never started
+  is printed first too, so the first `FAIL` of the step names the cause, not the audit
+  row it left missing. An audit check that fails lists each new row on its own line:
+  tool, verdict, rules and command, each cut to 160 characters.
 - **MCP call and background tasks.** `check.py background-mcp` compares the audit log
   with `fake_mcp.py`'s log. It **fails** when the server received a call with no
   `PreToolUse` decision, and when the call neither was decided nor reached the server

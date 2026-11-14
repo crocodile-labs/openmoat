@@ -121,6 +121,8 @@ impl Reports {
                     }
                     std::thread::sleep(Duration::from_millis(5));
                 }
+                // A signal interrupted the call; the wait goes on.
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
                 Err(error) => return Err(error).context("accepting the launch report"),
             }
         }
@@ -170,14 +172,27 @@ fn exchange(
 ) -> Result<()> {
     let json = serde_json::to_string(check)?;
     writeln!(stream, "{nonce} {json}").context("reporting the agent's start")?;
-    stream.set_read_timeout(Some(wait))?;
+    let deadline = std::time::Instant::now() + wait;
     let mut reply = [0u8; 1];
-    match stream.read(&mut reply) {
-        Ok(1) if reply[0] == GO => Ok(()),
-        Ok(1) => bail!("`openmoat run` could not keep the run on record and stops the agent"),
-        Ok(_) => bail!("`openmoat run` ended without a reply, so the agent is stopped"),
-        Err(error) => {
-            Err(error).context("waiting for `openmoat run`'s reply; the agent is stopped")
+    loop {
+        // A signal (the agent's own SIGCHLD, a terminal resize) interrupts the
+        // read without ending the wait: read again for the time that is left.
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            bail!("`openmoat run` did not reply in time, so the agent is stopped");
+        }
+        stream.set_read_timeout(Some(left))?;
+        match stream.read(&mut reply) {
+            Ok(1) if reply[0] == GO => return Ok(()),
+            Ok(1) => {
+                bail!("`openmoat run` could not keep the run on record and stops the agent")
+            }
+            Ok(_) => bail!("`openmoat run` ended without a reply, so the agent is stopped"),
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(error) => {
+                return Err(error)
+                    .context("waiting for `openmoat run`'s reply; the agent is stopped");
+            }
         }
     }
 }

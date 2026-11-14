@@ -30,6 +30,7 @@ pub(super) const PROTECT: Protect = Protect {
             "**/.agents/mcp_config.json",
         ],
     )],
+    temp_dirs: &[],
     credentials: &[Paths::new(
         "Antigravity CLI: the MCP OAuth tokens (`/docs/mcp`). The account's\n\
          sign-in is in the OS keyring (`/docs/install`), not a file",

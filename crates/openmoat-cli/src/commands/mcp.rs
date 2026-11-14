@@ -101,18 +101,20 @@ pub(super) fn review_and_accept(
     }
     for change in &changes {
         writeln!(out, "{}", change.describe())?;
-        let takes_name = change.accept.is_some()
-            && change
-                .host
-                .parse::<Host>()
-                .is_ok_and(|host| mcp::takes_builtin_name(host, &change.name));
-        if takes_name {
+        let taken = change
+            .accept
+            .is_some()
+            .then(|| change.host.parse::<Host>().ok())
+            .flatten()
+            .and_then(|host| mcp::builtin_name_taken(host, &change.name));
+        if let Some((provider, _)) = taken {
             writeln!(
                 out,
-                "! {} is the name of Claude in Chrome, which Claude Code provides itself; this \
-                 server is another program, so all its results mark the session untrusted, its \
-                 tab lists too",
-                Named(&change.name)
+                "! {} is the name of an MCP server {} provides itself; this server is another \
+                 program, so all its results mark the session untrusted, the lists that server \
+                 returns too",
+                Named(&change.name),
+                provider.display_name()
             )?;
         }
     }

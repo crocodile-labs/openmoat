@@ -17,12 +17,14 @@ pub mod channels;
 mod connect;
 mod gate;
 mod https;
-mod listen;
+pub mod listen;
+pub mod live;
 mod prompt;
 mod refused;
 mod request;
 mod settings;
 mod store;
+pub mod wait;
 
 #[cfg(test)]
 mod tests;
@@ -61,22 +63,36 @@ pub const ROW_TOOL: &str = "approval";
 /// [`gate::gate_used`] in this guard's state directory, now; without a state
 /// directory there is no channel, and `decision` stays. With it, the
 /// approval the call used, if one was: a call refused after that (its row
-/// could not be written) goes to [`Approved::refused`].
+/// could not be written) goes to [`Approved::refused`]. `started` is when
+/// the guard started and `relayed` whether `openmoat run` started it: with
+/// the host's spec they bound how long the gate may wait ([`wait::room`]).
 pub fn gated(
     request: &openmoat_hosts::HookRequest,
     decision: Decision,
     known: &openmoat_audit::KnownSecrets,
+    (started, relayed): (std::time::Instant, bool),
 ) -> (Decision, Option<Approved>) {
-    match Home::locate() {
-        Ok(home) => gate::gate_used(
-            &Store::of(&home),
-            request,
-            decision,
-            known,
-            crate::time::now_ms(),
-        ),
-        Err(_) => (decision, None),
-    }
+    let Ok(home) = Home::locate() else {
+        return (decision, None);
+    };
+    // A deadline, fixed now: the time the gate spends before it waits
+    // (reading requests, signing, writing one) comes off the wait.
+    let hold = wait::Hold {
+        until: std::time::Instant::now()
+            + wait::room(
+                &request.host.spec().hook_failure,
+                started.elapsed(),
+                relayed,
+            ),
+        clock: &crate::time::now_ms,
+    };
+    gate::gate_used(
+        &Store::of(&home),
+        request,
+        decision,
+        known,
+        (crate::time::now_ms(), &hold),
+    )
 }
 
 /// `bytes` as lowercase hex.

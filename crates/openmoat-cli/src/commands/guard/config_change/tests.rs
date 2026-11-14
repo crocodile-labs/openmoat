@@ -193,3 +193,27 @@ fn the_pinned_user_file_is_judged_by_the_lock_not_its_contents() {
         "pinned drift blocks first"
     );
 }
+
+/// The reader judges a project file with OpenMoat's hook file, which an entry
+/// may name: when it cannot be placed, the change is an error (a deny), never
+/// judged with no hook file.
+#[test]
+fn a_hook_file_that_cannot_be_placed_denies_a_project_change() {
+    let w = world();
+    let path = project_file(&w, "settings.json", r#"{"model": "opus"}"#);
+    assert_eq!(
+        decide(&w, "project_settings", Some(&path)).verdict,
+        Verdict::Allow
+    );
+    fs::write(w.home.hosts_path(), "not json").unwrap();
+    let payload = json!({
+        "session_id": "s", "cwd": w.project.to_string_lossy(),
+        "hook_event_name": "ConfigChange", "source": "project_settings",
+        "file_path": path.to_string_lossy(),
+    });
+    let request = Host::ClaudeCode
+        .parse_request(&payload.to_string())
+        .unwrap();
+    let error = decision(&w.home, &request, "project_settings", "changed").unwrap_err();
+    assert!(format!("{error:#}").contains("hook file"), "{error:#}");
+}

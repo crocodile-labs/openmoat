@@ -47,6 +47,7 @@ fn a_call_too_long_to_keep_whole_can_only_be_denied() {
             buttons,
             button_bytes: 64,
             max_text: 100_000,
+            poll_wait: std::time::Duration::ZERO,
         };
         let p = prompt(&s.key, &request, &capabilities);
         assert!(!p.text.contains(&approve), "{}", p.text);
@@ -100,6 +101,7 @@ fn a_call_redaction_changed_can_only_be_denied() {
                 buttons,
                 button_bytes: 64,
                 max_text: 4096,
+                poll_wait: std::time::Duration::ZERO,
             };
             let p = prompt(&s.key, &request, &capabilities);
             assert!(!p.text.contains(&approve), "{}", p.text);
@@ -198,6 +200,7 @@ fn a_line_break_in_the_call_is_shown_and_marked() {
             buttons,
             button_bytes: 64,
             max_text: 4096,
+            poll_wait: std::time::Duration::ZERO,
         };
         let p = prompt(&s.key, &request, &capabilities);
         assert!(p.text.contains("ls foo⏎\nrm -rf ~/work"), "{}", p.text);
@@ -283,11 +286,13 @@ fn without_buttons_the_prompt_carries_reply_codes() {
             buttons: false,
             button_bytes: 0,
             max_text: 1024,
+            poll_wait: std::time::Duration::ZERO,
         },
         Capabilities {
             buttons: true,
             button_bytes: 32,
             max_text: 1024,
+            poll_wait: std::time::Duration::ZERO,
         },
     ] {
         let p = prompt(&s.key, &request, &capabilities);
@@ -316,6 +321,7 @@ fn a_call_the_channel_cannot_show_whole_can_only_be_denied() {
             buttons,
             button_bytes: 64,
             max_text: 1024,
+            poll_wait: std::time::Duration::ZERO,
         };
         let p = prompt(&s.key, &request, &capabilities);
         assert!(!p.text.contains(&approve), "{}", p.text);

@@ -33,6 +33,7 @@ pub(super) const PROTECT: Protect = Protect {
             "**/.agents/plugins/**",
         ],
     )],
+    temp_dirs: &[],
     credentials: &[Paths::new(
         "goose: the provider keys it keeps in a file when the keyring is off\n\
          (`GOOSE_DISABLE_KEYRING`; `config/base.rs`)",

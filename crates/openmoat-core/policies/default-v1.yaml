@@ -659,9 +659,19 @@ deny:
     title: changing an agent's system-wide settings
     why: they outrank your own and can switch OpenMoat's hooks off for every later session
     hook_only: true
-    fs.write: ["/Library/Application Support/ClaudeCode/**", "/etc/claude-code/**", "C:/Program Files/ClaudeCode/**",
-      "/Library/Application Support/GeminiCli/**", "/etc/gemini-cli/**", "C:/ProgramData/gemini-cli/**",
-      "/etc/codex/**", "C:/ProgramData/OpenAI/Codex/**"]
+    fs.write:
+      # the folders of each agent's system-wide settings, generated from its spec
+      # Claude Code
+      - "/Library/Application Support/ClaudeCode/**"
+      - "/etc/claude-code/**"
+      - "C:/Program Files/ClaudeCode/**"
+      # Codex
+      - "/etc/codex/**"
+      - "C:/ProgramData/OpenAI/Codex/**"
+      # Gemini CLI
+      - "/Library/Application Support/GeminiCli/**"
+      - "/etc/gemini-cli/**"
+      - "C:/ProgramData/gemini-cli/**"
   # Windows: work handed to the Windows Subsystem for Linux. A command inside a
   # WSL distribution reads the distribution's own files (its `~/.ssh`, its shell
   # start-up files), which no Windows path in this policy names, and reaches the
@@ -806,10 +816,15 @@ allow:
       # a virtual environment's interpreter and a dev container's host command
       "!${project}/**/.venv/bin/**", "!${project}/**/venv/bin/**", "!${project}/**/.venv/bin", "!${project}/**/venv/bin",
       "!${project}/**/.devcontainer/**", "!${project}/**/.devcontainer", "!${project}/**/.devcontainer.json"]
-  # Claude Code's own temporary folder (`/tmp/claude-<uid>/`): the output of the
-  # agent's background commands, which it reads back with `cat`
+  # each agent's own temporary folders, whose files it writes and reads back
+  # itself; reads there do not count as collecting files (`staging`)
   - id: agent-temp
-    fs.read: ["/tmp/claude-*/**", "/private/tmp/claude-*/**"]
+    fs.read:
+      # each agent's temporary folders, generated from its spec
+      # Claude Code: the output of its background commands, which it reads back
+      # with `cat` (`/tmp/claude-<uid>/`)
+      - "/tmp/claude-*/**"
+      - "/private/tmp/claude-*/**"
   - id: dev-shell
     shell:
       - "git status*"
