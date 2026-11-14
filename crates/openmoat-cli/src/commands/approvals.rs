@@ -377,8 +377,13 @@ pub fn listen() -> Result<Code> {
         // Detached: it may be waiting on the channel's server when Ctrl-C
         // comes, and nothing it holds needs more than the process's end.
         std::thread::spawn(move || {
-            let Ok(key) = Key::load(&store.key_path()) else {
-                return;
+            let key = match Key::load(&store.key_path()) {
+                Ok(key) => key,
+                Err(error) => {
+                    print(&format!("cannot take answers: {error:#}"));
+                    shared.halt();
+                    return;
+                }
             };
             let mut records = AuditRecords { home: &home };
             let mut listener = Listener::new(&store, &key, spec, settings);

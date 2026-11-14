@@ -80,20 +80,23 @@ pub fn room(failure: &HookFailure, elapsed: Duration, relayed: bool) -> Duration
     end.saturating_sub(margin).saturating_sub(elapsed)
 }
 
-/// What the gate may spend waiting for this call: [`room`], and the clock
-/// the listener's beat and the request's expiry are read against.
+/// When the gate must stop waiting for this call (now plus [`room`], fixed
+/// before the gate starts), and the clock the listener's beat and the
+/// request's expiry are read against.
 pub struct Hold<'a> {
-    pub room: Duration,
+    pub until: Instant,
     pub clock: &'a dyn Fn() -> i64,
 }
 
 #[cfg(test)]
 impl Hold<'static> {
     /// No wait at all.
-    pub const NONE: Self = Self {
-        room: Duration::ZERO,
-        clock: &crate::time::now_ms,
-    };
+    pub fn none() -> Self {
+        Self {
+            until: Instant::now(),
+            clock: &crate::time::now_ms,
+        }
+    }
 }
 
 /// How a wait ended.
@@ -106,6 +109,9 @@ pub enum Waited {
     /// An answer came after this long: the decision it gives, and the request
     /// whose approval the call used, if one was.
     Answered(Box<(Decision, Option<Request>)>, Duration),
+    /// Another guard (a retry of the same call) used the approval: the
+    /// review, saying so.
+    Taken(Box<Decision>),
 }
 
 /// Wait for an answer to `open`, which holds `held`, within `hold`, while the
@@ -119,12 +125,12 @@ pub fn hold(
     (open, held): (&Request, &Decision),
     limits: &Hold<'_>,
 ) -> Result<Waited> {
-    let limit = limits.room.min(settings.wait());
-    if limit.is_zero() || !super::live::live(store, key, &settings.channel, (limits.clock)()) {
+    let started = Instant::now();
+    let until = limits.until.min(started + settings.wait());
+    if until <= started || !super::live::live(store, key, &settings.channel, (limits.clock)()) {
         return Ok(Waited::Not);
     }
     hangs::enter(Phase::Approval);
-    let started = Instant::now();
     let mut seen_live = started;
     loop {
         // Another guard (a retry of the same call) used the approval.
@@ -134,7 +140,7 @@ pub fn hold(
                 "request {} was approved once and is used",
                 open.code()
             ));
-            return Ok(Waited::Answered(Box::new((kept, None)), started.elapsed()));
+            return Ok(Waited::Taken(Box::new(kept)));
         }
         if store.has_answer(&open.id) {
             // As the guard reads them now: an approver removed meanwhile no
@@ -147,8 +153,8 @@ pub fn hold(
                 ));
             }
         }
-        let waited = started.elapsed();
-        if waited >= limit || open.expired((limits.clock)()) {
+        let now = Instant::now();
+        if now >= until || open.expired((limits.clock)()) {
             break;
         }
         if seen_live.elapsed() >= LIVE_EVERY {
@@ -157,7 +163,7 @@ pub fn hold(
             }
             seen_live = Instant::now();
         }
-        std::thread::sleep(STEP.min(limit.saturating_sub(waited)));
+        std::thread::sleep(STEP.min(until.saturating_duration_since(now)));
     }
     Ok(Waited::NoAnswer(started.elapsed()))
 }

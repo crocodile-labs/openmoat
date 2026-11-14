@@ -82,7 +82,7 @@ fn hold_a_call(s: &Setup) {
         &call("s1", "npm publish"),
         review(),
         &KnownSecrets::default(),
-        (crate::time::now_ms(), &Hold::NONE),
+        (crate::time::now_ms(), &Hold::none()),
     );
 }
 
@@ -169,4 +169,50 @@ fn a_long_poll_answers_the_moment_a_reply_arrives() {
         channel.queue(Reply::default());
         answering.join().unwrap();
     });
+}
+
+/// A channel whose poll panics, as a bug in a channel would.
+struct Broken;
+
+impl Channel for Broken {
+    fn account(&mut self) -> Result<String> {
+        Ok("@broken".to_owned())
+    }
+    fn send(&mut self, _: &str, _: &Prompt) -> Result<()> {
+        Ok(())
+    }
+    fn notify(&mut self, _: &str, _: &str) -> Result<()> {
+        Ok(())
+    }
+    fn poll(&mut self, _: Duration) -> Result<Vec<Reply>> {
+        panic!("a channel bug")
+    }
+    fn settle(&mut self, _: &Reply, _: &str) -> Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn an_answering_half_that_ends_stops_listen() {
+    let s = setup();
+    let shared = Shared::new(Arc::new(AtomicBool::new(false)));
+    let ended = std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                let mut listener = Listener::new(&s.store, &s.key, &LONG, s.settings.clone());
+                run::answering(
+                    &mut listener,
+                    (&mut Broken, &mut Rows::default()),
+                    &shared,
+                    &refresh(&s),
+                    &|_| {},
+                );
+            })
+            .join()
+    });
+    assert!(ended.is_err(), "the poll panicked");
+    assert!(
+        shared.stop.load(Ordering::Relaxed),
+        "and listen stops with it"
+    );
 }

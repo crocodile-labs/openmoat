@@ -75,12 +75,15 @@ pub fn gated(
     let Ok(home) = Home::locate() else {
         return (decision, None);
     };
+    // A deadline, fixed now: the time the gate spends before it waits
+    // (reading requests, signing, writing one) comes off the wait.
     let hold = wait::Hold {
-        room: wait::room(
-            &request.host.spec().hook_failure,
-            started.elapsed(),
-            relayed,
-        ),
+        until: std::time::Instant::now()
+            + wait::room(
+                &request.host.spec().hook_failure,
+                started.elapsed(),
+                relayed,
+            ),
         clock: &crate::time::now_ms,
     };
     gate::gate_used(

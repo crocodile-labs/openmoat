@@ -156,7 +156,7 @@ fn an_approved_call_refused_after_all_is_told_to_the_approver() {
         &req,
         review(),
         &KnownSecrets::default(),
-        (NOW + 2, &Hold::NONE),
+        (NOW + 2, &Hold::none()),
     );
     assert_eq!(decision.verdict, Verdict::Allow, "{decision:?}");
     let line = approved
@@ -196,7 +196,7 @@ fn an_approved_call_refused_after_all_is_told_to_the_approver() {
         &call("s1", "ls"),
         review(),
         &KnownSecrets::default(),
-        (NOW + 5, &Hold::NONE),
+        (NOW + 5, &Hold::none()),
     );
     assert!(none.is_none());
 }

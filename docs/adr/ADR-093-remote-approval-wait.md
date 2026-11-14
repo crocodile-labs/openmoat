@@ -34,13 +34,14 @@ person is usually looking at the phone when the request arrives.
    (`remote/listen/run.rs`, channel-neutral):
    - **sending** looks at `requests/` every second and sends each new request to the
      approvers at once, expires old ones, and writes the beat every 3 s while the
-     channel is healthy;
+     channel answers: its last successful poll ended within `poll_wait` plus 15 s;
    - **answering** long-polls the channel. How long a poll may wait on the server is a
      channel capability, `Capabilities::poll_wait` (Telegram: 25 s, `getUpdates`'
      `timeout`; the server answers as soon as an update arrives); a channel whose poll
-     returns at once (`poll_wait` zero) is polled every 2 s. A failed poll marks the
-     channel unhealthy, which stops the beat, until a poll succeeds; a poll that hangs
-     ends at the transport's own time limit as a failure.
+     returns at once (`poll_wait` zero) is polled every 2 s. Polls that fail, or a poll
+     that hangs past its transport's time limit, stop the beat by the rule above. If the
+     answering half ends for any reason (a panic, the key unreadable), it stops
+     `listen`, so no beat outlives the half that answers.
 
    So a request reaches the approver within about a second, an answer is seen the moment
    it is given, and an idle Telegram listener makes about 144 calls an hour. A poll in
@@ -90,7 +91,9 @@ A unit test checks the bound for every host in the registry; today every host ge
 1. The gate runs as ADR-078 says. When it leaves the call held on a request (sent now,
    or sent on an earlier try and not answered yet), it waits: it looks for the answer
    file every 100 ms (one `stat`), checks the beat every second, and stops when the
-   time is up, the beat goes stale or the request expires. The guard's phase is
+   time is up, the beat goes stale or the request expires. The time is a deadline fixed
+   before the gate starts (`Hold::until`), so what the gate spends reading and writing
+   requests comes off the wait. The guard's phase is
    `approval`, so a hang recorded meanwhile says so.
 2. **An answer** is checked by the same code as the next try (`gate::answered`):
    signature, digest, request id, expiry, channel, and the approver against the
@@ -99,8 +102,14 @@ A unit test checks the bound for every host in the registry; today every host ge
    so of a waiting guard and a retry, or of two waiting guards, exactly one allows; the
    other sees the marker and keeps the `review`. A deny denies at once (`remote-denied`).
    A `cut` or `redacted` request still uses no approval.
+   **An answer is visible only once its row is recorded:** `listen` writes it under a
+   name no guard reads, records the `remote-approved` or `remote-denied` row, and only
+   then links it into place (create-new). If the row fails the staged answer is removed,
+   so a waiting guard can never run a call whose approval was not recorded.
 3. **The audit row** of an approved call is ADR-078's: `allow`, rule `approved-remote`,
    the approver and channel in the reason, plus "answered while the hook waited N s".
+   An approval a retry used first leaves the `review` saying it was used, with no such
+   line.
 4. **No answer in time, or any error** (unreadable settings, a full disk): the `review`
    as before, with a reason saying no answer came within N s and that an approval
    before the expiry still lets the same call run once on the next try. The request
@@ -132,6 +141,8 @@ A unit test checks the bound for every host in the registry; today every host ge
 | The wait makes the host time the hook out and run the call | the wait ends inside the guard's budget less a margin, and inside a quarter of a fail-open host's timeout, from the spec | `remote::tests::wait::every_host_s_wait_ends_safely_before_its_hook_times_out` |
 | A listener whose channel is down still counted live | the beat is written only while polls succeed | `remote::tests::run::a_new_request_is_sent_within_a_second_and_the_beat_is_kept_then_removed` |
 | A request sent too late to answer within the wait, or an answer seen late | the sending half looks every second; the answering half long-polls and returns at the first reply | `remote::tests::run::a_new_request_is_sent_within_a_second_and_the_beat_is_kept_then_removed`, `remote::tests::run::a_long_poll_answers_the_moment_a_reply_arrives` |
+| A waiting guard uses an approval whose audit row then fails | the answer is linked into place only after its row is recorded | `remote::tests::wait::an_approval_whose_row_fails_is_never_used_by_a_waiting_guard` |
+| A listener that stopped answering, or a request that expired, keeps a guard waiting | the beat's age and the request's expiry are checked during the wait; an answering half that ends stops `listen` | `remote::tests::wait::the_wait_ends_when_the_beat_goes_stale`, `remote::tests::wait::the_wait_ends_when_the_request_expires` |
 | Under `openmoat run` the inner guard gives up first | the relayed guard keeps another 5 s | `remote::tests::wait::the_wait_is_capped_by_the_host_the_budget_and_the_time_already_spent`, e2e `remote_approvals::the_guard_openmoat_run_relays_to_waits_too` |
 
 ## Rejected

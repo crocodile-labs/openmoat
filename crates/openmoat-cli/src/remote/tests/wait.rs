@@ -11,15 +11,15 @@ use openmoat_hosts::{FailureOutcome, GUARD_BUDGET_S, HookFailure, HookRequest, H
 
 use super::super::answer::{self, Answer};
 use super::super::gate::gate_used;
-use super::super::listen::Listener;
+use super::super::listen::{Listener, Records, Row};
 use super::super::live::{self, LIVE_MS};
 use super::super::refused::Approved;
 use super::super::wait::{
     ANSWER_MARGIN, FAIL_OPEN_SHARE, Hold, MAX_WAIT_S, RELAY_MARGIN, host_limit, room,
 };
 use super::{
-    APPROVED_RULE, APPROVER_ID, DENIED_RULE, FAKE, Fake, Rows, Setup, call, only_request, review,
-    setup,
+    APPROVED_RULE, APPROVER, APPROVER_ID, DENIED_RULE, FAKE, Fake, Rows, Setup, approve_button,
+    call, only_request, press, review, setup,
 };
 use crate::proxy_session::Key;
 
@@ -38,7 +38,7 @@ fn failure(times_out: FailureOutcome, timeout_s: Option<u32>) -> HookFailure {
 /// The gate at the real time, holding the hook up to `room`.
 fn gate_for(s: &Setup, request: &HookRequest, room: Duration) -> (Decision, Option<Approved>) {
     let hold = Hold {
-        room,
+        until: Instant::now() + room,
         clock: &crate::time::now_ms,
     };
     gate_used(
@@ -363,4 +363,67 @@ fn two_waiting_guards_use_one_approval_once() {
             .any(|d| d.verdict == Verdict::Review && d.reasons.iter().any(|r| r.contains("used"))),
         "{decisions:?}"
     );
+}
+
+#[test]
+fn the_wait_ends_when_the_beat_goes_stale() {
+    let s = setup();
+    // Live now, stale in about a second: the listener stopped beating.
+    live::beat(&s.store, &s.key, "fake", now() - (LIVE_MS - 1_000)).unwrap();
+    let started = Instant::now();
+    let (d, _) = gate_for(&s, &call("s1", "npm publish"), Duration::from_secs(8));
+    let took = started.elapsed();
+    assert!(took < Duration::from_secs(4), "{took:?}");
+    assert_eq!(d.verdict, Verdict::Review, "{d:?}");
+}
+
+#[test]
+fn the_wait_ends_when_the_request_expires() {
+    let s = setup();
+    let req = call("s1", "npm publish");
+    gate_for(&s, &req, Duration::ZERO);
+    // The request on file expires in under a second.
+    let mut request = only_request(&s);
+    request.expires_ms = now() + 700;
+    request.sign(&s.key).unwrap();
+    s.store.put_request(&request).unwrap();
+    live::beat(&s.store, &s.key, "fake", now()).unwrap();
+    let started = Instant::now();
+    let (d, _) = gate_for(&s, &req, Duration::from_secs(8));
+    let took = started.elapsed();
+    assert!(took < Duration::from_secs(3), "{took:?}");
+    assert_eq!(d.verdict, Verdict::Review, "{d:?}");
+}
+
+/// Records whose write takes a while and then fails, as a locked or full
+/// audit log would.
+struct SlowThenFails;
+
+impl Records for SlowThenFails {
+    fn record(&mut self, _: Row) -> anyhow::Result<()> {
+        std::thread::sleep(Duration::from_millis(500));
+        anyhow::bail!("audit log unavailable")
+    }
+}
+
+#[test]
+fn an_approval_whose_row_fails_is_never_used_by_a_waiting_guard() {
+    let s = setup();
+    let req = call("s1", "npm publish");
+    gate_for(&s, &req, Duration::ZERO);
+    let request = only_request(&s);
+    live::beat(&s.store, &s.key, "fake", now()).unwrap();
+    let (d, answered) = std::thread::scope(|scope| {
+        let listening = scope.spawn(|| {
+            let mut listener = Listener::new(&s.store, &s.key, &FAKE, s.settings.clone());
+            let reply = press(APPROVER, &approve_button(&s, &request));
+            listener.answer(&mut Fake::default(), &mut SlowThenFails, &[reply], &now)
+        });
+        let decided = gate_for(&s, &req, Duration::from_millis(1_500)).0;
+        (decided, listening.join().unwrap())
+    });
+    answered.unwrap();
+    assert_eq!(d.verdict, Verdict::Review, "{d:?}");
+    assert!(!s.store.used(&request.id), "the approval was not used");
+    assert!(!s.store.has_answer(&request.id), "no answer stands");
 }

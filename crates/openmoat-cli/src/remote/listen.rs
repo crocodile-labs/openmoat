@@ -369,26 +369,37 @@ impl<'a> Listener<'a> {
             answer::Verdict::Approve => (APPROVED_ROW_RULE, Verdict::Allow),
             answer::Verdict::Deny => (DENIED_RULE, Verdict::Deny),
         };
-        if !self.store.put_answer(&answer)? {
-            let _ = channel.settle(reply, "This request was already answered.");
-            return Ok(());
-        }
-        // An answer that cannot be recorded does not stand.
-        let recorded = records.record(row(
-            &request,
-            rule,
-            core,
-            format!(
-                "request {} {} by {from} on {}",
-                request.code(),
-                verdict.word(),
-                self.spec.name
-            ),
-        ));
-        if let Err(error) = recorded {
-            self.store.forget_answer(id);
-            let _ = channel.settle(reply, "Not recorded, so not applied; try again.");
-            return Err(error);
+        // An answer that cannot be recorded does not stand, and no guard
+        // sees it before its row is written: a guard waiting for it would
+        // otherwise run the call while the row may still fail.
+        let recorded = self.store.put_answer_once_recorded(&answer, || {
+            records.record(row(
+                &request,
+                rule,
+                core,
+                format!(
+                    "request {} {} by {from} on {}",
+                    request.code(),
+                    verdict.word(),
+                    self.spec.name
+                ),
+            ))
+        });
+        match recorded {
+            Ok(true) => {}
+            Ok(false) => {
+                self.log.push(format!(
+                    "request {} was answered meanwhile by another listener; this answer was \
+                     recorded but not applied",
+                    request.code()
+                ));
+                let _ = channel.settle(reply, "This request was already answered.");
+                return Ok(());
+            }
+            Err(error) => {
+                let _ = channel.settle(reply, "Not recorded, so not applied; try again.");
+                return Err(error);
+            }
         }
         self.log.push(format!(
             "request {} {} by {name} ({from})",

@@ -31,7 +31,7 @@ pub fn gate(
     known: &KnownSecrets,
     now_ms: i64,
 ) -> Decision {
-    gate_used(store, request, decision, known, (now_ms, &Hold::NONE)).0
+    gate_used(store, request, decision, known, (now_ms, &Hold::none())).0
 }
 
 /// `decision` for `request` once remote approval has had its say, at
@@ -76,6 +76,7 @@ pub fn gate_used(
                 );
                 (with_reason(held, reason), None)
             }
+            Ok(Waited::Taken(kept)) => (*kept, None),
             Ok(Waited::Answered(answered, waited)) => {
                 let (answered, used) = *answered;
                 let reason = format!("answered while the hook waited {} s", waited.as_secs());
