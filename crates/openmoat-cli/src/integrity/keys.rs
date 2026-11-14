@@ -6,22 +6,26 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use super::digest::{COSMETIC_KEY, is_settings_json};
 use super::sha256_hex;
 
 /// Top-level key → SHA-256 of its value, for a `.json` file holding an object or
-/// a `.toml` file. `None` for any other file, or one that cannot be read or parsed.
-pub(super) fn key_digests(path: &Path) -> Option<BTreeMap<String, String>> {
-    key_digests_of(path, &fs::read(path).ok()?)
+/// a `.toml` file, without the `unpinned` keys its digest leaves out. `None`
+/// for any other file, or one that cannot be read or parsed.
+pub(super) fn key_digests(path: &Path, unpinned: &[&str]) -> Option<BTreeMap<String, String>> {
+    key_digests_of(path, &fs::read(path).ok()?, unpinned)
 }
 
 /// [`key_digests`] of `contents`, already read from `path`.
-pub(super) fn key_digests_of(path: &Path, contents: &[u8]) -> Option<BTreeMap<String, String>> {
+pub(super) fn key_digests_of(
+    path: &Path,
+    contents: &[u8],
+    unpinned: &[&str],
+) -> Option<BTreeMap<String, String>> {
     let text = std::str::from_utf8(contents).ok()?;
     match path.extension()?.to_str()? {
         "json" => {
             let value: serde_json::Value = serde_json::from_str(text).ok()?;
-            object_digests(value.as_object()?, is_settings_json(path))
+            object_digests(value.as_object()?, unpinned)
         }
         "toml" => {
             let doc: toml_edit::DocumentMut = text.parse().ok()?;
@@ -38,17 +42,16 @@ pub(super) fn key_digests_of(path: &Path, contents: &[u8]) -> Option<BTreeMap<St
     }
 }
 
-/// Key → SHA-256 of its value's compact serialisation. In a Claude Code
-/// settings file (`settings`) the key its digest leaves out is not named as a
-/// change either.
+/// Key → SHA-256 of its value's compact serialisation. The `unpinned` keys
+/// the file's digest leaves out are not named as a change either.
 pub(super) fn object_digests(
     object: &serde_json::Map<String, serde_json::Value>,
-    settings: bool,
+    unpinned: &[&str],
 ) -> Option<BTreeMap<String, String>> {
     let digest = |v| serde_json::to_vec(v).ok().map(|b| sha256_hex(&b));
     object
         .iter()
-        .filter(|(k, _)| !(settings && *k == COSMETIC_KEY))
+        .filter(|(k, _)| !unpinned.contains(&k.as_str()))
         .map(|(k, v)| Some((k.clone(), digest(v)?)))
         .collect()
 }

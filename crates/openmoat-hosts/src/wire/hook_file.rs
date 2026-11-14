@@ -141,7 +141,7 @@ impl dyn HookFile {
         id: &str,
         hooks: &[HookSpec],
         guard: &GuardCommand,
-        blocks_on_failure: fn() -> bool,
+        blocks_on_failure: impl Fn() -> bool + Copy,
     ) -> Result<HookOutcome, HookFileError> {
         let mut outcome = HookOutcome::Unchanged;
         for spec in hooks {
@@ -159,7 +159,7 @@ impl dyn HookFile {
         id: &str,
         spec: &HookSpec,
         guard: &GuardCommand,
-        blocks_on_failure: fn() -> bool,
+        blocks_on_failure: impl Fn() -> bool + Copy,
     ) -> Result<HookOutcome, HookFileError> {
         let Value::Object(top) = root else {
             return Err(HookFileError::NotObject(file.to_owned()));
@@ -215,7 +215,12 @@ impl dyn HookFile {
     /// Whether our entry for `spec` carries `"onFailure": "block"`: it does
     /// when it already has the key, so a shell without `claude` on `PATH`
     /// never takes the key away, and otherwise when the host's version knows it.
-    fn block(&self, spec: &HookSpec, existing: &Value, blocks_on_failure: fn() -> bool) -> bool {
+    fn block(
+        &self,
+        spec: &HookSpec,
+        existing: &Value,
+        blocks_on_failure: impl Fn() -> bool,
+    ) -> bool {
         self.knows_on_failure()
             && (has_block(existing) || (spec.block_on_failure && blocks_on_failure()))
     }
@@ -230,7 +235,7 @@ impl dyn HookFile {
         id: &str,
         hooks: &[HookSpec],
         guard: &GuardCommand,
-        blocks_on_failure: fn() -> bool,
+        blocks_on_failure: impl Fn() -> bool + Copy,
     ) -> HookFileState {
         let mut found = 0;
         let mut stale_command = None;

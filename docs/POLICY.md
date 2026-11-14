@@ -1287,7 +1287,8 @@ change under `hooks`, `env`, `apiKeyHelper`, `statusLine`, plugins, MCP servers 
 `sandbox`, any key not on the list, and a file that no longer parses still deny every
 call. Turning `blockReadsOutsideWorkingDirectories` off widens what sandboxed commands
 may read; `openmoat status` then shows Claude Code as `hook only`. The full list and why
-each key is safe are in `crates/openmoat-cli/src/integrity/relaxed.rs`. A lock written
+each key is safe are in Claude Code's spec,
+`crates/openmoat-hosts/src/host/claude_code/settings.rs`. A lock written
 before this release has no per-key record of `permissions`, so there a change to it
 still denies until the next re-pin.
 

@@ -38,8 +38,19 @@ fn installed(settings: &Value, owned: bool) -> Setup {
     installed_as("settings.json", settings, owned)
 }
 
-/// [`installed`] with the host file pinned under `name`.
+/// [`installed`] with the host file pinned under `name`, as the hook file of
+/// the host a lock from before the owners were recorded reads it as.
 fn installed_as(name: &str, settings: &Value, owned: bool) -> Setup {
+    installed_for(name, settings, owned, super::super::owner::assumed)
+}
+
+/// [`installed_as`], the host file pinned as the hook file of `owner`'s host.
+fn installed_for(
+    name: &str,
+    settings: &Value,
+    owned: bool,
+    host_of: impl Fn(&Path) -> Option<openmoat_hosts::Host>,
+) -> Setup {
     let dir = tempfile::tempdir().unwrap();
     let home = Home::at(dir.path().join("state"));
     fs::create_dir_all(home.root()).unwrap();
@@ -52,7 +63,11 @@ fn installed_as(name: &str, settings: &Value, owned: bool) -> Setup {
     let path = claude.join(name);
     fs::write(&path, serde_json::to_string_pretty(settings).unwrap()).unwrap();
     let pins = [home.policy_path(), home.hosts_path(), path.clone()];
-    let lock = Lock::pin(Path::new("/x/moat"), &pins).unwrap();
+    let owners: Vec<_> = host_of(&path)
+        .map(|host| (path.clone(), host))
+        .into_iter()
+        .collect();
+    let lock = Lock::pin_owned(Path::new("/x/moat"), &pins, &owners).unwrap();
     lock.save(&home.lock_path()).unwrap();
     Setup {
         _dir: dir,
@@ -464,3 +479,62 @@ fn repeated_keys_a_byte_order_mark_and_comments_are_read_as_the_agent_reads_them
         assert_denied(&check(&setup.home).unwrap());
     }
 }
+
+/// A top-level key whose name is a relaxed key's dotted path is not that key:
+/// only `allow` inside `permissions` is. Each denies every call, naming the
+/// file.
+#[test]
+fn a_top_level_key_named_like_a_nested_relaxed_key_denies() {
+    for name in [
+        "permissions.allow",
+        "permissions.ask",
+        "permissions.deny",
+        "permissions.defaultMode",
+        "permissions.blockReadsOutsideWorkingDirectories",
+    ] {
+        let checked = after(|s| s[name] = json!(["Bash(*)"]));
+        assert_denied(&checked);
+        let deny = checked.deny.unwrap();
+        assert!(
+            deny.reasons
+                .iter()
+                .any(|r| r.contains("settings.json was modified") && r.contains(name)),
+            "{name}: {:?}",
+            deny.reasons
+        );
+    }
+    let checked = after(|s| s["permissions.defaultMode"] = json!("default"));
+    assert_denied(&checked);
+}
+
+/// The rules a list must keep are the ones OpenMoat wrote into that host's
+/// file: with none written for the host, a changed `permissions.deny` cannot
+/// be told from a removed rule and denies.
+#[test]
+fn a_deny_list_change_without_written_rules_denies() {
+    let keys = [RelaxedKey::keeping_written_rules("permissions.deny")];
+    let list = json!([OWNED, "Bash(rm:*)"]);
+    assert!(relaxed_value(
+        &keys,
+        Some("permissions"),
+        "deny",
+        Some(&list),
+        &[OWNED.to_owned()]
+    ));
+    assert!(!relaxed_value(
+        &keys,
+        Some("permissions"),
+        "deny",
+        Some(&list),
+        &[]
+    ));
+    assert!(!relaxed_value(
+        &keys,
+        None,
+        "permissions.deny",
+        Some(&list),
+        &[OWNED.to_owned()]
+    ));
+}
+
+mod owners;

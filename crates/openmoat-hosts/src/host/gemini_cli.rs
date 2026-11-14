@@ -110,6 +110,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_variable_is_home: true,
         hook_file: HookLayout::Entries(&hook_file::Gemini),
         relaxed_keys: settings::RELAXED_KEYS,
+        // Gemini CLI's settings before `ui.theme` kept the theme at the top,
+        // as Claude Code's do; left out of the digest as every lock before
+        // this field did for a file of this name, so those locks still verify.
+        unpinned_keys: &["theme"],
         ..InstallSpec::BASE
     }),
     // <https://geminicli.com/docs/tools/mcp-server/>: `mcpServers` in the user

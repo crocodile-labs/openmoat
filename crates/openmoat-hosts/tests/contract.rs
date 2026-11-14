@@ -7,8 +7,8 @@ use std::path::Path;
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::bench::{Call, Exit, Place};
 use openmoat_hosts::{
-    Activity, GUARD_BUDGET_S, HEARTBEAT_FLAG, HOME_FLAG, HookLayout, Host, HostError, RunFacts,
-    ToolToken, reason_line,
+    Activity, GUARD_BUDGET_S, HEARTBEAT_FLAG, HOME_FLAG, HookLayout, Host, HostError, KeyShape,
+    RelaxedCheck, RunFacts, ToolToken, reason_line,
 };
 use serde_json::json;
 
@@ -162,10 +162,11 @@ const NEVER_RELAXED: &[&str] = &[
     "ui.renderProcess",
 ];
 
-/// A relaxed key is a dotted path of plain names, listed once, under none of
-/// [`NEVER_RELAXED`], and never names a command; the host's directory keeps
-/// its name wherever the host's variable moves it, so the CLI finds the file
-/// by its `<dir_name>/<config_file>` ending.
+/// A relaxed key is a dotted path of plain names (`$schema` too), listed
+/// once, under none of [`NEVER_RELAXED`], and never names a command. Keys
+/// compared one by one are at most one level deep, all in one object, and
+/// only they may keep OpenMoat's rules; keys taken out of the file to compare
+/// the rest are never that list, which the rest cannot tell from a removed rule.
 #[test]
 fn relaxed_keys_change_nothing_that_runs_or_decides() {
     for host in Host::ALL {
@@ -174,14 +175,24 @@ fn relaxed_keys_change_nothing_that_runs_or_decides() {
         if keys.is_empty() {
             continue;
         }
-        assert!(install.variable_names_home(), "{host:?}");
+        let parent = RelaxedCheck::parent(keys);
         for (i, key) in keys.iter().enumerate() {
             let path = key.path;
             assert!(
-                path.split('.')
-                    .all(|n| !n.is_empty() && n.chars().all(char::is_alphanumeric)),
+                path.split('.').all(|n| {
+                    let n = n.strip_prefix('$').unwrap_or(n);
+                    !n.is_empty() && n.chars().all(char::is_alphanumeric)
+                }),
                 "{path}"
             );
+            match install.relaxed_check {
+                RelaxedCheck::ByKey => assert!(
+                    path.split_once('.')
+                        .is_none_or(|(p, rest)| Some(p) == parent && !rest.contains('.')),
+                    "{host:?}: {path} is not one level under {parent:?}"
+                ),
+                _ => assert_ne!(key.shape, KeyShape::KeepsWrittenRules, "{host:?}: {path}"),
+            }
             assert!(keys[..i].iter().all(|k| k.path != path), "{path} twice");
             for never in NEVER_RELAXED {
                 assert!(

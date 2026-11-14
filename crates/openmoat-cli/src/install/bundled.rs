@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use openmoat_hosts::{Bundle, Host};
 use serde::Deserialize;
 
-use super::claude_version::{Version, parse};
+use super::host_version::{Version, parse};
 
 /// One bundled copy.
 #[derive(Debug, Clone, PartialEq, Eq)]

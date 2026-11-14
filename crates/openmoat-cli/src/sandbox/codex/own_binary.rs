@@ -54,12 +54,23 @@ const CODEX_STATE: &[&str] = &[
 /// on Linux expands to the files present when each command starts.
 const CODEX_DATABASES: &str = "**/*.sqlite*";
 
-/// The executable `codex` on `PATH` runs, symlinks resolved; found in absolute
-/// `PATH` entries only (ADR-067), so a `codex` planted in the working directory
-/// through `.` is never granted. Where Codex is installed is not checked: it
-/// runs from wherever the person put it (a version manager, `/opt`, a CI cache).
+/// The executable the program of the host whose sandbox this profile is
+/// ([`openmoat_hosts::ProcessSpec::names`], `codex`) runs from `PATH`,
+/// symlinks resolved; found in absolute `PATH` entries only (ADR-067), so one
+/// planted in the working directory through `.` is never granted. Where Codex
+/// is installed is not checked: it runs from wherever the person put it (a
+/// version manager, `/opt`, a CI cache).
 pub fn own_binary() -> Option<PathBuf> {
-    native(&std::fs::canonicalize(crate::environment::find_on_path("codex")?).ok()?)
+    let host = crate::sandbox::install::hosts().find(|host| {
+        crate::sandbox::install::format(*host) == Some(openmoat_hosts::SandboxFormat::CodexProfile)
+    })?;
+    let found = host
+        .spec()
+        .process
+        .names
+        .iter()
+        .find_map(|name| crate::environment::find_on_path(name))?;
+    native(&std::fs::canonicalize(found).ok()?)
 }
 
 /// `found` itself, or for npm's launcher (`<package>/bin/codex.js`) the

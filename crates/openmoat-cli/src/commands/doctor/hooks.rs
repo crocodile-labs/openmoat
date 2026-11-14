@@ -171,12 +171,20 @@ fn installed(report: &mut Report, home: &Home, config: &HostConfig, hook_files: 
         }
     }
     if config.runs_calls_when_hook_fails() {
+        let programs: Vec<String> = host
+            .spec()
+            .process
+            .names
+            .iter()
+            .map(|n| format!("`{n}`"))
+            .collect();
         report.warn(&format!(
             "{name:<16} runs a tool call when its hook fails to start, crashes or \
-             times out: no `claude` {since} or later on PATH or in an editor extension, \
+             times out: no {programs} {since} or later on PATH or in an editor extension, \
              or an older copy beside it, so the hook has no `onFailure: \"block\"`; \
-             update Claude Code, then run `openmoat init`",
-            since = crate::install::on_failure_since()
+             update {name}, then run `openmoat init`",
+            programs = programs.join(" or "),
+            since = crate::install::on_failure_since(host)
         ));
     }
 }

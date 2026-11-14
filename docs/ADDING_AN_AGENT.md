@@ -105,7 +105,15 @@ The spec in `host/<module>.rs` holds every fact about the agent that is not code
 - **`install`:** where its configuration lives and the hook entries `openmoat init`
   writes there, as an `InstallSpec`:
   - `hooks`: one `HookSpec` per event, with its matcher, timeout and whether it sets
-    Claude Code's `onFailure`.
+    the host's flag that blocks a failed hook's call (Claude Code's `onFailure`), which
+    `openmoat init` writes only where every copy of the host's program (`process.names`
+    on `PATH`, `bundled`) reports the version `hook_failure.fails:
+    FailureOutcome::BlocksFrom(version)` names or later.
+  - `relaxed_keys`, `relaxed_check`, `unpinned_keys`: keys of the hook file the host
+    rewrites itself for a person's choice (a model, a theme) and that change no
+    decision, and how the lock compares them. They apply only to the file the lock
+    pinned as this host's hook file, never to another host's file of the same name;
+    a host that lists none drifts on any change.
   - `hook_file`: the `HookLayout` of the file. `Entries` with a `HookFile` layout; or
     `Owned` with an `OwnedFile` from `host/<module>/integration/`, or `Plugin` with a
     `PluginConfig` (`host/<module>/plugin_config.rs`) naming that file and editing the

@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 
-use super::listed;
 use crate::home::Home;
 use crate::integrity::{Drift, INTEGRITY_RULE, Lock, check};
 
@@ -77,20 +76,6 @@ fn decided(setup: &Setup) -> bool {
     } else {
         assert_eq!(checked.relaxed.len(), 1, "{:?}", checked.relaxed);
         true
-    }
-}
-
-#[test]
-fn gemini_settings_are_found_by_their_place() {
-    assert!(listed(Path::new("/home/me/.gemini/settings.json")).is_some());
-    assert!(listed(Path::new("/srv/agent-home/.gemini/settings.json")).is_some());
-    for other in [
-        "/home/me/.claude/settings.json",
-        "/home/me/.gemini/settings.json.bak",
-        "/home/me/gemini/settings.json",
-        "/home/me/.gemini/extensions/x/settings.json",
-    ] {
-        assert!(listed(Path::new(other)).is_none(), "{other}");
     }
 }
 

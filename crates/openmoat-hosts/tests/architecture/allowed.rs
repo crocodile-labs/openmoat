@@ -13,9 +13,6 @@ pub const ALLOWED_NAMES: &[(&str, usize)] = &[
     // Not in the review: the build-script attack's login path; take it from
     // the host's `protect.credentials`.
     ("openmoat-cli/src/commands/bench/proof/os.rs", 1),
-    // H5: the `claude` on PATH that knows `onFailure`.
-    ("openmoat-cli/src/commands/doctor/hooks.rs", 1),
-    ("openmoat-cli/src/install/claude_version.rs", 1),
     // M3: a host's name in CLI text.
     ("openmoat-cli/src/commands/mcp.rs", 1),
     ("openmoat-cli/src/commands/proxy.rs", 1),
@@ -24,8 +21,6 @@ pub const ALLOWED_NAMES: &[(&str, usize)] = &[
     ("openmoat-cli/src/integrity.rs", 1),
     ("openmoat-cli/src/sandbox/install.rs", 1),
     ("openmoat-cli/src/sandbox/seatbelt.rs", 1),
-    // H3: Claude Code's `settings.json` chosen by its file name.
-    ("openmoat-cli/src/integrity/digest.rs", 1),
     // Not a host: OpenMoat's own `remote/settings.json` has the same name as
     // Claude Code's settings file.
     ("openmoat-cli/src/remote/store.rs", 1),
@@ -41,7 +36,7 @@ pub const ALLOWED_NAMES: &[(&str, usize)] = &[
     ("openmoat-cli/src/sandbox/codex.rs", 6),
     ("openmoat-cli/src/sandbox/codex/config.rs", 3),
     ("openmoat-cli/src/sandbox/codex/names.rs", 3),
-    ("openmoat-cli/src/sandbox/codex/own_binary.rs", 8),
+    ("openmoat-cli/src/sandbox/codex/own_binary.rs", 7),
     ("openmoat-cli/src/sandbox/cursor.rs", 11),
     ("openmoat-cli/src/sandbox/cursor/settings.rs", 1),
     // H4: Claude Code's temporary folder and the hosts' taint globs in the
@@ -54,8 +49,7 @@ pub const ALLOWED_NAMES: &[(&str, usize)] = &[
 
 /// The end-to-end tests every host shares (relative to
 /// `crates/openmoat-cli/tests/e2e/`). M6: each writes a host's id, directory
-/// or displayed text where the spec (`dir_of`, `display_name`) could give it;
-/// `common.rs` also holds H5's pinned Claude Code version.
+/// or displayed text where the spec (`dir_of`, `display_name`) could give it.
 pub const ALLOWED_IN_SHARED_TESTS: &[(&str, usize)] = &[
     ("alias.rs", 11),
     ("allow.rs", 19),
@@ -70,7 +64,7 @@ pub const ALLOWED_IN_SHARED_TESTS: &[(&str, usize)] = &[
     ("check_diff.rs", 2),
     ("cli.rs", 7),
     ("closed_pipe.rs", 5),
-    ("common.rs", 5),
+    ("common.rs", 4),
     ("config_change.rs", 20),
     ("deliver.rs", 13),
     ("differential.rs", 5),

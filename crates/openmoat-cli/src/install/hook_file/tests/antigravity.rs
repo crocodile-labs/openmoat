@@ -15,7 +15,7 @@ fn config(dir: &Path) -> HostConfig {
         dir: dir.to_path_buf(),
         hooks: spec.hooks,
         layout: spec.hook_file,
-        blocks_on_failure: || false,
+        blocks_on_failure: |_| false,
         state_dir: std::path::PathBuf::from("/h/state"),
     }
 }

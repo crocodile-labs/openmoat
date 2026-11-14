@@ -8,31 +8,21 @@ use sha2::{Digest as _, Sha256};
 
 use super::forms::Form;
 
-/// The top-level key of a Claude Code settings file left out of its digest.
-/// Claude Code writes it on first run and whenever the person picks a theme, and
-/// it changes only colours (#287).
-pub(super) const COSMETIC_KEY: &str = "theme";
-
-/// Whether `path` is named `settings.json`, as Claude Code's settings file is.
-/// The test is by name alone, whichever host owns the file: a file with this
-/// name is pinned without [`COSMETIC_KEY`].
-pub(super) fn is_settings_json(path: &Path) -> bool {
-    path.file_name().is_some_and(|name| name == "settings.json")
-}
-
 /// The digest to pin for the file at `path`: the first of [`digests`].
-pub(super) fn digest(path: &Path, settings: bool, form: Option<Form>) -> Result<String> {
-    Ok(digests(path, settings, form)?.swap_remove(0))
+pub(super) fn digest(path: &Path, unpinned: &[&str], form: Option<Form>) -> Result<String> {
+    Ok(digests(path, unpinned, form)?.swap_remove(0))
 }
 
 /// Every digest the file at `path` verifies against, the one to pin first.
 ///
-/// With `settings` (a Claude Code settings file) whose contents parse as a JSON
-/// object, the first is the digest of its canonical serialisation without
-/// [`COSMETIC_KEY`]. The last is always the whole-file digest, which locks
-/// written before #287 hold for settings files; it matches only identical bytes,
-/// so accepting it hides nothing. A settings file that no longer parses has only
-/// the whole-file digest and so no longer matches a canonical pin.
+/// With `unpinned` keys (its owner's
+/// [`openmoat_hosts::InstallSpec::unpinned_keys`], Claude Code's `theme`)
+/// and contents that parse as a JSON object, the first is the digest of its
+/// canonical serialisation without them. The last is always the whole-file
+/// digest, which locks written before #287 hold for settings files; it matches
+/// only identical bytes, so accepting it hides nothing. A file that no longer
+/// parses has only the whole-file digest and so no longer matches a canonical
+/// pin.
 ///
 /// With `form`, the pinned form of the host that owns the file (`forms.rs`),
 /// the first is the digest of that form when the file takes it.
@@ -40,8 +30,8 @@ pub(super) fn digest(path: &Path, settings: bool, form: Option<Form>) -> Result<
 /// A symlink hashes its target path together with the contents, so swapping a
 /// regular file for a link (or re-pointing a link) changes every digest even
 /// when the bytes read through it are identical.
-pub(super) fn digests(path: &Path, settings: bool, form: Option<Form>) -> Result<Vec<String>> {
-    Ok(ReadOnce::from(path)?.digests(settings, form))
+pub(super) fn digests(path: &Path, unpinned: &[&str], form: Option<Form>) -> Result<Vec<String>> {
+    Ok(ReadOnce::from(path)?.digests(unpinned, form))
 }
 
 /// A pinned file as read once: the symlink target it names, if any, and the
@@ -79,11 +69,12 @@ impl ReadOnce {
     }
 
     /// [`digests`] of these bytes.
-    pub fn digests(&self, settings: bool, form: Option<Form>) -> Vec<String> {
+    pub fn digests(&self, unpinned: &[&str], form: Option<Form>) -> Vec<String> {
         let link = self.link.as_slice();
         let contents = self.contents.as_slice();
         let mut out = Vec::new();
-        if settings && let Some(canonical) = without_cosmetic_key(contents) {
+        let settings = !unpinned.is_empty();
+        if settings && let Some(canonical) = without(contents, unpinned) {
             out.push(sha256_hex(&[link, &canonical].concat()));
         }
         if !settings
@@ -114,11 +105,15 @@ fn pinned_form(contents: &[u8], form: Form) -> Option<Vec<u8>> {
     serde_json::to_vec(&(form.shape)(value)?).ok()
 }
 
-/// The JSON object in `contents` without [`COSMETIC_KEY`], serialised compactly
-/// with sorted keys (`serde_json` maps are ordered without `preserve_order`).
-fn without_cosmetic_key(contents: &[u8]) -> Option<Vec<u8>> {
+/// The JSON object in `contents` without the top-level `keys`, serialised
+/// compactly with sorted keys (`serde_json` maps are ordered without
+/// `preserve_order`).
+fn without(contents: &[u8], keys: &[&str]) -> Option<Vec<u8>> {
     let mut value: serde_json::Value = serde_json::from_slice(contents).ok()?;
-    value.as_object_mut()?.remove(COSMETIC_KEY);
+    let object = value.as_object_mut()?;
+    for key in keys {
+        object.remove(*key);
+    }
     serde_json::to_vec(&value).ok()
 }
 
@@ -189,7 +184,7 @@ mod tests {
     #[test]
     fn a_whole_file_pin_from_an_older_lock_still_verifies() {
         let (_dir, path, mut lock) = pinned("{ \"hooks\": {} }\n");
-        let whole = digests(&path, false, None).unwrap().swap_remove(0);
+        let whole = digests(&path, &[], None).unwrap().swap_remove(0);
         lock.entries.values_mut().for_each(|d| d.clone_from(&whole));
         assert_eq!(lock.verify_one(&path), None);
         fs::write(&path, "{ \"hooks\": {}, \"theme\": \"light\" }\n").unwrap();

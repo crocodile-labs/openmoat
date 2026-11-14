@@ -216,7 +216,7 @@ fn protection(home: &Home, binary: &Path, inputs: &Inputs, host: Host) -> Result
     // reads the flag that blocks a failed hook can take a `--version` run.
     let hook_failure = level
         .hooked()
-        .then(|| hook_failure::of(host, (config.blocks_on_failure)()));
+        .then(|| hook_failure::of(host, (config.blocks_on_failure)(host)));
     Ok(Protection {
         host: host.id(),
         name: host.display_name(),

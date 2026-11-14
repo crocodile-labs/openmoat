@@ -26,9 +26,25 @@ pub const REVIEW: i32 = 3;
 /// Usage or configuration error from a command a person ran.
 pub const USAGE: i32 = 64;
 
-/// The Claude Code version every command is told is installed: one that knows
-/// `onFailure`, so `moat init` writes it.
-pub const CLAUDE_CODE_VERSION: &str = "2.1.295 (Claude Code)";
+/// The version each host whose hook entries ask to block a failed hook's call
+/// is told it has, through the variable debug builds read it from instead of
+/// running the host (`MOAT_<ID>_VERSION`, `install/on_failure.rs`): the first
+/// that reads the flag, so `moat init` writes it.
+fn flag_versions() -> impl Iterator<Item = (String, String)> {
+    openmoat_hosts::Host::ALL.into_iter().filter_map(|host| {
+        let spec = host.spec();
+        let asks = spec
+            .install
+            .as_ref()
+            .is_some_and(|i| i.hooks.iter().any(|h| h.block_on_failure));
+        let (major, minor, patch) = spec.hook_failure.flag_since().filter(|_| asks)?;
+        let variable = format!(
+            "MOAT_{}_VERSION",
+            host.id().to_ascii_uppercase().replace('-', "_")
+        );
+        Some((variable, format!("{major}.{minor}.{patch}")))
+    })
+}
 
 /// A throwaway home directory.
 pub struct Sandbox {
@@ -111,10 +127,8 @@ impl Sandbox {
             .env("PATH", std::env::var_os("PATH").unwrap_or_default())
             .env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
-            // Debug builds take Claude Code's version from here instead of
-            // running the `claude` on `PATH` (`install/claude_version.rs`).
-            .env("MOAT_CLAUDE_CODE_VERSION", CLAUDE_CODE_VERSION)
-            // and OpenCode's from here instead of running the `opencode` on
+            .envs(flag_versions())
+            // Debug builds take OpenCode's version from here instead of running the `opencode` on
             // `PATH` (`install/host_version.rs`); empty is none found
             .env("MOAT_OPENCODE_VERSION", "");
         // Windows sockets cannot start without it (`moat proxy` binds one).
