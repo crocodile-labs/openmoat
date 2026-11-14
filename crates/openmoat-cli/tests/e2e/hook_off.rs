@@ -317,7 +317,14 @@ fn init_managed_writes_the_hook_where_a_project_cannot_turn_it_off() {
             text(&again)
         );
 
-        let doctor = output(sb.command().env(SYSTEM_ROOT, &system).arg("doctor"), None);
+        // A managed hook in place is a note, listed with `--verbose`; one that
+        // another source shadows is a warning, shown either way.
+        let doctor = output(
+            sb.command()
+                .env(SYSTEM_ROOT, &system)
+                .args(["doctor", "--verbose"]),
+            None,
+        );
         assert!(
             text(&doctor).contains("managed hook"),
             "{id}: {}",
