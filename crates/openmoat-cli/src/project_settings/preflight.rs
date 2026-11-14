@@ -1,6 +1,6 @@
 //! What a project holds that turns a host's OpenMoat hook off when a session
 //! starts there, for `openmoat run`'s check before it starts the agent
-//! (ADR-095).
+//! (ADR-098).
 //!
 //! The same reading as `openmoat status` and the guard's write check: each
 //! project settings file of the host's spec (`HostSpec::project_settings`) in
@@ -55,6 +55,25 @@ pub fn turned_off(
                     continue;
                 }
             };
+            // Text the host replaces before parsing may become anything,
+            // a switch that turns the hook off included (ADR-098).
+            let text = String::from_utf8_lossy(&bytes);
+            if let Some(marker) = spec
+                .reader
+                .substitutions()
+                .iter()
+                .find(|marker| text.contains(**marker))
+            {
+                found.push(Off {
+                    path,
+                    what: vec![format!(
+                        "holds `{marker}…}}`, which the agent replaces with text OpenMoat cannot \
+                         read before it loads the file"
+                    )],
+                    overridden: false,
+                });
+                continue;
+            }
             // Text the host cannot parse loads nothing: it refuses the file.
             let Ok(root) = super::parse(&path, &bytes, spec.reader.reads_comments()) else {
                 continue;

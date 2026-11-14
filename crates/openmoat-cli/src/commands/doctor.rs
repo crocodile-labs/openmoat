@@ -147,7 +147,7 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         let name = warning.host.display_name();
         report.warn(&format!("{name:<16} other hook {}", warning.text));
     }
-    // OpenMoat's hook where an administrator's hooks live (ADR-095).
+    // OpenMoat's hook where an administrator's hooks live (ADR-098).
     for row in crate::managed::doctor_rows(&home, &binary) {
         match row {
             crate::managed::Row::Note(text) => report.note(&text),

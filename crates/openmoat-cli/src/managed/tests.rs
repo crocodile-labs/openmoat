@@ -48,21 +48,28 @@ fn every_managed_host_has_one_file_per_platform() {
 fn the_install_command_quotes_every_path_and_never_runs_itself() {
     let staged = Path::new("/home/a b/.moat/managed/it's.json");
     let target = Path::new("/etc/x/policy.d/openmoat.json");
-    let unix = install_command(staged, target, Platform::Linux);
+    let unix = install_command(staged, "ab12", target, Platform::Linux);
     assert_eq!(
         unix,
-        "sudo install -d -m 755 '/etc/x/policy.d' && sudo install -m 644 -o 0 -g 0 \
-         '/home/a b/.moat/managed/it'\\''s.json' '/etc/x/policy.d/openmoat.json'"
+        "echo 'ab12  ''/home/a b/.moat/managed/it'\\''s.json' | sha256sum -c - && \
+         { [ -d '/etc/x/policy.d' ] || sudo install -d -m 755 '/etc/x/policy.d'; } && \
+         sudo install -m 644 -o 0 -g 0 '/home/a b/.moat/managed/it'\\''s.json' \
+         '/etc/x/policy.d/openmoat.json'"
+    );
+    assert!(
+        install_command(staged, "ab12", target, Platform::MacOs).contains("shasum -a 256 -c -")
     );
     let windows = install_command(
         Path::new("C:/Users/o'k/.moat/managed/x.json"),
+        "ab12",
         Path::new("C:/ProgramData/X/policy.d/openmoat.json"),
         Platform::Windows,
     );
     assert!(
-        windows.contains("'C:/Users/o''k/.moat/managed/x.json'"),
+        windows.contains("-LiteralPath 'C:/Users/o''k/.moat/managed/x.json'"),
         "{windows}"
     );
+    assert!(windows.contains("-ne 'AB12'"), "{windows}");
     assert!(
         windows.starts_with("in an elevated PowerShell"),
         "{windows}"

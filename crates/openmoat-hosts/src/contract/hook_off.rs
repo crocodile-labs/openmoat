@@ -1,5 +1,5 @@
 //! What a repository can do to a host's user hook before any call reaches it,
-//! and what makes that hook outlast the repository (ADR-095): whether a file a
+//! and what makes that hook outlast the repository (ADR-098): whether a file a
 //! project holds turns OpenMoat's hook off when a session starts, an option of
 //! the host's that keeps it on for one session, and the place an
 //! administrator's hooks live, which a project's settings cannot turn off.
@@ -20,7 +20,10 @@ pub struct HookOff {
     /// Whether a project's own files turn OpenMoat's user hook off.
     pub project: ProjectOff,
     /// An option of the host's that keeps the hook on for one session
-    /// whatever a project's files say; `None` for a host with none.
+    /// whatever a project's files say; `None` for a host with none. `openmoat
+    /// run` adds it to every session of the host whose hook is installed,
+    /// since the host may load a project's files again mid-session, unless
+    /// the person passes their own or their own settings turn hooks off.
     pub session_override: Option<SessionOverride>,
     /// Where an administrator's hooks live.
     pub managed: Managed,
@@ -161,13 +164,19 @@ pub struct ManagedHooks {
     /// command that installs it so.
     pub root_owned: bool,
     /// The host's documentation says a project's settings cannot turn a hook
-    /// there off. Only then does `openmoat run` start an agent whose project
-    /// would turn its user hook off once this file holds OpenMoat's hook.
+    /// there off. Only then, and only for a host without a
+    /// [`HookOff::session_override`], does `openmoat run` start an agent whose
+    /// project would turn its user hook off once this file holds OpenMoat's
+    /// hook.
     pub outlasts_project: bool,
     /// Sources that, when present, make the host skip this file altogether
     /// (Claude Code applies one managed source by default, a device
     /// management profile before the file); none for most hosts.
     pub shadowed_by: &'static [SystemFile],
+    /// Sources that make the host skip the file which OpenMoat cannot see from
+    /// a file (a registry value, settings a server delivers), as `doctor`
+    /// names them; empty when there are none.
+    pub unseen_shadows: &'static str,
     /// Where the host documents it.
     pub source: &'static str,
 }

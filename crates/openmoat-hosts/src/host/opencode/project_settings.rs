@@ -24,6 +24,10 @@ pub(crate) static READER: Reader = Reader;
 /// OpenMoat's plugin's id (`export default { id: "openmoat", … }`).
 const PLUGIN_ID: &str = "openmoat";
 
+/// What OpenCode replaces in a configuration file's text before parsing it
+/// (<https://opencode.ai/docs/config/>, "Variables").
+const SUBSTITUTIONS: &[&str] = &["{env:", "{file:"];
+
 /// Keys whose entries may hold a `command` OpenCode runs: formatters after a
 /// file is edited, language servers when a file is opened.
 const COMMAND_KEYS: &[(&str, &str)] = &[
@@ -47,6 +51,12 @@ impl SettingsReader for Reader {
         removals(file)
     }
 
+    // Config "Variables": `{env:NAME}` and `{file:path}` are replaced in the
+    // file's text before it is parsed, anywhere in it.
+    fn substitutions(&self) -> &'static [&'static str] {
+        SUBSTITUTIONS
+    }
+
     fn hook_dir_effect(&self) -> &'static str {
         "is a plugin OpenCode loads at start, in its own process with the agent's rights"
     }
@@ -62,9 +72,24 @@ impl SettingsReader for Reader {
 fn removals(file: &SettingsFile<'_>) -> Vec<String> {
     let mut found = Vec::new();
     for key in ["plugins", "plugin"] {
+        if let Some(text) = file.root.get(key).and_then(Value::as_str)
+            && SUBSTITUTIONS.iter().any(|s| text.contains(s))
+        {
+            found.push(format!(
+                "`{key}` is `{text}`, which OpenCode replaces with text OpenMoat cannot read and \
+                 may remove OpenMoat's plugin"
+            ));
+        }
         let entries = file.root.get(key).and_then(Value::as_array).into_iter().flatten();
         for entry in entries.filter_map(Value::as_str) {
-            if entry
+            // A substituted entry becomes whatever the variable or file
+            // holds, a removal included: fail closed (ADR-098).
+            if SUBSTITUTIONS.iter().any(|s| entry.contains(s)) {
+                found.push(format!(
+                    "`{key}` holds `{entry}`, which OpenCode replaces with text OpenMoat cannot \
+                     read and may remove OpenMoat's plugin"
+                ));
+            } else if entry
                 .strip_prefix('-')
                 .is_some_and(|target| removes(target, PLUGIN_ID))
             {
@@ -225,6 +250,24 @@ mod tests {
         assert_eq!(of(&json!({"$schema": "https://opencode.ai/config.json", "model": "x/y"})), Vec::<String>::new());
         assert_eq!(of(&json!({"plugin": []})), Vec::<String>::new());
         assert_eq!(off(&json!({"plugins": ["opencode-helper", "-other", "-open*", "-openmoat2"]})), Vec::<String>::new());
+    }
+
+    /// An entry OpenCode substitutes may become a removal: it counts as one
+    /// (ADR-098), in either list, and as the whole value.
+    #[test]
+    fn a_substituted_plugin_entry_counts_as_a_removal() {
+        for value in [
+            json!(["{env:PLUGINS}"]),
+            json!(["-{file:./x.txt}"]),
+            json!("{file:./plugins.json}"),
+        ] {
+            for key in ["plugins", "plugin"] {
+                let found = off(&json!({ key: value.clone() }));
+                assert_eq!(found.len(), 1, "{key} {value}: {found:?}");
+                assert!(found[0].contains("cannot read"), "{found:?}");
+            }
+        }
+        assert_eq!(READER.substitutions(), SUBSTITUTIONS);
     }
 
     /// OpenCode 2 removes a plugin by its id, `*` or `<prefix>.*`, in either

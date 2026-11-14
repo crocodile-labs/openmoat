@@ -1,5 +1,5 @@
 //! A repository that turns the agent's OpenMoat hook off as a session starts
-//! (ADR-095): `openmoat run` refuses to start the agent over it, for every
+//! (ADR-098): `openmoat run` refuses to start the agent over it, for every
 //! host whose spec says a project can, while a project that turns nothing off
 //! is not refused; and `openmoat init --managed` puts OpenMoat's hook where an
 //! administrator's hooks live, which a project cannot turn off, printing the
@@ -200,6 +200,44 @@ fn run_does_not_refuse_a_project_that_turns_nothing_off() {
             host.id(),
             text(&out)
         );
+        // A host's own option goes on every run, a clean project included.
+        if host.spec().hook_off.session_override.is_some()
+            && cfg!(any(target_os = "macos", target_os = "linux"))
+            && !stderr(&out).contains("needs Landlock ABI 4")
+        {
+            assert!(
+                stderr(&out).contains("keeps its hooks on"),
+                "{}: {}",
+                host.id(),
+                text(&out)
+            );
+        }
+    }
+}
+
+/// A file in a folder between the working directory and the project root
+/// turns the hook off as one at the root does.
+#[test]
+fn run_reads_every_folder_up_to_the_project_root() {
+    for (host, example) in examples() {
+        if host.spec().hook_off.session_override.is_some() {
+            continue;
+        }
+        let (sb, system) = set_up(host);
+        let project = sb.project();
+        write(&project.join("pkg"), &example, example.text);
+        let cwd = project.join("pkg/src");
+        fs::create_dir_all(&cwd).unwrap();
+        let agent = fake_agent(&sb, host);
+        let out = run(&sb, &system, &cwd, &agent, &[]);
+        assert_eq!(
+            out.status.code(),
+            Some(USAGE),
+            "{}: {}",
+            host.id(),
+            text(&out)
+        );
+        assert!(stderr(&out).contains(REFUSED), "{}", text(&out));
     }
 }
 

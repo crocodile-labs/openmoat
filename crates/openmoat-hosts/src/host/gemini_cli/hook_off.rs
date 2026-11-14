@@ -1,5 +1,5 @@
 //! What a trusted folder's settings do to Gemini CLI's hooks, and its system
-//! settings, which OpenMoat does not write (ADR-095).
+//! settings, which OpenMoat does not write (ADR-098).
 
 use crate::contract::{HookOff, Managed, Platform, ProjectFile, ProjectOff, SystemFile};
 

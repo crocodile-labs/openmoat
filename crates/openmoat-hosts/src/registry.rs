@@ -178,7 +178,7 @@ mod tests {
     }
 
     /// Every fact of [`crate::HostSpec::hook_off`] names where the host says
-    /// it (ADR-095), and fits the rest of the spec: a project file that turns
+    /// it (ADR-098), and fits the rest of the spec: a project file that turns
     /// the hook off is one of the host's project settings, and a managed hook
     /// file is written only for a host whose hook file is a JSON document.
     fn hook_off_is_sourced(host: Host) {

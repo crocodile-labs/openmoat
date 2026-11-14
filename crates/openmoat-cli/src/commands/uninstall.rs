@@ -111,7 +111,7 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
         {
             files.push((file, Some(Undone::Deleted)));
         }
-        // OpenMoat's managed hook file (ADR-095), or the command that removes
+        // OpenMoat's managed hook file (ADR-098), or the command that removes
         // it where that needs an administrator.
         let managed = crate::managed::uninstall(&home, &config);
         if let Some(line) = &managed {

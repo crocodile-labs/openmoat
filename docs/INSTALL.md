@@ -374,8 +374,9 @@ again so the service file names the new path.
 repository's `.claude/settings.json` can turn every user-level hook off with
 `"disableAllHooks": true`, and Claude Code loads it when a session starts, before any
 hook runs. OpenMoat blocks such a change mid-session, `openmoat doctor` and `openmoat status`
-warn about it, and `openmoat run` refuses to start the agent over it (or starts Claude
-Code with `--settings '{"disableAllHooks":false}'`; POLICY.md §9.5, ADR-095), but an
+warn about it, and `openmoat run` starts Claude Code with `--settings
+'{"disableAllHooks":false}'` on every run (or refuses where you pass your own
+`--settings`; POLICY.md §9.5, ADR-098), but an
 agent started directly loads it (THREAT_MODEL §5). Only Claude Code's
 [managed settings](https://code.claude.com/docs/en/managed-settings), which an
 administrator deploys and the user cannot edit, make the hooks immune: a `disableAllHooks`

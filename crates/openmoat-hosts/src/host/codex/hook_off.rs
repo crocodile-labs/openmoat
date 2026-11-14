@@ -1,5 +1,5 @@
 //! What a trusted project's `.codex/` layer does to Codex's hooks, and its
-//! managed hooks, which OpenMoat does not write (ADR-095).
+//! managed hooks, which OpenMoat does not write (ADR-098).
 
 use crate::contract::{HookOff, Managed, Platform, ProjectFile, ProjectOff, SystemFile};
 

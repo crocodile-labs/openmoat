@@ -1,4 +1,4 @@
-//! What a project does to OpenMoat's goose plugin at start (ADR-095). goose
+//! What a project does to OpenMoat's goose plugin at start (ADR-098). goose
 //! has no administrator's location for plugins.
 
 use crate::contract::{HookOff, Managed, ProjectFile, ProjectOff};

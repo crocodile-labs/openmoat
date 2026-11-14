@@ -218,7 +218,7 @@ fn the_project_top_is_protected_unless_the_policy_says_writable() {
     assert!(!written.contains("project_top"), "{written}");
 }
 
-/// `sandbox.project_hook_off` (ADR-095): `openmoat run` refuses unless the
+/// `sandbox.project_hook_off` (ADR-098): `openmoat run` refuses unless the
 /// person's own policy says `start`; any other value is an error, and the
 /// default policy and one written back out leave it unsaid.
 #[test]

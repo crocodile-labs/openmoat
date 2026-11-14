@@ -1333,18 +1333,22 @@ something OpenMoat claims to stop.
   project before any hook runs, and no `ConfigChange` fires, so OpenMoat cannot stop
   them; when hooks are off, `openmoat guard` never runs and records nothing. `openmoat doctor`
   and `openmoat status` warn when the current project's files set these keys.
-  `openmoat run` reads them before it starts the agent (ADR-095): a project file that
-  turns the installed hook off (this host's `disableAllHooks`, and each other host's key
-  its spec's `hook_off` names) stops the run, unless OpenMoat's managed hook outlasts
-  the project, Claude Code's `--settings '{"disableAllHooks":false}'` covers every such
-  file (added before the person's arguments, recorded), or the person's own policy says
-  `sandbox.project_hook_off: start` (recorded). An agent started outside `openmoat run`
-  is not checked, nor a program OpenMoat cannot tell as an agent. `openmoat init
+  `openmoat run` starts Claude Code with `--settings '{"disableAllHooks":false}'`
+  before the person's arguments on every run (ADR-098), so a project file loaded at the
+  start or reloaded mid-session cannot turn the hooks off; not when the person passes
+  their own `--settings` (then a project file that turns the hook off stops the run,
+  unless their own policy says `sandbox.project_hook_off: start`, recorded) and not when
+  their own settings turn hooks off (said, recorded). For the other hosts a project file
+  of each folder from the working directory to the project root that turns the
+  installed hook off (each host's key its spec's `hook_off` names) stops the run,
+  recorded, unless OpenMoat's managed hook outlasts the project or the person's own
+  policy says `start`. An agent started outside `openmoat run` is not checked, nor a
+  program OpenMoat cannot tell as an agent (`npx`, `env`, a wrapper). `openmoat init
   --managed` writes OpenMoat's hook into `managed-settings.d/50-openmoat.json` (and
   GitHub Copilot CLI's `policy.d`, Cursor's enterprise `hooks.json`); where the folder
   needs root it prints the command. Claude Code applies one managed source by default,
-  so a server-managed policy or a device profile takes the drop-in's place; OpenMoat
-  sees the macOS profile, not a server-managed policy. Only Claude
+  so a server-managed policy, a device profile or the Windows `HKLM` value takes the
+  drop-in's place; OpenMoat sees the macOS profile, not the others. Only Claude
   Code managed settings make hooks immune: with OpenMoat's hook in managed settings,
   a `disableAllHooks` outside them cannot turn it off, and `allowManagedHooksOnly`
   also blocks user, project and local hooks and narrows `statusLine` to managed

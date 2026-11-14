@@ -1,8 +1,9 @@
-# ADR-095: A project that turns the hook off is refused before the agent starts; OpenMoat's hook where an administrator's hooks live
+# ADR-098: A project that turns the hook off is refused before the agent starts; OpenMoat's hook where an administrator's hooks live
 
 Status: accepted · Date: 2026-11-14 · Builds on ADR-018 (`openmoat run`), ADR-034
 (`hook_only`), ADR-072 (project settings writes), ADR-079 (hook-failure facts),
-ADR-090 (person-only `sandbox:` keys), ADR-091 (agent facts from host specs)
+ADR-090 (person-only `sandbox:` keys), ADR-091 (agent facts from host specs) · Numbered
+098: 095 to 097 are taken by branches open at the time of writing
 
 ## Context
 
@@ -65,27 +66,41 @@ of them (to say when the installed hook does not run) and wrote none.
 
 Before the sandbox is made, for the agent `openmoat run` starts (told by its program
 name, ADR-054) and only when OpenMoat's hook for that host is installed, the project's
-files are read per spec in the working directory and at the project root. When one turns
-the hook off:
+files are read per spec in the working directory, every directory above it up to the
+project root, and the root (OpenCode looks for its configuration up to the nearest git
+directory, Codex reads each `.codex/` layer between the root and the working directory;
+reading them all is the safe side for a host that reads fewer). Where the host's hook file
+cannot be located the run is refused.
 
-1. OpenMoat's managed hook file holds its current hook, the host's documentation says a
-   project cannot turn it off, and no source that shadows it is present: the run starts.
-2. Every such file does it only through keys the host's session override replaces, and
-   the person passed no option that would take its place: the run starts with the
-   override's arguments before the person's, says so, and records a
-   `run-project-hook-off-overridden` row.
-3. The person's own policy says `sandbox.project_hook_off: start`: the run starts, warns
-   that only the sandbox holds, and records a `run-project-hook-off` row before the agent
-   starts (a row that cannot be written stops the run). A repository policy or pack has no
-   `sandbox:` (ADR-090), so a repository can never set it; `openmoat policy check` warns
-   while it is set.
-4. Otherwise the run refuses (exit 64), naming each file and what in it does it, and the
-   ways out: remove the setting, `openmoat init --managed` where the host's managed hook
-   outlasts the project, or the policy key.
+1. A host with a session override (Claude Code) gets it on **every** run, before the
+   person's arguments, whether or not a file turns the hook off now: the host may reload a
+   project's settings mid-session, and it applies one managed source, so a server-managed
+   policy, a device profile or the Windows `HKLM` value would take the drop-in's place.
+   For such a host the managed file never clears the check on its own. Not added when the
+   person passes the same option (an option word before any `--`; a prompt that mentions
+   it does not count), and not when the person's own settings turn hooks off: that is
+   theirs, the run says so in one line and records `run-own-settings-hook-off`. A run
+   where a file would have turned the hook off records `run-project-hook-off-overridden`.
+2. For a host without one, OpenMoat's managed hook file holding its current hook, where
+   the host's documentation says a project cannot turn it off and no shadowing source is
+   present, lets the run start.
+3. The person's own policy says `sandbox.project_hook_off: start`: honoured only while the
+   policy lock matches (checked again here, after `openmoat run`'s own lock check); the
+   run starts, warns that only the sandbox holds, and records `run-project-hook-off`
+   before the agent starts (a row that cannot be written stops the run). A repository
+   policy or pack has no `sandbox:` (ADR-090), so a repository can never set it; `openmoat
+   policy check` warns while it is set.
+4. Otherwise the run refuses (exit 64), records `run-project-hook-off-refused`, and names
+   each file and what in it does it, and the ways out: remove the setting, `openmoat init
+   --managed` where the host's managed hook outlasts the project, or the policy key.
 
 A file that cannot be read counts as turning the hook off; text the host cannot parse
-does not (the host refuses to load it). A program OpenMoat cannot tell as an agent (`sh`,
-a wrapper script) is not checked.
+does not (the host refuses to load it). A file of a host that replaces text before parsing
+it (OpenCode's `{env:…}` and `{file:…}`) counts when it holds such a marker, and so does a
+`plugins`/`plugin` entry holding one in the guard's write check and `status`. A profile's
+own `[profiles.<name>.features] hooks = false` counts for Codex, whichever profile is
+chosen. A program OpenMoat cannot tell as an agent (`sh`, `npx`, `env`, a wrapper script)
+is not checked.
 
 ## Decision 3: `openmoat init --managed` writes OpenMoat's hook where an administrator's hooks live
 
@@ -94,10 +109,15 @@ document `init` writes into the person's own hook file, started from an empty on
 host reads both in the same format). It refuses without a terminal or with an agent among
 its parents, like the other trust-widening commands (AGENTS §7). It is idempotent: a file
 that already holds the current hook is left alone. A host's one file holding an
-administrator's own hooks is never edited, nor removed. OpenMoat never escalates: where it
-cannot write the file itself, or the host loads it only when root owns it (Copilot CLI),
-it keeps the file at `~/.moat/managed/<host>.json` and prints the exact `sudo install`
-command (an elevated PowerShell `Copy-Item` on Windows). `openmoat uninstall` removes a
+administrator's own hooks is never edited, nor removed, and a file it cannot read is never
+written over, whatever its shape. A file written in place is `0644` in folders created as
+the system creates them (`0755` under the usual umask): the host reads it for every
+account. OpenMoat never escalates: where it cannot write the file itself, or the host
+loads it only when root owns it (Copilot CLI), it keeps the file at
+`~/.moat/managed/<host>.json` and prints the exact command: it first checks the kept
+file's SHA-256, creates the folder only when it is missing (an existing folder's mode and
+access list stay), then `sudo install -m 644 -o 0 -g 0` (an elevated PowerShell with
+`-LiteralPath` on Windows). `openmoat uninstall` removes a
 file that holds OpenMoat's hook alone, or prints the command that does. `openmoat doctor`
 reports each set-up host's managed file: in place, missing, staged and not yet copied,
 outdated, shadowed. For `Manual` hosts `init --managed` names the place and why OpenMoat
@@ -123,10 +143,15 @@ settings it covered: Copilot CLI's `policy.d`, Cursor's and OpenCode's system fo
   cannot read that state directory, which fails closed.
 - With both the person's hook and the managed one, a host runs OpenMoat's hook twice per
   call where it does not merge identical hooks: two decisions and two audit rows.
-- Claude Code applies one managed source by default: a server-managed policy or a device
-  profile takes the place of the files. OpenMoat sees the macOS profile and reports it; it
-  cannot see a server-managed policy, so on such a machine the drop-in may not apply.
+- Claude Code applies one managed source by default: a server-managed policy, a device
+  profile or the Windows `HKLM` value takes the place of the files. OpenMoat sees the
+  macOS profile and reports it, and `doctor` names the others it cannot see; under
+  `openmoat run` the `--settings` override covers Claude Code whatever the managed source.
+- Every Claude Code session under `openmoat run` starts with an extra `--settings`
+  argument; a person who passes their own `--settings` keeps it and is checked as before.
 - Not checked against real agents in this change: Claude Code honouring `--settings` over
-  a project's `disableAllHooks` and loading a drop-in without a `managed-settings.json`;
-  Copilot CLI loading the policy file; Cursor's enterprise file outranking a project. Each
-  is what the host's documentation says.
+  a project's `disableAllHooks` (also after it reloads the project's settings) and loading
+  a drop-in without a `managed-settings.json`; Copilot CLI loading the policy file;
+  Cursor's enterprise file outranking a project; whether a Codex profile's `features`
+  apply; OpenCode's substitution and ancestor lookup as read from its documentation. Each
+  is what the host's documentation says, or the safe side where it says nothing.

@@ -1,5 +1,5 @@
 //! What a workspace's `.agents/` does to OpenMoat's Antigravity CLI hook
-//! (ADR-095). Antigravity documents no administrator-enforced hooks.
+//! (ADR-098). Antigravity documents no administrator-enforced hooks.
 
 use crate::contract::{HookOff, Managed, ProjectFile, ProjectOff};
 

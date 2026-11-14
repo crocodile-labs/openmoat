@@ -1,5 +1,5 @@
 //! What a trusted project's settings do to OpenMoat's pi extension
-//! (ADR-095). pi has no administrator's settings.
+//! (ADR-098). pi has no administrator's settings.
 
 use crate::contract::{HookOff, Managed, ProjectFile, ProjectOff};
 

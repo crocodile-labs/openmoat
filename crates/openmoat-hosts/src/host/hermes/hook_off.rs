@@ -1,5 +1,5 @@
 //! Hermes Agent reads its hooks from the person's own home and profiles; a
-//! project holds nothing that turns OpenMoat's off (ADR-095).
+//! project holds nothing that turns OpenMoat's off (ADR-098).
 
 use crate::contract::{HookOff, Managed, ProjectOff};
 

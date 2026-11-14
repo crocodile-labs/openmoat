@@ -669,7 +669,7 @@ deny:
   # `managed-mcp.json`), Gemini CLI's system settings and defaults, Codex's
   # `requirements.toml`, and the places an administrator's hooks live, which
   # `openmoat init --managed` may write (GitHub Copilot CLI's `policy.d`, Cursor's
-  # enterprise `hooks.json`, OpenCode's system folder; ADR-095). One can turn every
+  # enterprise `hooks.json`, OpenCode's system folder; ADR-098). One can turn every
   # hook off or add its own. An
   # administrator deploys them; where the folder is writable (`/etc/claude-code` on
   # WSL, a loosely permissioned `ProgramData`) the agent could too. `hook_only`

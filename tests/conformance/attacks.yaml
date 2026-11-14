@@ -5063,7 +5063,7 @@
   threat: T9
   action: { shell: "rm /etc/claude-code/managed-settings.d/50-openmoat.json" }
   expect: { verdict: deny, rules: [managed-settings] }
-# the places an administrator's hooks live (ADR-095), which `openmoat init
+# the places an administrator's hooks live (ADR-098), which `openmoat init
 # --managed` writes: removing OpenMoat's file there, or adding one that runs
 # another hook, works for every later session
 - id: T9-write-copilot-policy-hook

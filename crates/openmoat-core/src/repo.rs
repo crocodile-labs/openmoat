@@ -283,7 +283,7 @@ mod tests {
             // commands where `openmoat run` has no namespace (ADR-090).
             "version: 1\nsandbox:\n  project_top: writable\n",
             // Nor start an agent over a project file that turns its hook off
-            // (ADR-095).
+            // (ADR-098).
             "version: 1\nsandbox:\n  project_hook_off: start\n",
             "version: 1\nrepo_review: []\n",
             "version: 2\n",

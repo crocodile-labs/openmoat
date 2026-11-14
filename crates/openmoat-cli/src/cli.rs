@@ -225,7 +225,7 @@ pub struct InitArgs {
     pub mcp: InitMcpArgs,
 }
 
-/// `init`'s managed hook flag (ADR-095).
+/// `init`'s managed hook flag (ADR-098).
 #[derive(Debug, Args)]
 pub struct InitManagedArgs {
     /// Also write OpenMoat's hook where an administrator's hooks live, for each

@@ -247,10 +247,22 @@ pub fn candidates(
         .collect()
 }
 
-/// `cwd` and its project root, each only when it can be a project root.
+/// `cwd`, every directory above it up to its project root, and the root, each
+/// only when it can be a project root. Hosts read a project's files from
+/// these: OpenCode looks for its configuration from the working directory up
+/// to the nearest git directory, and Codex reads each `.codex/` layer between
+/// the project root and the working directory (ADR-098). Reading them all is
+/// the safe side for a host that reads fewer.
 fn project_dirs(cwd: &Path, user_home: &Path) -> Vec<PathBuf> {
-    let mut dirs: Vec<PathBuf> = vec![cwd.to_path_buf()];
-    if let Some(root) = crate::project::root_of(cwd, user_home)
+    let root = crate::project::root_of(cwd, user_home);
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    for dir in cwd.ancestors() {
+        dirs.push(dir.to_path_buf());
+        if root.as_deref().is_none_or(|root| root == dir) {
+            break;
+        }
+    }
+    if let Some(root) = root
         && !dirs.contains(&root)
     {
         dirs.push(root);

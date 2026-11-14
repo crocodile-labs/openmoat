@@ -1,5 +1,5 @@
 //! What a project's configuration does to OpenMoat's OpenCode plugin, and
-//! OpenCode's system directory, which OpenMoat does not write (ADR-095).
+//! OpenCode's system directory, which OpenMoat does not write (ADR-098).
 
 use crate::contract::{HookOff, Managed, Platform, ProjectFile, ProjectOff, SystemFile};
 

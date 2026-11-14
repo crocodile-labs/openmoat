@@ -1,5 +1,5 @@
 //! OpenClaw loads OpenMoat's plugin from the Gateway's own configuration; a
-//! project holds nothing that turns it off (ADR-095).
+//! project holds nothing that turns it off (ADR-098).
 
 use crate::contract::{HookOff, Managed, ProjectOff};
 

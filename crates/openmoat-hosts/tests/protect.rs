@@ -285,7 +285,7 @@ fn managed_settings_lines() -> String {
     for host in Host::EVERY {
         let spec = host.spec();
         // The system settings it reads, then the place of an administrator's
-        // hooks (ADR-095), which `openmoat init --managed` may write.
+        // hooks (ADR-098), which `openmoat init --managed` may write.
         let files: Vec<&openmoat_hosts::SystemFile> = spec
             .system_settings
             .iter()

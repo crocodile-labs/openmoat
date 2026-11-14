@@ -1,5 +1,5 @@
 //! What a project does to Cursor's hooks, and the enterprise `hooks.json`
-//! `openmoat init --managed` writes (ADR-095).
+//! `openmoat init --managed` writes (ADR-098).
 
 use crate::contract::{
     HookOff, Managed, ManagedHooks, ManagedShape, Platform, ProjectOff, SystemFile,
@@ -33,6 +33,7 @@ pub(super) const HOOK_OFF: HookOff = HookOff {
         root_owned: false,
         outlasts_project: false,
         shadowed_by: &[],
+        unseen_shadows: "",
         source: SOURCE,
     }),
 };

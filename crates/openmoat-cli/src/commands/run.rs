@@ -121,7 +121,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         Owner::Unknown => None,
     };
     // Before the agent starts: a project file that would turn its hook off
-    // as the session starts (ADR-095).
+    // as the session starts (ADR-098).
     let hook_off = hook_off::check(&home, Path::new(&ctx.cwd), agent_host, rest, &policy)?;
     crate::install::self_paths::protect_recorded(&home, &mut policy)?;
     // Kerberos tickets: the default caches and the session's own, wherever

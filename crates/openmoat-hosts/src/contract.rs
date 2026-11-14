@@ -214,7 +214,7 @@ pub struct HostSpec {
     pub system_settings: Option<SystemSettingsSpec>,
     /// What a project's files can do to OpenMoat's user hook when a session
     /// starts, the option that keeps it on for one session, and where an
-    /// administrator's hooks live (ADR-095): `openmoat run` reads the first
+    /// administrator's hooks live (ADR-098): `openmoat run` reads the first
     /// before it starts the agent, `openmoat init --managed` writes the last.
     pub hook_off: HookOff,
     /// How `openmoat run` keeps its relay token from the host's tool commands

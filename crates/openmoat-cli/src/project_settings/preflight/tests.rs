@@ -111,6 +111,40 @@ fn an_override_covers_only_its_own_keys() {
     }
 }
 
+/// A file the host substitutes text into counts, whatever it seems to hold,
+/// and so does one in a folder between the working directory and the root.
+#[test]
+fn substituted_text_and_folders_between_count() {
+    for (host, example) in examples() {
+        let (_dir, home, root) = project();
+        let deep = root.join("a/b");
+        fs::create_dir_all(&deep).unwrap();
+        write(&root.join("a"), &example, example.text);
+        assert_eq!(
+            found(host, &deep, &home).len(),
+            1,
+            "{host:?}: the middle folder"
+        );
+        let markers = host
+            .spec()
+            .project_settings
+            .as_ref()
+            .unwrap()
+            .reader
+            .substitutions();
+        for marker in markers {
+            let (_dir, home, root) = project();
+            write(
+                &root,
+                &example,
+                &format!("{{\"model\": \"{marker}X}}\"}}\n"),
+            );
+            let off = found(host, &root, &home);
+            assert_eq!(off.len(), 1, "{host:?} {marker}: {off:?}");
+        }
+    }
+}
+
 /// The home directory is no project: its files are the person's own.
 #[test]
 fn the_home_directory_is_not_a_project() {

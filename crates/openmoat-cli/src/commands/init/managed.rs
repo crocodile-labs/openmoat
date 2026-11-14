@@ -1,4 +1,4 @@
-//! `openmoat init --managed` (ADR-095): OpenMoat's hook in each set-up
+//! `openmoat init --managed` (ADR-098): OpenMoat's hook in each set-up
 //! agent's managed hook file as well, which a repository's settings cannot
 //! turn off. It widens what runs for every account of the machine, so like
 //! the other trust-widening commands it needs a person at a terminal and no

@@ -1,5 +1,5 @@
 //! OpenMoat's hook in the place an administrator's hooks live
-//! (`HostSpec::hook_off`'s `Managed::Written`, ADR-095): a file a project's
+//! (`HostSpec::hook_off`'s `Managed::Written`, ADR-098): a file a project's
 //! settings cannot turn off, written by `openmoat init --managed`, reported by
 //! `openmoat doctor`, removed by `openmoat uninstall`.
 //!
@@ -22,8 +22,18 @@ use crate::home::Home;
 use crate::install::HostConfig;
 
 mod command;
+// Who may read a file written in place: every account the host runs for.
+#[cfg(not(unix))]
+mod mode_other;
+#[cfg(unix)]
+mod mode_unix;
 #[cfg(test)]
 mod tests;
+
+#[cfg(not(unix))]
+use mode_other as mode;
+#[cfg(unix)]
+use mode_unix as mode;
 
 pub use command::install_command;
 
@@ -206,30 +216,35 @@ pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -
                 config.settings_path.display()
             )));
         }
-        State::Missing(path) | State::Outdated(path) | State::Unreadable(path, _) => path,
+        // A file OpenMoat cannot read may be an administrator's: never a
+        // place to write, whatever its shape (ADR-098).
+        State::Unreadable(path, why) => {
+            return Ok(Done::Skipped(format!(
+                "{} cannot be read ({why}), so OpenMoat cannot tell whose it is and leaves it \
+                 alone; an administrator can add OpenMoat's entries from {} to it",
+                path.display(),
+                config.settings_path.display()
+            )));
+        }
+        State::Missing(path) | State::Outdated(path) => path,
     };
     if dry_run {
         return Ok(Done::Written(target));
     }
     let text = content(config, binary)?;
-    if !hooks.root_owned && write_in_place(&target, text.as_bytes()).is_ok() {
+    if !hooks.root_owned && mode::write_readable(&target, text.as_bytes()).is_ok() {
         return Ok(Done::Written(target));
     }
     let staged = staged_path(home, host);
     crate::home::write_private(&staged, text.as_bytes())
         .with_context(|| format!("keeping {}", staged.display()))?;
-    let command = install_command(&staged, &target, crate::os_version::platform());
+    let digest = crate::integrity::sha256_hex(text.as_bytes());
+    let command = install_command(&staged, &digest, &target, crate::os_version::platform());
     Ok(Done::Staged {
         target,
         staged,
         command,
     })
-}
-
-/// Write `bytes` to `path` where this account may: an error where a system
-/// directory needs root, which the caller answers with a command instead.
-fn write_in_place(path: &Path, bytes: &[u8]) -> Result<()> {
-    crate::home::write_private(path, bytes)
 }
 
 /// What `openmoat uninstall` did with `config`'s managed file: `None` when
@@ -304,13 +319,26 @@ fn row(home: &Home, host: Host, hooks: &ManagedHooks, state: &State) -> Option<R
                 shadow.display(),
                 host.display_name()
             )),
-            None => Row::Note(format!("{name} {}: {holds}", path.display())),
+            None if hooks.unseen_shadows.is_empty() => {
+                Row::Note(format!("{name} {}: {holds}", path.display()))
+            }
+            None => Row::Note(format!(
+                "{name} {}: {holds}, unless {} supply a policy, which {} applies instead",
+                path.display(),
+                hooks.unseen_shadows,
+                host.display_name()
+            )),
         },
-        State::Missing(path) | State::Outdated(path) if staged.exists() => Row::Warn(format!(
-            "{name} {} is not in place yet; run: {}",
-            path.display(),
-            install_command(&staged, path, crate::os_version::platform())
-        )),
+        State::Missing(path) | State::Outdated(path) if staged.exists() => {
+            let digest = fs::read(&staged)
+                .map(|bytes| crate::integrity::sha256_hex(&bytes))
+                .unwrap_or_default();
+            Row::Warn(format!(
+                "{name} {} is not in place yet; run: {}",
+                path.display(),
+                install_command(&staged, &digest, path, crate::os_version::platform())
+            ))
+        }
         State::Missing(path) => Row::Note(format!(
             "{name} `openmoat init --managed` writes OpenMoat's hook to {}, where {holds}",
             path.display()

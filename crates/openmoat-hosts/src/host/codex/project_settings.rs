@@ -24,9 +24,26 @@ impl SettingsReader for Reader {
     }
 }
 
-/// What in `root` turns every Codex hook off, OpenMoat's included.
+/// What in `root` turns every Codex hook off, OpenMoat's included: the
+/// top-level `[features]`, and a profile's own `[profiles.<name>.features]`.
+/// A profile is chosen by `profile = …` or at start (`--profile`), which a
+/// file cannot tell, so every profile that turns hooks off is named: the safe
+/// side where whether a profile's features apply is not documented
+/// (ADR-098).
 fn switched_off(root: &Map<String, Value>) -> Vec<String> {
-    let features = root.get("features");
+    let mut found = off_in(root.get("features"), "features");
+    if let Some(profiles) = root.get("profiles").and_then(Value::as_object) {
+        for (name, profile) in profiles {
+            let at = format!("profiles.{name}.features");
+            found.extend(off_in(profile.get("features"), &at));
+        }
+    }
+    found
+}
+
+/// The hook switches of the features table `features` (at `at`) that are
+/// not `true`.
+fn off_in(features: Option<&Value>, at: &str) -> Vec<String> {
     ["hooks", "codex_hooks"]
         .into_iter()
         .filter(|key| {
@@ -34,7 +51,7 @@ fn switched_off(root: &Map<String, Value>) -> Vec<String> {
                 .and_then(|f| f.get(*key))
                 .is_some_and(|v| v != &Value::Bool(true))
         })
-        .map(|key| format!("`features.{key}` turns off every hook, OpenMoat's included"))
+        .map(|key| format!("`{at}.{key}` turns off every hook, OpenMoat's included"))
         .collect()
 }
 
@@ -85,6 +102,15 @@ mod tests {
             0
         );
         assert_eq!(off(json!({"model": "gpt-5"})), 0);
+        // A profile's own features, whichever profile is chosen.
+        let profile = json!({"profiles": {"fast": {"features": {"hooks": false}}}});
+        let named = switched_off(profile.as_object().unwrap());
+        assert_eq!(named.len(), 1, "{named:?}");
+        assert!(named[0].contains("profiles.fast.features.hooks"), "{named:?}");
+        assert_eq!(
+            off(json!({"profiles": {"fast": {"features": {"hooks": true}, "model": "x"}}})),
+            0
+        );
     }
 
     #[test]

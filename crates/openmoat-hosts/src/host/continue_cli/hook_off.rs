@@ -1,5 +1,5 @@
 //! The released Continue CLI runs no hook, so a project has none to turn off
-//! (ADR-095).
+//! (ADR-098).
 
 use crate::contract::{HookOff, Managed, ProjectOff};
 

@@ -1,5 +1,5 @@
 //! A project's Cline hook directories add hooks beside OpenMoat's; none turns
-//! it off (ADR-095).
+//! it off (ADR-098).
 
 use crate::contract::{HookOff, Managed, ProjectOff};
 

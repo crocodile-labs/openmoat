@@ -447,7 +447,7 @@ pub struct SandboxSettings {
     #[serde(default, skip_serializing_if = "ProjectTop::is_protected")]
     pub project_top: ProjectTop,
     /// What `openmoat run` does when a file of the project would turn the
-    /// agent's OpenMoat hook off as the session starts (ADR-095): `refuse`
+    /// agent's OpenMoat hook off as the session starts (ADR-098): `refuse`
     /// (absent) does not start the agent; `start` starts it anyway, says so
     /// and records it. Read from the person's own policy alone: a repository
     /// policy or a pack has no `sandbox:`.
@@ -455,7 +455,7 @@ pub struct SandboxSettings {
     pub project_hook_off: ProjectHookOff,
 }
 
-/// `sandbox.project_hook_off` (ADR-095).
+/// `sandbox.project_hook_off` (ADR-098).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectHookOff {
@@ -556,7 +556,7 @@ impl Policy {
     }
 
     /// What `openmoat run` does when a project's file would turn the agent's
-    /// hook off (`sandbox.project_hook_off`, ADR-095); [`ProjectHookOff::Refuse`]
+    /// hook off (`sandbox.project_hook_off`, ADR-098); [`ProjectHookOff::Refuse`]
     /// unless the person's own policy says otherwise.
     #[must_use]
     pub fn project_hook_off(&self) -> ProjectHookOff {

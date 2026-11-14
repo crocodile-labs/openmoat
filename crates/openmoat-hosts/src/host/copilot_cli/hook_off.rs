@@ -1,5 +1,5 @@
 //! What a repository's settings do to GitHub Copilot CLI's hooks at start,
-//! and the policy hook file `openmoat init --managed` writes (ADR-095).
+//! and the policy hook file `openmoat init --managed` writes (ADR-098).
 
 use crate::contract::{
     HookOff, Managed, ManagedHooks, ManagedShape, Platform, ProjectFile, ProjectOff, SystemFile,
@@ -37,6 +37,7 @@ pub(super) const HOOK_OFF: HookOff = HookOff {
         root_owned: true,
         outlasts_project: true,
         shadowed_by: &[],
+        unseen_shadows: "",
         source: SOURCE,
     }),
 };

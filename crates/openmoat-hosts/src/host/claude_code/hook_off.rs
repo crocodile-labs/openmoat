@@ -1,6 +1,6 @@
 //! What a project's settings do to Claude Code's hooks at start, the option
 //! that keeps them on for one session, and the managed settings drop-in
-//! `openmoat init --managed` writes (ADR-095).
+//! `openmoat init --managed` writes (ADR-098).
 
 use crate::contract::{
     HookOff, Managed, ManagedHooks, ManagedShape, Platform, ProjectFile, ProjectOff,
@@ -18,6 +18,10 @@ pub(super) const HOOK_OFF: HookOff = HookOff {
     // The same section: `--settings` "takes precedence over project and local
     // settings"; the CLI reference: its values "override the same keys in
     // your settings.json files for this session". `false` keeps every hook on.
+    // `openmoat run` adds it to every session: one managed source applies
+    // (a server-managed policy, a device profile or the `HKLM` value comes
+    // before the files), and Claude Code reloads a project's settings while a
+    // session runs, which the check before the start cannot see.
     session_override: Some(SessionOverride {
         args: &["--settings", "{\"disableAllHooks\":false}"],
         keys: &["disableAllHooks"],
@@ -52,6 +56,12 @@ pub(super) const HOOK_OFF: HookOff = HookOff {
             "/Library/Managed Preferences/com.anthropic.claudecode.plist",
             &[Platform::MacOs],
         )],
+        // Ranked above the files ("How Claude Code combines managed
+        // sources"): remote settings from the claude.ai console or a gateway,
+        // and on Windows the `HKLM\SOFTWARE\Policies\ClaudeCode` value.
+        unseen_shadows: "server-managed settings from the claude.ai console or a Claude apps \
+                         gateway, and on Windows the `HKLM\\SOFTWARE\\Policies\\ClaudeCode` \
+                         registry value",
         source: "https://code.claude.com/docs/en/managed-settings",
     }),
 };

@@ -72,6 +72,14 @@ pub trait SettingsReader: Sync + fmt::Debug {
         false
     }
 
+    /// The markers of text the host replaces in a file before it parses it
+    /// (OpenCode's `{env:NAME}` and `{file:path}`): what a file holding one
+    /// loads cannot be read from the file alone, so `openmoat run` counts it
+    /// as turning the hook off (ADR-098). Empty for most hosts.
+    fn substitutions(&self) -> &'static [&'static str] {
+        &[]
+    }
+
     /// The settings file that `path`, a copy the host staged for a person to
     /// review, replaces once the change is accepted (Claude Code's
     /// `/settings-review`): the copy holds exactly what the file will hold.
