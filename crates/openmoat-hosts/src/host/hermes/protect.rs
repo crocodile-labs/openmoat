@@ -37,6 +37,7 @@ pub(super) const PROTECT: Protect = Protect {
             "**/.hermes/**",
         ],
     )],
+    temp_dirs: &[],
     credentials: &[Paths::new(
         "Hermes Agent: the secret files and folders its own file tools refuse\n\
          (`agent/file_safety.py`; its `.env` is `secrets-paths`'), in its home and\n\

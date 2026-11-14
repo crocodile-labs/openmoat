@@ -13,12 +13,16 @@
 //!   that follow (CI, editors, builds, Python, virtual environments, dev
 //!   containers: files no host owns). The CLI's sandboxes read the same specs
 //!   (`RUNS_LATER`, `AGENT_CONFIG` in `crates/openmoat-cli/src/sandbox/patterns.rs`).
+//! - the default policy's `agent-temp` reads, each host's temporary folders
+//!   ([`Protect::temp_dirs`]), which the core's staging also reads, and
+//!   `managed-settings`' writes, the folders of each host's system-wide
+//!   settings files ([`openmoat_hosts::HostSpec::system_settings`]).
 //! - the core's taint list (`PROTECTED_WRITES`), between `// generated:taint`
-//!   and `// /generated`.
+//!   and `// /generated`, and its built-in metadata tools
+//!   (`BUILTIN_METADATA_TOOLS`, from [`openmoat_hosts::HostSpec::builtin_mcp`]).
 //!
-//! Claude Code's, Codex's and Cursor's `kernel-self` and taint paths stay
-//! hand-written: those lists name them among each other's and OpenMoat's own
-//! lines.
+//! Claude Code's, Codex's and Cursor's `kernel-self` paths stay hand-written:
+//! that list names them among each other's and OpenMoat's own lines.
 //!
 //! Regenerate with `OPENMOAT_TEST_UPDATE_PROTECT=1 cargo test -p openmoat-hosts --test protect`.
 
@@ -33,18 +37,15 @@ mod policy_blocks {
     include!("common/policy_blocks.rs");
 }
 use policy_blocks::{
-    BLOCKS, CREDENTIALS_AFTER, CREDENTIALS_BEFORE, POLICY, POLICY_AFTER, POLICY_BEFORE,
-    PROJECT_FS_AFTER, PROJECT_FS_BEFORE, RUNS_LATER_AFTER, RUNS_LATER_BEFORE,
+    AGENT_TEMP_AFTER, AGENT_TEMP_BEFORE, BLOCKS, CORE_AFTER, CREDENTIALS_AFTER, CREDENTIALS_BEFORE,
+    MANAGED_AFTER, MANAGED_BEFORE, METADATA_BEFORE, POLICY, POLICY_AFTER, POLICY_BEFORE,
+    PROJECT_FS_AFTER, PROJECT_FS_BEFORE, RUNS_LATER_AFTER, RUNS_LATER_BEFORE, TAINT, TAINT_BEFORE,
 };
 
 const UPDATE: &str = "OPENMOAT_TEST_UPDATE_PROTECT";
 
 /// The widest a generated line of quoted globs gets, as `cargo fmt` keeps code.
 const WIDTH: usize = 100;
-
-const TAINT: &str = "crates/openmoat-core/src/taint.rs";
-const TAINT_BEFORE: &str = "// generated:taint ";
-const TAINT_AFTER: &str = "    // /generated\n";
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -236,7 +237,70 @@ fn the_taint_list_protects_each_hosts_own_files() {
         |glob| format!("    \"{glob}\","),
     );
     assert!(body.contains("**/.copilot/hooks/**"), "{body}");
-    check(TAINT, TAINT_BEFORE, TAINT_AFTER, &body);
+    check(TAINT, TAINT_BEFORE, CORE_AFTER, &body);
+}
+
+/// The core's built-in metadata tools: each host's [`openmoat_hosts::BuiltinMcp`],
+/// its comment, then one `(server, tool)` a line.
+#[test]
+fn the_core_lists_each_hosts_builtin_metadata_tools() {
+    let mut body = String::new();
+    for host in Host::EVERY {
+        let Some(builtin) = &host.spec().builtin_mcp else {
+            continue;
+        };
+        for line in builtin.why.lines() {
+            let _ = writeln!(body, "    // {line}");
+        }
+        for tool in builtin.metadata_tools {
+            let _ = writeln!(body, "    (\"{}\", \"{tool}\"),", builtin.server);
+        }
+    }
+    assert!(body.contains("\"tabs_context_mcp\""), "{body}");
+    check(TAINT, METADATA_BEFORE, CORE_AFTER, &body);
+}
+
+/// The `agent-temp` rule's reads: each host's [`Protect::temp_dirs`].
+#[test]
+fn the_default_policy_lets_each_host_read_its_temporary_folders() {
+    let body = lines(
+        |p| p.temp_dirs,
+        |line| format!("      # {line}"),
+        |glob| format!("      - \"{glob}\""),
+    );
+    assert!(body.contains("/tmp/claude-*/**"), "{body}");
+    check(POLICY, AGENT_TEMP_BEFORE, AGENT_TEMP_AFTER, &body);
+}
+
+/// The `managed-settings` rule's writes: the folder of each system-wide
+/// settings file a host reads (its drop-ins sit beside it), each folder once,
+/// under the host's name.
+fn managed_settings_lines() -> String {
+    let mut out = String::new();
+    for host in Host::EVERY {
+        let Some(system) = &host.spec().system_settings else {
+            continue;
+        };
+        let mut folders: Vec<&str> = Vec::new();
+        for file in system.files {
+            let (folder, _) = file.path.rsplit_once('/').unwrap();
+            if !folders.contains(&folder) {
+                folders.push(folder);
+            }
+        }
+        let _ = writeln!(out, "      # {}", host.display_name());
+        for folder in folders {
+            let _ = writeln!(out, "      - \"{folder}/**\"");
+        }
+    }
+    out
+}
+
+#[test]
+fn the_default_policy_keeps_each_hosts_system_settings_from_its_tools() {
+    let body = managed_settings_lines();
+    assert!(body.contains("\"/etc/codex/**\""), "{body}");
+    check(POLICY, MANAGED_BEFORE, MANAGED_AFTER, &body);
 }
 
 /// `items` quoted, comma-separated and packed into lines of at most [`WIDTH`]

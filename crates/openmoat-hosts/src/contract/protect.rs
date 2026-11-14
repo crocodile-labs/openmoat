@@ -3,10 +3,10 @@
 //! generated lists from them and checks them).
 
 /// A host's paths in the generated blocks of the default policy's
-/// `kernel-self` and `agent-credentials` rules and of the core's taint list
-/// (`PROTECTED_WRITES`). The hosts whose paths `kernel-self` and the taint
-/// list name among other hosts' lines (Claude Code, Codex, Cursor) leave
-/// those two empty: their lines stay hand-written.
+/// `kernel-self`, `agent-credentials`, `runs-later`, `agent-temp` rules and of
+/// the core's taint list (`PROTECTED_WRITES`). The hosts whose paths
+/// `kernel-self` names among other hosts' lines (Claude Code, Codex, Cursor)
+/// leave [`Protect::self_paths`] empty: those lines stay hand-written.
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct Protect {
@@ -14,6 +14,11 @@ pub struct Protect {
     pub self_paths: &'static [Paths],
     /// The writes that need review once the session read untrusted content.
     pub taint: &'static [Paths],
+    /// The host's own temporary folders, whose files it writes and reads
+    /// back itself (the output of its background commands): the default
+    /// policy's `agent-temp` rule lets its tools read them, and reads there
+    /// do not count as collecting files outside the project (ADR-061).
+    pub temp_dirs: &'static [Paths],
     /// `agent-credentials`' globs: the files where the host keeps its login,
     /// provider keys and OAuth tokens, which the agent's own tools may neither
     /// read nor write. The rule is `hook_only`, so the host itself still reads
@@ -36,6 +41,7 @@ impl Protect {
     pub const BASE: Protect = Protect {
         self_paths: &[],
         taint: &[],
+        temp_dirs: &[],
         credentials: &[],
         runs_later: &[],
     };

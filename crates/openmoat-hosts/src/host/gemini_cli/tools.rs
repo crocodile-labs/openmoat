@@ -8,7 +8,7 @@ use openmoat_core::Action;
 use serde_json::Value;
 
 use super::McpContext;
-use crate::request::EVERY_WORKSPACE_DIRECTORY;
+use crate::contract::Unchecked;
 use crate::{Host, HostError};
 
 /// What one call is, and what the request records besides its action.
@@ -161,7 +161,7 @@ fn workspace_wide(input: &Value, action: Action) -> Action {
     if named {
         action
     } else {
-        Action::unchecked(action, EVERY_WORKSPACE_DIRECTORY)
+        Unchecked::WorkspaceWide.mark(&super::WORKSPACE, action)
     }
 }
 
@@ -269,7 +269,7 @@ fn read_many(tool: &str, input: &Value, cwd: Option<&str>) -> Result<Action, Hos
     let patterns = list.iter().filter_map(Value::as_str);
     let action = crate::bounded(Action::ReadFiles { paths }, patterns);
     // `read_many_files` takes no `dir_path`: it always reads every workspace directory.
-    Ok(Action::unchecked(action, EVERY_WORKSPACE_DIRECTORY))
+    Ok(Unchecked::WorkspaceWide.mark(&super::WORKSPACE, action))
 }
 
 /// The part of `pattern` before its first wildcard, cut back to a whole

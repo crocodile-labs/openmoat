@@ -148,9 +148,20 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         package_dirs: &[&["claude", "versions"], &["claude-code"]],
         helper: None,
     },
-    // `kernel-self`'s and the taint list's lines for Claude Code stay
-    // hand-written among Codex's and Cursor's.
+    // `kernel-self`'s lines for Claude Code stay hand-written among Codex's
+    // and Cursor's.
     protect: crate::contract::Protect {
+        taint: &[crate::contract::Paths::new(
+            "Claude Code: the memory file it loads into every session, its directory\n\
+             (settings, hooks, skills, agents, memory) and a project's, the person's MCP\n\
+             servers and a project's",
+            &["**/CLAUDE.md", "**/.claude/**", "**/.claude.json", "**/.mcp.json"],
+        )],
+        temp_dirs: &[crate::contract::Paths::new(
+            "Claude Code: the output of its background commands, which it reads back\n\
+             with `cat` (`/tmp/claude-<uid>/`)",
+            &["/tmp/claude-*/**", "/private/tmp/claude-*/**"],
+        )],
         credentials: &[crate::contract::Paths::new(
             "Claude Code: its login where it keeps it in a file (Linux and Windows, and\n\
              macOS when the Keychain refuses it) and the Anthropic profiles `ant auth\n\
@@ -215,6 +226,26 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         "ANTHROPIC_BASE_URL",
         "CLAUDE_CODE_OAUTH_TOKEN",
     ],
+    // Claude in Chrome, which Claude Code provides itself (`claude --chrome`,
+    // the browser extension), not a server an MCP configuration file defines.
+    // Every tool that returns what a page says (`get_page_text`, `read_page`,
+    // `find`, `navigate`, `javascript_tool`, the console and network logs,
+    // screenshots) is left out (ADR-057 amendment of 2026-11-07).
+    builtin_mcp: Some(crate::contract::BuiltinMcp {
+        server: "claude-in-chrome",
+        why: "Claude Code: Claude in Chrome's tab, window, browser and shortcut lists (tab ids,\n\
+              titles, URLs), the browser's own bookkeeping",
+        metadata_tools: &[
+            "list_connected_browsers",
+            "resize_window",
+            "select_browser",
+            "shortcuts_list",
+            "switch_browser",
+            "tabs_close_mcp",
+            "tabs_context_mcp",
+            "tabs_create_mcp",
+        ],
+    }),
     ..HostSpec::BASE
 };
 

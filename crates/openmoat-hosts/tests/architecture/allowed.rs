@@ -14,7 +14,6 @@ pub const ALLOWED_NAMES: &[(&str, usize)] = &[
     // the host's `protect.credentials`.
     ("openmoat-cli/src/commands/bench/proof/os.rs", 1),
     // M3: a host's name in CLI text.
-    ("openmoat-cli/src/commands/mcp.rs", 1),
     ("openmoat-cli/src/commands/proxy.rs", 1),
     ("openmoat-cli/src/commands/run.rs", 2),
     ("openmoat-cli/src/commands/sandbox.rs", 1),
@@ -39,12 +38,6 @@ pub const ALLOWED_NAMES: &[(&str, usize)] = &[
     ("openmoat-cli/src/sandbox/codex/own_binary.rs", 7),
     ("openmoat-cli/src/sandbox/cursor.rs", 11),
     ("openmoat-cli/src/sandbox/cursor/settings.rs", 1),
-    // H4: Claude Code's temporary folder and the hosts' taint globs in the
-    // core.
-    ("openmoat-core/src/staging.rs", 2),
-    ("openmoat-core/src/taint.rs", 6),
-    // M4: Gemini CLI named in `EVERY_WORKSPACE_DIRECTORY`.
-    ("openmoat-hosts/src/request.rs", 1),
 ];
 
 /// The end-to-end tests every host shares (relative to
@@ -163,8 +156,6 @@ pub const ALLOWED_IN_POLICY: &[(&str, usize)] = &[
     ("agent-credentials", 3),
     // Not in the review: GitHub Copilot CLI's `.github/copilot`.
     ("agent-folders", 1),
-    // H4: Claude Code's temporary folder, which `staging.rs` repeats.
-    ("agent-temp", 1),
     // Not in the review: `claude setup-token`.
     ("agent-token", 1),
     // Claude Code's, Codex's and Cursor's directories and files (17 lines),
@@ -172,8 +163,6 @@ pub const ALLOWED_IN_POLICY: &[(&str, usize)] = &[
     // Agent's commands that turn their hooks off (12 lines, not in the
     // review).
     ("kernel-self", 29),
-    // H4: each host's system-wide settings folders.
-    ("managed-settings", 3),
     // Each host's command that adds an MCP server or plugin (the paths are
     // generated from the specs since ADR-091).
     ("runs-later", 14),

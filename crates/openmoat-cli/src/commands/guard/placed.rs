@@ -1,7 +1,7 @@
 //! What the guard learns about a call outside its payload before deciding it:
 //! the session's directory for a host that sends the tool's own
 //! ([`SessionDir::HookProcess`]), the directories a host's settings add to a
-//! workspace-wide search ([`openmoat_hosts::HostSpec::workspace_dirs`]), and
+//! workspace-wide search ([`openmoat_hosts::HostSpec::workspace`]), and
 //! whether OpenMoat's sandbox confines a call the host says it sandboxes.
 
 use std::path::{Path, PathBuf};
@@ -85,7 +85,7 @@ fn git_root(start: &Path, home: &Path) -> Option<PathBuf> {
 /// user and project settings add. A settings file that cannot be read leaves
 /// the search needing review: what it adds is unknown.
 fn in_workspace(home: &Home, host: Host, request: HookRequest) -> Result<HookRequest> {
-    let Some(read) = host.spec().workspace_dirs else {
+    let Some(read) = host.spec().workspace.as_ref().map(|w| w.dirs) else {
         return Ok(request);
     };
     let mut files = vec![HostConfig::for_host(home, host)?.settings_path];

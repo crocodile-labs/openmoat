@@ -29,6 +29,10 @@ impl SettingsReader for Reader {
             .filter(|found| found.starts_with("`disableAllHooks`"))
             .collect()
     }
+
+    fn proposal_target(&self, path: &str) -> Option<String> {
+        super::config_change::proposal_target(path)
+    }
 }
 
 /// Keys that name a command Claude Code runs, each with what it is for.
@@ -62,7 +66,7 @@ const COMMAND_KEYS: [(&str, &str); 7] = [
 /// a server it is told to enable when settings load, which runs its command,
 /// so turning project servers on is named.
 #[must_use]
-pub fn findings(root: &Map<String, Value>) -> Vec<String> {
+pub(crate) fn findings(root: &Map<String, Value>) -> Vec<String> {
     let mut found = Vec::new();
     if root
         .get("disableAllHooks")

@@ -12,15 +12,7 @@
 use openmoat_core::Action;
 
 use crate::HookRequest;
-
-/// Why a search that names no directory is not all checked: the host then
-/// searches every directory of its workspace, and the hook payload names only
-/// the working directory. Gemini CLI does so (`workspaceContext.getDirectories()`
-/// in `packages/core/src/tools/grep.ts`, `glob.ts` and `read-many-files.ts`,
-/// 0.65.0); the guard replaces the mark with the directories the host's
-/// settings add ([`HookRequest::with_workspace_dirs`]).
-pub(crate) const EVERY_WORKSPACE_DIRECTORY: &str = "without a `dir_path` Gemini CLI searches \
-     every workspace directory, and the hook names only the working directory";
+use crate::contract::{Unchecked, WorkspaceSpec};
 
 /// Paths are compared without case where the file system ignores it.
 const CASE_INSENSITIVE: bool = cfg!(any(windows, target_os = "macos"));
@@ -44,10 +36,15 @@ impl HookRequest {
 
     /// Whether the action holds a search over every directory of the host's
     /// workspace, which the payload does not name: the guard then reads the
-    /// directories the host's settings add ([`crate::HostSpec::workspace_dirs`]).
+    /// directories the host's settings add ([`crate::HostSpec::workspace`]).
     #[must_use]
     pub fn searches_workspace(&self) -> bool {
-        self.action.as_ref().is_some_and(workspace_wide)
+        let Some(spec) = &self.host.spec().workspace else {
+            return false;
+        };
+        self.action
+            .as_ref()
+            .is_some_and(|action| workspace_wide(action, spec))
     }
 
     /// This request with each search over the host's workspace reading
@@ -66,24 +63,26 @@ impl HookRequest {
                 _ => dir.clone(),
             })
             .collect();
-        self.action = self.action.map(|action| in_workspace(action, &extra));
+        if let Some(spec) = &self.host.spec().workspace {
+            self.action = self.action.map(|action| in_workspace(action, &extra, spec));
+        }
         self
     }
 }
 
-fn workspace_wide(action: &Action) -> bool {
+fn workspace_wide(action: &Action, spec: &WorkspaceSpec) -> bool {
     match action {
         Action::Unchecked { action, reason } => {
-            reason == EVERY_WORKSPACE_DIRECTORY || workspace_wide(action)
+            Unchecked::WorkspaceWide.marks(spec, reason) || workspace_wide(action, spec)
         }
         _ => false,
     }
 }
 
 /// `action` with each workspace-wide search's mark replaced by reads of `extra`.
-fn in_workspace(action: Action, extra: &[String]) -> Action {
+fn in_workspace(action: Action, extra: &[String], spec: &WorkspaceSpec) -> Action {
     match action {
-        Action::Unchecked { action, reason } if reason == EVERY_WORKSPACE_DIRECTORY => {
+        Action::Unchecked { action, reason } if Unchecked::WorkspaceWide.marks(spec, &reason) => {
             let mut paths = match *action {
                 Action::FsRead { path } => vec![path],
                 Action::ReadFiles { paths } => paths,
@@ -103,7 +102,7 @@ fn in_workspace(action: Action, extra: &[String]) -> Action {
             }
         }
         Action::Unchecked { action, reason } => {
-            Action::unchecked(in_workspace(*action, extra), reason)
+            Action::unchecked(in_workspace(*action, extra, spec), reason)
         }
         other => other,
     }

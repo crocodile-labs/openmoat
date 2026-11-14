@@ -30,6 +30,7 @@ pub(super) const PROTECT: Protect = Protect {
             "**/.clinerules/**",
         ],
     )],
+    temp_dirs: &[],
     credentials: &[Paths::new(
         "Cline: the provider keys the CLI stores and its connectors' credentials\n\
          (`resolveProviderSettingsPath`, `resolveConnectorsDbPath` in\n\

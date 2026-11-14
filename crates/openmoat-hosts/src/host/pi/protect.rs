@@ -22,6 +22,7 @@ pub(super) const PROTECT: Protect = Protect {
          project's `.pi` (extensions, settings, MCP servers, system prompt)",
         &["**/.pi", "**/.pi/**"],
     )],
+    temp_dirs: &[],
     credentials: &[Paths::new(
         "pi: its provider keys and OAuth tokens, the API keys `models.json` may\n\
          hold and its MCP sign-ins (`packages/coding-agent/src/config.ts`,\n\

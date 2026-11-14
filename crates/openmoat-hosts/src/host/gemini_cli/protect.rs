@@ -21,6 +21,7 @@ pub(super) const PROTECT: Protect = Protect {
          every session",
         &["**/GEMINI.md", "**/.gemini", "**/.gemini/**"],
     )],
+    temp_dirs: &[],
     credentials: &[Paths::new(
         "Gemini CLI: its Google sign-in, the MCP and A2A OAuth tokens (in\n\
          `~/.cache/.gemini` under the macOS Seatbelt sandbox) and the file its\n\

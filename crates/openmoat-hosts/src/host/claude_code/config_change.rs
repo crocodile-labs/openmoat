@@ -69,7 +69,7 @@ const PROPOSED: &str = ".proposed-";
 /// does it rename the copy over the file, after checking the copy's bytes did
 /// not change. So the copy's contents are exactly what the file will hold.
 #[must_use]
-pub fn proposal_target(path: &str) -> Option<String> {
+pub(crate) fn proposal_target(path: &str) -> Option<String> {
     let (target, suffix) = path.rsplit_once(PROPOSED)?;
     let named = !target.is_empty() && !target.ends_with(['/', '\\']);
     let random = suffix.len() == 8

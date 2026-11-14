@@ -71,6 +71,14 @@ pub trait SettingsReader: Sync + fmt::Debug {
     fn reads_comments(&self) -> bool {
         false
     }
+
+    /// The settings file that `path`, a copy the host staged for a person to
+    /// review, replaces once the change is accepted (Claude Code's
+    /// `/settings-review`): the copy holds exactly what the file will hold.
+    /// `None` when `path` is no such copy, or the host stages none.
+    fn proposal_target(&self, _path: &str) -> Option<String> {
+        None
+    }
 }
 
 /// A value that sets something: not `null`, `false`, `""`, `{}` or `[]`.

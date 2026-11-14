@@ -26,6 +26,7 @@ mod settings;
 mod system_settings;
 mod tool_token;
 mod windows_sandbox;
+mod workspace;
 
 pub use advisory::{Advisories, Advisory, Platform, Version};
 pub use bundle::Bundle;
@@ -37,8 +38,8 @@ pub use hook_file::HookLayout;
 pub use hook_trust::HookTrust;
 pub use location::{Locate, Located, Location};
 pub use mcp::{
-    AutoStart, McpAutoStart, McpCommandForm, McpFile, McpNames, McpReader, McpServer, McpSpec,
-    McpSyntax,
+    AutoStart, BuiltinMcp, McpAutoStart, McpCommandForm, McpFile, McpNames, McpReader, McpServer,
+    McpSpec, McpSyntax,
 };
 pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
 pub use protect::{Helper, Paths, ProcessSpec, Protect, RunsLater};
@@ -51,6 +52,8 @@ pub use settings::{SettingsFile, SettingsReader};
 pub use system_settings::{SystemFile, SystemSettingsSpec};
 pub use tool_token::ToolToken;
 pub use windows_sandbox::{WindowsSandboxLevel, WindowsSandboxMode, WindowsSandboxReader};
+pub(crate) use workspace::Unchecked;
+pub use workspace::WorkspaceSpec;
 
 /// The code each host format needs beyond its [`HostSpec`]: reading a payload
 /// and writing the response. One per format; a host that sends another's
@@ -165,11 +168,13 @@ pub struct HostSpec {
     /// `${project}`.
     pub session_dir: SessionDir,
     /// The directories the host's settings add to its workspace (Gemini CLI's
-    /// `context.includeDirectories`), read from a parsed settings file: a
-    /// search that names no directory reads them too
-    /// ([`HookRequest::with_workspace_dirs`]). Empty from the function when
-    /// the file sets none; no function for a host without such a setting.
-    pub workspace_dirs: Option<fn(&serde_json::Value) -> Vec<String>>,
+    /// `context.includeDirectories`): a search that names no directory reads
+    /// them too ([`HookRequest::with_workspace_dirs`]); `None` for a host
+    /// without such a setting.
+    pub workspace: Option<WorkspaceSpec>,
+    /// The MCP server the host provides itself, whose listed tools return
+    /// metadata, not content; `None` for most hosts.
+    pub builtin_mcp: Option<BuiltinMcp>,
     /// How many times the payload carries a call's arguments (Cline sends them
     /// as `tool_call.input` and again as `preToolUse.parameters`): the guard
     /// reads that many times its per-call limit, so a file is refused at the

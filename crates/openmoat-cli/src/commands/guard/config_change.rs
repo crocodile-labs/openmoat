@@ -5,13 +5,26 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_core::{Decision, Verdict};
-use openmoat_hosts::{HookRequest, ProjectSettingsSpec};
+use openmoat_hosts::{HookRequest, Host, ProjectSettingsSpec};
 
 use crate::home::Home;
+use crate::install::HostConfig;
 use crate::integrity::{self, Drift, INTEGRITY_RULE, Lock};
 use crate::project_settings;
 
 const CONFIG_CHANGE_RULE: &str = "config-change";
+
+/// The host whose hooks `request` came through: a host that sends another's
+/// hooks reads that host's files (the Continue CLI, Claude Code's).
+fn format(request: &HookRequest) -> Host {
+    request.host.spec().speaks.unwrap_or(request.host)
+}
+
+/// The settings files of [`format`]'s host; `None` for a host without
+/// project settings.
+fn settings_spec(request: &HookRequest) -> Option<&'static ProjectSettingsSpec> {
+    format(request).spec().project_settings.as_ref()
+}
 
 /// The project settings file a `project_settings` or `local_settings` change
 /// is about, with the spec that places it; `None` for user settings, every
@@ -20,9 +33,7 @@ fn project_file(
     request: &HookRequest,
     source: &str,
 ) -> Option<(&'static ProjectSettingsSpec, &'static str)> {
-    // The Continue CLI sends Claude Code's hooks, which read Claude Code's files.
-    let format = request.host.spec().speaks.unwrap_or(request.host);
-    let spec = format.spec().project_settings.as_ref()?;
+    let spec = settings_spec(request)?;
     match source {
         "project_settings" => Some((spec, spec.shared)),
         "local_settings" => Some((spec, spec.local?)),
@@ -36,7 +47,7 @@ fn project_file(
 /// Otherwise a pinned file loads (it matches the lock, or differs only in those
 /// settings), a settings-review copy of one loads only if it leaves the pinned
 /// file as is, and an unpinned project or local settings file loads only if it
-/// sets nothing `project_settings::findings` names. Anything else is audited
+/// sets nothing its host's settings reader names. Anything else is audited
 /// and allowed.
 pub(super) fn decision(
     home: &Home,
@@ -78,7 +89,7 @@ pub(super) fn decision(
             if let Some((spec, name)) = project_file(request, source) {
                 for file in unnamed_project_files(request.cwd.as_deref(), spec, name)? {
                     if !lock.pins(&file)
-                        && let Some(blocked) = project_change(&file)
+                        && let Some(blocked) = project_change(home, request, spec, &file)
                     {
                         return Ok(blocked);
                     }
@@ -99,7 +110,10 @@ pub(super) fn decision(
     // target's pin decides: block unless the copy leaves the pinned file as is.
     // Only a person re-pins, and the hook cannot tell an owner's accept in
     // `/settings-review` from an agent's, so any edit of a pinned file is refused.
-    let target = path.to_str().and_then(openmoat_hosts::proposal_target);
+    let target = path
+        .to_str()
+        .zip(settings_spec(request))
+        .and_then(|(path, spec)| spec.reader.proposal_target(path));
     if let Some(target) = &target
         && lock.pins(Path::new(target))
     {
@@ -118,9 +132,9 @@ pub(super) fn decision(
     }
     // An unpinned project or local file (or a review copy of one, which holds
     // what it will become) comes from the repository: checked by its contents.
-    if project_file(request, source).is_some()
+    if let Some((spec, _)) = project_file(request, source)
         && !lock.pins(path)
-        && let Some(blocked) = project_change(path)
+        && let Some(blocked) = project_change(home, request, spec, path)
     {
         return Ok(blocked);
     }
@@ -160,8 +174,19 @@ fn unnamed_project_files(
 /// A block for a project settings file that sets something that could turn
 /// OpenMoat off, run a program or redirect the agent, that cannot be read, or
 /// that changed between the check and the decision; `None` when it may load.
-fn project_change(path: &Path) -> Option<Decision> {
-    let found = project_settings::check_unchanged(path)?;
+/// `spec`'s reader judges the file, with the hook file OpenMoat installed for
+/// the host whose files they are; when that cannot be placed, an entry that
+/// names it is not recognised, and everything else is still judged.
+fn project_change(
+    home: &Home,
+    request: &HookRequest,
+    spec: &ProjectSettingsSpec,
+    path: &Path,
+) -> Option<Decision> {
+    let hook_file = HostConfig::for_host(home, format(request))
+        .map(|config| config.settings_path)
+        .unwrap_or_default();
+    let found = project_settings::check_unchanged(path, spec, &hook_file)?;
     let mut deny = Decision::new(Verdict::Deny);
     deny.rules.push(project_settings::RULE.to_owned());
     deny.reasons.push(format!(
