@@ -32,7 +32,9 @@ mod capture;
 mod config_change;
 mod drift;
 mod entry;
+mod loaded;
 mod placed;
+mod plugin;
 mod post_tool_use;
 mod record;
 mod required;
@@ -63,10 +65,17 @@ pub fn run(args: &GuardArgs) -> Code {
         }
         return respond(host, &HookEvent::default(), &kernel_error(&error));
     }
-    if args.heartbeat {
-        return heartbeat(host);
+    // A package from the agent's own plugin channel (ADR-095), which starts
+    // the budget's deny itself.
+    if let Some(code) = plugin::answer(args) {
+        return code;
     }
-    deny_when_over_budget(host, Instant::now());
+    if args.heartbeat {
+        return loaded::report(host);
+    }
+    if !args.plugin {
+        deny_when_over_budget(host, Instant::now());
+    }
     // A panic would exit 101, which Claude Code treats as a non-blocking hook
     // failure, i.e. the call would proceed. Turn it into an explicit deny.
     // The deny is in the format of the payload's event once it was read.
@@ -100,26 +109,6 @@ fn fault_point(point: &str) {
 
 #[cfg(not(debug_assertions))]
 fn fault_point(_: &str) {}
-
-/// `--heartbeat`: the plugin's report that its host loaded it (ADR-042). No
-/// call is decided and nothing is read from stdin or written to stdout; a
-/// report that cannot be written exits 2, which the plugin ignores. Inside
-/// `openmoat run` the sandbox holds no state directory: the report is skipped,
-/// and the run's decisions for the host show the plugin loaded instead.
-fn heartbeat(host: Host) -> Code {
-    let home = Home::locate().ok();
-    let env = |var: &str| std::env::var(var).ok();
-    if let guard_relay::Relay::Inside(_) = guard_relay::relay(&env, home.as_ref()) {
-        return Code::Ok;
-    }
-    match Home::locate().and_then(|home| crate::heartbeat::report(&home, host, time::now_ms())) {
-        Ok(()) => Code::Ok,
-        Err(error) => {
-            eprintln!("moat: could not record that {host} loaded the plugin: {error:#}");
-            Code::Deny
-        }
-    }
-}
 
 /// A hook the host times out counts as failed, and most hosts then run the
 /// call, so after [`GUARD_BUDGET_S`] the guard denies on its own, in the

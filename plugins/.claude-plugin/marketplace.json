@@ -1,0 +1,13 @@
+{
+  "name": "crocodile-labs",
+  "owner": {
+    "name": "Crocodile Labs"
+  },
+  "plugins": [
+    {
+      "description": "Checks each tool call your coding agent makes against OpenMoat's policy before it runs. Needs the openmoat program: brew install crocodile-labs/tap/openmoat, then openmoat init.",
+      "name": "openmoat",
+      "source": "./claude-code"
+    }
+  ]
+}

@@ -13,6 +13,7 @@ mod block;
 mod contract;
 mod glob;
 mod host;
+pub mod plugin;
 mod program;
 mod registry;
 mod request;
@@ -24,14 +25,14 @@ pub use contract::{
     ConfigFormat, ConsentFile, Convention, Detect, ExtraFile, FailureOutcome, GUARD_BUDGET_S,
     HEARTBEAT_FLAG, Heartbeat, Helper, HookDir, HookFailure, HookLayout, HookOff, HookSpec,
     HookTrust, HookVersions, HostDocs, HostSpec, InstallSpec, KeyShape, Locate, Located, Location,
-    Managed, ManagedHooks, ManagedShape, McpAutoStart, McpCommandForm, McpFile, McpNames,
-    McpReader, McpServer, McpSpec, McpSyntax, OtherHooks, Paths, Platform, PluginDir, ProcessSpec,
-    ProjectFile, ProjectOff, ProjectSettingsSpec, Protect, Proves, ProxySessions, RelaxedCheck,
-    RelaxedKey, Reviews, RunFacts, RunWrite, Runner, RunsLater, SandboxFormat, SandboxSpec,
-    SessionDir, SessionOverride, SettingsFile, SettingsReader, SystemFile, SystemSettingsSpec,
-    ToolRow, ToolToken, Unseen, Version, Weekly, WeeklyInstall, WeeklyPayload, WeeklyRun,
-    WeeklyRuns, WindowsSandboxLevel, WindowsSandboxMode, WindowsSandboxReader, WorkspaceSpec,
-    every_runs_later,
+    Managed, ManagedHooks, ManagedShape, Marketplace, McpAutoStart, McpCommandForm, McpFile,
+    McpNames, McpReader, McpServer, McpSpec, McpSyntax, Meta, OtherHooks, Paths, Platform, Plugin,
+    PluginDir, PluginFile, PluginSpec, ProcessSpec, ProjectFile, ProjectOff, ProjectSettingsSpec,
+    Protect, Proves, ProxySessions, RelaxedCheck, RelaxedKey, Reviews, RunFacts, RunWrite, Runner,
+    RunsLater, SandboxFormat, SandboxSpec, SessionDir, SessionOverride, SettingsFile,
+    SettingsReader, StandAside, SystemFile, SystemSettingsSpec, ToolRow, ToolToken, Unseen,
+    Version, Weekly, WeeklyInstall, WeeklyPayload, WeeklyRun, WeeklyRuns, WindowsSandboxLevel,
+    WindowsSandboxMode, WindowsSandboxReader, WorkspaceSpec, every_runs_later,
 };
 pub use wire::guard_command::{EVENT_FLAG, GuardCommand, HOME_FLAG, decode_home, encode_home};
 pub use wire::hook_file::yaml as yaml_hooks;
@@ -42,6 +43,7 @@ pub use wire::mcp_call::{
 };
 pub use wire::owned_file::{OwnedFile, OwnedFileError, Syntax};
 pub use wire::plugin_config::PluginConfig;
+pub use wire::plugin_package::{NOT_INSTALLED, PLUGIN_FLAG};
 
 use std::fmt;
 use std::str::FromStr;

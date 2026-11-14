@@ -199,6 +199,14 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     run_env: &["OPENAI_API_KEY", "CODEX_ACCESS_TOKEN"],
     weekly: weekly::WEEKLY,
     hook_off: hook_off::HOOK_OFF,
+    // "Plugin hooks are not eligible for the public Plugins Directory"
+    // (<https://learn.chatgpt.com/docs/plugins>), and a hook Codex runs needs
+    // the person's trust in `/hooks` either way.
+    plugin: crate::contract::Plugin::None {
+        why: "Codex's Plugins Directory does not take plugins that carry hooks \
+              (https://learn.chatgpt.com/docs/plugins); `openmoat init` writes the hook, which \
+              you then trust in Codex's `/hooks`",
+    },
     ..HostSpec::BASE
 };
 

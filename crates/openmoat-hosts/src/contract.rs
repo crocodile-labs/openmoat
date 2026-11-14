@@ -20,6 +20,7 @@ mod hook_off;
 mod hook_trust;
 mod location;
 mod mcp;
+mod plugin;
 mod protect;
 mod relaxed;
 mod reviews;
@@ -49,6 +50,7 @@ pub use mcp::{
     McpSpec, McpSyntax,
 };
 pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
+pub use plugin::{Marketplace, Meta, Plugin, PluginFile, PluginSpec, StandAside};
 pub use protect::{Helper, Paths, ProcessSpec, Protect, RunsLater};
 pub use relaxed::{KeyShape, RelaxedCheck, RelaxedKey};
 pub use reviews::{Reviews, Unseen};
@@ -232,6 +234,9 @@ pub struct HostSpec {
     /// How CI's weekly check of the latest release runs the host, or why it
     /// does not (`scripts/ci/latest-agents/agents.json` is written from it).
     pub weekly: Weekly,
+    /// The package the host's own plugin channel installs OpenMoat from, or
+    /// why it has none (ADR-095); `plugins/` is generated from it.
+    pub plugin: Plugin,
 }
 
 /// Where a host finds hook files for OpenMoat's event besides OpenMoat's own

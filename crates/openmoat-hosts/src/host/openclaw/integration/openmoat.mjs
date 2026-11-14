@@ -86,6 +86,15 @@ const MOAT = __MOAT_BINARY__;
 // from the environment the host gives this plugin (ADR-071).
 /** @type {string} */
 const MOAT_HOME = __MOAT_HOME__;
+// What follows the host in the guard's arguments: the state directory `init`
+// wrote, or, in the package of OpenClaw's own channel (`plugins/openclaw`,
+// where both are empty and `openmoat` is found on the search path),
+// `--plugin`: the guard finds its state directory and gives no decision where
+// `init`'s own copy of this plugin decides (ADR-095).
+const WHERE = MOAT_HOME === "" ? ["--plugin"] : ["--home", MOAT_HOME];
+// What the call is blocked with when there is no `openmoat` to run.
+const NOT_INSTALLED =
+  "OpenMoat is not installed: install it with `brew install crocodile-labs/tap/openmoat` (other ways: https://github.com/crocodile-labs/openmoat/blob/main/docs/INSTALL.md), then run `openmoat init`";
 // Above `moat guard`'s own 30 s budget, below the hook timeout `moat init` sets.
 const GUARD_TIMEOUT_MS = 45_000;
 const MAX_OUTPUT = 1 << 20;
@@ -108,6 +117,16 @@ function block(why) {
  */
 function message(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Why `openmoat` could not run: not installed, or `error`.
+ * @param {unknown} error
+ * @returns {string}
+ */
+function couldNotRun(error) {
+  if (field(error, "code") === "ENOENT") return `moat could not run: ${NOT_INSTALLED}`;
+  return `moat could not run: ${message(error)}`;
 }
 
 /**
@@ -253,13 +272,13 @@ function guard(payload, cwd, signal) {
     };
     const onAbort = () => stop("the tool call was cancelled");
     try {
-      child = spawn(MOAT, ["guard", "--host", "openclaw", "--home", MOAT_HOME], {
+      child = spawn(MOAT, ["guard", "--host", "openclaw", ...WHERE], {
         cwd,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
       });
     } catch (error) {
-      finish(block(`moat could not start: ${message(error)}`));
+      finish(block(couldNotRun(error)));
       return;
     }
     timer = setTimeout(() => stop("moat guard did not answer in time"), GUARD_TIMEOUT_MS);
@@ -275,7 +294,7 @@ function guard(payload, cwd, signal) {
     child.stderr.on("data", (/** @type {string} */ chunk) => {
       if (stderr.length < MAX_OUTPUT) stderr += chunk;
     });
-    child.on("error", (error) => finish(block(`moat could not run: ${message(error)}`)));
+    child.on("error", (error) => finish(block(couldNotRun(error))));
     child.on("close", (code) => finish(answer(code, stdout, stderr)));
     child.stdin.on("error", () => {});
     child.stdin.end(JSON.stringify(payload));
@@ -287,7 +306,7 @@ function guard(payload, cwd, signal) {
 // saying the plugin has not reported.
 function heartbeat() {
   try {
-    const child = spawn(MOAT, ["guard", "--heartbeat", "--host", "openclaw", "--home", MOAT_HOME], {
+    const child = spawn(MOAT, ["guard", "--heartbeat", "--host", "openclaw", ...WHERE], {
       stdio: "ignore",
       windowsHide: true,
     });

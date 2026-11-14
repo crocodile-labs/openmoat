@@ -1,0 +1,17 @@
+{
+  "openmoat": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "'./openmoat-guard' guard --host antigravity-cli",
+            "timeout": 600,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "enabled": true
+  }
+}

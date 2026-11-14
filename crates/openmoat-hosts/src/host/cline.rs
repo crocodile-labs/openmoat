@@ -175,6 +175,11 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     run_env: &["CLINE_DATA_DIR"],
     weekly: weekly::WEEKLY,
     hook_off: hook_off::HOOK_OFF,
+    plugin: crate::contract::Plugin::None {
+        why: "Cline's SDK plugins wait 3 s and ignore a failed hook unless they end the whole \
+              run (https://docs.cline.bot/sdk/plugins.md), weaker than the `PreToolUse` file \
+              `openmoat init` writes",
+    },
     ..HostSpec::BASE
 };
 

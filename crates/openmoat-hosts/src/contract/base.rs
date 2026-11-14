@@ -43,6 +43,7 @@ impl HostSpec {
         run: super::RunFacts::BASE,
         run_env: &[],
         weekly: super::Weekly::BASE,
+        plugin: super::Plugin::None { why: "" },
     };
 }
 

@@ -1,0 +1,19 @@
+# The Plugin Catalog entry, as `plugin-catalog/openmoat.yaml` of
+# NousResearch/hermes-agent. Set `sha` to the full commit of https://github.com/crocodile-labs/openmoat
+# that holds this folder before opening the pull request.
+name: openmoat
+repo: https://github.com/crocodile-labs/openmoat
+sha: "<40-character commit>"
+subdir: plugins/hermes
+description: "Checks each tool call your coding agent makes against OpenMoat's policy before it runs. Needs the openmoat program: brew install crocodile-labs/tap/openmoat, then openmoat init."
+maintainer: "Crocodile Labs"
+tier: community
+requires_hermes: ">=0.22.5"
+docs_url: "https://github.com/crocodile-labs/openmoat/blob/main/docs/INSTALL.md"
+version: "0.21.0"
+title: "OpenMoat"
+capabilities:
+  provides_tools: []
+  provides_hooks: [pre_tool_call]
+  provides_middleware: []
+  requires_env: []

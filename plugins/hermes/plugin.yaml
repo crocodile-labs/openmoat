@@ -1,0 +1,7 @@
+name: openmoat
+version: "0.21.0"
+description: "Checks each tool call your coding agent makes against OpenMoat's policy before it runs. Needs the openmoat program: brew install crocodile-labs/tap/openmoat, then openmoat init."
+author: "Crocodile Labs"
+provides_hooks:
+  - pre_tool_call
+requires_hermes: ">=0.22.5"

@@ -46,6 +46,7 @@ mod hook_off;
 mod advisories;
 mod bench;
 mod doc;
+mod plugin;
 mod location;
 mod mcp;
 mod project_settings;
@@ -234,6 +235,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     run_env: &["OPENROUTER_API_KEY", "OPENCODE_CONFIG_DIR"],
     weekly: weekly::WEEKLY,
     hook_off: hook_off::HOOK_OFF,
+    plugin: crate::contract::Plugin::Package(&plugin::SPEC),
     ..HostSpec::BASE
 };
 

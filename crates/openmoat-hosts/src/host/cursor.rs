@@ -23,6 +23,7 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 mod hook_off;
 mod bench;
 mod doc;
+mod plugin;
 pub(crate) mod hook_file;
 mod project_settings;
 mod pre_tool;
@@ -160,6 +161,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     run_env: &["CURSOR_API_KEY"],
     weekly: weekly::WEEKLY,
     hook_off: hook_off::HOOK_OFF,
+    plugin: crate::contract::Plugin::Package(&plugin::SPEC),
     ..HostSpec::BASE
 };
 

@@ -1,0 +1,10 @@
+{
+  "configSchema": {
+    "additionalProperties": false,
+    "type": "object"
+  },
+  "description": "Checks each tool call your coding agent makes against OpenMoat's policy before it runs. Needs the openmoat program: brew install crocodile-labs/tap/openmoat, then openmoat init.",
+  "id": "openmoat-clawhub",
+  "name": "OpenMoat",
+  "version": "0.21.0"
+}

@@ -653,6 +653,12 @@ pub struct GuardArgs {
     /// (run by the plugin as it loads; `openmoat status` reports it).
     #[arg(long)]
     pub heartbeat: bool,
+    /// Run from an OpenMoat package installed through the agent's own plugin
+    /// channel (ADR-095): decide the call, or give no decision where `openmoat
+    /// init`'s own hook for the agent is installed and pinned, so each call is
+    /// decided once. `openmoat doctor` reports what it did last.
+    #[arg(long, conflicts_with = "home")]
+    pub plugin: bool,
     /// The state directory to decide with, as `openmoat init` writes it into
     /// the hook (ADR-071). It wins over `MOAT_HOME`, and a `MOAT_HOME` that
     /// names another directory makes the guard deny.

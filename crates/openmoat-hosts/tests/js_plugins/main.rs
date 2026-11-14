@@ -13,6 +13,7 @@ use serde_json::Value;
 
 mod openclaw;
 mod opencode;
+mod packaged;
 mod pi;
 
 /// `node` on the search path.

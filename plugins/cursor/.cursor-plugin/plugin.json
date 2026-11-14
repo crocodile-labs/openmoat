@@ -1,0 +1,16 @@
+{
+  "author": {
+    "name": "Crocodile Labs"
+  },
+  "description": "Checks each tool call your coding agent makes against OpenMoat's policy before it runs. Needs the openmoat program: brew install crocodile-labs/tap/openmoat, then openmoat init.",
+  "homepage": "https://github.com/crocodile-labs/openmoat/blob/main/docs/INSTALL.md",
+  "keywords": [
+    "security",
+    "hooks",
+    "policy"
+  ],
+  "license": "MIT OR Apache-2.0",
+  "name": "openmoat",
+  "repository": "https://github.com/crocodile-labs/openmoat",
+  "version": "0.21.0"
+}

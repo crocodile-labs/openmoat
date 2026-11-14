@@ -26,6 +26,7 @@ mod mcp;
 mod notice;
 mod os_version;
 mod packs;
+mod plugin_record;
 mod project;
 mod project_settings;
 mod protection;

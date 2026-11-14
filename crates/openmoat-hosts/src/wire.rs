@@ -9,6 +9,7 @@ pub(crate) mod mcp_call;
 pub(crate) mod output;
 pub(crate) mod owned_file;
 pub(crate) mod plugin_config;
+pub(crate) mod plugin_package;
 pub(crate) mod pre_tool_use;
 pub(crate) mod unknown;
 

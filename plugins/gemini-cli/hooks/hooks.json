@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "AfterTool": [
+      {
+        "hooks": [
+          {
+            "command": "'${extensionPath}/hooks/openmoat-guard' guard --host gemini-cli",
+            "name": "openmoat",
+            "timeout": 60000,
+            "type": "command"
+          }
+        ],
+        "matcher": "run_shell_command|web_fetch|google_web_search|mcp_.*"
+      }
+    ],
+    "BeforeTool": [
+      {
+        "hooks": [
+          {
+            "command": "'${extensionPath}/hooks/openmoat-guard' guard --host gemini-cli",
+            "name": "openmoat",
+            "timeout": 600000,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ]
+  }
+}

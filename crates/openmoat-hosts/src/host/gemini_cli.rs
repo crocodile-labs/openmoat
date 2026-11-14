@@ -36,6 +36,7 @@ mod advisories;
 mod after_tool;
 mod bench;
 mod doc;
+mod plugin;
 pub(crate) mod hook_file;
 mod project_settings;
 mod protect;
@@ -219,6 +220,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     ],
     weekly: weekly::WEEKLY,
     hook_off: hook_off::HOOK_OFF,
+    plugin: crate::contract::Plugin::Package(&plugin::SPEC),
     ..HostSpec::BASE
 };
 

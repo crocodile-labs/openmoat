@@ -162,6 +162,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     run_env: &["GOOSE_PROVIDER", "GOOSE_MODEL", "GOOSE_PROVIDER__API_KEY"],
     weekly: weekly::WEEKLY,
     hook_off: hook_off::HOOK_OFF,
+    plugin: crate::contract::Plugin::None {
+        why: "goose has no registry for hook plugins, and `openmoat init` already writes \
+              OpenMoat as an Open Plugins folder",
+    },
     ..HostSpec::BASE
 };
 

@@ -1,0 +1,40 @@
+#!/bin/sh
+# OpenMoat plugin for Antigravity CLI: runs `openmoat guard` for each hook call.
+# Generated from OpenMoat's host specs (plugins/README.md); do not edit.
+#
+# Antigravity CLI runs this file where `openmoat init`'s hook runs the `openmoat`
+# binary, with the same arguments (`guard --host antigravity-cli`, and `--event <event>`
+# where the payload names no event). It runs the `openmoat` on the search
+# path, or in a folder OpenMoat's installers use, with `--plugin` added: the
+# guard decides the call or, where `openmoat init`'s own hook is installed and
+# pinned, gives no decision so that hook decides it alone (ADR-095). Without
+# `openmoat`, or when it exits without an answer, the call is blocked. This
+# file downloads and installs nothing.
+
+missing='{"decision":"deny","reason":"moat: deny [kernel-error] — OpenMoat is not installed: install it with `brew install crocodile-labs/tap/openmoat` (other ways: https://github.com/crocodile-labs/openmoat/blob/main/docs/INSTALL.md), then run `openmoat init`"}'
+failed='{"decision":"deny","reason":"moat: deny [kernel-error] — OpenMoat could not decide this call: `openmoat guard` gave no answer; run `openmoat doctor`"}'
+
+block() {
+  printf '%s\n' "$1"
+  printf 'OpenMoat blocked this call: %s\n' "$2" >&2
+  exit 2
+}
+
+moat=$(command -v openmoat 2>/dev/null) || moat=
+if [ -z "$moat" ]; then
+  for dir in "$HOME/.cargo/bin" /opt/homebrew/bin /usr/local/bin /home/linuxbrew/.linuxbrew/bin; do
+    if [ -x "$dir/openmoat" ]; then
+      moat=$dir/openmoat
+      break
+    fi
+  done
+fi
+[ -n "$moat" ] || block "$missing" 'OpenMoat is not installed: install it with `brew install crocodile-labs/tap/openmoat` (other ways: https://github.com/crocodile-labs/openmoat/blob/main/docs/INSTALL.md), then run `openmoat init`'
+
+answer=$("$moat" "$@" --plugin)
+code=$?
+if [ "$code" -eq 0 ] || { [ "$code" -eq 2 ] && [ -n "$answer" ]; }; then
+  [ -z "$answer" ] || printf '%s\n' "$answer"
+  exit "$code"
+fi
+block "$failed" "openmoat guard exited $code without an answer"

@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "beforeMCPExecution": [
+      {
+        "command": "'./hooks/openmoat-guard' guard --host cursor",
+        "failClosed": true,
+        "timeout": 600
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": "'./hooks/openmoat-guard' guard --host cursor",
+        "failClosed": true,
+        "timeout": 600
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "'./hooks/openmoat-guard' guard --host cursor",
+        "failClosed": true,
+        "timeout": 600
+      }
+    ],
+    "beforeTabFileRead": [
+      {
+        "command": "'./hooks/openmoat-guard' guard --host cursor",
+        "failClosed": true,
+        "timeout": 600
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "'./hooks/openmoat-guard' guard --host cursor",
+        "failClosed": true,
+        "timeout": 600
+      }
+    ]
+  },
+  "version": 1
+}

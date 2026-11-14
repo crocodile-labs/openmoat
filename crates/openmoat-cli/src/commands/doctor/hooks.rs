@@ -49,6 +49,19 @@ pub(super) fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<V
             );
             continue;
         }
+        // A package from the agent's own plugin channel (ADR-095): beside
+        // `init`'s hook it stands aside; without one it is the hook.
+        if let Some(record) = crate::plugin_record::last(home, host) {
+            let text = format!("{name:<16} {}", crate::plugin_record::line(&record));
+            if matches!(state, HookState::Installed) {
+                report.note(&text);
+            } else {
+                report.line(Area::Hook, true, text);
+                if matches!(state, HookState::Missing) {
+                    continue;
+                }
+            }
+        }
         if recorded.skipped(host) && config.host_present() && matches!(state, HookState::Missing) {
             report.note(&format!(
                 "{name:<16} not set up; `openmoat init --hosts {}` adds it",

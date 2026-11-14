@@ -280,11 +280,21 @@ fn every_plugin_reports_that_it_loaded() {
         let (Some(file), Some(heartbeat)) = (plugin, &install.heartbeat) else {
             continue;
         };
+        // `WHERE` is the state directory `init` fills in, or in the package of
+        // the host's own channel `--plugin` (ADR-095).
         let call = format!(
-            r#"["guard", "{HEARTBEAT_FLAG}", "--host", "{}", "{HOME_FLAG}", MOAT_HOME]"#,
+            r#"["guard", "{HEARTBEAT_FLAG}", "--host", "{}", ...WHERE]"#,
             host.id()
         );
         assert!(file.source.contains(&call), "{host:?} plugin has no {call}");
+        let place = format!(
+            r#"const WHERE = MOAT_HOME === "" ? ["{}"] : ["{HOME_FLAG}", MOAT_HOME];"#,
+            openmoat_hosts::PLUGIN_FLAG
+        );
+        assert!(
+            file.source.contains(&place),
+            "{host:?} plugin has no {place}"
+        );
         assert!(!heartbeat.program.is_empty(), "{host:?}");
         for activity in heartbeat.activity {
             assert!(

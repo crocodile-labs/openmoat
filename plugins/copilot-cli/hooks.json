@@ -1,0 +1,23 @@
+{
+  "hooks": {
+    "postToolUse": [
+      {
+        "bash": "'./openmoat-guard' guard --host copilot-cli --event postToolUse",
+        "cwd": "${COPILOT_PLUGIN_ROOT}",
+        "powershell": "& './openmoat-guard' guard --host copilot-cli --event postToolUse",
+        "timeoutSec": 60,
+        "type": "command"
+      }
+    ],
+    "preToolUse": [
+      {
+        "bash": "'./openmoat-guard' guard --host copilot-cli --event preToolUse",
+        "cwd": "${COPILOT_PLUGIN_ROOT}",
+        "powershell": "& './openmoat-guard' guard --host copilot-cli --event preToolUse",
+        "timeoutSec": 600,
+        "type": "command"
+      }
+    ]
+  },
+  "version": 1
+}

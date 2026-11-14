@@ -1,0 +1,73 @@
+{
+  "hooks": {
+    "ConfigChange": [
+      {
+        "hooks": [
+          {
+            "args": [
+              "guard",
+              "--host",
+              "claude-code"
+            ],
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/openmoat-guard",
+            "timeout": 60,
+            "type": "command"
+          }
+        ],
+        "matcher": "user_settings|project_settings|local_settings"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "args": [
+              "guard",
+              "--host",
+              "claude-code"
+            ],
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/openmoat-guard",
+            "timeout": 60,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|WebFetch|WebSearch|ReadMcpResourceTool|mcp__.*"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "args": [
+              "guard",
+              "--host",
+              "claude-code"
+            ],
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/openmoat-guard",
+            "onFailure": "block",
+            "timeout": 600,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|Monitor|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Read|Glob|Grep|LSP|SendFile|WebFetch|WebSearch|ReadMcpResourceTool|EnterWorktree|Skill|Artifact|ArtifactData|mcp__.*"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "args": [
+              "guard",
+              "--host",
+              "claude-code"
+            ],
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/openmoat-guard",
+            "timeout": 60,
+            "type": "command"
+          }
+        ],
+        "matcher": "startup|resume|clear|compact"
+      }
+    ]
+  }
+}

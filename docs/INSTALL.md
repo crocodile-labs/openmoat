@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Read this when** you install or upgrade OpenMoat on macOS, Linux or Windows, run `openmoat init`, want to know what each agent's hook covers, or use other config directories.
 
-**On this page:** [Install](#install) · [Set up with openmoat init](#set-up-with-openmoat-init) · [Undo with openmoat uninstall](#undo-with-openmoat-uninstall) · [Upgrading](#upgrading) · [Keep openmoat proxy running as a user service](#keep-openmoat-proxy-running-as-a-user-service) · [Teams: managed settings](#teams-managed-settings) · [Non-default config directories](#non-default-config-directories)
+**On this page:** [Install](#install) · [Set up with openmoat init](#set-up-with-openmoat-init) · [Install from an agent's plugin channel (preview)](#install-from-an-agents-plugin-channel-preview) · [Undo with openmoat uninstall](#undo-with-openmoat-uninstall) · [Upgrading](#upgrading) · [Keep openmoat proxy running as a user service](#keep-openmoat-proxy-running-as-a-user-service) · [Teams: managed settings](#teams-managed-settings) · [Non-default config directories](#non-default-config-directories)
 
 In short: install the binary, run `openmoat init` in your own terminal, and start a new
 agent session. `openmoat init` writes the default policy, asks before it hooks each agent
@@ -198,6 +198,130 @@ calls or commands. See [Codex's host contract](../crates/openmoat-hosts/src/host
 | Cline CLI | OpenMoat's script `PreToolUse` for every tool (Cline has no matcher), which prints Cline's `cancel` itself when `openmoat` is missing or fails (Cline runs a call whose hook fails), 120 s (Cline's own): `run_commands` (every command shape Cline accepts; several are decided together, each in a subshell, and need review when one cannot be read alone; PowerShell on Windows is not read), `read_files`, `editor`, `apply_patch` (every file the patch names), `search_codebase` (the workspace), `fetch_web_content` (one URL as `fetch`, several as an unknown tool), MCP tools (`<server>__<tool>`, recorded as `mcp__<server>__<tool>`; each server in `data/settings/cline_mcp_settings.json` pinned); `ask_question` and `submit_and_exit` are not governed, and any other tool (`skills`, subagent and team tools, a plugin's) is `tool.unknown`, checked for the paths, URLs and commands its arguments name. Cline's hooks cannot prompt: a `review` is a deny, which ends Cline's run, that you approve with `openmoat allow --last`. `--yolo` runs no hooks; the Cline VS Code extension reads hooks only from `~/Documents/Cline/Hooks` and is not covered. `CLINE_DIR` moves `~/.cline`. `PostToolUse` (since 0.17.0, the same script): what each call returned, read for `injected-input` (ADR-057; ADR-063, proposed); it prints nothing and decides nothing itself | `~/.cline/hooks/PreToolUse`, `~/.cline/hooks/PostToolUse` |
 | goose | `PreToolUse` for every tool (no matcher), `on_failure: block`, 60 s, in OpenMoat's plugin: `shell` (`cmd` on Windows: `unparseable`), `write`, `edit`, `tree`, `analyze`, `read_image`, every extension tool (`<extension>__<tool>`, MCP extensions included), and a tool OpenMoat does not know by what its arguments name. goose hooks cannot prompt, so a `review` blocks the call until you run `openmoat allow --last`. Code Mode's `execute_javascript` needs review: the tools its script calls skip the hook | `~/.agents/plugins/openmoat/hooks/hooks.json` |
 | Continue CLI (`cn`) | Runs the Claude Code hook, recorded as host `continue`. `cn` ignores Claude Code's `"ask"`, so a `review` blocks the call until you run `openmoat allow --last`. The released `cn` does not run hooks, so nothing is checked; use `openmoat run` (`openmoat doctor` warns). [Continue's repository](https://github.com/continuedev/continue) is no longer maintained and is read-only | Claude Code's |
+
+## Install from an agent's plugin channel (preview)
+
+> [!NOTE]
+> **Preview.** The packages below are in the repository's
+> [`plugins/`](../plugins/README.md) folder, generated from the host specs
+> ([ADR-095](adr/ADR-095-plugin-packages.md)). None is listed in its channel yet; until
+> one is, install it from the folder or keep using `openmoat init` alone.
+
+Each agent below can take OpenMoat's hook from its own plugin channel in one step. A
+package holds no binary and downloads nothing: you still install `openmoat` and run
+`openmoat init` once, which writes the policy and its lock. The package runs the
+`openmoat` on your search path (or in `~/.cargo/bin` or Homebrew's folder) as
+`openmoat guard --host <id> --plugin`:
+
+- **No `openmoat`**, or it gives no answer: every call is blocked, and the message
+  names the install command (`brew install crocodile-labs/tap/openmoat`, then
+  `openmoat init`).
+- **No policy lock** (`openmoat init` not run yet): every call is denied, and the reason
+  says to run `openmoat init`.
+- **`openmoat init`'s own hook installed for the agent as well**: the package gives no
+  decision (on Cursor, `allow`, which never changes what the other hook answers), so
+  each call is decided once, by `init`'s hook, which the lock pins and which runs the
+  binary by its path. The package stands aside only while the lock is intact, it pins
+  the hook file the agent reads, the entry there is the one `init` wrote and, for pi,
+  OpenCode and OpenClaw, `init`'s plugin has reported loading since it last changed;
+  otherwise the package decides.
+- **Only the package**: it decides each call as `init`'s hook would. Answer `n` for that
+  agent in `openmoat init` to keep it that way.
+
+`openmoat doctor` reports each package that ran: when, and whether it stood aside for
+`init`'s hook or decided itself (`~/.moat/plugins/<id>.json`). The guard scripts are
+POSIX `sh`, so on native Windows use `openmoat init`. A package installed this way is
+outside the lock: the agent may update it and you may turn it off without OpenMoat
+seeing it, so `openmoat init`'s hook stays the recommended setup.
+
+### Claude Code
+
+```bash
+claude plugin marketplace add crocodile-labs/openmoat-plugins
+claude plugin install openmoat@crocodile-labs
+```
+
+The plugin (`plugins/claude-code`) carries the four hooks `openmoat init` writes, with
+`onFailure: "block"` (Claude Code 2.1.295 or later). Before the marketplace repository
+exists, add the folder itself: `claude plugin marketplace add ./plugins`.
+
+### Cursor
+
+In Cursor: **Customize**, find OpenMoat in the Marketplace, **Install**. Before it is
+listed, copy `plugins/cursor` to `~/.cursor/plugins/local/openmoat` and run
+**Developer: Reload Window**. The plugin carries the five hooks `openmoat init` writes,
+each with `failClosed: true`.
+
+### Gemini CLI
+
+```bash
+gemini extensions install https://github.com/crocodile-labs/openmoat-gemini
+```
+
+Before that repository exists: `gemini extensions link plugins/gemini-cli`. The
+extension's `BeforeTool` hook is the one `openmoat init` writes; Gemini CLI's limits
+stay (a hook that times out or exits 1 lets the call run; untrusted folders run no hooks).
+
+### GitHub Copilot CLI
+
+```bash
+copilot plugin install crocodile-labs/openmoat:plugins/copilot-cli
+```
+
+Needs Copilot CLI 1.0.111 or later, which runs a plugin's hook in the plugin's folder.
+
+### OpenCode
+
+```bash
+opencode plugin add @openmoat/opencode
+```
+
+The package is `init`'s OpenCode plugin (OpenCode 1 and 2) finding `openmoat` on the
+search path, under the id `openmoat-npm` so both can be loaded. Restart OpenCode
+(OpenCode 2: `opencode service restart`).
+
+### pi
+
+```bash
+pi install npm:@openmoat/pi
+```
+
+The package is `init`'s pi extension finding `openmoat` on the search path.
+
+### OpenClaw
+
+```bash
+openclaw plugins install clawhub:@openmoat/openclaw
+```
+
+The package is `init`'s OpenClaw plugin under the id `openmoat-clawhub`, so both can be
+loaded; restart the Gateway. It takes OpenClaw's default handler timeout (15 s) unless
+you set `plugins.entries.openmoat-clawhub.hooks.timeouts.before_tool_call`; `openmoat
+init` sets 60 s for its own.
+
+### Hermes Agent
+
+```bash
+hermes plugins install openmoat && hermes plugins enable openmoat
+```
+
+A Python plugin whose `pre_tool_call` callback sends the call to `openmoat guard` and
+returns a block for every failure (Hermes skips a callback that raises).
+
+### Antigravity CLI
+
+```bash
+agy plugin install https://github.com/crocodile-labs/openmoat-antigravity
+```
+
+Antigravity CLI is a preview host: check that the hook fires (`openmoat doctor` shows
+the package's last run) before you rely on it.
+
+### Codex, Cline and goose
+
+No package: Codex's Plugins Directory does not take plugins that carry hooks, Cline's
+SDK plugins wait 3 s and ignore a failed hook, and goose has no registry for hook plugins
+(`openmoat init` already writes OpenMoat as an Open Plugins folder). Use `openmoat init`.
 
 ## Undo with `openmoat uninstall`
 
