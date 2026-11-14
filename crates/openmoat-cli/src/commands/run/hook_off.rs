@@ -31,6 +31,7 @@ use anyhow::{Context as _, Result, bail};
 use openmoat_core::{Policy, ProjectHookOff, Verdict};
 use openmoat_hosts::{Host, SessionOverride};
 
+use crate::context::path_string;
 use crate::home::Home;
 use crate::install::{HookState, HostConfig};
 use crate::project_settings::preflight::{self, Off};
@@ -99,7 +100,9 @@ fn find(
     rest: &[OsString],
     policy: &Policy,
 ) -> Result<Preflight> {
-    let Some(host) = host else {
+    // A host with no OpenMoat hook of its own (one that runs another host's,
+    // the Continue CLI) has nothing a project could turn off: not checked.
+    let Some(host) = host.filter(|host| pre_flighted(*host)) else {
         return Ok(Preflight::Clear);
     };
     // Where the agent's hook file is not known, neither is whether a
@@ -136,6 +139,13 @@ fn find(
         choice = ProjectHookOff::Refuse;
     }
     Ok(decide(host, &off, over, rest, choice))
+}
+
+/// Whether `host` has an OpenMoat hook of its own that `openmoat init`
+/// installs ([`openmoat_hosts::HostSpec::install`]): only then is the check
+/// made, and a hook whose place cannot be told refuses the run.
+fn pre_flighted(host: Host) -> bool {
+    host.spec().install.is_some()
 }
 
 /// Whether the policy lock no longer matches what it pins.
@@ -184,7 +194,7 @@ fn decide(
             ways,
             "\nOr run `openmoat init --managed` in a terminal of your own: {name} then runs \
              OpenMoat's hook from {}, which a project's settings cannot turn off.",
-            path.display()
+            path_string(&path)
         );
     }
     Preflight::Refused {
@@ -218,7 +228,7 @@ fn clashing(over: &SessionOverride, rest: &[OsString]) -> Option<String> {
 /// One indented line per file and what in it turns the hook off.
 fn listed(off: &[Off]) -> String {
     off.iter()
-        .map(|o| format!("  {}: {}", o.path.display(), o.what.join("; ")))
+        .map(|o| format!("  {}: {}", path_string(&o.path), o.what.join("; ")))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -253,7 +263,7 @@ pub fn notice(host: Option<Host>, found: &Preflight) -> Option<String> {
 fn paths(files: &[PathBuf]) -> String {
     files
         .iter()
-        .map(|p| p.display().to_string())
+        .map(|p| path_string(p))
         .collect::<Vec<_>>()
         .join(", ")
 }

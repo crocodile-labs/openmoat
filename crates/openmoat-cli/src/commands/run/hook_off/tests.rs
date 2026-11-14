@@ -4,7 +4,27 @@ use std::path::PathBuf;
 use openmoat_core::ProjectHookOff;
 use openmoat_hosts::{Host, SessionOverride};
 
-use super::{Off, Preflight, clashing, decide, notice};
+use super::{Off, Preflight, clashing, decide, notice, pre_flighted};
+
+/// A host that runs another host's hook has no hook of its own to lose, so
+/// the run does not check it (nor refuse it for a hook file it has none
+/// of); every host `openmoat init` installs a hook for is checked.
+#[test]
+fn only_hosts_with_a_hook_of_their_own_are_checked() {
+    let mut skipped = 0;
+    for host in Host::EVERY {
+        let own = host.spec().install.is_some();
+        assert_eq!(pre_flighted(host), own, "{host:?}");
+        if !own {
+            assert!(host.spec().speaks.is_some(), "{host:?}");
+            skipped += 1;
+        }
+    }
+    assert!(skipped >= 1, "a host that runs another's hook exists");
+    for host in Host::ALL {
+        assert!(pre_flighted(host), "{host:?}");
+    }
+}
 
 /// A host with a session override, and its override.
 fn with_override() -> (Host, &'static SessionOverride) {

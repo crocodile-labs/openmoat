@@ -35,7 +35,15 @@ fn examples() -> Vec<(Host, ProjectFile)> {
 
 /// `host` set up in a fresh home, and the home's system directory.
 fn set_up(host: Host) -> (Sandbox, PathBuf) {
-    let sb = Sandbox::installed(&[&dir_of(host)]);
+    // Linux's test homes stay out of the shared temp directory, as a real
+    // home is: `openmoat run` refuses a state directory inside one its
+    // sandbox grants (as `run::installed_with_secret` does).
+    let parent = if cfg!(target_os = "linux") {
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+    } else {
+        std::env::temp_dir()
+    };
+    let sb = Sandbox::installed_in(&parent, &[&dir_of(host)]);
     let system = sb.home.with_file_name("system");
     fs::create_dir_all(&system).unwrap();
     (sb, system)
@@ -138,9 +146,11 @@ fn run_refuses_a_project_that_turns_the_agents_hook_off() {
             }
             assert_eq!(out.status.code(), Some(USAGE), "{id}: {shown}");
             assert!(stderr(&out).contains(REFUSED), "{id}: {shown}");
+            // Named in the slash-separated form (`paths.rs`); compared by
+            // its project-relative part, whatever spelling the temp folder
+            // has (a Windows 8.3 short name).
             assert!(
-                stderr(&out).contains(&example.path.replace('/', std::path::MAIN_SEPARATOR_STR))
-                    || stderr(&out).contains(example.path),
+                stderr(&out).contains(&format!("/proj/{}", example.path)),
                 "{id}: {shown}"
             );
             assert!(
@@ -294,7 +304,10 @@ fn init_managed_writes_the_hook_where_a_project_cannot_turn_it_off() {
             assert!(target.is_file(), "{id}: {shown}");
         }
         let written = fs::read_to_string(&target).unwrap();
-        assert!(written.contains(" guard"), "{id}: {written}");
+        // The guard as the host's format spells it: one command string, or
+        // a program and its arguments (`"guard", "--host", …`).
+        assert!(written.contains("guard"), "{id}: {written}");
+        assert!(written.contains("--host"), "{id}: {written}");
         assert!(written.contains(id), "{id}: {written}");
 
         let again = init_managed(&sb, &system);
