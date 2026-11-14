@@ -1,2 +1,0 @@
-### Changed
-- The default policy's `agent-temp` and `managed-settings` rules and the core's built-in session-taint paths and metadata tools are generated from each agent's spec; the patterns are the same, `agent-temp` is now what `staging` leaves uncounted and `openmoat policy lint` warns when a read there is wider than one agent's temporary folder, and `openmoat mcp accept` names the agent whose own MCP server a configured server takes the name of ([#9403](https://github.com/crocodile-labs/openmoat/pull/9403)).
