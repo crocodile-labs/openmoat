@@ -228,8 +228,8 @@ fn open_codex_home(filesystem: &mut Table, home: &str) -> bool {
 mod tests {
     use std::path::Path;
 
+    use super::super::tests::generated;
     use super::*;
-    use crate::sandbox::codex::tests::generated;
 
     fn mode<'a>(out: &'a Generated, key: &str) -> Option<&'a str> {
         out.profile["filesystem"].get(key)?.as_str()

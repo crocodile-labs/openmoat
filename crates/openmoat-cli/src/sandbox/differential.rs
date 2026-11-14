@@ -11,14 +11,13 @@
 use openmoat_core::ir::{Checker, Effect, Enforcement};
 use openmoat_core::{AtomicAction, DEFAULT_POLICY, EvalContext, Kind, Policy};
 
-use super::patterns::Spot;
 use super::{Grants, Report, landlock, seatbelt};
 
 // It reads `bwrap`'s masks, a module built on Unix only (`sandbox.rs`).
 #[cfg(unix)]
-mod hosts;
+mod grant_masks;
 
-const HOME: &str = "/home/me";
+pub(super) const HOME: &str = "/home/me";
 const PROJECT: &str = "/home/me/proj";
 
 /// Policies whose patterns use every glob form the backends translate.
@@ -47,7 +46,7 @@ allow:
     fs.write: ["${project}/**", "!${project}/{.git,.github}/**"]
 "#;
 
-fn policies() -> [&'static str; 3] {
+pub(super) fn policies() -> [&'static str; 3] {
     [DEFAULT_POLICY, GLOBS, READ_ALL]
 }
 
@@ -151,7 +150,7 @@ fn samples(ir: &Enforcement) -> Vec<String> {
 }
 
 /// [`samples`] for an IR lowered with `project` as the project.
-fn samples_in(ir: &Enforcement, project: &str) -> Vec<String> {
+pub(super) fn samples_in(ir: &Enforcement, project: &str) -> Vec<String> {
     let rules = [&ir.fs.read, &ir.fs.write]
         .into_iter()
         .flat_map(|a| a.deny.iter().chain(&a.allow));
@@ -179,7 +178,7 @@ fn samples_in(ir: &Enforcement, project: &str) -> Vec<String> {
 
 /// The engine's reading of one allowance pattern: `*` stops at `/`, and
 /// `dir/**` also matches `dir`.
-fn allowance_matches(pattern: &str, path: &str) -> bool {
+pub(super) fn allowance_matches(pattern: &str, path: &str) -> bool {
     thread_local! {
         // Each pattern compiled once: the host differentials match every
         // sample against every entry.
@@ -231,7 +230,7 @@ fn atom(kind: Kind, path: &str) -> AtomicAction {
 }
 
 /// Every sample on which `backend` and the checker differ, unreported.
-fn unreported(
+pub(super) fn unreported(
     checker: &Checker,
     report: &Report,
     paths: &[String],
@@ -453,57 +452,16 @@ mod sbpl {
     }
 }
 
-/// Each deny pattern of the IR is in Claude Code's `denyRead`/`denyWrite`
-/// (macOS, globs kept), or the report names it.
-#[test]
-fn claude_code_settings_deny_every_pattern_the_ir_denies_or_report_it() {
-    for yaml in policies() {
-        let policy = Policy::parse(yaml).expect("test policy lints");
-        let ir = super::lower_for_hosts(&policy, HOME, None, Vec::new(), false).expect("lowers");
-        let generated = super::claude::generate(&ir, None, false).expect("generates");
-        let list = |key: &str| -> Vec<String> {
-            generated.sandbox["filesystem"][key]
-                .as_array()
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|v| v.as_str().map(str::to_owned))
-                        .collect()
-                })
-                .unwrap_or_default()
-        };
-        let mut missing = Vec::new();
-        for (access, key, kind) in [
-            (&ir.fs.read, "denyRead", Kind::FsRead),
-            (&ir.fs.write, "denyWrite", Kind::FsWrite),
-        ] {
-            let listed = list(key);
-            for rule in &access.deny {
-                for pattern in super::patterns::split(&rule.patterns).0 {
-                    // `**/x` is written `/**/x`: a relative path would resolve
-                    // against `~/.claude`. User settings cannot name the
-                    // project, so a project path is denied in every directory.
-                    let absolute = match super::patterns::spot(pattern) {
-                        Spot::Project("" | "**") => "/".to_owned(),
-                        Spot::Project(rest) | Spot::Anywhere(rest) => format!("/**/{rest}"),
-                        Spot::Absolute(path) => path.to_owned(),
-                    };
-                    let bare = absolute.strip_suffix("/**").unwrap_or(&absolute);
-                    let named =
-                        listed.iter().any(|l| l == &absolute || l == bare)
-                            || generated.report.allowances.iter().any(|a| {
-                                a.kind == kind && a.patterns.iter().any(|p| p == &absolute)
-                            })
-                            || generated
-                                .report
-                                .losses
-                                .iter()
-                                .any(|l| l.kind == kind && l.rule == rule.id);
-                    if !named {
-                        missing.push(format!("{key} {} {pattern}", rule.id));
-                    }
-                }
-            }
-        }
-        assert!(missing.is_empty(), "{}", missing.join("\n"));
-    }
+/// The policies lowered as for the hosts: the project is the placeholder each
+/// host maps to its workspace.
+#[cfg(unix)]
+pub(super) fn host_ir(yaml: &str) -> Enforcement {
+    let policy = Policy::parse(yaml).expect("test policy lints");
+    super::lower_for_hosts(&policy, HOME, None, Vec::new(), false).expect("lowers")
+}
+
+/// Whether `path` is `root` or below it.
+#[cfg(unix)]
+pub(super) fn under(path: &str, root: &str) -> bool {
+    root == "/" || path == root || super::patterns::is_below(path, root)
 }

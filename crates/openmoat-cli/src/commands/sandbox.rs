@@ -45,14 +45,14 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
     let masks = shown_masks(&plan, &policy.secrets)?;
     let mut hosts = Vec::new();
     for host in install::hosts() {
-        let Some(backend) = install::backend(host) else {
+        let Some(output) = plan.output(host) else {
             continue;
         };
         hosts.push(Shown {
             host,
             path: install::settings_path(&home, host)?,
-            text: backend.shown(&plan)?,
-            report: backend.report(&plan),
+            text: output.shown()?,
+            report: output.report(),
         });
     }
     if args.format == Format::Json {
@@ -242,16 +242,14 @@ fn shown_masks<'a>(
     plan: &Plan,
     secrets: &'a [openmoat_core::Secret],
 ) -> Result<Option<(Host, Vec<SecretMask<'a>>)>> {
-    let masking = install::hosts().find_map(|host| {
-        install::backend(host)
-            .filter(|b| b.masks_secrets())
-            .map(|b| (host, b))
-    });
-    let Some((host, backend)) = masking else {
+    let masking = install::hosts()
+        .filter(|host| install::backend(*host).is_some_and(SandboxBackend::masks_secrets))
+        .find_map(|host| plan.output(host).map(|output| (host, output)));
+    let Some((host, output)) = masking else {
         return Ok(None);
     };
-    let settings = install::parse_json(&backend.shown(plan)?)?;
-    Ok(Some((host, backend.secret_masks(&settings, secrets, plan))))
+    let settings = install::parse_json(&output.shown()?)?;
+    Ok(Some((host, output.secret_masks(&settings, secrets))))
 }
 
 /// One line per policy secret: where its value is read (never the value) and

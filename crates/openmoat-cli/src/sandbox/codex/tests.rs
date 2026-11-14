@@ -4,6 +4,9 @@ use toml_edit::DocumentMut;
 use super::*;
 use crate::sandbox::{assert_golden, lower_for_hosts};
 
+// On Unix only, where this reading has always run.
+#[cfg(unix)]
+mod differential;
 mod nested_git;
 
 pub(super) fn generated(yaml: &str) -> Generated {

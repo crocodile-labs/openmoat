@@ -29,10 +29,8 @@ pub const ALLOWED_NAMES: &[(&str, usize)] = &[
     // Not a host: OpenMoat's own `remote/settings.json` has the same name as
     // Claude Code's settings file.
     ("openmoat-cli/src/remote/store.rs", 1),
-    // H2: the plan's per-format outputs and backends, which name their host's
-    // files and say what it does; built from each host's spec once the
-    // backends implement `SandboxBackend` over it.
-    ("openmoat-cli/src/sandbox.rs", 1),
+    // H2: the per-format backends, which name their host's files and say
+    // what it does; the plan reaches each through `SandboxBackend`.
     ("openmoat-cli/src/sandbox/claude.rs", 9),
     ("openmoat-cli/src/sandbox/claude/credentials.rs", 5),
     ("openmoat-cli/src/sandbox/claude/mask.rs", 3),
@@ -46,7 +44,6 @@ pub const ALLOWED_NAMES: &[(&str, usize)] = &[
     ("openmoat-cli/src/sandbox/codex/own_binary.rs", 8),
     ("openmoat-cli/src/sandbox/cursor.rs", 11),
     ("openmoat-cli/src/sandbox/cursor/settings.rs", 1),
-    ("openmoat-cli/src/sandbox/hook_only.rs", 4),
     // H4: Claude Code's temporary folder and the hosts' taint globs in the
     // core.
     ("openmoat-core/src/staging.rs", 2),

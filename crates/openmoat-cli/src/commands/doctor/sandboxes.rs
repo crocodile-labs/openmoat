@@ -16,7 +16,7 @@ use crate::home::Home;
 use crate::install::{HostConfig, read_or_empty};
 use crate::integrity::Lock;
 use crate::report::{Mark, Row};
-use crate::sandbox::backend::{MaskLevel, SandboxBackend};
+use crate::sandbox::backend::{MaskLevel, Output, SandboxBackend};
 use crate::sandbox::{Plan, install as host_sandbox};
 
 /// The Standard tier: each present host's sandbox settings against the policy,
@@ -82,8 +82,9 @@ pub(super) fn sandboxes(
             }
             Err(e) => report.line(Area::Sandbox, false, format!("{name:<16} sandbox: {e:#}")),
         }
-        if let Some(backend) = host_sandbox::backend(host).filter(|b| b.masks_secrets()) {
-            masks(report, home, (host, backend), policy, &plan);
+        let masked = host_sandbox::backend(host).is_some_and(SandboxBackend::masks_secrets);
+        if let Some(output) = plan.output(host).filter(|_| masked) {
+            masks(report, home, (host, output), policy);
         }
         if verbose {
             let mut text = Vec::new();
@@ -119,13 +120,7 @@ pub(super) fn sandboxes(
 /// settings on disk (#363). A secret it does not mask keeps the hook's and
 /// `moat proxy`'s handling, so none of these is a problem: a missing entry is
 /// already the "differs from the policy" problem above.
-fn masks(
-    report: &mut Report,
-    home: &Home,
-    (host, backend): (Host, &dyn SandboxBackend),
-    policy: &Policy,
-    plan: &Plan,
-) {
+fn masks(report: &mut Report, home: &Home, (host, output): (Host, &dyn Output), policy: &Policy) {
     if policy.secrets.is_empty() {
         return;
     }
@@ -138,7 +133,7 @@ fn masks(
             return;
         }
     };
-    for mask in backend.secret_masks(&root, &policy.secrets, plan) {
+    for mask in output.secret_masks(&root, &policy.secrets) {
         let text = format!(
             "{name:<16} secret `{}` ({}): {}",
             mask.secret.id, mask.secret.host, mask.text

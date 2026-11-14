@@ -143,17 +143,12 @@ fn check_only_shrinks(found: &Found, allowed: &[(&str, usize)], what: &str, list
 
 /// Lines of every crate's source (relative to `crates/`, outside the host
 /// modules and test files) with a module path or module declaration naming a
-/// host (`openclaw::`, `mod codex;`). Only `openmoat-cli/src/sandbox/` and what
-/// reaches its per-format backends is to stay; the list only shrinks.
+/// host (`openclaw::`, `mod codex;`). The CLI's sandbox backends are declared
+/// and listed once, in `sandbox.rs` (`backend_of`), and reached through
+/// `SandboxBackend`; the list only shrinks.
 const ALLOWED_MODULES: &[(&str, usize)] = &[
-    // The per-format sandbox backends and the plan that holds one output each
-    // ([`openmoat_hosts::SandboxFormat`]), which stay in the CLI.
-    ("openmoat-cli/src/sandbox.rs", 16),
-    ("openmoat-cli/src/sandbox/backend.rs", 3),
-    ("openmoat-cli/src/sandbox/codex/own_binary.rs", 1),
-    ("openmoat-cli/src/sandbox/differential.rs", 1),
-    ("openmoat-cli/src/sandbox/differential/hosts.rs", 2),
-    ("openmoat-cli/src/sandbox/hook_only.rs", 4),
+    // The one list of sandbox backends: each format's module and its arm.
+    ("openmoat-cli/src/sandbox.rs", 6),
     // Re-exports the guard needs: Claude Code's `ConfigChange` helpers.
     ("openmoat-hosts/src/lib.rs", 2),
 ];
