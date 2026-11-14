@@ -261,12 +261,16 @@ fn run(script: &str, args: &[&str], path: &Path, home: &Path) -> (i32, String, S
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    child
+    // A script that blocks before it runs `openmoat` exits without reading
+    // the payload; the pipe closing then is its answer, not a failure.
+    let written = child
         .stdin
         .take()
         .unwrap()
-        .write_all(b"{\"tool_name\":\"Bash\"}")
-        .unwrap();
+        .write_all(b"{\"tool_name\":\"Bash\"}");
+    if let Err(e) = written {
+        assert_eq!(e.kind(), std::io::ErrorKind::BrokenPipe, "{e}");
+    }
     let out = child.wait_with_output().unwrap();
     (
         out.status.code().unwrap_or(-1),
