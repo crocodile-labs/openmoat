@@ -61,8 +61,9 @@ const CODEX_DATABASES: &str = "**/*.sqlite*";
 /// is installed is not checked: it runs from wherever the person put it (a
 /// version manager, `/opt`, a CI cache).
 pub fn own_binary() -> Option<PathBuf> {
-    let host =
-        crate::sandbox::install::host_with(openmoat_hosts::SandboxFormat::CodexProfile).ok()?;
+    let host = crate::sandbox::install::hosts().find(|host| {
+        crate::sandbox::install::format(*host) == Some(openmoat_hosts::SandboxFormat::CodexProfile)
+    })?;
     let found = host
         .spec()
         .process
