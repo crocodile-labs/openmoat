@@ -27,9 +27,6 @@ use serde_json::{Map, Value};
 use crate::home::Home;
 use crate::install::HostConfig;
 
-/// The rule a blocked project settings change and its audit row carry.
-pub const RULE: &str = "project-settings";
-
 /// A settings file larger than this is refused unread rather than parsed.
 const MAX_BYTES: u64 = 1024 * 1024;
 

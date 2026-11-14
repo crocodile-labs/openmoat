@@ -17,6 +17,7 @@ mod allowed;
 mod facts;
 mod literals;
 mod names;
+mod rule_ids;
 mod policy_blocks {
     include!("../common/policy_blocks.rs");
 }

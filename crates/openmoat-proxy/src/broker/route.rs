@@ -3,13 +3,10 @@
 //! before anything goes upstream: a refused request never reaches the server,
 //! and its audit row names the method and the reason, never the path.
 
+use openmoat_core::rule_id::{PROXY_SECRET_EXPIRED, PROXY_SECRET_ROUTE};
 use openmoat_core::{Decision, Permit, Verdict};
 
-use super::{Broker, Channel, RULE_SECRET_EXPIRED};
-
-/// Rule id for a request to a secret's host that the secret's `allow` rules
-/// do not name: it would have received the value, so it is not sent.
-pub const RULE_SECRET_ROUTE: &str = "proxy-secret-route";
+use super::{Broker, Channel};
 
 impl Broker {
     /// Check `head` (a complete request head the proxy wrote) to `host` over
@@ -22,7 +19,7 @@ impl Broker {
         channel: Channel,
         head: &[u8],
     ) -> Result<Vec<String>, Decision> {
-        let refuse = |why: String| Decision::single(Verdict::Deny, RULE_SECRET_ROUTE, why);
+        let refuse = |why: String| Decision::single(Verdict::Deny, PROXY_SECRET_ROUTE, why);
         let injecting: Vec<_> = self
             .held
             .iter()
@@ -34,7 +31,7 @@ impl Broker {
         if let Some(expired) = injecting.iter().find(|h| h.live().is_none()) {
             return Err(Decision::single(
                 Verdict::Deny,
-                RULE_SECRET_EXPIRED,
+                PROXY_SECRET_EXPIRED,
                 format!(
                     "secret `{}` for {host} expired and was not renewed (its command failed or \
                      has not answered); the request was not sent",

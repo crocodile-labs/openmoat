@@ -89,7 +89,7 @@ pub enum Action {
     /// A call the hook payload shows only in part: input typed into a shell
     /// that is already running, or a search over directories the payload does
     /// not name. `action` is decided as usual and the call is at least an
-    /// `review` (rule [`UNCHECKED_RULE`]), since `reason` names what OpenMoat
+    /// `review` (rule [`crate::rule_id::UNCHECKED`]), since `reason` names what OpenMoat
     /// cannot see.
     Unchecked {
         /// What the payload shows of the call.
@@ -215,10 +215,6 @@ impl Action {
         }
     }
 }
-
-/// The rule id of a call the hook payload shows only in part
-/// ([`Action::Unchecked`]): it needs review whatever else it is decided.
-pub const UNCHECKED_RULE: &str = "unchecked";
 
 /// The primitive operations an [`Action`] decomposes into.
 ///

@@ -42,6 +42,7 @@ mod programs;
 mod realpath;
 mod repo;
 mod route;
+pub mod rule_id;
 mod secret;
 mod shell;
 mod staging;
@@ -50,18 +51,18 @@ pub mod token;
 mod verdict;
 pub mod yaml;
 
-pub use action::{Action, AtomicAction, UNCHECKED_RULE};
+pub use action::{Action, AtomicAction};
 // The taint `Secret` (material a session read) is exported as `TaintSecret`, apart
 // from the policy's brokered `Secret`.
 pub use engine::{
-    CompiledPolicy, EvalContext, HOLDS_PROTECTED_RULE, STAGING_ATOM, Secret as TaintSecret,
-    Staging, TAINT_RULE, Taint, UntrustedKind, evaluate,
+    CompiledPolicy, EvalContext, STAGING_ATOM, Secret as TaintSecret, Staging, Taint,
+    UntrustedKind, evaluate,
 };
 pub use host::{
     MAX_DNS_LABEL_LEN, MAX_DNS_NAME_LEN, file_url_path, malformed_port_pattern, port_pattern,
 };
 pub use injection::{
-    INJECTED_RULE, InjectedLookup, InjectedMap, MAX_SCANNED_BYTES as MAX_INJECTED_SCAN_BYTES,
+    InjectedLookup, InjectedMap, MAX_SCANNED_BYTES as MAX_INJECTED_SCAN_BYTES,
     MAX_TOKENS_PER_OUTPUT as MAX_INJECTED_TOKENS_PER_OUTPUT, Token as InjectedToken,
     TokenKind as InjectedTokenKind,
 };

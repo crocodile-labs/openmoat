@@ -17,6 +17,7 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Result, bail};
+use openmoat_core::rule_id::KERNEL_INTEGRITY;
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::{InstallSpec, RelaxedCheck, RelaxedKey};
 use serde_json::{Map, Value};
@@ -66,11 +67,7 @@ pub fn check(home: &Home) -> Result<Verified> {
     if checked.deny.is_none()
         && let Some(reason) = super::binary::check(&home, &lock).deny_reason()
     {
-        checked.deny = Some(Decision::single(
-            Verdict::Deny,
-            super::INTEGRITY_RULE,
-            reason,
-        ));
+        checked.deny = Some(Decision::single(Verdict::Deny, KERNEL_INTEGRITY, reason));
     }
     Ok(Verified {
         lock,

@@ -98,6 +98,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         tiocsti_open_on_linux: false,
         // `sandbox.json` has no proxy setting.
         proxy_sessions: ProxySessions::NotProxied,
+        own_sandbox_off: None,
     }),
     // A project's `.cursor/hooks.json` runs its hooks beside the user's
     // (<https://cursor.com/docs/agent/hooks>, "Configuration").

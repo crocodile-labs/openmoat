@@ -1,4 +1,5 @@
 use openmoat_audit::{EventId, NewEvent};
+use openmoat_core::rule_id::SESSION_WRITTEN_CODE;
 use openmoat_core::{EvalContext, Policy};
 
 use super::*;
@@ -147,7 +148,7 @@ fn shell(command: &str) -> Action {
 }
 
 fn needs_review(decision: &Decision) -> bool {
-    decision.verdict == Verdict::Review && decision.rules == [RULE]
+    decision.verdict == Verdict::Review && decision.rules == [SESSION_WRITTEN_CODE]
 }
 
 #[test]

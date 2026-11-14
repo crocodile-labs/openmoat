@@ -1,5 +1,7 @@
 use std::fs;
 
+use openmoat_core::rule_id::{CONFIG_CHANGE, KERNEL_INTEGRITY, PROJECT_SETTINGS};
+
 use openmoat_hosts::Host;
 use serde_json::json;
 
@@ -66,7 +68,7 @@ fn claude_file(w: &World, name: &str, contents: &str) {
 
 fn assert_blocked(d: &Decision, what: &str) {
     assert_eq!(d.verdict, Verdict::Deny, "{what}: {d:?}");
-    assert_eq!(d.rules, vec![project_settings::RULE.to_owned()], "{what}");
+    assert_eq!(d.rules, vec![PROJECT_SETTINGS.to_owned()], "{what}");
     let reason = d.reasons.join(" ");
     assert!(reason.contains("not loaded into this session"), "{reason}");
     assert!(reason.contains("Review the file"), "{reason}");
@@ -120,7 +122,7 @@ fn ordinary_project_settings_load() {
     );
     let d = decide(&w, "project_settings", Some(&path));
     assert_eq!(d.verdict, Verdict::Allow, "{d:?}");
-    assert_eq!(d.rules, vec![CONFIG_CHANGE_RULE.to_owned()]);
+    assert_eq!(d.rules, vec![CONFIG_CHANGE.to_owned()]);
     assert!(d.reasons[0].contains("not pinned by OpenMoat"), "{d:?}");
 }
 
@@ -183,13 +185,13 @@ fn the_pinned_user_file_is_judged_by_the_lock_not_its_contents() {
     fs::write(&w.user, r#"{"hooks":{}}"#).unwrap();
     let d = decide(&w, "user_settings", Some(&w.user));
     assert_eq!(d.verdict, Verdict::Deny, "{d:?}");
-    assert_eq!(d.rules, vec![INTEGRITY_RULE.to_owned()]);
+    assert_eq!(d.rules, vec![KERNEL_INTEGRITY.to_owned()]);
 
     let clean = project_file(&w, "settings.json", "{}");
     let d = decide(&w, "project_settings", Some(&clean));
     assert_eq!(
         d.rules,
-        vec![INTEGRITY_RULE.to_owned()],
+        vec![KERNEL_INTEGRITY.to_owned()],
         "pinned drift blocks first"
     );
 }

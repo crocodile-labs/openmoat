@@ -5,10 +5,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use openmoat_core::rule_id::KERNEL_INTEGRITY;
+
 use serde_json::{Value, json};
 
 use crate::home::Home;
-use crate::integrity::{Drift, INTEGRITY_RULE, Lock, check};
+use crate::integrity::{Drift, Lock, check};
 
 struct Setup {
     _dir: tempfile::TempDir,
@@ -70,7 +72,7 @@ fn decided_after(change: impl FnOnce(&mut Value)) -> bool {
 fn decided(setup: &Setup) -> bool {
     let checked = check(&setup.home).unwrap().checked;
     if let Some(deny) = checked.deny {
-        assert_eq!(deny.rules, [INTEGRITY_RULE]);
+        assert_eq!(deny.rules, [KERNEL_INTEGRITY]);
         assert_eq!(checked.relaxed, Vec::<Drift>::new());
         false
     } else {

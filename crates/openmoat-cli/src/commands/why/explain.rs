@@ -2,6 +2,11 @@
 //! event and what was read for it ([`Inputs`]), with no file access here.
 
 use openmoat_audit::{Event, KnownSecrets};
+use openmoat_core::rule_id::{
+    APPROVED_SESSION, DEFAULT, DEFAULT_NET, DEFAULT_PREFIX, KERNEL_INTEGRITY, MCP_CROSS_SERVER,
+    MCP_SERVER_CHANGED, MCP_TOOL_HELD, PUSH_RUNS_LATER, PUSH_SECRET, PUSH_UNCHECKED, SESSION_TAINT,
+    SESSION_WRITTEN_CODE, UNCHECKED, UNPARSEABLE,
+};
 use openmoat_core::{Policy, Verdict};
 use serde::Serialize;
 
@@ -176,7 +181,7 @@ fn origin(id: &str, files: &Files) -> (String, Option<String>) {
     if let Some(local) = id.strip_prefix(openmoat_core::REPO_RULE_PREFIX) {
         return ("repository policy".to_owned(), at(&files.repository, local));
     }
-    if let Some(rest) = id.strip_prefix("pack:") {
+    if let Some(rest) = id.strip_prefix(crate::packs::PACK_RULE_PREFIX) {
         let name = rest.split(':').next().unwrap_or(rest);
         return (format!("policy pack `{name}`"), None);
     }
@@ -186,7 +191,7 @@ fn origin(id: &str, files: &Files) -> (String, Option<String>) {
     if let Some(source) = at(&files.approved, id) {
         return ("your approvals (`openmoat allow`)".to_owned(), Some(source));
     }
-    if id == "default" || id.starts_with("default.") {
+    if id == DEFAULT || id.starts_with(DEFAULT_PREFIX) {
         let source = files.policy.as_ref().and_then(|f| {
             let n = f.text.lines().position(|l| l.starts_with("defaults:"))?;
             Some(format!("{}:{}", f.shown, n + 1))
@@ -215,25 +220,25 @@ pub fn line_of(text: &str, id: &str) -> Option<usize> {
 /// What a built-in rule says about the session or the call.
 fn context(rule: &str) -> Option<&'static str> {
     Some(match rule {
-        "session-taint" => {
+        SESSION_TAINT => {
             "this session read untrusted content or a secret earlier, so calls that write \
              or send need review (session taint)"
         }
-        crate::session_code::RULE => {
+        SESSION_WRITTEN_CODE => {
             "the command runs code this session wrote, with no OS sandbox below the hook"
         }
-        "mcp-cross-server" => "the call carries text another MCP server returned (ADR-058)",
-        "mcp-server-changed" | "mcp-tool-held" => {
+        MCP_CROSS_SERVER => "the call carries text another MCP server returned (ADR-058)",
+        MCP_SERVER_CHANGED | MCP_TOOL_HELD => {
             "an MCP server's definition or tools changed and are not accepted yet: \
              `openmoat mcp accept`"
         }
-        "kernel-integrity" => {
+        KERNEL_INTEGRITY => {
             "OpenMoat's own files changed since they were pinned: `openmoat doctor` shows what"
         }
-        "unchecked" => "the hook payload shows only part of the call",
-        "unparseable" => "OpenMoat could not read all of the command",
-        "approved-session" => "you approved this call for the session with `openmoat allow`",
-        "push-secret" | "push-runs-later" | "push-unchecked" => {
+        UNCHECKED => "the hook payload shows only part of the call",
+        UNPARSEABLE => "OpenMoat could not read all of the command",
+        APPROVED_SESSION => "you approved this call for the session with `openmoat allow`",
+        PUSH_SECRET | PUSH_RUNS_LATER | PUSH_UNCHECKED => {
             "a push is checked for what the commits it publishes hold"
         }
         _ => return None,
@@ -273,7 +278,7 @@ fn deny_change(rule: &Rule) -> String {
             "`{id}` comes from the repository's policy{}; its owners can change it",
             at.as_ref().map(|a| format!(" ({a})")).unwrap_or_default()
         ),
-        _ if id == "default.net" => {
+        _ if id == DEFAULT_NET => {
             "your policy denies hosts it does not list: `openmoat allow --site <host>` lists one"
                 .to_owned()
         }

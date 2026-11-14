@@ -1,5 +1,6 @@
 use openmoat_audit::Store;
 use openmoat_core::boundary::{Enforcement, Mechanism, Tier as Applied};
+use openmoat_core::rule_id::RUN_BOUNDARY;
 
 use super::*;
 use crate::taint::run::LINK_HOST;
@@ -133,7 +134,7 @@ fn the_row_holds_the_record_and_a_gap_refuses() {
     assert_eq!(rows.len(), 2);
     for row in &rows {
         assert_eq!(row.tool, TOOL);
-        assert_eq!(row.rules, [RULE]);
+        assert_eq!(row.rules, [RUN_BOUNDARY]);
         assert_eq!(row.session_id, "run-1-abcd");
         let back: EffectiveBoundary = serde_json::from_str(&row.reasons[0]).unwrap();
         assert_eq!(back.tier, Applied::Isolated);

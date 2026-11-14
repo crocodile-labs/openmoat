@@ -22,14 +22,11 @@ use std::sync::PoisonError;
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{NewEvent, Ticket};
+use openmoat_core::rule_id::MCP_SERVER_TEXT;
 use openmoat_core::{Action, Decision, Verdict};
 use serde_json::Value;
 
 use super::{AUDIT_HOST, Awaiting, Gateway};
-
-/// Rule id of the row that marks a session untrusted for what the server
-/// sent it outside a tool result.
-const SERVER_TEXT_RULE: &str = "mcp-server-text";
 
 /// The most requests' texts kept for a session the proxy has not served yet.
 const MAX_QUEUED: usize = 64;
@@ -151,7 +148,7 @@ impl Gateway {
         let store = self.store()?.with_secrets(self.known());
         let decision = Decision::single(
             Verdict::Allow,
-            SERVER_TEXT_RULE,
+            MCP_SERVER_TEXT,
             format!(
                 "MCP server `{}` sent the agent text outside a tool result ({what}), which \
                  marks the session untrusted (recorded by {AUDIT_HOST})",

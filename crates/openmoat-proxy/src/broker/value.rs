@@ -2,7 +2,7 @@
 //!
 //! A value read once (an `env`, `file` or `keychain` source) never expires. A
 //! value from a `command` source has a deadline: past it the value is not put
-//! into any request, and the request is refused ([`super::RULE_SECRET_EXPIRED`]).
+//! into any request, and the request is refused ([`openmoat_core::rule_id::PROXY_SECRET_EXPIRED`]).
 //! The deadline is kept on two clocks and is past when either says so: the
 //! monotonic clock does not count a machine's sleep on every system, and the
 //! wall clock can be set back.

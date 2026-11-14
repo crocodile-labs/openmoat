@@ -16,6 +16,7 @@ use std::sync::{Mutex, PoisonError};
 
 use anyhow::Result;
 use openmoat_audit::{EventId, NewEvent, Store};
+use openmoat_core::rule_id::RUN_SESSION;
 use openmoat_core::{CompiledPolicy, Decision, Taint, Verdict};
 use openmoat_hosts::Host;
 use openmoat_proxy::TaintLookup;
@@ -27,8 +28,6 @@ use crate::home::Home;
 pub const RUN_SESSION_ENV: &str = "MOAT_RUN_SESSION";
 /// The host of a link row.
 pub const LINK_HOST: &str = "moat-run";
-/// The rule a link row carries.
-const LINK_RULE: &str = "run-session";
 
 /// The run session `value` (of [`RUN_SESSION_ENV`]) names, when it is one:
 /// `run-` and then only letters, digits and `-`.
@@ -50,7 +49,7 @@ pub fn link(store: &Store, run: &str, host: Host, session: &str) -> Result<()> {
     }
     let decision = Decision::single(
         Verdict::Allow,
-        LINK_RULE,
+        RUN_SESSION,
         format!(
             "{} session {session} runs under this `openmoat run`; its taint applies to the proxy. \
              Its rows come through the run's relay, which any program in the run's sandbox can \

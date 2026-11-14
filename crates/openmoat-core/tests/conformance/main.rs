@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 
 use openmoat_core::{
     Action, CompiledPolicy, DEFAULT_POLICY, EvalContext, InjectedMap, MapPathResolver, MapResolver,
-    Policy, RepoPolicy, Taint, TaintSecret, Verdict,
+    Policy, RepoPolicy, Taint, TaintSecret, Verdict, rule_id,
 };
 use serde::Deserialize;
 
@@ -348,6 +348,16 @@ fn default_policy_conformance() {
         }
         let decision = compiled.with_taint(plain, &action, &links, &taint);
         let decision = compiled.with_injected(decision, &action, &links, &seen);
+        // Every rule a decision carries is the policy's or one of OpenMoat's
+        // own (`openmoat_core::rule_id`), never an id written somewhere else.
+        let policy_used = merged.as_ref().unwrap_or(&policy);
+        for rule in decision.rules.iter().chain(&worst.rules) {
+            assert!(
+                rule_id::resolves(rule, policy_used),
+                "{}: rule `{rule}` is neither the policy's nor in `rule_id`",
+                fixture.id
+            );
+        }
         let missing: Vec<&String> = fixture
             .expect
             .rules

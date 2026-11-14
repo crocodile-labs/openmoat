@@ -15,10 +15,6 @@ pub const ALLOWED_NAMES: &[(&str, usize)] = &[
     ("openmoat-cli/src/commands/bench/proof/os.rs", 1),
     // M3: a host's name in CLI text.
     ("openmoat-cli/src/commands/proxy.rs", 1),
-    ("openmoat-cli/src/commands/run.rs", 2),
-    ("openmoat-cli/src/commands/sandbox.rs", 1),
-    ("openmoat-cli/src/integrity.rs", 1),
-    ("openmoat-cli/src/sandbox/install.rs", 1),
     ("openmoat-cli/src/sandbox/seatbelt.rs", 1),
     // Not a host: OpenMoat's own `remote/settings.json` has the same name as
     // Claude Code's settings file.

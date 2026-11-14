@@ -3,6 +3,8 @@
 use std::io::{self, Write as _};
 use std::time::Duration;
 
+use openmoat_core::rule_id::AUDIT_DELIVERY_TEST;
+
 use anyhow::{Result, bail};
 use openmoat_audit::EventId;
 use openmoat_audit::delivery::{Delivered, Origin};
@@ -16,9 +18,6 @@ use crate::{render, time};
 
 /// How long a person's `flush` may send for.
 const FLUSH_BUDGET: Duration = Duration::from_mins(10);
-
-/// Rule id of the record `test` sends.
-const TEST_RULE: &str = "audit-delivery-test";
 
 #[derive(Debug, Serialize)]
 struct SinkStatus {
@@ -251,7 +250,7 @@ fn test_record(now_ms: i64) -> Delivered {
         tool: "deliver".to_owned(),
         action: serde_json::Value::Null,
         verdict: "allow".to_owned(),
-        rules: vec![TEST_RULE.to_owned()],
+        rules: vec![AUDIT_DELIVERY_TEST.to_owned()],
         reasons: vec![
             "a test record from `openmoat audit deliver test`, not an agent's call".to_owned(),
         ],

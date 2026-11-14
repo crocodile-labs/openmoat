@@ -13,23 +13,13 @@ mod ports;
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
-pub use self::ports::{DEFAULT_PORTS, RULE_PORT, host_port, port_policy};
+pub use self::ports::{DEFAULT_PORTS, host_port, port_policy};
 
+use openmoat_core::rule_id::{PROXY_ADDRESS, PROXY_REQUEST};
 use openmoat_core::{
     Action, AtomicAction, CompiledPolicy, Decision, Defaults, Kind, MapPathResolver, Policy, Taint,
     Verdict,
 };
-
-/// Rule id for a destination refused whatever the policy says.
-pub const RULE_ADDRESS: &str = "proxy-address";
-/// Rule id for a tunnel whose TLS SNI is missing or names another host.
-pub const RULE_SNI: &str = "proxy-sni";
-/// Rule id for a request the proxy could not parse or does not serve.
-pub const RULE_REQUEST: &str = "proxy-request";
-/// Rule id for a destination that could not be resolved or reached.
-pub const RULE_UPSTREAM: &str = "proxy-upstream";
-/// Rule id for a connection refused because it could not be recorded.
-pub const RULE_AUDIT: &str = "proxy-audit";
 
 /// Metadata services reachable by name on cloud instances.
 const METADATA_NAMES: &[&str] = &["metadata.google.internal", "metadata.goog"];
@@ -100,7 +90,7 @@ pub fn host(policy: &CompiledPolicy<'_>, host: &str) -> Decision {
     let mut decision = policy.evaluate_atomic(&atom).unwrap_or_else(|| {
         Decision::single(
             Verdict::Deny,
-            RULE_REQUEST,
+            PROXY_REQUEST,
             format!("no rule decided {host}"),
         )
     });
@@ -127,7 +117,7 @@ fn metadata(host: &str) -> Option<Decision> {
     metadata_name(host).then(|| {
         Decision::single(
             Verdict::Deny,
-            RULE_ADDRESS,
+            PROXY_ADDRESS,
             format!("{host} is a cloud metadata service"),
         )
     })

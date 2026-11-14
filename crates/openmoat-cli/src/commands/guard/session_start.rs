@@ -17,6 +17,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use anyhow::Result;
+use openmoat_core::rule_id::{PROXY_CREDENTIAL, SESSION_START};
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::{HookRequest, ProxySessions};
 use zeroize::Zeroizing;
@@ -24,10 +25,6 @@ use zeroize::Zeroizing;
 use crate::home::Home;
 use crate::integrity;
 use crate::proxy_session::{self, Key};
-use crate::taint::issued::ISSUED_RULE;
-
-/// The rule of a session start that issues nothing.
-const NOTHING_RULE: &str = "session-start";
 
 /// The proxy variables the credential goes in, both cases, as `openmoat run`
 /// sets them (ADR-027).
@@ -54,7 +51,7 @@ impl Pending {
 }
 
 fn nothing(reason: &str) -> Decision {
-    Decision::single(Verdict::Allow, NOTHING_RULE, reason)
+    Decision::single(Verdict::Allow, SESSION_START, reason)
 }
 
 /// What the session start records, and the lines to write once it is
@@ -95,7 +92,7 @@ pub(super) fn decision(
     let refuse = |why: &str| {
         let decision = Decision::single(
             Verdict::Deny,
-            ISSUED_RULE,
+            PROXY_CREDENTIAL,
             format!(
                 "{why}, so this session's sandboxed commands get no credential and \
                  `openmoat proxy` refuses their traffic (407)"
@@ -134,7 +131,7 @@ pub(super) fn decision(
     }
     let decision = Decision::single(
         Verdict::Allow,
-        ISSUED_RULE,
+        PROXY_CREDENTIAL,
         format!(
             "the session's sandboxed commands get their own `openmoat proxy` credential, \
              accepted until {} (Unix time)",

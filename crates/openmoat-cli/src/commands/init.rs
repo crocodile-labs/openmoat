@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
 use openmoat_audit::Store;
+use openmoat_core::rule_id::KERNEL_INTEGRITY;
 use openmoat_core::{DEFAULT_POLICY, Policy};
 use openmoat_hosts::Host;
 
@@ -248,7 +249,7 @@ fn refuse_repin(home: &Home, out: &mut Deferred) -> Result<bool> {
             "refusing to re-pin while the policy lock shows drift ({}) and no person is at \
              a terminal:\n  {}\nrun `openmoat doctor` to see what changed, then `openmoat doctor \
              --accept` in a terminal of your own if the changes are yours",
-            integrity::INTEGRITY_RULE,
+            KERNEL_INTEGRITY,
             drift.join("\n  ")
         );
     }
@@ -562,7 +563,7 @@ fn sandboxes(
                     out,
                     "{prefix} {:<16} {}",
                     host.display_name(),
-                    sandbox::install::OLD_SANDBOX_REMOVED
+                    sandbox::install::old_sandbox_removed(host)
                 )?;
             }
             writeln!(out, "· {:<16} {note}", host.display_name())?;

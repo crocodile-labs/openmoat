@@ -127,6 +127,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         // The hooks reference, "Persist environment variables": each Bash
         // command runs the file's lines first (ADR-044).
         proxy_sessions: ProxySessions::EnvFile("CLAUDE_ENV_FILE"),
+        own_sandbox_off: None,
     }),
     // Merged over the user `settings.json`, where a key set wins
     // (`disableAllHooks`, `hooks`, `env`, …).

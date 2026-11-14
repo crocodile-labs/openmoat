@@ -15,7 +15,7 @@
 use super::Job;
 
 /// The environment variable a service file gets, the only one.
-pub const ALLOWED_ENV: &str = "MOAT_HOME";
+pub const ALLOWED_ENV: &str = crate::home::ENV;
 
 /// What the installed service file looks like: its bytes, and its Unix mode
 /// bits where the platform has them.

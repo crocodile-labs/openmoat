@@ -1,4 +1,5 @@
-use super::{RULE_REQUEST_RULE, Requests};
+use super::Requests;
+use openmoat_core::rule_id::PROXY_REQUEST_RULE;
 
 const HOST: &str = "api.github.com";
 
@@ -14,7 +15,7 @@ fn head(line: &str, extra: &str) -> Vec<u8> {
 
 fn refused(r: &Requests, line: &str, extra: &str) -> String {
     let d = r.check(HOST, &head(line, extra)).unwrap_err();
-    assert_eq!(d.rules, [RULE_REQUEST_RULE], "{line}");
+    assert_eq!(d.rules, [PROXY_REQUEST_RULE], "{line}");
     d.reasons.join("; ")
 }
 
@@ -87,7 +88,7 @@ fn another_host_is_not_checked() {
 #[test]
 fn an_unreadable_head_is_refused() {
     let d = gists().check(HOST, b"POST /gists").unwrap_err();
-    assert_eq!(d.rules, [RULE_REQUEST_RULE]);
+    assert_eq!(d.rules, [PROXY_REQUEST_RULE]);
 }
 
 #[test]

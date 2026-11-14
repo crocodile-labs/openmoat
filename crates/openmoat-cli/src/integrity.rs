@@ -15,6 +15,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
+use openmoat_core::rule_id::KERNEL_INTEGRITY;
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::Host;
 use serde::{Deserialize, Serialize};
@@ -39,8 +40,6 @@ pub use kept::{Kept, verify_state};
 pub use relaxed::{check, split};
 
 const LOCK_VERSION: u32 = 1;
-/// Rule id of every decision the lock forces.
-pub const INTEGRITY_RULE: &str = "kernel-integrity";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Lock {
@@ -310,7 +309,7 @@ fn deny_for(drift: &[Drift]) -> Option<Decision> {
         return None;
     }
     let mut decision = Decision::new(Verdict::Deny);
-    decision.rules.push(INTEGRITY_RULE.to_owned());
+    decision.rules.push(KERNEL_INTEGRITY.to_owned());
     for d in drift {
         decision.reasons.push(d.to_string());
     }
@@ -326,7 +325,7 @@ fn deny_for(drift: &[Drift]) -> Option<Decision> {
 pub fn refuse_drift(home: &Home, doing: &str) -> Result<()> {
     if let Some(deny) = violation(home)? {
         bail!(
-            "refusing to {doing} while the policy lock shows drift ({INTEGRITY_RULE}):\n  {}",
+            "refusing to {doing} while the policy lock shows drift ({KERNEL_INTEGRITY}):\n  {}",
             deny.reasons.join("\n  ")
         );
     }
@@ -500,7 +499,7 @@ impl Lock {
     pub fn save(&self, path: &Path) -> Result<()> {
         debug_assert!(
             self.pinned_twice().is_none(),
-            "{:?} is pinned whole and by its Codex profile",
+            "{:?} is pinned whole and by the part of it OpenMoat owns",
             self.pinned_twice()
         );
         // No save writes a server's variable or header value in clear, even

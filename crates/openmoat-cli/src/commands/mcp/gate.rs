@@ -33,6 +33,9 @@ use std::time::Instant;
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{KnownSecrets, NewEvent, Store, Ticket};
+use openmoat_core::rule_id::{
+    MCP_PROXY, MCP_SERVER_CHANGED, MCP_SERVER_REQUEST, MCP_TOOL_HELD, MCP_UNATTRIBUTED,
+};
 use openmoat_core::{Action, CompiledPolicy, Decision, Verdict};
 use openmoat_hosts::Host;
 use serde_json::Value;
@@ -44,13 +47,9 @@ use crate::mcp::relay::{Call, Gate, Method};
 use crate::realpath::FsPathResolver;
 use crate::{context, integrity, secrets};
 
-/// Host id of the proxy's audit rows.
-const AUDIT_HOST: &str = "mcp-proxy";
-/// Rule ids of the proxy's decisions.
-const PASSED_RULE: &str = "mcp-proxy";
-const HELD_RULE: &str = "mcp-tool-held";
-const UNATTRIBUTED_RULE: &str = "mcp-unattributed";
-const SERVER_REQUEST_RULE: &str = "mcp-server-request";
+/// Host id of the proxy's audit rows: the name of the rule its passed calls
+/// carry.
+const AUDIT_HOST: &str = MCP_PROXY;
 
 pub struct Gateway {
     home: Home,
@@ -160,7 +159,7 @@ impl Gateway {
             }
             Method::Resource => openmoat_hosts::mcp_resource_action(&self.server, call.name)?,
             Method::Prompt => {
-                let decision = Decision::single(Verdict::Allow, PASSED_RULE, "a prompt, recorded");
+                let decision = Decision::single(Verdict::Allow, MCP_PROXY, "a prompt, recorded");
                 return Ok(self.outcome(Action::mcp(name), decision, None, None));
             }
         };
@@ -179,20 +178,20 @@ impl Gateway {
             _ if decided.verdict == Verdict::Deny => decided,
             (None, Method::Tool) => Decision::single(
                 Verdict::Deny,
-                UNATTRIBUTED_RULE,
+                MCP_UNATTRIBUTED,
                 "OpenMoat's hook made no decision on this exact call (the same tool and \
                  arguments, within the hour): the host did not run the hook for it, or sent \
                  other arguments than it checked, so it is not passed on",
             ),
             (Some(t), _) => Decision::single(
                 Verdict::Allow,
-                PASSED_RULE,
+                MCP_PROXY,
                 format!(
                     "passed to the server: the hook decided `{}` for this call (event {})",
                     t.verdict, t.event_id.0
                 ),
             ),
-            (None, _) => Decision::single(Verdict::Allow, PASSED_RULE, "passed to the server"),
+            (None, _) => Decision::single(Verdict::Allow, MCP_PROXY, "passed to the server"),
         };
         Ok(Outcome {
             action,
@@ -298,7 +297,7 @@ impl Gateway {
     pub fn refused_start(&self, why: &str) -> Result<()> {
         let store = self.store()?.with_secrets(self.known());
         let name = format!("mcp__{}", self.server);
-        let decision = Decision::single(Verdict::Deny, crate::mcp::SERVER_RULE, why);
+        let decision = Decision::single(Verdict::Deny, MCP_SERVER_CHANGED, why);
         store.record(&NewEvent {
             host: AUDIT_HOST,
             session_id: &self.session,
@@ -345,7 +344,7 @@ impl Gate for Gateway {
         let outcome = match held {
             Some(why) => self.outcome(
                 Action::mcp(name.clone()),
-                Decision::single(Verdict::Deny, HELD_RULE, why),
+                Decision::single(Verdict::Deny, MCP_TOOL_HELD, why),
                 None,
                 None,
             ),
@@ -401,7 +400,7 @@ impl Gate for Gateway {
     fn server_request(&self, method: &str, params: Option<&Value>) -> Result<()> {
         let decision = Decision::single(
             Verdict::Allow,
-            SERVER_REQUEST_RULE,
+            MCP_SERVER_REQUEST,
             format!("MCP server `{}` asked the agent: {method}", self.server),
         );
         self.record_request(method, &decision)?;
@@ -412,7 +411,7 @@ impl Gate for Gateway {
     }
 
     fn server_refused(&self, method: &str, why: &str) -> Result<()> {
-        let decision = Decision::single(Verdict::Deny, SERVER_REQUEST_RULE, why);
+        let decision = Decision::single(Verdict::Deny, MCP_SERVER_REQUEST, why);
         self.record_request(method, &decision)
     }
 }

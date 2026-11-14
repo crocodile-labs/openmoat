@@ -39,10 +39,43 @@ pub fn unavailable(host: Host) -> Option<&'static str> {
 }
 
 /// What `init` and `sandbox sync` print when [`write()`] changed the settings
-/// of a host whose sandbox is [`unavailable`]: Claude Code's deny rules are
-/// written there, and the sandbox settings of an older version removed.
-pub const OLD_SANDBOX_REMOVED: &str = "deny rules written for Claude Code's file tools, without \
-     sandbox settings (an older OpenMoat's are removed), so Claude Code can start";
+/// of `host` while its sandbox is [`unavailable`]: its deny rules for the file
+/// tools are written there, and the sandbox settings of an older version
+/// removed.
+pub fn old_sandbox_removed(host: Host) -> String {
+    let name = host.display_name();
+    format!(
+        "deny rules written for {name}'s file tools, without sandbox settings (an older \
+         OpenMoat's are removed), so {name} can start"
+    )
+}
+
+/// The hosts whose sandbox settings the lock pins by the part OpenMoat owns
+/// (a profile in a file the host edits too), by name.
+pub fn pinned_by_part() -> String {
+    hosts()
+        .filter(|h| matches!(backend(*h).map(SandboxBackend::pin), Some(Pin::Part { .. })))
+        .map(Host::display_name)
+        .collect::<Vec<_>>()
+        .join(" or ")
+}
+
+/// How to turn each host's own sandbox off for `openmoat run`, from its spec
+/// ([`openmoat_hosts::SandboxSpec::own_sandbox_off`]): ` (<agent>: <flag>)`,
+/// or nothing when no host has a flag to name.
+pub fn own_sandbox_off() -> String {
+    let flags: Vec<String> = hosts()
+        .filter_map(|h| {
+            let flag = h.spec().sandbox.as_ref()?.own_sandbox_off?;
+            Some(format!("{}: {flag}", h.display_name()))
+        })
+        .collect();
+    if flags.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", flags.join("; "))
+    }
+}
 
 fn unavailable_on(host: Host, windows: bool) -> Option<&'static str> {
     let sandbox = host.spec().sandbox.as_ref()?;

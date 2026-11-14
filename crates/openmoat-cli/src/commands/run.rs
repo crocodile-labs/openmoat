@@ -537,11 +537,12 @@ fn notice(
     if let Some(open) = agent.project_notice() {
         writeln!(err, "{open}")?;
     }
+    let off = crate::sandbox::install::own_sandbox_off();
     if verbose {
         writeln!(
             err,
             "  proxy: 127.0.0.1:{port}\n  \
-             turn the agent's own sandbox off (Codex: --sandbox danger-full-access): sandboxes \
+             turn the agent's own sandbox off{off}: sandboxes \
              do not nest, so the agent's cannot start in here. This one holds the agent and \
              every command it starts together, so it is less precise per command than the \
              agent's own sandbox."
@@ -556,7 +557,7 @@ fn notice(
     } else {
         writeln!(
             err,
-            "moat run: turn the agent's own sandbox off (Codex: --sandbox danger-full-access); \
+            "moat run: turn the agent's own sandbox off{off}; \
              sandbox ready ({} stricter, {} wider; --verbose for details)",
             report.losses.len(),
             report.allowances.len()

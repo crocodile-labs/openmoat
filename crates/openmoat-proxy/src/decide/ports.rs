@@ -8,13 +8,11 @@
 //! port is excluded on every port. IPv6 literals take no port: they are
 //! reached on the default ports only.
 
+use openmoat_core::rule_id::PROXY_PORT;
 use openmoat_core::{
     AtomicAction, CompiledPolicy, Decision, Defaults, Kind, Policy, RuleGroup, Verdict,
     port_pattern,
 };
-
-/// Rule id for a host the policy allows, refused on a port no rule names.
-pub const RULE_PORT: &str = "proxy-port";
 
 /// The ports a host pattern without a port allows: HTTPS and HTTP.
 pub const DEFAULT_PORTS: [u16; 2] = [443, 80];
@@ -79,7 +77,7 @@ fn ported(host: &str, port: u16) -> Option<String> {
 /// - an allow rule naming `host:port` allows;
 /// - otherwise the host is decided as [`host`](super::host) decides it, and an
 ///   allowed host passes on [`DEFAULT_PORTS`] only: any other port is refused
-///   with [`RULE_PORT`].
+///   with [`PROXY_PORT`].
 #[must_use]
 pub fn host_port(
     policy: &CompiledPolicy<'_>,
@@ -117,7 +115,7 @@ pub fn host_port(
     };
     Decision::single(
         Verdict::Deny,
-        RULE_PORT,
+        PROXY_PORT,
         format!("{host} is allowed on ports 443 and 80 only, not {port}; {how}"),
     )
 }

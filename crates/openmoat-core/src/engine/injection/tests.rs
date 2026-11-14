@@ -2,8 +2,9 @@
 //! untrusted output, and which later calls it tightens.
 
 use super::*;
-use crate::injection::{INJECTED_RULE, InjectedMap};
+use crate::injection::InjectedMap;
 use crate::policy::Policy;
+use crate::rule_id::INJECTED_INPUT as INJECTED_RULE;
 
 mod foreign;
 mod normalised;

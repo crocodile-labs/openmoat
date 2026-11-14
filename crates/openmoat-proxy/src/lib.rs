@@ -56,27 +56,23 @@ mod tunnel;
 mod upstream;
 
 pub use audit::{Connection, RecordError, Recorder};
-pub use broker::{
-    Broker, BrokerError, Carried, Leak, RULE_SECRET, RULE_SECRET_EXPIRED, RULE_SECRET_ROUTE,
-    Rotation,
-};
+pub use broker::{Broker, BrokerError, Carried, Leak, Rotation};
 pub use decide::{
-    DEFAULT_PORTS, Forbidden, RULE_ADDRESS, RULE_AUDIT, RULE_PORT, RULE_REQUEST, RULE_SNI,
-    RULE_UPSTREAM, address_policy, denied as address_denied, forbidden, host as decide_host,
-    host_port as decide_host_port, named as address_named, named_on as address_named_on,
-    port_policy, tainted as decide_tainted,
+    DEFAULT_PORTS, Forbidden, address_policy, denied as address_denied, forbidden,
+    host as decide_host, host_port as decide_host_port, named as address_named,
+    named_on as address_named_on, port_policy, tainted as decide_tainted,
 };
 pub use local::LocalService;
 pub use post::{Answer, Endpoint, MAX_BODY, PostError, Poster, Scheme};
 pub use request::{
     MAX_HEADERS, ProxyCredential, Request, RequestError, Target, parse as parse_request,
 };
-pub use requests::{RULE_REQUEST_RULE, RequestRuleError, Requests};
-pub use server::{Limits, Proxy, RULE_CAPACITY};
+pub use requests::{RequestRuleError, Requests};
+pub use server::{Limits, Proxy};
 pub use session::{
-    AuthError, Credential, CredentialError, MIN_TOKEN_LEN, RULE_SESSION, Sessions, TaintLookup,
-    Verify, base64, constant_time_eq,
+    AuthError, Credential, CredentialError, MIN_TOKEN_LEN, Sessions, TaintLookup, Verify, base64,
+    constant_time_eq,
 };
 pub use sni::{Hello, HelloError, MAX_HELLO, server_name};
-pub use tls::{CA_VALID_DAYS, CaFiles, RULE_TLS, Roots, Tls, TlsError, new_ca};
+pub use tls::{CA_VALID_DAYS, CaFiles, Roots, Tls, TlsError, new_ca};
 pub use upstream::{Refusal, Resolve, SystemResolver, connect};

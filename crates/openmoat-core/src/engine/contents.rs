@@ -7,7 +7,7 @@
 //! An extraction into a folder (`tar xf e.tar -C ~`) is one `fs.write` of it in
 //! the same way. So when the folder of an `fs.read` (or `fs.write`) atom is, or
 //! is an ancestor of, the literal folder of a deny rule's `fs.read` (or
-//! `fs.write`) pattern, the atom needs review with [`HOLDS_PROTECTED_RULE`]. The
+//! `fs.write`) pattern, the atom needs review with [`crate::rule_id::PROTECTED_CONTENTS`]. The
 //! classifier has no notion of "recursive", so a plain `ls ~/.codex` needs review too.
 //!
 //! Patterns with no literal folder (`**/.env`, `**/.claude/settings.json`)
@@ -25,10 +25,8 @@ use crate::action::AtomicAction;
 use crate::kind::Kind;
 use crate::pattern::{literal_folder, split_negation};
 use crate::policy::RuleGroup;
+use crate::rule_id::PROTECTED_CONTENTS as HOLDS_PROTECTED_RULE;
 use crate::verdict::{Decision, Verdict};
-
-/// The rule id of a review for a folder that holds paths a deny rule names.
-pub const HOLDS_PROTECTED_RULE: &str = "protected-contents";
 
 /// The shared temp folder in each spelling (macOS links `/tmp` to
 /// `/private/tmp`), left out as the home is.

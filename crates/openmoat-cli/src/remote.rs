@@ -47,16 +47,10 @@ pub use store::Store;
 
 use crate::home::Home;
 
-/// A call's rule when an approval is used for it.
-pub const APPROVED_RULE: &str = "approved-remote";
-/// The listener's row for an approval given.
-pub const APPROVED_ROW_RULE: &str = "remote-approved";
-/// An approver's deny: the listener's row, and the call's while it holds.
-pub const DENIED_RULE: &str = "remote-denied";
-/// An answer or request refused: not an approver, a bad button or signature, too late.
-pub const REFUSED_RULE: &str = "remote-refused";
-/// A request nobody answered in time.
-pub const EXPIRED_RULE: &str = "remote-expired";
+pub use openmoat_core::rule_id::{
+    APPROVED_REMOTE as APPROVED_RULE, REMOTE_APPROVED as APPROVED_ROW_RULE,
+    REMOTE_DENIED as DENIED_RULE, REMOTE_EXPIRED as EXPIRED_RULE, REMOTE_REFUSED as REFUSED_RULE,
+};
 /// The tool name of the listener's rows.
 pub const ROW_TOOL: &str = "approval";
 

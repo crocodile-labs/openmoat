@@ -25,7 +25,7 @@ fn repo() -> PathBuf {
 /// Whether each line of `lines` is left out: inside a `// generated:` …
 /// `// /generated` block, or a file's inline tests (`#[cfg(test)]` and `mod
 /// tests {` at the top level, to its `}`), test data as `tests.rs` is.
-fn skipped_lines(lines: &[&str]) -> Vec<bool> {
+pub(crate) fn skipped_lines(lines: &[&str]) -> Vec<bool> {
     let mut generated = false;
     let mut tests = false;
     let mut skip = Vec::with_capacity(lines.len());

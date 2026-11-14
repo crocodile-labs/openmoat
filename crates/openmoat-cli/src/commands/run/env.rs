@@ -66,7 +66,7 @@ const BASE: &[&str] = &[
     "XDG_RUNTIME_DIR",
     "XDG_STATE_HOME",
     // Where OpenMoat's own state is: the hook is told the same on its command line.
-    "MOAT_HOME",
+    crate::home::ENV,
 ];
 
 /// How many credential-looking names the warning spells out.

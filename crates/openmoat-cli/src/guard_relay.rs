@@ -22,7 +22,6 @@ use anyhow::{Context as _, Result};
 use zeroize::Zeroizing;
 
 pub use client::{Endpoint, configured};
-pub use inside::RULE_OUTSIDE;
 pub use service::Service;
 pub use wire::Reply;
 

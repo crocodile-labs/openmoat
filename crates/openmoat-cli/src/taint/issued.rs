@@ -5,7 +5,7 @@
 //! in the same audit session, so its taint is the guard's own fold of them,
 //! with the effective policy of the project the session started in: the
 //! session-start hook records that directory on the row it records the issue
-//! with ([`ISSUED_RULE`]). A session with no such row has no history the
+//! with ([`PROXY_CREDENTIAL`]). A session with no such row has no history the
 //! proxy can trust, and its requests are refused.
 //!
 //! Each session's fold is kept between requests, so a request late in a long
@@ -18,6 +18,7 @@ use std::time::Instant;
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{Event, EventId, Store};
+use openmoat_core::rule_id::PROXY_CREDENTIAL;
 use openmoat_core::{CompiledPolicy, EvalContext, Policy, Taint, Verdict};
 use openmoat_hosts::Host;
 use openmoat_proxy::TaintLookup;
@@ -25,10 +26,6 @@ use openmoat_proxy::TaintLookup;
 use super::{Pass, SessionTaint, fold};
 use crate::context;
 use crate::home::Home;
-
-/// The rule of the row the session-start hook records when it issues a
-/// session its proxy credential.
-pub const ISSUED_RULE: &str = "proxy-credential";
 
 /// How many sessions' folds are kept; the least recently used goes first.
 const MAX_SESSIONS: usize = 1024;
@@ -114,7 +111,7 @@ impl IssuedTaint {
     fn follow(&self, session: &str, events: &[Event]) -> Result<Followed> {
         let Some(issued) = events
             .iter()
-            .find(|e| e.verdict == Verdict::Allow && e.rules.iter().any(|r| r == ISSUED_RULE))
+            .find(|e| e.verdict == Verdict::Allow && e.rules.iter().any(|r| r == PROXY_CREDENTIAL))
         else {
             bail!("no proxy credential was issued to session {session}");
         };

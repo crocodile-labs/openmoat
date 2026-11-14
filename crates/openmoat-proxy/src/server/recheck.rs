@@ -9,12 +9,12 @@
 
 use std::time::Duration;
 
+use openmoat_core::rule_id::PROXY_SESSION;
 use openmoat_core::{Decision, Verdict};
 
 use super::{Proxy, Turn};
 use crate::decide;
 use crate::request::Request;
-use crate::session::RULE_SESSION;
 
 impl Proxy<'_> {
     /// The refusal the connection's session taint calls for, if any. A
@@ -37,7 +37,7 @@ impl Proxy<'_> {
             Ok(taint) => decide::tainted(self.policy, request.host(), request.port(), &taint),
             Err(why) => Some(Decision::single(
                 Verdict::Deny,
-                RULE_SESSION,
+                PROXY_SESSION,
                 format!("the session's history cannot be read, so its taint is unknown: {why}"),
             )),
         }

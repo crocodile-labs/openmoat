@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use openmoat_core::rule_id::PROXY_PORT;
 use openmoat_core::{EvalContext, RepoPolicy};
 
 use super::*;
@@ -43,7 +44,7 @@ fn a_host_rule_without_a_port_allows_443_and_80_only() {
         let (verdict, rule) = decide(&policy, "example.com", port);
         assert_eq!(verdict, Verdict::Deny, "{port}");
         assert!(
-            rule == RULE_PORT || (port == 22 && rule == "no-ssh"),
+            rule == PROXY_PORT || (port == 22 && rule == "no-ssh"),
             "{port}: {rule}"
         );
     }
@@ -51,13 +52,13 @@ fn a_host_rule_without_a_port_allows_443_and_80_only() {
     assert_eq!(decide(&policy, "any.test", 443), allow("everywhere"));
     assert_eq!(
         decide(&policy, "any.test", 8443),
-        (Verdict::Deny, RULE_PORT.to_owned())
+        (Verdict::Deny, PROXY_PORT.to_owned())
     );
     // IPv6 literals take no port.
     assert_eq!(decide(&policy, "fe80::1", 443).0, Verdict::Allow);
     assert_eq!(
         decide(&policy, "fe80::1", 8443),
-        (Verdict::Deny, RULE_PORT.to_owned())
+        (Verdict::Deny, PROXY_PORT.to_owned())
     );
 }
 
@@ -105,7 +106,7 @@ fn denies_and_exclusions_hold_on_every_port() {
     assert_eq!(decide(&deny_all_but, "github.com", 443).0, Verdict::Allow);
     assert_eq!(
         decide(&deny_all_but, "github.com", 22),
-        (Verdict::Deny, RULE_PORT.to_owned())
+        (Verdict::Deny, PROXY_PORT.to_owned())
     );
     assert_eq!(decide(&deny_all_but, "evil.test", 443).0, Verdict::Deny);
 }
@@ -118,7 +119,10 @@ fn cloud_metadata_is_refused_whatever_a_port_rule_says() {
     .unwrap();
     assert_eq!(
         decide(&policy, "metadata.google.internal", 80),
-        (Verdict::Deny, crate::decide::RULE_ADDRESS.to_owned())
+        (
+            Verdict::Deny,
+            openmoat_core::rule_id::PROXY_ADDRESS.to_owned()
+        )
     );
 }
 

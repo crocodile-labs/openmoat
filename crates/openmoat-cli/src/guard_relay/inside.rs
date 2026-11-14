@@ -7,7 +7,7 @@
 //! repeats the nonce would then answer every call. So the guard relays only
 //! when it cannot open its own lock, and only for the reason the run's sandbox
 //! gives ([`refused_by_sandbox`]); anywhere else it decides by itself and
-//! records that the variables were there ([`RULE_OUTSIDE`]).
+//! records that the variables were there ([`openmoat_core::rule_id::RUN_GUARD_OUTSIDE`]).
 
 use std::io;
 use std::path::Path;
@@ -30,10 +30,6 @@ use macos as platform;
 use other as platform;
 
 pub use platform::Probe;
-
-/// The rule of the row a guard leaves when it found the relay variables but
-/// was not in a run's sandbox, and so decided the call itself.
-pub const RULE_OUTSIDE: &str = "run-guard-outside";
 
 /// Whether the guard should relay: `lock` (the state directory's lock, `None`
 /// when no state directory can be named) cannot be opened, and the way it

@@ -1,3 +1,4 @@
+use openmoat_core::rule_id::PROTECTION_REQUIRED;
 use openmoat_core::{Policy, RequiredBy, RequiredLevel, Verdict};
 use openmoat_hosts::Host;
 
@@ -42,7 +43,7 @@ fn below_the_level_is_a_deny_that_names_what_is_missing_and_the_fix() {
         Policy::parse("version: 1\nrequire:\n  protection: hook-and-os-sandbox\n").unwrap();
     let d = unmet(&policy, host, || Level::HookOnly).unwrap();
     assert_eq!(d.verdict, Verdict::Deny);
-    assert_eq!(d.rules, [RULE]);
+    assert_eq!(d.rules, [PROTECTION_REQUIRED]);
     let reason = &d.reasons[0];
     for part in [
         "your policy requires hook + OS sandbox for ",

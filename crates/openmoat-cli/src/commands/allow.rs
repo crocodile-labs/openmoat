@@ -7,7 +7,8 @@ use std::path::Path;
 
 use anyhow::{Context as _, Result, bail, ensure};
 use openmoat_audit::Event;
-use openmoat_core::{Action, PathResolver as _, RuleGroup, TAINT_RULE, Verdict};
+use openmoat_core::rule_id::{KERNEL_INTEGRITY, SESSION_TAINT, SESSION_WRITTEN_CODE};
+use openmoat_core::{Action, PathResolver as _, RuleGroup, Verdict};
 
 use crate::approvals::{self, Entry, GRANT_TTL_MS, Grants, Overlay};
 use crate::cli::AllowArgs;
@@ -66,7 +67,7 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
             render::line(&mut out, &last)?;
             // A permanent rule is an allow, and code the session wrote needs review
             // whatever allows the command (ADR-039): only a session grant answers it.
-            if args.always && event.rules.iter().any(|r| r == crate::session_code::RULE) {
+            if args.always && event.rules.iter().any(|r| r == SESSION_WRITTEN_CODE) {
                 out.finish()?;
                 bail!(
                     "it runs code this session wrote, which needs review whatever a rule allows; run \
@@ -75,7 +76,7 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
             }
             // The newest review of any agent session: say which one before approving
             // it, so a person never approves a call they did not see.
-            let taint = !args.always && event.rules.iter().any(|r| r == TAINT_RULE);
+            let taint = !args.always && event.rules.iter().any(|r| r == SESSION_TAINT);
             let answer = if taint {
                 writeln!(
                     out,
@@ -195,7 +196,7 @@ fn checked_home() -> Result<(Home, integrity::Checkpoint)> {
     {
         bail!(
             "refusing to approve while the policy lock shows drift ({}):\n  {}",
-            integrity::INTEGRITY_RULE,
+            KERNEL_INTEGRITY,
             deny.reasons.join("\n  ")
         );
     }

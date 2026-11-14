@@ -23,15 +23,12 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use openmoat_audit::KnownSecrets;
+use openmoat_core::rule_id::{PUSH_RUNS_LATER, PUSH_SECRET, PUSH_UNCHECKED};
 use openmoat_core::{Decision, Push, Verdict};
 
 use git::{Git, Unchecked};
 
 use crate::environment::Snapshot;
-
-pub const SECRET_RULE: &str = "push-secret";
-pub const RUNS_LATER_RULE: &str = "push-runs-later";
-pub const UNCHECKED_RULE: &str = "push-unchecked";
 
 /// The time all git commands of one call may take together, well inside the
 /// guard's own budget (`install::GUARD_BUDGET_S`). Starting git can take
@@ -82,7 +79,7 @@ pub fn check(
         return tighten(
             decision,
             Verdict::Review,
-            UNCHECKED_RULE,
+            PUSH_UNCHECKED,
             "what the push would publish was not checked: no git with an absolute path is in \
              the search path `openmoat init` recorded"
                 .to_owned(),
@@ -95,7 +92,7 @@ pub fn check(
         return tighten(
             decision,
             Verdict::Deny,
-            SECRET_RULE,
+            PUSH_SECRET,
             format!(
                 "{secret}; a push publishes every commit it sends, so remove it from those \
                  commits first"
@@ -107,7 +104,7 @@ pub fn check(
         decision = tighten(
             decision,
             Verdict::Review,
-            RUNS_LATER_RULE,
+            PUSH_RUNS_LATER,
             format!(
                 "the session read untrusted content or a secret, and the push changes {}, \
                  which CI or a tool runs later with the repository's secrets",
@@ -119,7 +116,7 @@ pub fn check(
         decision = tighten(
             decision,
             Verdict::Review,
-            UNCHECKED_RULE,
+            PUSH_UNCHECKED,
             format!("what the push would publish was not checked: {why}"),
         );
     }

@@ -12,9 +12,6 @@
 
 use std::collections::BTreeMap;
 
-/// The rule id a decision tightened by injected input carries.
-pub const INJECTED_RULE: &str = "injected-input";
-
 /// The most tokens one output is reduced to; past it the rest are not kept.
 pub const MAX_TOKENS_PER_OUTPUT: usize = 256;
 

@@ -118,6 +118,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         // Its upstream proxy comes from the Codex process's own `HTTP_PROXY`,
         // and its hooks cannot set a command's environment (ADR-044).
         proxy_sessions: ProxySessions::NoCredential,
+        // `codex --sandbox danger-full-access` runs commands without its sandbox.
+        own_sandbox_off: Some("--sandbox danger-full-access"),
     }),
     // A trusted project's `.codex/` layer adds its `config.toml` and
     // `hooks.json`, whose hooks run beside OpenMoat's; `[features] hooks =

@@ -345,7 +345,7 @@ fn a_copy_of_an_agent_folder_is_denied_with_the_allow_hint() {
     let request = call("read", json!({"filePath": "/Users/me/.codex"}), json!({})).unwrap();
     let decision = compiled.decide(request.action.as_ref().unwrap());
     assert_eq!(decision.verdict, Verdict::Review);
-    assert_eq!(decision.rules, [openmoat_core::HOLDS_PROTECTED_RULE]);
+    assert_eq!(decision.rules, [openmoat_core::rule_id::PROTECTED_CONTENTS]);
     let event = request.event;
     let answered = Host::OpenCode.answer(&event, &decision);
     assert_eq!(answered.verdict, Verdict::Deny);

@@ -11,16 +11,13 @@
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{NewEvent, Store};
+use openmoat_core::rule_id::{RUN_ISOLATION_UNAVAILABLE, RUN_NO_ISOLATE, RUN_PROJECT_TOP_OPEN};
 use openmoat_core::{Decision, Verdict};
 
 use crate::cli::RunArgs;
 use crate::home::Home;
 use crate::taint::run::LINK_HOST;
 
-/// The rule of the row a run started with `--no-isolate` writes.
-pub const OPTED_OUT_RULE: &str = "run-no-isolate";
-/// The rule of the row a run that could not isolate writes.
-pub const UNAVAILABLE_RULE: &str = "run-isolation-unavailable";
 /// The tool those rows name, beside [`LINK_HOST`]: never a host id, so the
 /// run's taint lookup, which reads link rows by their tool, passes them by.
 const TOOL: &str = "isolation";
@@ -161,7 +158,7 @@ pub fn failed_default(tier: &Tier, strict: bool) -> Option<&'static str> {
 pub fn row(tier: &Tier) -> Option<(&'static str, String)> {
     match tier {
         Tier::Lightweight(Lightweight::OptedOut) => Some((
-            OPTED_OUT_RULE,
+            RUN_NO_ISOLATE,
             "`openmoat run --no-isolate`: the person started the Lightweight tier instead of \
              the Isolated one, so commands could see the rest of the machine the policy's read \
              roots allow, and inside the project the paths the policy denies were covered only \
@@ -169,7 +166,7 @@ pub fn row(tier: &Tier) -> Option<(&'static str, String)> {
                 .to_owned(),
         )),
         Tier::Lightweight(Lightweight::Unavailable(why)) => Some((
-            UNAVAILABLE_RULE,
+            RUN_ISOLATION_UNAVAILABLE,
             format!(
                 "`openmoat run` could not start the Isolated tier ({why}) and started the \
                  Lightweight tier, so commands could see the rest of the machine the policy's \
@@ -190,10 +187,6 @@ pub fn record(home: &Home, session: &str, cwd: &str, tier: &Tier) -> Result<()> 
     write_row(home, (session, cwd), (TOOL, rule), Verdict::Allow, reason)
 }
 
-/// The rule of the row a run writes when the person's policy opened the
-/// project's top to commands (`sandbox.project_top: writable`, ADR-090).
-pub const PROJECT_TOP_RULE: &str = "run-project-top-open";
-
 /// Write that this run granted the project's top whole because the person's
 /// policy says `sandbox.project_top: writable` (ADR-090). An error stops the
 /// run: the choice must be on record.
@@ -205,7 +198,7 @@ pub fn record_project_top(home: &Home, session: &str, cwd: &str) -> Result<()> {
     write_row(
         home,
         (session, cwd),
-        (TOOL, PROJECT_TOP_RULE),
+        (TOOL, RUN_PROJECT_TOP_OPEN),
         Verdict::Allow,
         reason,
     )

@@ -10,15 +10,12 @@
 
 use std::time::Instant;
 
+use openmoat_core::rule_id::PROXY_CAPACITY;
 use openmoat_core::{Decision, Verdict};
 
 use crate::audit::{Connection, Recorder};
 pub(super) use crate::coalesce::INTERVAL;
 use crate::coalesce::{Coalesce, counted};
-
-/// Rule id for a connection refused at accept because the proxy, or the
-/// connections not yet authenticated, hold all the slots they may.
-pub const RULE_CAPACITY: &str = "proxy-capacity";
 
 /// Why a connection was refused at accept.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,7 +68,7 @@ impl Refusals {
 fn write(full: Full, count: u64, recorder: &dyn Recorder) {
     let decision = Decision::single(
         Verdict::Deny,
-        RULE_CAPACITY,
+        PROXY_CAPACITY,
         format!(
             "{} refused before a request was read: {}; later ones within {} s are counted in \
              the next row",

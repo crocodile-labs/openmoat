@@ -111,7 +111,7 @@ fn a_cross_server_flow_tightens_to_review_and_names_both_servers() {
     let sources = ["web".to_owned()];
     let d = cross_server(Decision::new(Verdict::Defer), &sources, "http");
     assert_eq!(d.verdict, Verdict::Review);
-    assert_eq!(d.rules, [FLOW_RULE]);
+    assert_eq!(d.rules, [crate::rule_id::MCP_CROSS_SERVER]);
     assert!(
         d.reasons[0].contains("`web`") && d.reasons[0].contains("`http`"),
         "{d:?}"

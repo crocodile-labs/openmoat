@@ -3,7 +3,7 @@
 //! even when a secret's `allow` rule names it; any other request passes.
 
 use super::*;
-use crate::requests::RULE_REQUEST_RULE;
+use openmoat_core::rule_id::PROXY_REQUEST_RULE;
 
 fn with_rules(deny: &[&str]) -> Setup {
     let mut s = setup();
@@ -29,10 +29,10 @@ fn a_deny_rule_wins_over_a_secrets_allow_and_nothing_is_sent() {
     ] {
         let out = exchange(&s, &post(path), OK);
         assert!(out.agent.starts_with("HTTP/1.1 403 "), "{}", out.agent);
-        assert!(out.agent.contains(RULE_REQUEST_RULE), "{}", out.agent);
+        assert!(out.agent.contains(PROXY_REQUEST_RULE), "{}", out.agent);
         assert_eq!(out.connects, 0, "no connection to the upstream");
         assert!(out.upstream.is_empty(), "{}", out.upstream);
-        assert_eq!(out.rules(), [RULE_REQUEST_RULE], "{:?}", out.rows);
+        assert_eq!(out.rules(), [PROXY_REQUEST_RULE], "{:?}", out.rows);
         assert!(
             !format!("{:?}", out.rows).contains("/repos/o"),
             "{:?}",

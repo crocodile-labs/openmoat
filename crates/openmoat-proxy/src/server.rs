@@ -24,10 +24,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Instant;
 
+use openmoat_core::rule_id::{PROXY_REQUEST, PROXY_SECRET, PROXY_SESSION, PROXY_SNI};
 use openmoat_core::{CompiledPolicy, Decision, Verdict};
 use zeroize::Zeroizing;
 
-pub use self::capacity::RULE_CAPACITY;
 use self::capacity::{Full, Refusals};
 pub use self::limits::Limits;
 use self::unauthenticated::{Noise, Unauthenticated};
@@ -35,12 +35,12 @@ pub(crate) use self::wire::response;
 use self::wire::{read_head, read_hello, refuse, respond, summary};
 use crate::audit::{Connection, Recorder};
 use crate::body::{self, BodyEnd, Framing};
-use crate::broker::{Broker, Channel, Echo, RULE_SECRET, Watch, value_came_back};
-use crate::decide::{self, RULE_REQUEST, RULE_SNI};
+use crate::broker::{Broker, Channel, Echo, Watch, value_came_back};
+use crate::decide;
 use crate::local::{self, LocalService};
 use crate::request::{Request, Target};
 use crate::requests::Requests;
-use crate::session::{AuthError, RULE_SESSION, Sessions};
+use crate::session::{AuthError, Sessions};
 use crate::slots::{PENDING, Share, Shares, WITHOUT_CREDENTIAL};
 use crate::tls::Tls;
 use crate::tunnel::{self, Forward};
@@ -201,7 +201,7 @@ impl Proxy<'_> {
         let request = match read_head(client, &mut buf, self.limits.max_head_bytes, deadline) {
             Ok(request) => request,
             Err(why) => {
-                let decision = Decision::single(Verdict::Deny, RULE_REQUEST, why);
+                let decision = Decision::single(Verdict::Deny, PROXY_REQUEST, why);
                 let turn = Turn {
                     session: None,
                     started,
@@ -285,7 +285,7 @@ impl Proxy<'_> {
             Target::Connect { .. } => Framing::None,
         });
         let Ok(body_in_rest) = body.feed(&rest) else {
-            let decision = Decision::single(Verdict::Deny, RULE_REQUEST, MALFORMED_CHUNKS);
+            let decision = Decision::single(Verdict::Deny, PROXY_REQUEST, MALFORMED_CHUNKS);
             self.record(turn, Some(&request), &decision);
             refuse(client, 400, MALFORMED_CHUNKS);
             return;
@@ -315,7 +315,7 @@ impl Proxy<'_> {
         let mut inspect = |chunk: &[u8]| {
             let Ok(n) = body.feed(chunk) else {
                 // The allow row is already written; this one says it was cut.
-                let decision = Decision::single(Verdict::Deny, RULE_REQUEST, MALFORMED_CHUNKS);
+                let decision = Decision::single(Verdict::Deny, PROXY_REQUEST, MALFORMED_CHUNKS);
                 self.record(turn, Some(&request), &decision);
                 return Forward::Stop;
             };
@@ -355,7 +355,7 @@ impl Proxy<'_> {
                 echo = injected.as_ref().map(|_| {
                     Echo::new(self.broker, move |id: &str| {
                         let why = value_came_back(host, id);
-                        let refused = Decision::single(Verdict::Deny, RULE_SECRET, why);
+                        let refused = Decision::single(Verdict::Deny, PROXY_SECRET, why);
                         self.record(turn, Some(request), &refused);
                     })
                 });
@@ -410,7 +410,7 @@ impl Proxy<'_> {
                 (None, WITHOUT_CREDENTIAL.to_owned())
             }
             Err(why) => {
-                let decision = Decision::single(Verdict::Deny, RULE_SESSION, why.to_string());
+                let decision = Decision::single(Verdict::Deny, PROXY_SESSION, why.to_string());
                 // Before any credential: counted, not one row each.
                 if let Some(row) = served
                     .noise
@@ -436,7 +436,7 @@ impl Proxy<'_> {
         };
         let decision = Decision::single(
             Verdict::Deny,
-            RULE_SESSION,
+            PROXY_SESSION,
             format!(
                 "{holder} {} connections, half of the proxy's",
                 served.shares.cap()
@@ -486,7 +486,7 @@ impl Proxy<'_> {
             Err(why) => Some(why),
         };
         if let Some(why) = refusal {
-            let decision = Decision::single(Verdict::Deny, RULE_SNI, why);
+            let decision = Decision::single(Verdict::Deny, PROXY_SNI, why);
             self.record(turn, Some(request), &decision);
             return None;
         }

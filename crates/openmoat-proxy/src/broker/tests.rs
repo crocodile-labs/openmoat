@@ -1,7 +1,8 @@
+use openmoat_core::rule_id::{PROXY_SECRET, PROXY_SECRET_ROUTE};
 use openmoat_core::{Policy, Verdict};
 use zeroize::Zeroizing;
 
-use super::{Broker, BrokerError, Carried, Channel, RULE_SECRET, Watch};
+use super::{Broker, BrokerError, Carried, Channel, Watch};
 
 /// A generated stand-in; no real secret is used anywhere in these tests.
 const VALUE: &str = "fake-0123456789abcdef";
@@ -50,7 +51,7 @@ fn the_owner_may_receive_both_forms_and_no_other_host_may() {
     assert_eq!(leak.carried, Carried::Value);
     let decision = leak.decision("github.com");
     assert_eq!(decision.verdict, Verdict::Deny);
-    assert_eq!(decision.rules, [RULE_SECRET]);
+    assert_eq!(decision.rules, [PROXY_SECRET]);
     assert!(!decision.reasons.join(" ").contains(VALUE), "{decision:?}");
     assert!(b.leak("evil.example", b"GET / HTTP/1.1\r\n\r\n").is_none());
 }
@@ -253,7 +254,6 @@ fn routed(extra: &str) -> Broker {
 
 #[test]
 fn a_request_the_rules_do_not_name_is_refused_before_the_value_goes_in() {
-    use super::RULE_SECRET_ROUTE;
     let plain = routed("    plain_http: true\n");
     let tls = routed("    tls: terminate\n");
     let head = |line: &str, extra: &str| format!("{line}\r\nHost: api.github.com\r\n{extra}\r\n");
@@ -290,7 +290,7 @@ fn a_request_the_rules_do_not_name_is_refused_before_the_value_goes_in() {
                 .admit("api.github.com", channel, head(line, extra).as_bytes())
                 .unwrap_err();
             assert_eq!(refused.verdict, Verdict::Deny);
-            assert_eq!(refused.rules, [RULE_SECRET_ROUTE]);
+            assert_eq!(refused.rules, [PROXY_SECRET_ROUTE]);
             assert!(refused.reasons[0].contains(why), "{line}: {refused:?}");
             assert!(!refused.reasons[0].contains("user"), "no path: {refused:?}");
         }

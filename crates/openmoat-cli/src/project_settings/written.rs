@@ -30,6 +30,7 @@
 
 use std::path::{Path, PathBuf};
 
+use openmoat_core::rule_id::PROJECT_SETTINGS;
 use openmoat_core::{Action, Decision, EvalContext, Verdict};
 use openmoat_hosts::{HookRequest, Host, ProjectSettingsSpec, SettingsFile};
 
@@ -44,7 +45,7 @@ struct Outcome {
     content: String,
 }
 
-/// `decision` with a deny ([`super::RULE`]) in its place when `request` leaves
+/// `decision` with a deny ([`PROJECT_SETTINGS`]) in its place when `request` leaves
 /// a host's project settings file turning that host's hook off; unchanged
 /// otherwise, and when it already denies. Only tightens.
 #[must_use]
@@ -78,7 +79,7 @@ fn tightened(
         return decision;
     }
     let mut deny = Decision::new(Verdict::Deny);
-    deny.rules.push(super::RULE.to_owned());
+    deny.rules.push(PROJECT_SETTINGS.to_owned());
     deny.reasons.extend(found);
     deny
 }

@@ -23,17 +23,17 @@ use std::io::{self, ErrorKind, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::time::{Duration, Instant};
 
+use openmoat_core::rule_id::{PROXY_AUDIT, PROXY_REQUEST, PROXY_TLS};
 use openmoat_core::{Decision, Verdict};
 use rustls::{ServerConnection, StreamOwned};
 use zeroize::Zeroizing;
 
 use crate::body::BodyEnd;
 use crate::broker::{Broker, Channel, Watch};
-use crate::decide::RULE_REQUEST;
 use crate::request::origin::{self, Inner};
 use crate::requests::Requests;
 use crate::server::{Limits, response as answer};
-use crate::tls::{RULE_TLS, Tls};
+use crate::tls::Tls;
 
 const BUFFER: usize = 16 * 1024;
 
@@ -109,7 +109,7 @@ impl Tunnel<'_> {
         connect: &mut dyn FnMut() -> Result<U, (u16, Decision)>,
     ) {
         let handshake = self.limits.handshake_timeout;
-        let deny = |why: String| Decision::single(Verdict::Deny, RULE_TLS, why);
+        let deny = |why: String| Decision::single(Verdict::Deny, PROXY_TLS, why);
         if client.timeouts(handshake, handshake).is_err() {
             client.close();
             return;
@@ -226,7 +226,7 @@ impl Tunnel<'_> {
     ) -> Result<Inner, Stop> {
         let deadline = Instant::now() + self.limits.handshake_timeout;
         let malformed =
-            |why: String| Stop::Refuse(400, Decision::single(Verdict::Deny, RULE_REQUEST, why));
+            |why: String| Stop::Refuse(400, Decision::single(Verdict::Deny, PROXY_REQUEST, why));
         let mut chunk = [0u8; 4096];
         loop {
             match origin::parse(buf, self.host, self.port) {
@@ -261,7 +261,7 @@ impl Tunnel<'_> {
         &self,
         connect: &mut dyn FnMut() -> Result<U, (u16, Decision)>,
     ) -> Result<StreamOwned<rustls::ClientConnection, U>, Stop> {
-        let deny = |why: String| Stop::Refuse(502, Decision::single(Verdict::Deny, RULE_TLS, why));
+        let deny = |why: String| Stop::Refuse(502, Decision::single(Verdict::Deny, PROXY_TLS, why));
         let sock = connect().map_err(|(status, decision)| Stop::Refuse(status, decision))?;
         let wait = self.limits.connect_timeout;
         let conn = match (sock.timeouts(wait, wait), self.tls.connect(self.host)) {
@@ -353,7 +353,7 @@ impl Tunnel<'_> {
             .map_err(|_| {
                 Stop::Cut(Decision::single(
                     Verdict::Deny,
-                    RULE_REQUEST,
+                    PROXY_REQUEST,
                     "malformed chunked request body",
                 ))
             })?;
@@ -420,11 +420,7 @@ fn accept<C: Wire>(
 }
 
 fn audit_unavailable() -> Decision {
-    Decision::single(
-        Verdict::Deny,
-        crate::decide::RULE_AUDIT,
-        "audit log unavailable",
-    )
+    Decision::single(Verdict::Deny, PROXY_AUDIT, "audit log unavailable")
 }
 
 /// Whether `e` says the peer went away.

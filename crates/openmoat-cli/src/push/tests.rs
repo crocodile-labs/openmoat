@@ -1,8 +1,8 @@
 use openmoat_audit::KnownSecrets;
+use openmoat_core::rule_id::{PUSH_RUNS_LATER, PUSH_SECRET, PUSH_UNCHECKED};
 use openmoat_core::{Decision, Push, Verdict};
 
 use super::testrepo::{Repo, fake_token, snapshot};
-use super::{RUNS_LATER_RULE, SECRET_RULE, UNCHECKED_RULE};
 use crate::environment::Snapshot;
 
 /// [`super::check`] with the `git` of this test's search path pinned.
@@ -57,7 +57,7 @@ fn a_token_in_the_newest_commit_denies_without_naming_it() {
     );
     let d = checked(&repo, false);
     assert_eq!(d.verdict, Verdict::Deny);
-    assert_eq!(d.rules, [SECRET_RULE]);
+    assert_eq!(d.rules, [PUSH_SECRET]);
     assert!(
         d.reasons[0].contains("adds a GitHub token to conf/app.env"),
         "{d:?}"
@@ -92,7 +92,7 @@ fn a_brokered_value_or_a_token_in_a_message_denies() {
     repo.commit("notes.md", &format!("use {fake}\n"), "notes");
     let known = KnownSecrets::new([fake]).unwrap();
     let d = check(&push(&repo, "git push"), &known, false, allowed());
-    assert_eq!(d.rules, [SECRET_RULE]);
+    assert_eq!(d.rules, [PUSH_SECRET]);
     assert!(d.reasons[0].contains("brokered secret"), "{d:?}");
 
     let repo = Repo::new();
@@ -108,7 +108,7 @@ fn a_workflow_change_needs_review_only_in_a_tainted_session() {
     assert_eq!(checked(&repo, false), allowed());
     let d = checked(&repo, true);
     assert_eq!(d.verdict, Verdict::Review);
-    assert_eq!(d.rules, [RUNS_LATER_RULE]);
+    assert_eq!(d.rules, [PUSH_RUNS_LATER]);
     assert!(d.reasons[0].contains(".github/workflows/ci.yml"), "{d:?}");
 }
 
@@ -119,7 +119,7 @@ fn a_push_too_large_to_read_or_in_an_unknown_place_needs_review() {
     repo.commit("big.txt", &line.repeat(90_000), "big");
     let d = checked(&repo, false);
     assert_eq!(d.verdict, Verdict::Review);
-    assert_eq!(d.rules, [UNCHECKED_RULE]);
+    assert_eq!(d.rules, [PUSH_UNCHECKED]);
     assert!(d.reasons[0].contains("more than 8 MiB"), "{d:?}");
 
     let unknown = vec![Push {
@@ -128,7 +128,7 @@ fn a_push_too_large_to_read_or_in_an_unknown_place_needs_review() {
     }];
     let d = check(&unknown, &KnownSecrets::default(), false, allowed());
     assert_eq!(d.verdict, Verdict::Review);
-    assert_eq!(d.rules, [UNCHECKED_RULE]);
+    assert_eq!(d.rules, [PUSH_UNCHECKED]);
 }
 
 /// The guard runs git outside every sandbox, so only the `git` the snapshot
@@ -155,7 +155,7 @@ fn a_push_needs_review_when_the_snapshot_pins_no_absolute_git() {
         allowed(),
     );
     assert_eq!(d.verdict, Verdict::Review);
-    assert_eq!(d.rules, [UNCHECKED_RULE]);
+    assert_eq!(d.rules, [PUSH_UNCHECKED]);
 }
 
 #[test]

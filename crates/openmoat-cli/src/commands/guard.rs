@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{KnownSecrets, Store};
+use openmoat_core::rule_id::{APPROVED_SESSION, KERNEL_ERROR, UNGOVERNED};
 use openmoat_core::{CompiledPolicy, Decision, Verdict};
 use openmoat_hosts::{HookEvent, HookRequest, Host};
 use record::Recorded;
@@ -37,10 +38,6 @@ mod record;
 mod required;
 mod session_start;
 mod unseen;
-
-pub(crate) const UNGOVERNED_RULE: &str = "ungoverned";
-pub(crate) const KERNEL_ERROR_RULE: &str = "kernel-error";
-const SESSION_GRANT_RULE: &str = "approved-session";
 
 /// How far into [`GUARD_BUDGET_S`] the session's taint may be folded, leaving
 /// time to record: a session too long to fold in time is denied with a
@@ -491,7 +488,7 @@ fn evaluate(
         )
     {
         decision = Decision::new(Verdict::Allow);
-        decision.rules.push(SESSION_GRANT_RULE.to_owned());
+        decision.rules.push(APPROVED_SESSION.to_owned());
         decision
             .reasons
             .push("approved for this session with `openmoat allow`".to_owned());
@@ -634,7 +631,7 @@ fn read_stdin(host: Host) -> Result<String> {
 /// decision" gets an `allow` instead (`Reviews::ungoverned`).
 fn ungoverned(host: Host) -> Decision {
     let mut decision = Decision::new(host.spec().reviews.ungoverned);
-    decision.rules.push(UNGOVERNED_RULE.to_owned());
+    decision.rules.push(UNGOVERNED.to_owned());
     decision
         .reasons
         .push("tool is outside policy scope".to_owned());
@@ -643,7 +640,7 @@ fn ungoverned(host: Host) -> Decision {
 
 fn kernel_error(error: &anyhow::Error) -> Decision {
     let mut decision = Decision::new(Verdict::Deny);
-    decision.rules.push(KERNEL_ERROR_RULE.to_owned());
+    decision.rules.push(KERNEL_ERROR.to_owned());
     decision
         .reasons
         .push(format!("kernel could not evaluate this action: {error:#}"));

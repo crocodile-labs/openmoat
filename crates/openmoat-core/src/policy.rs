@@ -22,15 +22,18 @@ impl Defaults {
     #[must_use]
     pub fn for_kind(&self, kind: Kind) -> (Verdict, String) {
         match self {
-            Self::All(v) => (*v, "default".to_owned()),
+            Self::All(v) => (*v, crate::rule_id::DEFAULT.to_owned()),
             Self::PerKind(map) => kind
                 .rule_kinds()
                 .iter()
-                .find_map(|k| map.get(k.as_str()).map(|v| (*v, format!("default.{k}"))))
+                .find_map(|k| {
+                    map.get(k.as_str())
+                        .map(|v| (*v, format!("{}{k}", crate::rule_id::DEFAULT_PREFIX)))
+                })
                 .unwrap_or_else(|| {
                     (
                         map.get("*").copied().unwrap_or(Verdict::Review),
-                        "default".to_owned(),
+                        crate::rule_id::DEFAULT.to_owned(),
                     )
                 }),
         }
@@ -42,7 +45,9 @@ impl Defaults {
     #[must_use]
     pub fn for_atom(&self, atom: &crate::AtomicAction) -> (Verdict, String) {
         match atom {
-            crate::AtomicAction::NetWord { .. } => (self.unclassified(), "default".to_owned()),
+            crate::AtomicAction::NetWord { .. } => {
+                (self.unclassified(), crate::rule_id::DEFAULT.to_owned())
+            }
             _ => self.for_kind(atom.kind()),
         }
     }

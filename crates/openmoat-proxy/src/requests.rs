@@ -14,11 +14,8 @@
 //! There is no policy schema for these rules yet: the CLI builds them from an
 //! unlisted setting of `openmoat run`, which ADR-062 step 0 measures.
 
+use openmoat_core::rule_id::PROXY_REQUEST_RULE;
 use openmoat_core::{Decision, METHOD_OVERRIDE_HEADERS, RequestPath, SecretRoute, Verdict};
-
-/// Rule id of a request a host's request rules refuse. ADR-062 proposes
-/// `proxy-request`, which already names a malformed request (`RULE_REQUEST`).
-pub const RULE_REQUEST_RULE: &str = "proxy-request-rule";
 
 /// The request rules of one proxy run. [`Requests::default`] holds none.
 #[derive(Debug, Default)]
@@ -96,7 +93,7 @@ impl Requests {
         let Some(rules) = self.rules(host) else {
             return Ok(None);
         };
-        let refuse = |why: String| Decision::single(Verdict::Deny, RULE_REQUEST_RULE, why);
+        let refuse = |why: String| Decision::single(Verdict::Deny, PROXY_REQUEST_RULE, why);
         let mut headers = [httparse::EMPTY_HEADER; crate::request::MAX_HEADERS + 2];
         let mut request = httparse::Request::new(&mut headers);
         let (Ok(httparse::Status::Complete(_)), Some(method), Some(target)) =

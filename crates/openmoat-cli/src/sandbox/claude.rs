@@ -53,6 +53,7 @@ mod state_dir;
 
 use anyhow::Result;
 use openmoat_core::ir::{Access, Effect, Enforcement, Rule};
+use openmoat_core::rule_id::DEFAULT_NET;
 use openmoat_core::{AtomicAction, Kind};
 use serde_json::{Map, Value, json};
 
@@ -61,11 +62,11 @@ pub use deny_list::apply_rules;
 pub use rules::deny_edit;
 pub use settings::{apply, deny_write, in_sync, protect, remove, weaknesses};
 
+use super::Report;
 use super::patterns::{
     Spot, domain, git_exclusion, has_glob, literal_tree, push_unique, runs_later_exclusion, split,
     spot,
 };
-use super::{DEFAULT_NET_RULE, Report};
 use git_internals::runs_later;
 
 /// Claude Code's own directory, whose settings it keeps read-only in the
@@ -404,7 +405,7 @@ fn network(net: &Access, report: &mut Report) -> Value {
     if net.default == Effect::Allow {
         report.loss(
             Kind::Net,
-            DEFAULT_NET_RULE,
+            DEFAULT_NET,
             "Claude Code's allowlist cannot allow every host: sandboxed commands reach only listed hosts"
                 .into(),
         );

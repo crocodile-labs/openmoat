@@ -18,19 +18,11 @@
 
 use std::sync::{Arc, RwLock};
 
+use openmoat_core::rule_id::PROXY_SECRET;
 use openmoat_core::{Decision, Secret, Verdict};
 use zeroize::Zeroizing;
 
 use self::value::{Slot, read};
-
-/// Rule id for a request refused because it carries a brokered secret to a
-/// host that is not the secret's own.
-pub const RULE_SECRET: &str = "proxy-secret";
-
-/// Rule id for a request that would get a secret whose value has expired and
-/// was not renewed (ADR-087): it is not sent, rather than sent with a stale
-/// value or without one.
-pub const RULE_SECRET_EXPIRED: &str = "proxy-secret-expired";
 
 /// Where a request to a secret's host travels, which decides whether the
 /// secret goes in.
@@ -136,7 +128,7 @@ impl Leak<'_> {
         };
         Decision::single(
             Verdict::Deny,
-            RULE_SECRET,
+            PROXY_SECRET,
             format!(
                 "request to {host} carries the {what} of secret `{}`, which only {} may receive",
                 self.id, self.owner
@@ -376,7 +368,6 @@ mod route;
 mod value;
 
 pub(crate) use self::echo::{Echo, Holdback, value_came_back};
-pub use self::route::RULE_SECRET_ROUTE;
 pub use self::value::Rotation;
 
 #[cfg(test)]

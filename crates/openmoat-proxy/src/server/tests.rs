@@ -3,6 +3,7 @@ use std::net::{Ipv4Addr, Shutdown};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use openmoat_core::rule_id::PROXY_SNI;
 use openmoat_core::{EvalContext, Policy};
 
 use super::*;
@@ -94,7 +95,7 @@ fn a_tunnel_whose_client_cannot_be_answered_is_recorded_and_gets_no_bytes() {
         noise: Noise::default(),
     };
     proxy.handle(&proxy_end, &served, None);
-    assert_eq!(*rules.0.lock().unwrap(), [[RULE_SNI]]);
+    assert_eq!(*rules.0.lock().unwrap(), [[PROXY_SNI]]);
     let (mut opened, _) = upstream.accept().unwrap();
     let mut forwarded = Vec::new();
     opened.read_to_end(&mut forwarded).unwrap();

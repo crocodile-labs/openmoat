@@ -230,7 +230,8 @@ fn decide_only(policy: &Policy) -> Vec<DecideOnly> {
     }
     if !policy.executables.is_empty() {
         out.push(DecideOnly {
-            kind: "executables".to_owned(),
+            // The section is decided under its own rule id.
+            kind: crate::rule_id::EXECUTABLES.to_owned(),
             rules: policy.executables.keys().cloned().collect(),
         });
     }

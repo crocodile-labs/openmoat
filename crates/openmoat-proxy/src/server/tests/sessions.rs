@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use openmoat_core::rule_id::PROXY_SESSION;
 use openmoat_core::{Taint, TaintSecret};
 
 use super::*;
@@ -129,7 +130,7 @@ fn a_request_without_a_valid_credential_gets_407_and_reaches_nothing() {
         assert_eq!(rows.len(), 1);
         assert_eq!(
             (rows[0].0.as_deref(), rows[0].1.as_slice()),
-            (None, &[RULE_SESSION.to_owned()][..])
+            (None, &[PROXY_SESSION.to_owned()][..])
         );
     }
 }
@@ -179,7 +180,7 @@ fn a_session_whose_history_cannot_be_read_is_refused() {
     let (reply, forwarded, rows) = exchange(&lookup, Some(&header("run-a", token_a())), 0);
     assert!(reply.starts_with("HTTP/1.1 403"), "{reply}");
     assert_eq!(forwarded, Vec::<u8>::new());
-    assert_eq!(rows[0].1, [RULE_SESSION]);
+    assert_eq!(rows[0].1, [PROXY_SESSION]);
 }
 
 #[test]
@@ -194,7 +195,7 @@ fn a_session_holding_half_the_slots_gets_503() {
     assert_eq!(forwarded, Vec::<u8>::new());
     assert_eq!(
         (rows[0].0.as_deref(), rows[0].1.as_slice()),
-        (Some("run-a"), &[RULE_SESSION.to_owned()][..])
+        (Some("run-a"), &[PROXY_SESSION.to_owned()][..])
     );
     let (_, forwarded, _) = exchange(&lookup, Some(&header("run-a", token_a())), 1);
     assert!(!forwarded.is_empty(), "a session under its share is served");
@@ -219,7 +220,7 @@ fn an_issued_credential_is_served_as_its_session_and_others_get_407() {
         let (reply, forwarded, rows) = exchange_with(&sessions, credential.as_deref(), 0);
         assert!(reply.starts_with("HTTP/1.1 407"), "{reply}");
         assert_eq!(forwarded, Vec::<u8>::new());
-        assert_eq!(rows[0].1, [RULE_SESSION]);
+        assert_eq!(rows[0].1, [PROXY_SESSION]);
     }
     // A tainted session's own credential carries its taint.
     let b = Issued::new("claude-b");

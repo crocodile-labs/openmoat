@@ -32,10 +32,6 @@ use zeroize::Zeroizing;
 
 pub(crate) use self::date::Day;
 
-/// Rule id of a terminated tunnel refused for its TLS: a handshake that
-/// failed on either side, or an upstream certificate that did not verify.
-pub const RULE_TLS: &str = "proxy-tls";
-
 /// The one application protocol the proxy speaks inside a terminated tunnel.
 const HTTP_1_1: &[u8] = b"http/1.1";
 

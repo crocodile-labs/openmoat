@@ -13,13 +13,13 @@
 
 use std::io::{Read, Write};
 
+use openmoat_core::rule_id::{PROXY_SECRET, PROXY_UPSTREAM};
 use openmoat_core::{Decision, Verdict};
 use zeroize::Zeroizing;
 
 use super::{BUFFER, Pace, Stop, closed};
 use crate::body::{BodyEnd, Framing};
-use crate::broker::{Broker, Holdback, RULE_SECRET, value_came_back as echoed};
-use crate::decide::RULE_UPSTREAM;
+use crate::broker::{Broker, Holdback, value_came_back as echoed};
 
 /// Largest answer head the proxy reads, and most headers in it.
 const MAX_HEAD: usize = 64 * 1024;
@@ -66,14 +66,14 @@ pub(super) fn relay<U: Read, C: Write>(
             Err(Some(why)) => {
                 return Err(fail(
                     sent,
-                    RULE_UPSTREAM,
+                    PROXY_UPSTREAM,
                     format!("the answer from {host}: {why}"),
                 ));
             }
             Err(None) => return Err(Stop::Quiet),
         };
         if let Some(id) = broker.value_in(&buf[..head.len]) {
-            return Err(fail(sent, RULE_SECRET, echoed(host, id)));
+            return Err(fail(sent, PROXY_SECRET, echoed(host, id)));
         }
         agent.write_all(&head.out).map_err(|_| Stop::Quiet)?;
         sent = true;
@@ -86,7 +86,7 @@ pub(super) fn relay<U: Read, C: Write>(
     }
     Err(fail(
         sent,
-        RULE_UPSTREAM,
+        PROXY_UPSTREAM,
         format!("{host} sent more than {MAX_INTERIM} interim answers"),
     ))
 }
@@ -286,7 +286,7 @@ impl Body<'_> {
             .map_err(|_| {
                 Stop::Cut(Decision::single(
                     Verdict::Deny,
-                    RULE_UPSTREAM,
+                    PROXY_UPSTREAM,
                     format!("the answer from {}: malformed chunked body", self.host),
                 ))
             })?;
@@ -294,7 +294,7 @@ impl Body<'_> {
         let release = self.hold.push(&payload).map_err(|id| {
             Stop::Cut(Decision::single(
                 Verdict::Deny,
-                RULE_SECRET,
+                PROXY_SECRET,
                 echoed(host, id),
             ))
         })?;

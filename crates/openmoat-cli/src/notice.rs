@@ -1,6 +1,6 @@
 //! The words of the block message (ADR-059) for one call: the deciding rule's
 //! `title` and `why` from the person's policy, or those of OpenMoat's own
-//! check ([`builtin`]), and the call and the reasons as they may be shown.
+//! check ([`openmoat_core::rule_id::words`]), and the call and the reasons as they may be shown.
 //! `openmoat-hosts` lays them out in each host's reason field
 //! ([`openmoat_hosts::reason_line`]); `openmoat watch` and `openmoat why` show
 //! calls and titles the same way.
@@ -11,7 +11,15 @@ use openmoat_core::{Action, Decision, Notice, Policy, Verdict};
 use crate::render::clean;
 use crate::report::Paths;
 
-mod builtin;
+/// The words of OpenMoat's own check `rule` ([`openmoat_core::rule_id`]);
+/// `None` for any other id.
+fn builtin(rule: &str) -> Option<Words<'static>> {
+    openmoat_core::rule_id::words(rule).map(|w| Words {
+        title: w.title,
+        why: Some(w.why),
+        next: w.next,
+    })
+}
 
 /// The longest call shown, in characters; a longer one loses its middle.
 pub const CALL_CHARS: usize = 100;
@@ -41,7 +49,7 @@ pub fn words<'a>(policy: Option<&'a Policy>, rule: &str) -> Option<Words<'a>> {
             why: group.why.as_deref(),
             next: None,
         }),
-        None => builtin::words(rule),
+        None => builtin(rule),
     }
 }
 
@@ -86,7 +94,7 @@ impl Titles {
                 why: own.why.as_deref(),
                 next: None,
             }),
-            None => builtin::words(rule),
+            None => builtin(rule),
         }
     }
 }

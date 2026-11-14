@@ -2,6 +2,7 @@
 //! later call of the same session, a local one keeps nothing, and the store
 //! holds no text of the output.
 
+use openmoat_core::rule_id::INJECTED_INPUT;
 use openmoat_core::{EvalContext, Policy, Verdict};
 
 use super::*;
@@ -56,10 +57,7 @@ fn a_forge_issue_naming_a_host_tightens_a_later_command_to_it() {
     )
     .unwrap();
     assert_eq!(d.verdict, Verdict::Review, "{d:?}");
-    assert!(
-        d.rules.iter().any(|r| r == openmoat_core::INJECTED_RULE),
-        "{d:?}"
-    );
+    assert!(d.rules.iter().any(|r| r == INJECTED_INPUT), "{d:?}");
     assert!(d.reasons.join(" ").contains("gh issue view 12"), "{d:?}");
 
     // another session read nothing: it stays as it was

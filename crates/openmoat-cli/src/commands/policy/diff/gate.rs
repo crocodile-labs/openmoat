@@ -18,8 +18,11 @@
 
 use anyhow::Result;
 use openmoat_core::diffscan::Settings;
+use openmoat_core::rule_id::{
+    DIFF_LINK, DIFF_PATH, DIFF_POLICY, DIFF_SECRET, DIFF_SUBMODULE, DIFF_UNCHECKED, SESSION_TAINT,
+};
 use openmoat_core::{
-    Action, CompiledPolicy, Decision, EvalContext, NoResolver, Policy, TAINT_RULE, Taint, Verdict,
+    Action, CompiledPolicy, Decision, EvalContext, NoResolver, Policy, Taint, Verdict,
 };
 use serde::Serialize;
 
@@ -34,13 +37,6 @@ const HOME: &str = "/openmoat-diff/home";
 
 /// What the untrusted content of every change is, in the engine's taint.
 const UNTRUSTED: &str = "the change under review";
-
-pub const PATH_RULE: &str = "diff-path";
-pub const SECRET_RULE: &str = "diff-secret";
-pub const POLICY_RULE: &str = "diff-policy";
-pub const LINK_RULE: &str = "diff-link";
-pub const SUBMODULE_RULE: &str = "diff-submodule";
-pub const UNCHECKED_RULE: &str = "diff-unchecked";
 
 /// git's modes for a symbolic link and a submodule.
 const LINK_MODE: &str = "120000";
@@ -226,7 +222,7 @@ impl<'p> Gate<'p> {
                 return vec![Finding::new(
                     Level::Deny,
                     raw,
-                    PATH_RULE,
+                    DIFF_PATH,
                     "the path leaves the repository or is not a file name git checks out"
                         .to_owned(),
                 )];
@@ -240,7 +236,7 @@ impl<'p> Gate<'p> {
             findings.push(Finding::new(
                 Level::Review,
                 raw,
-                POLICY_RULE,
+                DIFF_POLICY,
                 "changes a policy file this check reads; checked from git, the check reads \
                  the base revision's copy, so the change applies only once it is merged"
                     .to_owned(),
@@ -262,7 +258,7 @@ impl<'p> Gate<'p> {
         }
         let level = Level::of(decision.verdict)?;
         // Session taint's reason speaks of a session; for a change, say what it means.
-        let tainted = decision.rules.iter().any(|r| r == TAINT_RULE);
+        let tainted = decision.rules.iter().any(|r| r == SESSION_TAINT);
         let reasons = decision
             .reasons
             .iter()
@@ -313,7 +309,7 @@ impl<'p> Gate<'p> {
             findings.push(Finding::new(
                 Level::Review,
                 shown,
-                SUBMODULE_RULE,
+                DIFF_SUBMODULE,
                 "changes a submodule: the commit it points to is not in this diff, and its \
                  code was not checked"
                     .to_owned(),
@@ -329,7 +325,7 @@ impl<'p> Gate<'p> {
             findings.push(Finding::new(
                 Level::Review,
                 new,
-                LINK_RULE,
+                DIFF_LINK,
                 "makes a symbolic link whose target the diff does not show".to_owned(),
             ));
             return findings;
@@ -348,7 +344,7 @@ impl<'p> Gate<'p> {
                  or writes {new} reaches a file of the machine it is checked out on"
             ),
         };
-        findings.push(Finding::new(Level::Review, new, LINK_RULE, reason));
+        findings.push(Finding::new(Level::Review, new, DIFF_LINK, reason));
         findings
     }
 }
@@ -367,7 +363,7 @@ fn secret_findings(file: &FileChange) -> Vec<Finding> {
                 ..Finding::new(
                     Level::Deny,
                     path,
-                    SECRET_RULE,
+                    DIFF_SECRET,
                     format!(
                         "adds {shape}; the change already published it to whoever can read it, \
                          so revoke it and remove it from the commits"
@@ -380,7 +376,7 @@ fn secret_findings(file: &FileChange) -> Vec<Finding> {
 
 /// The finding for a diff that was not read in full.
 pub fn unchecked(why: String) -> Finding {
-    Finding::new(Level::Review, "", UNCHECKED_RULE, why)
+    Finding::new(Level::Review, "", DIFF_UNCHECKED, why)
 }
 
 #[cfg(test)]

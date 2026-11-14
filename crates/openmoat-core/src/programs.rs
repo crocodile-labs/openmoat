@@ -9,9 +9,8 @@
 
 use std::collections::BTreeMap;
 
+use crate::rule_id::EXECUTABLES as RULE;
 use crate::verdict::{Decision, Verdict};
-
-pub const RULE: &str = "executables";
 
 /// Resolves program names using a search path the kernel controls.
 pub trait ProgramResolver {

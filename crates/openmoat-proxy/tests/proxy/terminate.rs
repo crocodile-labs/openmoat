@@ -6,6 +6,8 @@
 
 use std::sync::Arc;
 
+use openmoat_core::rule_id::PROXY_REQUEST_RULE;
+
 use rcgen::{BasicConstraints, CertificateParams, IsCa, Issuer, KeyPair};
 use rustls::pki_types::pem::PemObject as _;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName};
@@ -13,7 +15,7 @@ use rustls::{
     ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
 };
 
-use openmoat_proxy::{RULE_REQUEST_RULE, Requests, Roots, Tls, new_ca};
+use openmoat_proxy::{Requests, Roots, Tls, new_ca};
 use zeroize::Zeroizing;
 
 use super::*;
@@ -402,7 +404,7 @@ fn a_host_with_request_rules_is_terminated_and_its_denied_requests_stay_local() 
     ] {
         let reply = send(line);
         assert!(reply.starts_with("HTTP/1.1 403 "), "{line}: {reply}");
-        assert!(reply.contains(RULE_REQUEST_RULE), "{reply}");
+        assert!(reply.contains(PROXY_REQUEST_RULE), "{reply}");
     }
     assert!(t.h.nothing_forwarded());
     let reply = send("GET /gists");
@@ -415,7 +417,7 @@ fn a_host_with_request_rules_is_terminated_and_its_denied_requests_stay_local() 
         "{head}"
     );
     let rows = t.h.rows();
-    let refused = rows.iter().filter(|r| r.rules == [RULE_REQUEST_RULE]);
+    let refused = rows.iter().filter(|r| r.rules == [PROXY_REQUEST_RULE]);
     assert_eq!(refused.count(), 4, "{rows:?}");
     assert!(
         rows.iter().any(|r| r

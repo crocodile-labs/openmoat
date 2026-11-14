@@ -11,6 +11,8 @@
 
 use std::path::{Path, PathBuf};
 
+use openmoat_core::rule_id::KERNEL_INTEGRITY;
+
 use anyhow::{Result, bail};
 
 use super::{Drift, HookPins, Lock, key, repin, split, verify_state};
@@ -59,7 +61,7 @@ impl Checkpoint {
             bail!(
                 "refusing to re-pin: a pinned file changed while OpenMoat waited for your \
                  answer, and re-pinning now would accept it unseen ({}):\n  {}",
-                super::INTEGRITY_RULE,
+                KERNEL_INTEGRITY,
                 deny.reasons.join("\n  ")
             );
         }

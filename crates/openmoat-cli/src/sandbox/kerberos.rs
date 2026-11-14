@@ -13,12 +13,10 @@
 //! other, so not the ticket services (`KCM:`, `API:`). `MEMORY:` lives in
 //! the process that made it.
 
+use openmoat_core::rule_id::KERBEROS_TICKETS;
 use openmoat_core::{Policy, RuleGroup};
 
 use super::patterns::has_glob;
-
-/// The default policy's rule for the caches.
-pub const RULE: &str = "kerberos-tickets";
 
 /// Where the caches are by default, as the default policy names them; the
 /// rule gets them when the policy has none.
@@ -53,16 +51,16 @@ pub fn cache_patterns(ccname: Option<&str>) -> Vec<String> {
     patterns
 }
 
-/// `policy` for `moat run`'s sandbox: [`RULE`] applied by the sandbox too
+/// `policy` for `moat run`'s sandbox: [`KERBEROS_TICKETS`] applied by the sandbox too
 /// (not `hook_only`), with `ccname`'s cache added to its reads and writes.
 /// A policy without the rule gets it with the default caches.
 pub fn for_run(policy: &mut Policy, ccname: Option<&str>) {
-    let index = if let Some(index) = policy.deny.iter().position(|g| g.id == RULE) {
+    let index = if let Some(index) = policy.deny.iter().position(|g| g.id == KERBEROS_TICKETS) {
         index
     } else {
         let defaults: Vec<String> = DEFAULT_CACHES.iter().map(|p| (*p).to_owned()).collect();
         policy.deny.push(RuleGroup {
-            id: RULE.to_owned(),
+            id: KERBEROS_TICKETS.to_owned(),
             reason: Some("a Kerberos ticket cache".to_owned()),
             fs_read: defaults.clone(),
             fs_write: defaults,
@@ -123,7 +121,13 @@ mod tests {
     #[test]
     fn the_run_applies_the_rule_with_the_sessions_cache() {
         let mut policy = Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
-        let rule = |p: &Policy| p.deny.iter().find(|g| g.id == RULE).cloned().unwrap();
+        let rule = |p: &Policy| {
+            p.deny
+                .iter()
+                .find(|g| g.id == KERBEROS_TICKETS)
+                .cloned()
+                .unwrap()
+        };
         assert!(rule(&policy).hook_only, "the host sandboxes leave it out");
         assert_eq!(rule(&policy).fs_read, DEFAULT_CACHES);
         for_run(&mut policy, Some("FILE:/srv/krb/cc"));

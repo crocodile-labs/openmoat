@@ -1,6 +1,8 @@
 use std::sync::Mutex;
 use std::time::Duration;
 
+use openmoat_core::rule_id::PROXY_CAPACITY;
+
 use super::*;
 use crate::audit::RecordError;
 
@@ -39,7 +41,7 @@ fn a_flood_of_refusals_is_one_row_per_interval_with_its_count() {
     refusals.flush(&rows, later);
     refusals.flush(&rows, later + INTERVAL);
     let rows = rows.0.into_inner().unwrap();
-    assert!(rows.iter().all(|(rule, _)| rule == RULE_CAPACITY));
+    assert!(rows.iter().all(|(rule, _)| rule == PROXY_CAPACITY));
     let reasons: Vec<&str> = rows.iter().map(|(_, why)| why.as_str()).collect();
     assert_eq!(reasons.len(), 3, "{reasons:?}");
     assert!(

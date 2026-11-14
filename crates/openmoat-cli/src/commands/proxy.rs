@@ -22,11 +22,11 @@ use std::sync::Mutex;
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{NewEvent, Store};
+use openmoat_core::rule_id::PROXY_AUDIT;
 use openmoat_core::{Action, CompiledPolicy, EvalContext, Policy, Secret};
 use openmoat_hosts::{Host, ProxySessions};
 use openmoat_proxy::{
-    Broker, Connection, Credential, Limits, Proxy, RULE_AUDIT, RecordError, Recorder, Sessions,
-    SystemResolver,
+    Broker, Connection, Credential, Limits, Proxy, RecordError, Recorder, Sessions, SystemResolver,
 };
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -592,7 +592,7 @@ impl Recorder for AuditLog {
 }
 
 fn unrecorded_line(error: &RecordError) -> String {
-    format!("moat proxy: {RULE_AUDIT}: {error}")
+    format!("moat proxy: {PROXY_AUDIT}: {error}")
 }
 
 #[cfg(test)]

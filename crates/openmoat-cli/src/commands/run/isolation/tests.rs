@@ -1,4 +1,5 @@
 use super::*;
+use openmoat_core::rule_id::{RUN_ISOLATION_UNAVAILABLE, RUN_NO_ISOLATE};
 
 const WHY: &str = "bubblewrap is not installed";
 
@@ -41,7 +42,7 @@ fn without_bubblewrap_the_default_warns_records_and_starts_the_lightweight_tier(
         assert!(shown.contains(expected), "{expected}: {shown}");
     }
     let (rule, reason) = row(&tier).unwrap();
-    assert_eq!(rule, UNAVAILABLE_RULE);
+    assert_eq!(rule, RUN_ISOLATION_UNAVAILABLE);
     assert!(reason.contains(WHY), "{reason}");
 }
 
@@ -52,7 +53,7 @@ fn no_isolate_is_the_lightweight_tier_on_record() {
         assert_eq!(tier, Tier::Lightweight(Lightweight::OptedOut));
         assert_eq!(notice(&tier), None, "chosen on purpose: no warning");
         let (rule, reason) = row(&tier).unwrap();
-        assert_eq!(rule, OPTED_OUT_RULE);
+        assert_eq!(rule, RUN_NO_ISOLATE);
         assert!(reason.contains("--no-isolate"), "{reason}");
     }
 }

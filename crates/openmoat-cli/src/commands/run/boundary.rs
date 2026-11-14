@@ -9,6 +9,7 @@ use openmoat_core::boundary::{
     Downgrade, EffectiveBoundary, Landlock, LaunchCheck, Network, NetworkMode, Requested,
     ToolToken, VERSION, Weaker,
 };
+use openmoat_core::rule_id::RUN_BOUNDARY;
 use openmoat_core::{EvalContext, ProjectTop, Verdict};
 
 use super::isolation::{Asked, Lightweight, Tier, write_row};
@@ -19,9 +20,6 @@ use crate::home::Home;
 use crate::render;
 use crate::sandbox::landlock::abi::{self, Kernel};
 use crate::sandbox::own_login::Owner;
-
-/// The rule of the boundary row.
-pub const RULE: &str = "run-boundary";
 
 /// The tool the row names: never a host id, so the run's taint lookup,
 /// which reads link rows by their tool, passes it by.
@@ -206,11 +204,11 @@ pub fn launched(
         Verdict::Deny
     };
     let json = serde_json::to_string(record)?;
-    write_row(home, (session, cwd), (TOOL, RULE), verdict, json)?;
+    write_row(home, (session, cwd), (TOOL, RUN_BOUNDARY), verdict, json)?;
     if !missing.is_empty() {
         bail!(
             "`openmoat run` stopped the agent: what its sandbox promises is not all in force \
-             ({}); the audit log has the run's boundary row (`{RULE}`)",
+             ({}); the audit log has the run's boundary row (`{RUN_BOUNDARY}`)",
             missing.join("; ")
         );
     }

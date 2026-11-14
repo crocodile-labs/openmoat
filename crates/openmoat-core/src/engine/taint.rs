@@ -14,17 +14,13 @@ use crate::pattern::{GlobPattern, any_match};
 use crate::policy::{Policy, PolicyError};
 use crate::realpath::PathResolver;
 use crate::repo::REPO_RULE_PREFIX;
+// `SECRET_RULE`: the rule group whose `fs.read` patterns name secret
+// material, wherever the policy puts it. In the default policy it denies, so
+// only a policy that reviews for these reads lets one run and taint the
+// session. A repository policy's group with the same base id (prefixed to
+// `repo:secrets-paths` by `RepoPolicy::merge`) is also taint-significant.
+use crate::rule_id::{SECRETS_PATHS as SECRET_RULE, SESSION_TAINT as TAINT_RULE};
 use crate::verdict::{Decision, Verdict};
-
-/// The rule group whose `fs.read` patterns name secret material, wherever the
-/// policy puts it. In the default policy it denies, so only a policy that reviews
-/// for these reads lets one run and taint the session. A repository policy's
-/// group with the same base id (prefixed to `repo:secrets-paths` by
-/// `RepoPolicy::merge`) is also taint-significant.
-const SECRET_RULE: &str = "secrets-paths";
-
-/// The rule id a decision tightened by session taint carries.
-pub const TAINT_RULE: &str = "session-taint";
 
 /// Where secret material in a session came from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

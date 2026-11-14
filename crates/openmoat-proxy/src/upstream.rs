@@ -8,9 +8,10 @@ use std::io;
 use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs as _};
 use std::time::Duration;
 
+use openmoat_core::rule_id::{PROXY_ADDRESS, PROXY_UPSTREAM};
 use openmoat_core::{CompiledPolicy, Decision, Verdict};
 
-use crate::decide::{self, Forbidden, RULE_ADDRESS, RULE_UPSTREAM};
+use crate::decide::{self, Forbidden};
 
 /// Name resolution, injectable so tests can map names without a DNS server.
 pub trait Resolve: Send + Sync {
@@ -70,7 +71,7 @@ impl Refusal {
         match self {
             Self::Address(addr, why) => Decision::single(
                 Verdict::Deny,
-                RULE_ADDRESS,
+                PROXY_ADDRESS,
                 format!("{host} resolves to {}, {}", addr.ip(), why.describe()),
             ),
             Self::Denied(addr, denied) => {
@@ -83,14 +84,14 @@ impl Refusal {
                     .join(", ");
                 Decision::single(
                     Verdict::Deny,
-                    RULE_ADDRESS,
+                    PROXY_ADDRESS,
                     format!(
                         "{host} resolves to {}, refused by deny rule {rules}",
                         addr.ip()
                     ),
                 )
             }
-            Self::Unreachable(why) => Decision::single(Verdict::Deny, RULE_UPSTREAM, why.clone()),
+            Self::Unreachable(why) => Decision::single(Verdict::Deny, PROXY_UPSTREAM, why.clone()),
         }
     }
 }

@@ -349,7 +349,7 @@ fn planted(decision: Decision, found: Vec<Found>) -> Decision {
         .map(|(source, parts)| {
             Decision::single(
                 Verdict::Review,
-                injection::INJECTED_RULE,
+                crate::rule_id::INJECTED_INPUT,
                 format!(
                     "{} came from {source}, untrusted content this session read; the call may \
                      follow an instruction planted there",

@@ -572,6 +572,10 @@ pub struct SandboxSpec {
     /// How the sandbox's traffic to `openmoat proxy` carries an agent session
     /// when the policy sets `sandbox.proxy_port` (ADR-044).
     pub proxy_sessions: ProxySessions,
+    /// The command-line flag that turns the host's own sandbox off, which
+    /// `openmoat run` asks for: sandboxes do not nest, so the host's cannot
+    /// start inside OpenMoat's. `None` when the host has none to name.
+    pub own_sandbox_off: Option<&'static str>,
 }
 
 /// How a host sandbox's traffic to `openmoat proxy` carries an agent session

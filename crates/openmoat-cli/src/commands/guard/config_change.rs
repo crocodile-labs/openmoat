@@ -4,15 +4,14 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
+use openmoat_core::rule_id::{CONFIG_CHANGE, KERNEL_INTEGRITY, PROJECT_SETTINGS};
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::{HookRequest, Host, ProjectSettingsSpec};
 
 use crate::home::Home;
 use crate::install::HostConfig;
-use crate::integrity::{self, Drift, INTEGRITY_RULE, Lock};
+use crate::integrity::{self, Drift, Lock};
 use crate::project_settings;
-
-const CONFIG_CHANGE_RULE: &str = "config-change";
 
 /// The host whose hooks `request` came through: a host that sends another's
 /// hooks reads that host's files (the Continue CLI, Claude Code's).
@@ -77,7 +76,7 @@ pub(super) fn decision(
         return Ok(drift_blocks_change(&drift));
     }
     let mut decision = Decision::new(Verdict::Allow);
-    decision.rules.push(CONFIG_CHANGE_RULE.to_owned());
+    decision.rules.push(CONFIG_CHANGE.to_owned());
     let path = match &request.action {
         Some(openmoat_core::Action::FsWrite { path }) => Path::new(path),
         Some(_) => bail!("config change for something other than a file"),
@@ -119,7 +118,7 @@ pub(super) fn decision(
     {
         if let Some(drift) = lock.verify_proposal(path, Path::new(target)) {
             let mut deny = Decision::new(Verdict::Deny);
-            deny.rules.push(INTEGRITY_RULE.to_owned());
+            deny.rules.push(KERNEL_INTEGRITY.to_owned());
             deny.reasons.push(format!(
                 "{drift}; OpenMoat pinned {target}, so the proposal is not applied. Edit the file yourself and run `openmoat doctor --accept` to change it"
             ));
@@ -191,7 +190,7 @@ fn project_change(
         return Ok(None);
     };
     let mut deny = Decision::new(Verdict::Deny);
-    deny.rules.push(project_settings::RULE.to_owned());
+    deny.rules.push(PROJECT_SETTINGS.to_owned());
     deny.reasons.push(format!(
         "{} (project settings) {found}; the change is not loaded into this session. Review the file and remove what you did not add; a new session loads the file as it is",
         path.display()
@@ -201,7 +200,7 @@ fn project_change(
 
 fn drift_blocks_change(drift: &[Drift]) -> Decision {
     let mut decision = Decision::new(Verdict::Deny);
-    decision.rules.push(INTEGRITY_RULE.to_owned());
+    decision.rules.push(KERNEL_INTEGRITY.to_owned());
     for d in drift {
         decision.reasons.push(format!(
             "{d} outside OpenMoat; the change is not loaded into this session. Run `openmoat doctor` to inspect, `openmoat doctor --accept` to accept it"

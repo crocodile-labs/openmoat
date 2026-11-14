@@ -1,7 +1,7 @@
 use openmoat_audit::KnownSecrets;
 use openmoat_core::{Action, Decision, Policy, Verdict};
 
-use super::{Titles, builtin, call_text, middle, of, words};
+use super::{Titles, call_text, middle, of, words};
 
 const POLICY: &str = "version: 1\n\
     deny:\n  - id: keys\n    reason: secret material\n    title: reading your SSH keys\n    \
@@ -148,7 +148,8 @@ fn a_checks_step_fits_its_verdict_only() {
 #[test]
 fn every_checks_message_reads_like_a_policy_rules() {
     let default = Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
-    for rule in builtin::rules() {
+    let checks = openmoat_core::rule_id::BUILTIN_RULES.iter();
+    for rule in checks.filter(|r| r.words.is_some()).map(|r| r.id) {
         assert!(default.own_group(rule).is_none(), "{rule} is a policy rule");
         let w = words(None, rule).unwrap();
         let why = w.why.unwrap();

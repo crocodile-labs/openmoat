@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 use std::fs;
 
+use openmoat_core::rule_id::MCP_SERVER_CHANGED;
+
 use super::*;
 use crate::install::Recorded;
 
@@ -59,7 +61,7 @@ fn a_changed_server_is_denied_alone_until_accepted() {
     .unwrap();
     let deny = denied(&home, "mcp__gh__search").expect("changed server");
     assert_eq!(deny.verdict, Verdict::Deny);
-    assert_eq!(deny.rules, [SERVER_RULE]);
+    assert_eq!(deny.rules, [MCP_SERVER_CHANGED]);
     let reasons = deny.reasons.join("\n");
     assert!(reasons.contains(r#"command: "npx" → "sh""#), "{reasons}");
     assert!(reasons.contains("openmoat mcp accept gh"), "{reasons}");
@@ -223,7 +225,7 @@ fn copilot_and_pi_servers_are_pinned_from_their_configuration_directory() {
         assert!(denied(tool).is_none(), "{host}");
         fs::write(&file, servers("sh")).unwrap();
         let deny = denied(tool).unwrap_or_else(|| panic!("{host}: changed server"));
-        assert_eq!(deny.rules, [SERVER_RULE], "{host}");
+        assert_eq!(deny.rules, [MCP_SERVER_CHANGED], "{host}");
         assert!(denied(other).is_none(), "{host}: other servers run");
     }
 }
@@ -263,7 +265,7 @@ fn a_changed_openclaw_server_holds_back_only_its_tools() {
 
     fs::write(&file, config("sh")).unwrap();
     let deny = denied("mcp__docs__search").expect("changed server");
-    assert_eq!(deny.rules, [SERVER_RULE]);
+    assert_eq!(deny.rules, [MCP_SERVER_CHANGED]);
     assert!(denied("mcp__db__query").is_none(), "other servers run");
 
     // An `$include` could hold servers OpenMoat cannot see.

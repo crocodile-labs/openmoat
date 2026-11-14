@@ -1,6 +1,7 @@
 //! Fixture diffs against the default policy: what each kind of change is
 //! reported as, and attempts to get a protected path past the check.
 
+use openmoat_core::rule_id::{DIFF_LINK, DIFF_PATH, DIFF_POLICY, DIFF_SECRET, DIFF_SUBMODULE};
 use openmoat_core::{DEFAULT_POLICY, Policy};
 
 use super::gate::{self, Finding, Gate, Level};
@@ -106,7 +107,7 @@ fn a_change_to_the_repository_policy_is_reported() {
     let f = finding(&found, ".moat/policy.yaml");
     // `kernel-self` denies an agent writing it; the check says why it matters here too
     assert_eq!(f.level, Level::Deny, "{f:#?}");
-    assert_eq!(f.rules, ["kernel-self", gate::POLICY_RULE], "{f:#?}");
+    assert_eq!(f.rules, ["kernel-self", DIFF_POLICY], "{f:#?}");
 }
 
 #[test]
@@ -114,7 +115,7 @@ fn a_policy_file_named_by_the_check_is_reported() {
     let policy = Policy::parse(DEFAULT_POLICY).unwrap();
     let gate = Gate::new(&policy, &["ci/openmoat.yaml".to_owned()]).unwrap();
     let found = gate.check(&parse::parse(&edit("ci/openmoat.yaml", "x")).unwrap());
-    assert_eq!(found[0].rules, [gate::POLICY_RULE]);
+    assert_eq!(found[0].rules, [DIFF_POLICY]);
 }
 
 #[test]
@@ -123,7 +124,7 @@ fn an_added_token_is_denied_without_naming_it() {
     let found = check(&edit("src/config.rs", &format!("let t = \"{token}\";")));
     let f = found.iter().find(|f| f.line == Some(2)).unwrap();
     assert_eq!(f.level, Level::Deny);
-    assert_eq!(f.rules, [gate::SECRET_RULE]);
+    assert_eq!(f.rules, [DIFF_SECRET]);
     assert!(f.reasons[0].contains("a GitHub token"), "{f:#?}");
     let json = serde_json::to_string(&found).unwrap();
     assert!(!json.contains(&token), "{json}");
@@ -251,7 +252,7 @@ fn dot_dot_segments_cannot_hide_a_protected_path() {
     ] {
         let found = check(&edit(escaping, "x"));
         assert_eq!(found[0].level, Level::Deny, "{escaping}: {found:#?}");
-        assert_eq!(found[0].rules, [gate::PATH_RULE]);
+        assert_eq!(found[0].rules, [DIFF_PATH]);
     }
     assert_eq!(
         gate::placed_inside("a\\..\\.env", ""),
@@ -289,7 +290,7 @@ fn a_symbolic_link_is_reported_with_where_it_points() {
     ));
     let f = finding(&found, "docs/settings");
     assert_eq!(f.level, Level::Deny, "{f:#?}");
-    assert!(f.rules.iter().any(|r| r == gate::LINK_RULE), "{f:#?}");
+    assert!(f.rules.iter().any(|r| r == DIFF_LINK), "{f:#?}");
     assert!(f.rules.iter().any(|r| r == "kernel-self"), "{f:#?}");
     // out of the repository
     for target in ["../../.ssh/id_rsa", "/etc/passwd"] {
@@ -300,7 +301,7 @@ fn a_symbolic_link_is_reported_with_where_it_points() {
     }
     // a harmless target is still a link
     let found = check(&added("latest", "120000", "v2/README.md"));
-    assert_eq!(finding(&found, "latest").rules, [gate::LINK_RULE]);
+    assert_eq!(finding(&found, "latest").rules, [DIFF_LINK]);
     // a link replacing the folder that holds the workflows
     let found = check(&added(".github", "120000", "elsewhere"));
     assert_eq!(finding(&found, ".github").level, Level::Deny, "{found:#?}");
@@ -314,7 +315,7 @@ fn a_submodule_change_needs_review() {
     let f = &check(diff)[0];
     assert_eq!(
         (f.level, f.rules.as_slice()),
-        (Level::Review, &[gate::SUBMODULE_RULE.to_owned()][..])
+        (Level::Review, &[DIFF_SUBMODULE.to_owned()][..])
     );
 }
 

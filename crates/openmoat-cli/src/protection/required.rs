@@ -13,6 +13,7 @@
 //! `openmoat run` can say so (docs/LIMITS.md).
 
 use anyhow::{Result, bail};
+use openmoat_core::rule_id::PROTECTION_REQUIRED;
 use openmoat_core::{Decision, Policy, Require, RequiredBy, RequiredLevel, Requirement, Verdict};
 use openmoat_hosts::Host;
 use serde::Serialize;
@@ -25,9 +26,6 @@ use crate::sandbox::install as host_sandbox;
 pub mod boundary;
 
 pub use boundary::Boundary;
-
-/// The rule id of the guard's deny for an agent below the required level.
-pub const RULE: &str = "protection-required";
 
 impl Level {
     /// Whether an agent at this level meets `required`.
@@ -176,7 +174,7 @@ pub fn unmet(policy: &Policy, host: Host, level: impl FnOnce() -> Level) -> Opti
         host.display_name(),
         level.label(),
     );
-    Some(Decision::single(Verdict::Deny, RULE, reason))
+    Some(Decision::single(Verdict::Deny, PROTECTION_REQUIRED, reason))
 }
 
 /// The user policy with the packs and the repository policy of `ctx`'s

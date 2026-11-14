@@ -5,6 +5,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use openmoat_core::rule_id::PROJECT_SETTINGS;
 use openmoat_core::{Decision, EvalContext, Verdict};
 use openmoat_hosts::Host;
 use serde_json::{Value, json};
@@ -105,7 +106,7 @@ impl Project {
 }
 
 fn denied(result: &(Verdict, Decision)) -> bool {
-    result.0 == Verdict::Deny && result.1.rules == [super::super::RULE]
+    result.0 == Verdict::Deny && result.1.rules == [PROJECT_SETTINGS]
 }
 
 const CODEX_OFF: &str = "[features]\nhooks = false\n";

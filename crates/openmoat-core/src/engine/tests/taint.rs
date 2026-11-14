@@ -145,7 +145,10 @@ fn a_tab_list_taints_nothing_and_page_content_still_does() {
         "/p/CLAUDE.md",
     ] {
         let d = decide_after(&[Action::mcp(TABS)], &write(path));
-        assert!(!d.rules.iter().any(|r| r == TAINT_RULE), "{path}: {d:?}");
+        assert!(
+            !d.rules.iter().any(|r| r == crate::rule_id::SESSION_TAINT),
+            "{path}: {d:?}"
+        );
     }
     let p = policy(POLICY);
     let c = CompiledPolicy::compile(&p, &ctx()).unwrap();

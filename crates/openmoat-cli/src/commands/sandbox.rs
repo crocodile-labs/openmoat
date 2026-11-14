@@ -3,6 +3,8 @@
 use std::io::{self, Write as _};
 use std::path::PathBuf;
 
+use openmoat_core::rule_id::AGENT_CREDENTIALS;
+
 use anyhow::{Result, bail};
 use openmoat_hosts::Host;
 use serde_json::{Value, json};
@@ -188,7 +190,7 @@ fn write_all(home: &Home, out: &mut impl io::Write) -> Result<Synced> {
         let changed = install::write(home, host, &plan, false)?;
         if let Some(note) = install::unavailable(host) {
             if changed {
-                let removed = install::OLD_SANDBOX_REMOVED;
+                let removed = install::old_sandbox_removed(host);
                 writeln!(out, "✔ {:<16} {removed}", host.display_name())?;
                 files.push(path);
             }
@@ -218,9 +220,10 @@ fn write_all(home: &Home, out: &mut impl io::Write) -> Result<Synced> {
     let lock = integrity::repin_with(home, &binary, HookPins::Keep, &files, &by_part)?;
     writeln!(
         out,
-        "✔ lock             {} files and {} Codex profile(s) pinned",
+        "✔ lock             {} files and {} {} profile(s) pinned",
         lock.entries.len(),
-        lock.codex_profiles.len()
+        lock.codex_profiles.len(),
+        install::pinned_by_part()
     )?;
     // The proxy reads the policy once at start-up, so a policy change needs a
     // reload. An installed service is restarted; a missing one is fine
@@ -349,7 +352,7 @@ fn agent_logins_denied(policy: &openmoat_core::Policy) -> bool {
     policy
         .deny
         .iter()
-        .any(|g| g.id == own_login::RULE && !g.hook_only)
+        .any(|g| g.id == AGENT_CREDENTIALS && !g.hook_only)
 }
 
 /// Each agent with a login and the patterns `openmoat run` keeps readable
@@ -370,7 +373,7 @@ fn agent_logins_json(policy: &openmoat_core::Policy) -> Value {
         .filter(|_| denied)
         .map(|(host, patterns)| (host.id().to_owned(), json!(patterns)))
         .collect();
-    json!({ "rule": own_login::RULE, "denied": denied, "run_keeps": kept })
+    json!({ "rule": AGENT_CREDENTIALS, "denied": denied, "run_keeps": kept })
 }
 
 /// Where the agents' logins are denied, and what `openmoat run` keeps of them.
@@ -385,7 +388,7 @@ fn write_agent_logins(out: &mut impl io::Write, policy: &openmoat_core::Policy) 
          agent still signs in. `openmoat run` holds the agent itself, so it keeps the login of \
          the agent it starts readable (`{}`), or for another program the logins inside its \
          `--write` paths:",
-        own_login::RULE,
+        AGENT_CREDENTIALS,
         own_login::ALLOWANCE
     )?;
     for (host, patterns) in kept_logins() {

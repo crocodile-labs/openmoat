@@ -3,11 +3,12 @@
 //! could otherwise send calls under any host and any session.
 
 use openmoat_audit::{NewEvent, Store};
+use openmoat_core::rule_id::{RUN_GUARD_HOST, RUN_GUARD_SESSION};
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::Host;
 use serde_json::json;
 
-use super::super::service::{MAX_SESSIONS, RULE_HOST, RULE_SESSION};
+use super::super::service::MAX_SESSIONS;
 use super::{RUN, ask, request, service, service_for, token};
 use crate::home::Home;
 
@@ -79,7 +80,7 @@ fn a_call_for_another_host_is_refused_with_a_row() {
     let mcp = payload("PreToolUse", "fresh");
     assert!(!decided(&service, &call(Host::Codex, &mcp)));
     assert!(decided(&service, &call(Host::ClaudeCode, &mcp)));
-    assert_eq!(run_rules(&home), [RULE_HOST]);
+    assert_eq!(run_rules(&home), [RUN_GUARD_HOST]);
     // Nothing the guard records came from the refused call.
     let fresh = home.open_audit().unwrap().session("fresh").unwrap();
     assert_eq!(fresh.len(), 0, "{fresh:?}");
@@ -96,7 +97,7 @@ fn a_program_openmoat_does_not_know_is_bound_to_its_first_host() {
         &service,
         &call(Host::ClaudeCode, &payload("PreToolUse", "b"))
     ));
-    assert_eq!(run_rules(&home), [RULE_HOST]);
+    assert_eq!(run_rules(&home), [RUN_GUARD_HOST]);
 }
 
 #[test]
@@ -119,7 +120,7 @@ fn only_the_runs_own_sessions_are_decided() {
     // The run's own session, and any other run's.
     assert!(!decided(&service, &pre(RUN)));
     assert!(!decided(&service, &start("run-2-feedbeef")));
-    assert_eq!(run_rules(&home), [RULE_SESSION; 4]);
+    assert_eq!(run_rules(&home), [RUN_GUARD_SESSION; 4]);
 }
 
 #[test]
@@ -136,5 +137,5 @@ fn a_run_takes_a_bounded_number_of_sessions() {
         &service,
         &call(Host::ClaudeCode, &payload("PreToolUse", "s0"))
     ));
-    assert_eq!(run_rules(&home), [RULE_SESSION]);
+    assert_eq!(run_rules(&home), [RUN_GUARD_SESSION]);
 }

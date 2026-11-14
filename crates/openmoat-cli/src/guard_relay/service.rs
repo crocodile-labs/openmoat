@@ -13,7 +13,7 @@
 //! of the first call, and the sessions that are the run's: one the audit log
 //! has never seen, or one the agent resumes with its own session start. A
 //! call for another host or another session is refused with a row in the
-//! run's session ([`RULE_HOST`], [`RULE_SESSION`]) and a deny.
+//! run's session ([`RUN_GUARD_HOST`], [`RUN_GUARD_SESSION`]) and a deny.
 
 use std::io::Write as _;
 use std::net::TcpStream;
@@ -24,6 +24,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{EventId, NewEvent, Store};
+use openmoat_core::rule_id::{RUN_GUARD_HOST, RUN_GUARD_SESSION, RUN_GUARD_TOKEN};
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::{HookEvent, Host};
 use openmoat_proxy::coalesce::{Coalesce, INTERVAL, counted};
@@ -37,12 +38,6 @@ use crate::home::Home;
 use crate::install::GUARD_BUDGET_S;
 use crate::taint::run::{LINK_HOST, RUN_SESSION_ENV, run_session};
 
-/// The rule of the row a call with a wrong token leaves.
-pub const RULE_TOKEN: &str = "run-guard-token";
-/// The rule of the row a call for another agent than the run's leaves.
-pub const RULE_HOST: &str = "run-guard-host";
-/// The rule of the row a call in a session that is not the run's leaves.
-pub const RULE_SESSION: &str = "run-guard-session";
 /// The most agent sessions one run decides calls for: a start, `/clear`s,
 /// resumes and subagents with sessions of their own fit well within it.
 pub const MAX_SESSIONS: usize = 64;
@@ -153,7 +148,7 @@ impl Service {
             Some(agent) if agent == host || agent == sender => {}
             Some(agent) => {
                 return Ok(Err(Refused {
-                    rule: RULE_HOST,
+                    rule: RUN_GUARD_HOST,
                     reason: format!(
                         "a hook call for {} came from inside this `openmoat run` of {}, so it was \
                          not decided: the run decides only its own agent's calls",
@@ -172,7 +167,7 @@ impl Service {
         }
         let refuse = |why: &str| {
             Ok(Err(Refused {
-                rule: RULE_SESSION,
+                rule: RUN_GUARD_SESSION,
                 reason: format!(
                     "a hook call from inside this `openmoat run` named a session that is not the \
                      run's ({why}), so it was not decided"
@@ -279,7 +274,7 @@ impl Service {
             return self.record_wrong_tokens(count);
         }
         self.record_row(
-            RULE_TOKEN,
+            RUN_GUARD_TOKEN,
             format!(
                 "a hook call for {host} came with a wrong token for this `openmoat run`, so it was \
                  not decided"
@@ -290,7 +285,7 @@ impl Service {
     /// One row for `count` calls with a wrong token since the last such row.
     fn record_wrong_tokens(&self, count: u64) -> Result<()> {
         self.record_row(
-            RULE_TOKEN,
+            RUN_GUARD_TOKEN,
             format!(
                 "{} came with a wrong token for this `openmoat run` since the last such row (at \
                  most one per {} s), so none was decided",

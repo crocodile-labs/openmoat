@@ -17,6 +17,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use openmoat_core::rule_id::MCP_SERVER_CHANGED;
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::Host;
 
@@ -35,10 +36,6 @@ pub mod tools;
 pub mod wrap;
 
 pub use pins::{Change, Pins};
-
-/// Rule id of a tool call denied because its server's definition is not the
-/// one a person accepted.
-pub const SERVER_RULE: &str = "mcp-server-changed";
 
 /// The MCP servers some host provides itself, which no MCP configuration file
 /// defines, each with that host ([`openmoat_hosts::HostSpec::builtin_mcp`]).
@@ -174,7 +171,7 @@ pub fn violation(
     );
     reasons.push(accept);
     let mut decision = Decision::new(Verdict::Deny);
-    decision.rules.push(SERVER_RULE.to_owned());
+    decision.rules.push(MCP_SERVER_CHANGED.to_owned());
     decision.reasons = reasons;
     Ok(Some(decision))
 }

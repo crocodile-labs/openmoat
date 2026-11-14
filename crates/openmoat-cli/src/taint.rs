@@ -16,7 +16,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{Cached, Event, EventId, Store};
-use openmoat_core::{Action, CompiledPolicy, Decision, Staging, TAINT_RULE, Taint, Verdict};
+use openmoat_core::rule_id::SESSION_TAINT;
+use openmoat_core::{Action, CompiledPolicy, Decision, Staging, Taint, Verdict};
 use openmoat_hosts::{HookEvent, Host};
 use serde::{Deserialize, Serialize};
 
@@ -415,7 +416,7 @@ pub fn answered(
     let Some(last_read) = session.untrusted_last_ms else {
         return Ok(tainted);
     };
-    if tainted.verdict != Verdict::Review || !tainted.rules.iter().any(|r| r == TAINT_RULE) {
+    if tainted.verdict != Verdict::Review || !tainted.rules.iter().any(|r| r == SESSION_TAINT) {
         return Ok(tainted);
     }
     // Only untrusted content may be answered: the secrets alone must not make
@@ -430,7 +431,7 @@ pub fn answered(
         &FsPathResolver,
         &secrets_only,
     );
-    if with_secrets.rules.iter().any(|r| r == TAINT_RULE) {
+    if with_secrets.rules.iter().any(|r| r == SESSION_TAINT) {
         return Ok(tainted);
     }
     let grants = Grants::load_in(call.home)?;

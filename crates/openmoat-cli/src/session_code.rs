@@ -9,7 +9,7 @@
 //! it does not (the agents with only a hook, and Claude Code and Cursor on
 //! native Windows) the hook is the only check, so running a file the same
 //! session wrote needs review: [`checked`] turns an `allow` or a `defer` into a `review`
-//! with [`RULE`], and a host that cannot prompt gets a deny naming `openmoat
+//! with [`SESSION_WRITTEN_CODE`], and a host that cannot prompt gets a deny naming `openmoat
 //! allow --last`.
 //!
 //! It only tightens. A file the session did not write (it was there before,
@@ -18,6 +18,7 @@
 
 use anyhow::{Context as _, Result};
 use openmoat_audit::{SessionWrite, Store, Written};
+use openmoat_core::rule_id::SESSION_WRITTEN_CODE;
 use openmoat_core::{Action, CompiledPolicy, Decision, Verdict};
 use openmoat_hosts::Host;
 
@@ -25,9 +26,6 @@ use crate::approvals::{self, Grants};
 use crate::home::Home;
 use crate::realpath::FsPathResolver;
 use crate::taint::provenance;
-
-/// The rule id of the review, in audit rows and the reason the agent sees.
-pub const RULE: &str = "session-written-code";
 
 /// The call being decided, as the check needs it.
 pub struct Call<'a> {
@@ -135,7 +133,7 @@ fn review(host: Host, decision: Decision, written: &[Written]) -> Decision {
     files.sort_unstable();
     files.dedup();
     let mut reviewed = Decision::new(Verdict::Review);
-    reviewed.rules.push(RULE.to_owned());
+    reviewed.rules.push(SESSION_WRITTEN_CODE.to_owned());
     reviewed.reasons.push(format!(
         "runs code this session wrote, with no OS sandbox below the hook: {}",
         files.join(", ")

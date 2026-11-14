@@ -1,8 +1,9 @@
 use openmoat_core::ir::Effect;
+use openmoat_core::rule_id::AGENT_CREDENTIALS;
 use openmoat_core::{AtomicAction, DEFAULT_POLICY, EvalContext, Kind, Policy};
 use openmoat_hosts::Host;
 
-use super::{ALLOWANCE, Kept, Owner, RULE, for_session, own_patterns, report};
+use super::{ALLOWANCE, Kept, Owner, for_session, own_patterns, report};
 use crate::sandbox::Report;
 
 const HOME: &str = "/Users/me";
@@ -122,7 +123,11 @@ fn every_login_is_denied_to_the_host_sandboxes() {
     }
     // `for_session` changes only the sandbox's copy.
     let (_, _) = for_session(&policy, &ctx, Owner::Unknown, &[]);
-    let group = policy.deny.iter().find(|g| g.id == RULE).unwrap();
+    let group = policy
+        .deny
+        .iter()
+        .find(|g| g.id == AGENT_CREDENTIALS)
+        .unwrap();
     assert!(group.fs_read.iter().any(|p| p.contains('{')), "untouched");
 }
 

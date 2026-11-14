@@ -25,9 +25,8 @@ mod staging;
 mod taint;
 
 use atoms::{checked_atoms, value_read_atoms};
-pub use contents::HOLDS_PROTECTED_RULE;
 pub use staging::{STAGING_ATOM, Staging};
-pub use taint::{Secret, TAINT_RULE, Taint, UntrustedKind};
+pub use taint::{Secret, Taint, UntrustedKind};
 
 /// Everything the engine needs from the environment. Supplied by the caller.
 #[derive(Debug, Clone)]
@@ -428,7 +427,7 @@ impl CompiledPolicy<'_> {
         let partial = match action {
             Action::Unchecked { reason, .. } => Some(Decision::single(
                 Verdict::Review,
-                crate::action::UNCHECKED_RULE,
+                crate::rule_id::UNCHECKED,
                 reason.clone(),
             )),
             _ => None,
@@ -455,7 +454,7 @@ impl CompiledPolicy<'_> {
 
 /// Input that cannot be classified: the policy's catch-all, never `allow` (ADR-025).
 fn unparseable(verdict: Verdict, reason: String) -> Decision {
-    Decision::single(verdict, "unparseable", reason)
+    Decision::single(verdict, crate::rule_id::UNPARSEABLE, reason)
 }
 
 /// Compile `policy` for `ctx` and decide a single action.

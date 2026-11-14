@@ -3,7 +3,7 @@
 //! reading tool, a trusted server or another session stays quiet.
 
 use openmoat_audit::Store;
-use openmoat_core::mcp_flow::FLOW_RULE;
+use openmoat_core::rule_id::MCP_CROSS_SERVER;
 use openmoat_core::{Decision, Policy, Verdict};
 use openmoat_hosts::{Host, mcp_call_action, mcp_call_arguments};
 use serde_json::{Value, json};
@@ -94,7 +94,7 @@ fn a_url_one_server_returned_sent_to_another_servers_tool_needs_review() {
         Verdict::Defer,
     );
     assert_eq!(d.verdict, Verdict::Review, "{d:?}");
-    assert_eq!(d.rules, [FLOW_RULE]);
+    assert_eq!(d.rules, [MCP_CROSS_SERVER]);
     assert!(
         d.reasons[0].contains("`web`") && d.reasons[0].contains("`http`"),
         "{d:?}"
@@ -191,7 +191,7 @@ fn pinned_annotations_decide_what_a_tool_does() {
     let d = c.decide(SESSION, "mcp__kb__lookup", &args, Verdict::Defer);
     assert_eq!(
         (d.verdict, d.rules.as_slice()),
-        (Verdict::Review, [FLOW_RULE.to_owned()].as_slice())
+        (Verdict::Review, [MCP_CROSS_SERVER.to_owned()].as_slice())
     );
     assert!(d.reasons[0].contains("`kb`"), "{d:?}");
     let d = c.decide(SESSION, "mcp__cache__post_entry", &args, Verdict::Defer);
@@ -254,7 +254,7 @@ fn fixtures_hold() {
             );
             if attack {
                 assert_eq!(d.verdict, Verdict::Review, "{id}: {d:?}");
-                assert!(d.rules.iter().any(|r| r == FLOW_RULE), "{id}: {d:?}");
+                assert!(d.rules.iter().any(|r| r == MCP_CROSS_SERVER), "{id}: {d:?}");
             } else {
                 assert_eq!((d.verdict, d.rules.len()), (before, 0), "{id}: {d:?}");
             }

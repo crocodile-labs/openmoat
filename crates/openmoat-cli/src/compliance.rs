@@ -12,6 +12,13 @@
 //! requirement is met.
 
 use Framework::{Iso27001, OwaspLlm2025, Soc2};
+use openmoat_core::rule_id::{
+    AGENT_CREDENTIALS, DEFAULT_NET, EXECUTABLES, KERBEROS_TICKETS, KERNEL_INTEGRITY, KERNEL_SELF,
+    MCP_SERVER_CHANGED, MCP_TOOL_HELD, MCP_UNATTRIBUTED, PROJECT_SETTINGS, PROTECTED_CONTENTS,
+    PROXY_ADDRESS, PROXY_PORT, PROXY_REQUEST, PROXY_SECRET, PROXY_SECRET_ROUTE, PROXY_SESSION,
+    PROXY_SNI, PROXY_TLS, PROXY_UPSTREAM, PUSH_RUNS_LATER, PUSH_SECRET, SECRETS_PATHS,
+    SESSION_TAINT, SESSION_WRITTEN_CODE, SETTINGS_DRIFT,
+};
 use serde::Serialize;
 
 #[cfg(test)]
@@ -163,10 +170,10 @@ pub const GROUPS: &[Group] = &[
         does: "deny or hold for review the agent's reads of key files, credential stores, secret \
                environment variables and folders that hold them",
         covers: Covers::Rules(&[
-            "secrets-paths",
+            SECRETS_PATHS,
             "build-credentials",
-            "kerberos-tickets",
-            "agent-credentials",
+            KERBEROS_TICKETS,
+            AGENT_CREDENTIALS,
             "env-secrets",
             "env-dump",
             "home-sweep",
@@ -174,7 +181,7 @@ pub const GROUPS: &[Group] = &[
             "secret-names",
             "docker-secrets",
             "agent-token",
-            openmoat_core::HOLDS_PROTECTED_RULE,
+            PROTECTED_CONTENTS,
         ]),
         controls: &[&LLM02, &CC6_1, &A5_17, &A8_3],
     },
@@ -189,11 +196,11 @@ pub const GROUPS: &[Group] = &[
             "placeholder-egress",
             "encoded-egress",
             "card-egress",
-            openmoat_core::TAINT_RULE,
-            crate::push::SECRET_RULE,
-            openmoat_proxy::RULE_SECRET,
-            openmoat_proxy::RULE_SECRET_ROUTE,
-            openmoat_proxy::RULE_TLS,
+            SESSION_TAINT,
+            PUSH_SECRET,
+            PROXY_SECRET,
+            PROXY_SECRET_ROUTE,
+            PROXY_TLS,
         ]),
         controls: &[&LLM02, &CC6_7, &A5_14, &A8_12],
     },
@@ -203,14 +210,14 @@ pub const GROUPS: &[Group] = &[
         does: "deny outbound connections to hosts the policy does not list, cloud metadata \
                addresses, and connections `openmoat proxy` refuses",
         covers: Covers::Rules(&[
-            "default.net",
+            DEFAULT_NET,
             "cloud-metadata",
-            openmoat_proxy::RULE_ADDRESS,
-            openmoat_proxy::RULE_SNI,
-            openmoat_proxy::RULE_REQUEST,
-            openmoat_proxy::RULE_UPSTREAM,
-            openmoat_proxy::RULE_PORT,
-            openmoat_proxy::RULE_SESSION,
+            PROXY_ADDRESS,
+            PROXY_SNI,
+            PROXY_REQUEST,
+            PROXY_UPSTREAM,
+            PROXY_PORT,
+            PROXY_SESSION,
         ]),
         controls: &[&CC6_6, &A8_23],
     },
@@ -224,8 +231,8 @@ pub const GROUPS: &[Group] = &[
         covers: Covers::Rules(&[
             "pipe-to-shell",
             "opaque-code",
-            crate::session_code::RULE,
-            "executables",
+            SESSION_WRITTEN_CODE,
+            EXECUTABLES,
             "container-host",
             "wsl-crossing",
         ]),
@@ -249,7 +256,7 @@ pub const GROUPS: &[Group] = &[
             "shell-rc",
             "git-internals",
             "env-poison",
-            crate::push::RUNS_LATER_RULE,
+            PUSH_RUNS_LATER,
         ]),
         controls: &[&CC6_8, &A8_7],
     },
@@ -259,7 +266,7 @@ pub const GROUPS: &[Group] = &[
         does: "deny the agent changing or stopping OpenMoat and running the commands only a \
                person may run, and hold its writes to OpenMoat's provenance notes for review",
         covers: Covers::Rules(&[
-            "kernel-self",
+            KERNEL_SELF,
             "agent-folders",
             "managed-settings",
             "stops-openmoat",
@@ -272,11 +279,7 @@ pub const GROUPS: &[Group] = &[
         title: "Configuration integrity",
         does: "deny every call while a file the policy lock pins has changed, record \
                settings drift, and block project settings that turn hooks off",
-        covers: Covers::Rules(&[
-            crate::integrity::INTEGRITY_RULE,
-            "settings-drift",
-            crate::project_settings::RULE,
-        ]),
+        covers: Covers::Rules(&[KERNEL_INTEGRITY, SETTINGS_DRIFT, PROJECT_SETTINGS]),
         controls: &[&CC7_1, &CC8_1, &A8_9],
     },
     Group {
@@ -285,7 +288,7 @@ pub const GROUPS: &[Group] = &[
         does: "deny the tool calls of a new or changed MCP server definition and the start \
                of a wrapped one until a person accepts it; refuse a tool whose definition \
                changed and a call no hook decision names",
-        covers: Covers::Rules(&[crate::mcp::SERVER_RULE, "mcp-tool-held", "mcp-unattributed"]),
+        covers: Covers::Rules(&[MCP_SERVER_CHANGED, MCP_TOOL_HELD, MCP_UNATTRIBUTED]),
         controls: &[&LLM03, &CC6_8, &CC7_1, &A8_19],
     },
     Group {

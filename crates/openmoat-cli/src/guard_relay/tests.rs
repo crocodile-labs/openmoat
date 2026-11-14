@@ -8,12 +8,13 @@ use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use openmoat_core::rule_id::RUN_GUARD_TOKEN;
+
 use openmoat_audit::Store;
 use openmoat_hosts::Host;
 use openmoat_proxy::coalesce::INTERVAL;
 
 use super::client::{connect_retrying, exchange};
-use super::service::RULE_TOKEN;
 use super::wire::{NONCE_LEN, REPLY_MAGIC, REQUEST_MAGIC, Request};
 use super::*;
 use crate::home::Home;
@@ -347,7 +348,7 @@ fn a_wrong_token_gets_no_answer_and_is_recorded() {
     assert_eq!(rows.len(), 2);
     assert!(rows[1].reasons[0].starts_with("2 hook calls came with a wrong token"));
     for row in rows {
-        assert_eq!(row.rules, [RULE_TOKEN]);
+        assert_eq!(row.rules, [RUN_GUARD_TOKEN]);
         assert_eq!(row.verdict, openmoat_core::Verdict::Deny);
         assert!(!row.reasons[0].contains(token()));
     }

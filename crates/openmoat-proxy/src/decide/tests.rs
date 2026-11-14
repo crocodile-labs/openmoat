@@ -1,3 +1,4 @@
+use openmoat_core::rule_id::PROXY_ADDRESS;
 use openmoat_core::{EvalContext, Policy};
 
 use super::*;
@@ -84,7 +85,7 @@ fn the_default_policy_allows_only_listed_hosts() {
             // local-net is a review group: refused too
             ("localhost", Verdict::Deny, "local-net"),
             ("169.254.169.254", Verdict::Deny, "cloud-metadata"),
-            ("metadata.google.internal", Verdict::Deny, RULE_ADDRESS),
+            ("metadata.google.internal", Verdict::Deny, PROXY_ADDRESS),
         ],
     );
 }
@@ -121,8 +122,8 @@ allow:
     verdicts(
         yaml,
         &[
-            ("metadata.google.internal", Verdict::Deny, RULE_ADDRESS),
-            ("x.metadata.goog", Verdict::Deny, RULE_ADDRESS),
+            ("metadata.google.internal", Verdict::Deny, PROXY_ADDRESS),
+            ("x.metadata.goog", Verdict::Deny, PROXY_ADDRESS),
             ("notmetadata.goog", Verdict::Allow, "all"),
         ],
     );

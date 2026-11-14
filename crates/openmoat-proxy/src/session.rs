@@ -24,10 +24,6 @@ use std::time::{Duration, Instant};
 use openmoat_core::Taint;
 use zeroize::Zeroizing;
 
-/// Rule id for a request refused for its session: no valid credential, the
-/// session's connection share used up, or its history unreadable.
-pub const RULE_SESSION: &str = "proxy-session";
-
 /// Shortest token a [`Credential`] accepts, in characters.
 pub const MIN_TOKEN_LEN: usize = 32;
 

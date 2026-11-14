@@ -15,11 +15,11 @@ pub const DEFAULT_OUTSIDE_READS: u32 = 25;
 /// Outside folders read after which a send with a body carries the atom, by default.
 pub const DEFAULT_OUTSIDE_FOLDERS: u32 = 2;
 
-/// The `allow` rule naming each agent's own temporary folders, which the
-/// default policy generates from the host specs: reads there never count
-/// either. Not the whole of `/tmp`: a home or a project can be below a
-/// temporary folder, and what is read there is no less collected.
-pub(crate) const AGENT_TEMP: &str = "agent-temp";
+// The `allow` rule naming each agent's own temporary folders, which the
+// default policy generates from the host specs: reads there never count
+// either. Not the whole of `/tmp`: a home or a project can be below a
+// temporary folder, and what is read there is no less collected.
+pub(crate) use crate::rule_id::AGENT_TEMP;
 
 /// Where reads never count as collection: dependency caches and toolchains an
 /// agent reads to build, besides the policy's [`AGENT_TEMP`] rule.

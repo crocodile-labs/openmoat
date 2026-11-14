@@ -59,16 +59,13 @@ pub fn backend_of(format: openmoat_hosts::SandboxFormat) -> &'static dyn backend
 }
 
 use openmoat_core::ir::{Access, Allowance, Effect, Enforcement, Loss};
+use openmoat_core::rule_id::DEFAULT_NET;
 use openmoat_core::{EvalContext, Policy, PolicyError};
 use serde::Serialize;
 
 /// Stand-in for the session's project in a host-wide lowering. Never a real
 /// directory: it only marks the patterns that name `${project}`.
 pub const PROJECT: &str = "/__moat_project__";
-
-/// The rule id of the policy's `defaults: net`, which a backend reports when
-/// it cannot reproduce an allow-by-default network.
-pub const DEFAULT_NET_RULE: &str = "default.net";
 
 /// The loopback port of `moat proxy` the host sandboxes send their commands'
 /// traffic to (`sandbox.proxy_port`); `None` leaves each host's own proxy in
@@ -306,7 +303,7 @@ pub fn kernel_self_in_writes(
         }
     };
     let rules = ir.fs.write.deny.iter().chain(&ir.fs.read.deny);
-    for rule in rules.filter(|r| r.id == KERNEL_SELF_RULE) {
+    for rule in rules.filter(|r| r.id == openmoat_core::rule_id::KERNEL_SELF) {
         for pattern in patterns::split(&rule.patterns).0 {
             if let Some(rest) = pattern.strip_prefix("**/") {
                 for write in writes.iter().filter(|w| !in_project(w)) {
@@ -343,11 +340,6 @@ pub fn kernel_self_in_writes(
     }
     Ok(held)
 }
-
-/// The rule id of the default policy's self-protection.
-#[cfg(any(target_os = "linux", test))]
-#[cfg(any(target_os = "linux", all(test, unix)))]
-const KERNEL_SELF_RULE: &str = "kernel-self";
 
 /// The project's spellings in `ctx`, the resolved one first.
 #[cfg(target_os = "linux")]
@@ -406,7 +398,7 @@ impl Report {
     fn proxy_only(&mut self, net: &Access) {
         if net.default == Effect::Allow {
             let message = "every host is reachable only through OpenMoat's proxy";
-            self.loss(openmoat_core::Kind::Net, DEFAULT_NET_RULE, message.into());
+            self.loss(openmoat_core::Kind::Net, DEFAULT_NET, message.into());
         }
         for rule in &net.allow {
             let message = "these hosts are reachable only through OpenMoat's proxy: a program that \

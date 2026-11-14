@@ -1,4 +1,5 @@
 use super::*;
+use openmoat_core::rule_id::SESSION_TAINT;
 
 /// Once the person let a write of a file run (the file holds what the reviewed
 /// write sent, and did not before), the next write of the same file in the
@@ -34,7 +35,7 @@ fn an_approved_write_covers_the_next_write_of_the_same_file() {
             .any(|r| r.contains("an earlier write of") && r.contains(WORKFLOW)),
         "{covered:?}"
     );
-    assert!(!covered.rules.iter().any(|r| r == TAINT_RULE));
+    assert!(!covered.rules.iter().any(|r| r == SESSION_TAINT));
 }
 
 /// The answer covers the one file in the one session, and only until the
@@ -214,5 +215,5 @@ fn a_secret_taint_is_not_answered_by_an_earlier_write() {
     };
     let decision = t.decide("s1", &fetch, &taint);
     assert_eq!(decision.verdict, Verdict::Review, "{decision:?}");
-    assert!(decision.rules.iter().any(|r| r == TAINT_RULE));
+    assert!(decision.rules.iter().any(|r| r == SESSION_TAINT));
 }

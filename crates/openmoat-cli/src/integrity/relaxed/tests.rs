@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use openmoat_core::rule_id::KERNEL_INTEGRITY;
+
 use serde_json::{Value, json};
 
 use super::*;
@@ -94,7 +96,7 @@ fn assert_relaxed(checked: &Checked) {
 #[track_caller]
 fn assert_denied(checked: &Checked) {
     let deny = checked.deny.as_ref().expect("drift must deny");
-    assert_eq!(deny.rules, [super::super::INTEGRITY_RULE]);
+    assert_eq!(deny.rules, [KERNEL_INTEGRITY]);
     assert_eq!(checked.relaxed, Vec::<Drift>::new());
 }
 

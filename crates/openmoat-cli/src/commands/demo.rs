@@ -125,8 +125,8 @@ mod tests {
             (Verdict::Deny, "secrets-paths"),
             (Verdict::Deny, "pipe-to-shell"),
             (Verdict::Review, "package-near-miss"),
-            (Verdict::Defer, "default"),
-            (Verdict::Deny, "kernel-self"),
+            (Verdict::Defer, openmoat_core::rule_id::DEFAULT),
+            (Verdict::Deny, openmoat_core::rule_id::KERNEL_SELF),
         ];
         assert_eq!(got.len(), EXAMPLES.len());
         for ((command, verdict, rules), (want_verdict, want_rule)) in got.iter().zip(want) {

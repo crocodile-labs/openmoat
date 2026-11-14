@@ -17,10 +17,6 @@
 
 use crate::verdict::{Decision, Verdict};
 
-/// Rule id of a call held because its arguments carry text another MCP
-/// server returned in this session.
-pub const FLOW_RULE: &str = "mcp-cross-server";
-
 /// The most pieces [`pieces`] returns for one text: a long result is kept by
 /// its first addresses and tokens and a sample of its wording.
 pub const MAX_PIECES: usize = 256;
@@ -98,7 +94,11 @@ pub fn cross_server(mut decision: Decision, sources: &[String], sink: &str) -> D
          `mcp.flow_trusted` is exempt)",
         named.join(", ")
     );
-    decision.merge(Decision::single(Verdict::Review, FLOW_RULE, reason));
+    decision.merge(Decision::single(
+        Verdict::Review,
+        crate::rule_id::MCP_CROSS_SERVER,
+        reason,
+    ));
     decision
 }
 

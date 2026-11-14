@@ -4,6 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use openmoat_core::Policy;
+use openmoat_core::rule_id::KERNEL_ERROR;
 use openmoat_hosts::Host;
 
 use crate::hangs;
@@ -192,10 +193,7 @@ const REASON_CHARS: usize = 200;
 /// credential-like handle, and `openmoat why <id>` shows the call in full.
 pub(super) fn kernel_errors(store: &openmoat_audit::Store, now_ms: i64) -> Option<String> {
     let seen = store
-        .rule_since(
-            crate::commands::guard::KERNEL_ERROR_RULE,
-            now_ms - KERNEL_ERROR_WINDOW_MS,
-        )
+        .rule_since(KERNEL_ERROR, now_ms - KERNEL_ERROR_WINDOW_MS)
         .ok()??;
     let newest = &seen.newest;
     let reason = newest.reasons.first().map_or_else(String::new, |reason| {

@@ -15,14 +15,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
+use openmoat_core::rule_id::KERNEL_SELF;
 use openmoat_core::{Policy, RuleGroup};
 
 use crate::context::{absolute, path_string};
 use crate::home::Home;
 use crate::integrity::Lock;
-
-/// The rule the binary's paths join.
-const KERNEL_SELF: &str = "kernel-self";
 
 /// The binary the lock recorded, or the running one before there is a lock.
 pub fn recorded_binary(home: &Home) -> Result<PathBuf> {

@@ -131,7 +131,7 @@ pub(super) fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
 pub(super) fn relay_outside(host: Host, request: Option<&HookRequest>) {
     let decision = Decision::single(
         Verdict::Deny,
-        crate::guard_relay::RULE_OUTSIDE,
+        openmoat_core::rule_id::RUN_GUARD_OUTSIDE,
         "the hook's environment set MOAT_GUARD_SOCKET and MOAT_GUARD_TOKEN, but it runs in no \
          `openmoat run` sandbox, so the call was decided here and not sent there; find the \
          setting that gives the hook these variables",

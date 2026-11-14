@@ -5,23 +5,26 @@
 //! The audit log is the queue. A sink that falls more than `max_backlog`
 //! events behind skips the oldest down to nine tenths of it; the skip is
 //! recorded in the audit log as an event of its own (rule
-//! [`OVERFLOW_RULE`]) and sent to the sink as a gap with its next request,
+//! [`AUDIT_DELIVERY_OVERFLOW`]) and sent to the sink as a gap with its next request,
 //! so nothing is left out unseen. The skipped events stay in the local log.
 //!
 //! Each event is trimmed before it is sent (`delivery::pack`). A sink that
 //! still answers `413` gets half as many events per request; one event alone
-//! that gets `413` is skipped the same way (rule [`TOO_LARGE_RULE`]), so one
+//! that gets `413` is skipped the same way (rule [`AUDIT_DELIVERY_TOO_LARGE`]), so one
 //! event never pauses a sink.
 //!
 //! An OTLP collector that accepts a request but rejects some of its records
 //! (`partial_success`) must not be sent them again: the cursor moves on, and
-//! the loss is recorded (rule [`PARTIAL_RULE`]) and sent as a gap.
+//! the loss is recorded (rule [`AUDIT_DELIVERY_PARTIAL`]) and sent as a gap.
 
 use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result};
 use openmoat_audit::delivery::{self, Delivered, Gap, GapReason, Origin};
 use openmoat_audit::{EventId, KnownSecrets, NewEvent, Store};
+use openmoat_core::rule_id::{
+    AUDIT_DELIVERY_OVERFLOW, AUDIT_DELIVERY_PARTIAL, AUDIT_DELIVERY_TOO_LARGE,
+};
 use openmoat_core::{Decision, Verdict};
 
 use super::config::{Config, Sink, Start};
@@ -30,14 +33,6 @@ use super::state::State;
 use crate::home::Home;
 use crate::time;
 
-/// Rule id of the audit event that records a skip.
-pub const OVERFLOW_RULE: &str = "audit-delivery-overflow";
-/// Rule id of the audit event that records an event the sink refused as too
-/// large (`413`) even alone.
-pub const TOO_LARGE_RULE: &str = "audit-delivery-too-large";
-/// Rule id of the audit event that records log records an OTLP collector
-/// accepted the request without (`partial_success`).
-pub const PARTIAL_RULE: &str = "audit-delivery-partial";
 /// The most characters of a collector's own message kept.
 const MAX_MESSAGE_CHARS: usize = 300;
 /// Host id of the events delivery itself records.
@@ -246,7 +241,12 @@ impl Sinking<'_> {
             count,
             reason: GapReason::BacklogFull,
         };
-        record_skip(self.store, &self.sink.id, OVERFLOW_RULE, &gap.describe())?;
+        record_skip(
+            self.store,
+            &self.sink.id,
+            AUDIT_DELIVERY_OVERFLOW,
+            &gap.describe(),
+        )?;
         state.cursor = Some(skip_to);
         state.skipped = state.skipped.saturating_add(count);
         state.gaps.push(gap);
@@ -264,7 +264,12 @@ impl Sinking<'_> {
             count: 1,
             reason: GapReason::TooLarge,
         };
-        record_skip(self.store, &self.sink.id, TOO_LARGE_RULE, &gap.describe())?;
+        record_skip(
+            self.store,
+            &self.sink.id,
+            AUDIT_DELIVERY_TOO_LARGE,
+            &gap.describe(),
+        )?;
         state.cursor = Some(id);
         state.skipped = state.skipped.saturating_add(1);
         state.gaps.push(gap);
@@ -319,7 +324,7 @@ impl Sinking<'_> {
         };
         if records.iter().any(|r| r.host != DELIVERY_HOST) {
             let reason = format!("{} ({why})", gap.describe());
-            record_skip(self.store, &self.sink.id, PARTIAL_RULE, &reason)?;
+            record_skip(self.store, &self.sink.id, AUDIT_DELIVERY_PARTIAL, &reason)?;
         }
         state.skipped = state.skipped.saturating_add(lost);
         state.gaps.push(gap);
@@ -328,8 +333,8 @@ impl Sinking<'_> {
 }
 
 /// A skip as an audit event: host [`DELIVERY_HOST`], the sink as its
-/// session, `rule` ([`OVERFLOW_RULE`], [`TOO_LARGE_RULE`] or
-/// [`PARTIAL_RULE`]) and `reason`. Verdict `defer`: it decides no call.
+/// session, `rule` ([`AUDIT_DELIVERY_OVERFLOW`], [`AUDIT_DELIVERY_TOO_LARGE`] or
+/// [`AUDIT_DELIVERY_PARTIAL`]) and `reason`. Verdict `defer`: it decides no call.
 fn record_skip(store: &Store, sink: &str, rule: &str, reason: &str) -> Result<()> {
     let decision = Decision::single(Verdict::Defer, rule, reason.to_owned());
     store
@@ -454,7 +459,7 @@ mod tests {
             .map(|e| e.rules.get().to_owned())
             .collect();
         assert!(
-            rules.iter().any(|r| r.contains(TOO_LARGE_RULE)),
+            rules.iter().any(|r| r.contains(AUDIT_DELIVERY_TOO_LARGE)),
             "{rules:?}"
         );
     }
@@ -525,7 +530,7 @@ mod tests {
         let events = store.export_after(EventId(0), 10).unwrap();
         let partial: Vec<String> = events
             .iter()
-            .filter(|e| e.rules.get().contains(PARTIAL_RULE))
+            .filter(|e| e.rules.get().contains(AUDIT_DELIVERY_PARTIAL))
             .map(|e| e.reasons.get().to_owned())
             .collect();
         assert_eq!(partial.len(), 1, "{partial:?}");

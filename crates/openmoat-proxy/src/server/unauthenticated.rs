@@ -11,13 +11,12 @@
 
 use std::time::Instant;
 
+use openmoat_core::rule_id::{PROXY_REQUEST, PROXY_SESSION};
 use openmoat_core::{Decision, Verdict};
 
 use super::capacity::INTERVAL;
 use crate::audit::{Connection, Recorder};
 use crate::coalesce::{Coalesce, counted};
-use crate::decide::RULE_REQUEST;
-use crate::session::RULE_SESSION;
 
 /// What was refused before a credential was verified.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,8 +32,8 @@ impl Unauthenticated {
 
     fn rule(self) -> &'static str {
         match self {
-            Self::Credential => RULE_SESSION,
-            Self::Head => RULE_REQUEST,
+            Self::Credential => PROXY_SESSION,
+            Self::Head => PROXY_REQUEST,
         }
     }
 
@@ -136,7 +135,7 @@ mod tests {
     fn a_thousand_bad_credentials_are_a_few_rows_that_count_them_all() {
         let noise = Noise::default();
         let rows = Rows::default();
-        let refused = Decision::single(Verdict::Deny, RULE_SESSION, "wrong credential");
+        let refused = Decision::single(Verdict::Deny, PROXY_SESSION, "wrong credential");
         let start = Instant::now();
         let mut written = Vec::new();
         for i in 0..1000u64 {
@@ -152,7 +151,7 @@ mod tests {
         noise.flush(&rows, start + INTERVAL * 10);
         let mut total = 1;
         for row in written.iter().skip(1) {
-            assert_eq!(row.rules, [RULE_SESSION]);
+            assert_eq!(row.rules, [PROXY_SESSION]);
             assert!(
                 row.reasons[0].ends_with("the last: wrong credential"),
                 "{row:?}"
@@ -174,8 +173,8 @@ mod tests {
     fn a_bad_head_has_its_own_first_row() {
         let noise = Noise::default();
         let now = Instant::now();
-        let credential = Decision::single(Verdict::Deny, RULE_SESSION, "wrong");
-        let head = Decision::single(Verdict::Deny, RULE_REQUEST, "not HTTP");
+        let credential = Decision::single(Verdict::Deny, PROXY_SESSION, "wrong");
+        let head = Decision::single(Verdict::Deny, PROXY_REQUEST, "not HTTP");
         assert!(
             noise
                 .row(Unauthenticated::Credential, &credential, now)

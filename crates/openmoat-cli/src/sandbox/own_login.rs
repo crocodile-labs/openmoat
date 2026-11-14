@@ -13,15 +13,13 @@
 //! the whole policy, so the agent's own tools still may not read its login.
 
 use openmoat_core::ir::brace_alternatives;
+use openmoat_core::rule_id::AGENT_CREDENTIALS;
 use openmoat_core::{EvalContext, Kind, Policy};
 use openmoat_hosts::Host;
 
 use super::Report;
 use super::exposure::within;
 use super::patterns::push_unique;
-
-/// The default policy's group of the agents' login files.
-pub const RULE: &str = "agent-credentials";
 
 /// The allowance that lists the login a session keeps readable.
 pub const ALLOWANCE: &str = "run.own-login";
@@ -46,7 +44,7 @@ impl Owner {
     }
 }
 
-/// What a session keeps readable of [`RULE`].
+/// What a session keeps readable of [`AGENT_CREDENTIALS`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Kept {
     /// Whose login it is.
@@ -57,7 +55,7 @@ pub struct Kept {
 }
 
 /// `policy` for the sandbox of a session `owner` runs in, with `--write`
-/// paths `writes` (resolved) in `ctx`: [`RULE`]'s file patterns without those
+/// paths `writes` (resolved) in `ctx`: [`AGENT_CREDENTIALS`]'s file patterns without those
 /// that hold `owner`'s login, and which they were. Only the sandbox is lowered
 /// from it; the hook keeps deciding with `policy`. A group marked `hook_only`
 /// reaches no sandbox anyway and is left as it is.
@@ -87,7 +85,7 @@ pub fn for_session(
     for group in policy
         .deny
         .iter_mut()
-        .filter(|g| g.id == RULE && !g.hook_only)
+        .filter(|g| g.id == AGENT_CREDENTIALS && !g.hook_only)
     {
         for list in [&mut group.fs_read, &mut group.fs_write] {
             let expanded: Vec<String> = list.iter().flat_map(|p| brace_alternatives(p)).collect();
@@ -151,13 +149,13 @@ pub fn report(report: &mut Report, kept: &Kept, ctx: &EvalContext) {
         Owner::Agent(host) => format!(
             "the sandbox holds {} itself, which signs in with these files, so they stay \
              readable and writable here, for the commands it runs too; every other agent's \
-             login is denied (`{RULE}`)",
+             login is denied (`{AGENT_CREDENTIALS}`)",
             host.display_name()
         ),
         Owner::Unknown => format!(
             "the program is no agent OpenMoat knows, so the agent logins inside its `--write` \
              paths stay readable and writable here, for the commands it runs too; every other \
-             agent's login is denied (`{RULE}`)"
+             agent's login is denied (`{AGENT_CREDENTIALS}`)"
         ),
     };
     for kind in [Kind::FsRead, Kind::FsWrite] {

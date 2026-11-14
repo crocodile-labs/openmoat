@@ -1,9 +1,10 @@
 use std::time::Duration;
 
+use openmoat_core::rule_id::PROXY_SECRET_EXPIRED;
 use openmoat_core::{Policy, Verdict};
 use zeroize::Zeroizing;
 
-use crate::broker::{Broker, BrokerError, Carried, Channel, Holdback, RULE_SECRET_EXPIRED};
+use crate::broker::{Broker, BrokerError, Carried, Channel, Holdback};
 
 /// Generated stand-ins; no real secret is used anywhere in these tests.
 const FIRST: &str = "fake-first-0123456789";
@@ -66,7 +67,7 @@ fn an_expired_value_is_never_sent_and_the_request_is_refused() {
         .admit("api.example.com", Channel::Plain(80), HEAD)
         .unwrap_err();
     assert_eq!(refused.verdict, Verdict::Deny);
-    assert_eq!(refused.rules, [RULE_SECRET_EXPIRED]);
+    assert_eq!(refused.rules, [PROXY_SECRET_EXPIRED]);
     let why = refused.reasons.join(" ");
     assert!(
         why.contains("secret `t`") && why.contains("expired"),

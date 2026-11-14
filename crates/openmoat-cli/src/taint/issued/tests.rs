@@ -1,4 +1,5 @@
 use openmoat_audit::NewEvent;
+use openmoat_core::rule_id::PROXY_CREDENTIAL;
 use openmoat_core::{Action, Decision, TaintSecret};
 
 use super::*;
@@ -39,7 +40,7 @@ fn record(home: &Home, session: &str, row: (&str, Option<&Action>, &str, &str)) 
 }
 
 fn issued(home: &Home, session: &str, cwd: &str) {
-    record(home, session, ("SessionStart", None, ISSUED_RULE, cwd));
+    record(home, session, ("SessionStart", None, PROXY_CREDENTIAL, cwd));
 }
 
 fn read(home: &Home, session: &str, path: &str, cwd: &str) {

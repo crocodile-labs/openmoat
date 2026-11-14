@@ -1,8 +1,9 @@
 use std::time::{Duration, Instant};
 
 use openmoat_audit::{EventId, NewEvent, SessionWrite, Store};
+use openmoat_core::rule_id::SESSION_TAINT;
 use openmoat_core::{
-    Action, CompiledPolicy, Decision, EvalContext, Policy, TAINT_RULE, Taint, TaintSecret, Verdict,
+    Action, CompiledPolicy, Decision, EvalContext, Policy, Taint, TaintSecret, Verdict,
 };
 use openmoat_hosts::{Host, Replacement};
 
@@ -489,7 +490,10 @@ impl Covering {
             self.compiled
                 .with_taint(untainted.clone(), action, &FsPathResolver, &taint.taint);
         assert_eq!(tainted.verdict, Verdict::Review, "{tainted:?}");
-        assert!(tainted.rules.iter().any(|r| r == TAINT_RULE), "{tainted:?}");
+        assert!(
+            tainted.rules.iter().any(|r| r == SESSION_TAINT),
+            "{tainted:?}"
+        );
         let call = Call {
             home: &self.home,
             store: &self.store,
