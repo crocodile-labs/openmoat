@@ -1,7 +1,6 @@
 # ADR-093: The hook waits a bounded time for a remote answer
 
-Status: accepted · Date: 2026-11-13 · Builds on ADR-078 · Number 092 is held by
-another open change, so this decision is 093.
+Status: accepted · Date: 2026-11-13 · Builds on ADR-078
 
 ## Context
 
