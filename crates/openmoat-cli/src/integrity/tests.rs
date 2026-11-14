@@ -217,7 +217,7 @@ fn a_file_is_never_pinned_whole_and_by_its_codex_profile() {
 
 #[cfg(debug_assertions)]
 #[test]
-#[should_panic(expected = "pinned whole and by its Codex profile")]
+#[should_panic(expected = "pinned whole and by the part of it OpenMoat owns")]
 fn saving_a_lock_that_pins_a_file_twice_is_a_bug() {
     let dir = tempfile::tempdir().unwrap();
     let config = write(dir.path(), "config.toml", "model = \"x\"\n");
