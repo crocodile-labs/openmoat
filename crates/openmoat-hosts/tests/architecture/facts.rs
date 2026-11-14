@@ -23,11 +23,14 @@ pub struct Facts {
 }
 
 /// Directories a host's spec names that are not the host's own: every XDG
-/// program's `.config` (OpenCode's `.config/opencode`), and the repository's
+/// program's `.config` (OpenCode's `.config/opencode`), the repository's
 /// `.github` (GitHub Copilot CLI's project settings), where CI's workflows
-/// live too. A host's own directory below one (`.config/opencode`) is still
-/// matched whole.
-const SHARED_DIRS: &[&str] = &[".config", ".github"];
+/// live too, and the cross-agent `.agents` (Antigravity CLI's project
+/// settings, goose's project plugins), whose `skills` folder several hosts
+/// load by one convention (`contract/convention.rs`). A host's own directory
+/// below one (`.config/opencode`, `.agents/plugins`) and its own files in one
+/// (`.agents/hooks.json`) are still matched whole.
+const SHARED_DIRS: &[&str] = &[".config", ".github", ".agents"];
 
 /// The characters a word, program or file name is made of; anything else
 /// ends one.
@@ -102,6 +105,15 @@ impl Facts {
         }
         if let Some(project) = &spec.project_settings {
             dirs.push(project.dir);
+            let in_project = [project.shared]
+                .into_iter()
+                .chain(project.local)
+                .chain(project.more.iter().copied());
+            if SHARED_DIRS.contains(&project.dir) {
+                // `.agents/hooks.json`: the host's own file in a shared folder
+                dirs.extend(in_project.map(|f| &*format!("{}/{f}", project.dir).leak()));
+            }
+            dirs.extend(project.plugin_dir.as_ref().map(|p| p.path));
             let named = [project.shared, project.user_file]
                 .into_iter()
                 .chain(project.local)

@@ -198,6 +198,40 @@
   context: { cwd: /p, project: /p }
   action: { fs_write: "/p/docs/skills/onboarding.md" }
   expect: { verdict: allow, rules: [project-fs] }
+# neighbours of the shared `.agents/skills` folder and OpenCode's agent and skill
+# folders stay as they were: project work, or left to the agent
+- id: benign-write-project-agents-notes
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.agents/notes.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-project-agents-skills-lookalike
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/docs/agents/skills/deploy.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-project-agents-skillset
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.agents/skillset/x.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-opencode-user-theme
+  threat: T9
+  action: { fs_write: "~/.config/opencode/themes/dark.json" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-write-opencode-user-agents-lookalike
+  threat: T9
+  action: { fs_write: "~/.config/opencode-notes/agents/reviewer.md" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-opencode-user-skill
+  threat: T9
+  action: { fs_read: "~/.config/opencode/skills/deploy/SKILL.md" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-agents-skill
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_read: "/p/.agents/skills/deploy/SKILL.md" }
+  expect: { verdict: allow, rules: [project-fs] }
 - id: benign-opencode-run
   threat: T9
   action: { shell: "opencode run 'fix the failing test'" }
@@ -2606,10 +2640,12 @@
   why: no untrusted content was read, so nothing could have planted the edit
   action: { fs_write: "/p/CLAUDE.md" }
   expect: { verdict: allow, rules: [project-fs] }
-- id: benign-clean-session-edit-agents-skill
+# (a `.agents/skills` skill is no longer one: the hosts load it into later
+# sessions, so `runs-later` holds it for review in any session)
+- id: benign-clean-session-edit-agents-md
   threat: T8
   why: no untrusted content was read, so nothing could have planted the edit
-  action: { fs_write: "/p/.agents/skills/deploy/SKILL.md" }
+  action: { fs_write: "/p/AGENTS.md" }
   expect: { verdict: allow, rules: [project-fs] }
 
 # provenance (ADR-056): only writes to OpenMoat's notes ref need review; other notes,

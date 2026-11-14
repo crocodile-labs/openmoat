@@ -2,7 +2,7 @@
 
 use std::sync::LazyLock;
 
-use openmoat_hosts::{Host, RunsLater};
+use openmoat_hosts::{RunsLater, every_runs_later};
 
 use super::PROJECT;
 
@@ -67,11 +67,10 @@ pub static AGENT_CONFIG: LazyLock<Vec<&'static str>> =
     LazyLock::new(|| hosts_runs_later(|entry| entry.agent_config).collect());
 
 /// The project globs (`**/…`) of every host's `Protect::runs_later` entries
-/// that `pick` takes, in the host list's order.
+/// that `pick` takes, in the host list's order, then those of each shared
+/// convention a host names (`.agents/skills`), once.
 fn hosts_runs_later(pick: fn(&RunsLater) -> bool) -> impl Iterator<Item = &'static str> {
-    Host::EVERY
-        .iter()
-        .flat_map(|host| host.spec().protect.runs_later)
+    every_runs_later()
         .filter(move |entry| pick(entry))
         .flat_map(|entry| entry.paths.globs.iter().copied())
         .filter(|glob| glob.starts_with("**/"))
@@ -321,8 +320,15 @@ mod tests {
     #[test]
     fn agent_configuration_comes_from_every_hosts_spec() {
         let mut flagged = Vec::new();
-        for host in Host::EVERY {
+        for host in openmoat_hosts::Host::EVERY {
             for entry in host.spec().protect.runs_later {
+                if entry.agent_config {
+                    flagged.extend(entry.paths.globs.iter().copied());
+                }
+            }
+        }
+        for convention in openmoat_hosts::Convention::in_use() {
+            for entry in convention.runs_later {
                 if entry.agent_config {
                     flagged.extend(entry.paths.globs.iter().copied());
                 }
@@ -330,6 +336,9 @@ mod tests {
         }
         assert_eq!(*AGENT_CONFIG, flagged);
         for file in [
+            "**/.agents/skills/**",
+            "**/.opencode/modes/**",
+            "**/.opencode/skill/**",
             "**/.cline/hooks/**",
             "**/.clinerules/hooks/**",
             "**/.gemini/policies/**",

@@ -170,8 +170,15 @@ fn the_matcher_finds_hosts_in_code_not_in_words() {
         "\"**/.claude.json\"",
         "fs.read: [\"~/.codex/auth.json\"]",
         "  - \"{pi,*/pi} auth print-api-key*\"",
+        // a host's own paths in the shared `.agents` folder
+        "\"**/.agents/mcp_config.json\"",
+        "\"~/.agents/plugins/openmoat\"",
     ] {
         assert!(facts.named_in(named).is_some(), "{named}");
+    }
+    // the shared folder itself, and the convention several hosts load from it
+    for shared in ["\"**/.agents\"", "\"**/.agents/skills/**\""] {
+        assert_eq!(facts.named_in(shared), None, "{shared}");
     }
     for not_named in [
         "\"--continue\"",

@@ -818,11 +818,12 @@ allow:
       "!${project}/**/.opencode/tools/**", "!${project}/**/.opencode/tool/**",
       "!${project}/**/.opencode/commands/**", "!${project}/**/.opencode/command/**",
       "!${project}/**/.opencode/agents/**", "!${project}/**/.opencode/agent/**",
-      "!${project}/**/.opencode/skills/**", "!${project}/**/.opencode/opencode.json",
-      "!${project}/**/.opencode/opencode.jsonc", "!${project}/**/opencode.json",
-      "!${project}/**/opencode.jsonc", "!${project}/**/.opencode/package.json",
-      "!${project}/**/.opencode", "!${project}/**/.opencode/plugins",
-      "!${project}/**/.opencode/plugin",
+      "!${project}/**/.opencode/modes/**", "!${project}/**/.opencode/mode/**",
+      "!${project}/**/.opencode/skills/**", "!${project}/**/.opencode/skill/**",
+      "!${project}/**/.opencode/opencode.json", "!${project}/**/.opencode/opencode.jsonc",
+      "!${project}/**/opencode.json", "!${project}/**/opencode.jsonc",
+      "!${project}/**/.opencode/package.json", "!${project}/**/.opencode",
+      "!${project}/**/.opencode/plugins", "!${project}/**/.opencode/plugin",
       # Hermes Agent
       "!${project}/**/.hermes/plugins/**", "!${project}/**/.hermes",
       "!${project}/**/.hermes/plugins",
@@ -830,6 +831,9 @@ allow:
       "!${project}/**/.clinerules/hooks/**", "!${project}/**/.cline/hooks/**",
       "!${project}/**/.clinerules", "!${project}/**/.clinerules/hooks", "!${project}/**/.cline",
       "!${project}/**/.cline/hooks",
+      # Agent Skills, loaded by Codex, Cursor, GitHub Copilot CLI, pi, Gemini CLI,
+      # OpenCode, goose, Antigravity CLI:
+      "!${project}/**/.agents/skills/**", "!${project}/**/.agents", "!${project}/**/.agents/skills",
       # a virtual environment's interpreter and a dev container's host command
       "!${project}/**/.venv/bin/**", "!${project}/**/venv/bin/**", "!${project}/**/.venv/bin", "!${project}/**/venv/bin",
       "!${project}/**/.devcontainer/**", "!${project}/**/.devcontainer", "!${project}/**/.devcontainer.json"]
@@ -1330,13 +1334,24 @@ review:
       "~/.config/opencode/tools/**", "~/.config/opencode/tool/**", "~/.config/opencode/commands/**",
       "~/.config/opencode/command/**", "~/.config/opencode/package.json",
       "~/.config/opencode/node_modules/**", "~/.cache/opencode/node_modules/**",
-      # OpenCode: a project's plugins, tools, commands, agents and skills (loaded at
-      # start, with no prompt), and its configuration, which adds plugins, MCP
+      # OpenCode: the person's agents and modes, which set their own prompt, model
+      # and permissions, and skills, loaded into every later session with no
+      # prompt; and the folders that hold them and the commands and tools (a
+      # rename away and back edits them)
+      "~/.config/opencode/agents/**", "~/.config/opencode/agent/**", "~/.config/opencode/modes/**",
+      "~/.config/opencode/mode/**", "~/.config/opencode/skills/**", "~/.config/opencode/skill/**",
+      "~/.config/opencode/agents", "~/.config/opencode/agent", "~/.config/opencode/modes",
+      "~/.config/opencode/mode", "~/.config/opencode/skills", "~/.config/opencode/skill",
+      "~/.config/opencode/commands", "~/.config/opencode/command", "~/.config/opencode/tools",
+      "~/.config/opencode/tool",
+      # OpenCode: a project's plugins, tools, commands, agents, modes and skills
+      # (loaded at start, with no prompt), and its configuration, which adds plugins, MCP
       # servers and permission rules (a write that removes OpenMoat's plugin is
       # denied, `project-settings`)
       "**/.opencode/plugins/**", "**/.opencode/plugin/**", "**/.opencode/tools/**",
       "**/.opencode/tool/**", "**/.opencode/commands/**", "**/.opencode/command/**",
-      "**/.opencode/agents/**", "**/.opencode/agent/**", "**/.opencode/skills/**",
+      "**/.opencode/agents/**", "**/.opencode/agent/**", "**/.opencode/modes/**",
+      "**/.opencode/mode/**", "**/.opencode/skills/**", "**/.opencode/skill/**",
       "**/.opencode/opencode.json", "**/.opencode/opencode.jsonc", "**/opencode.json",
       "**/opencode.jsonc",
       # OpenCode: a project's package file, which OpenCode writes itself when it
@@ -1360,6 +1375,13 @@ review:
       # Cline: the folders above them (a rename away and back edits them); its rules
       # files in `.clinerules/` stay ordinary project writes
       "**/.clinerules", "**/.clinerules/hooks", "**/.cline", "**/.cline/hooks",
+      # Agent Skills, loaded by Codex, Cursor, GitHub Copilot CLI, pi, Gemini CLI,
+      # OpenCode, goose, Antigravity CLI:
+      # the shared `.agents/skills` folder, whose skills these hosts load into their
+      # later sessions (in the home too: `**/` matches it there)
+      "**/.agents/skills/**",
+      # the folders above it (a rename away and back edits them)
+      "**/.agents", "**/.agents/skills",
       # a virtual environment's interpreter and scripts, which the editor's
       # Python extension and the test runners start outside any sandbox; with
       # the folder itself, a rename away and back edits it

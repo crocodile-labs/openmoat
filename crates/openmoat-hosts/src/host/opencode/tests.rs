@@ -355,3 +355,32 @@ fn a_copy_of_an_agent_folder_is_denied_with_the_allow_hint() {
     assert!(reason.contains("openmoat allow --last"), "{reason}");
     assert!(reason.contains("/Users/me/.codex"), "{reason}");
 }
+
+/// The folders OpenCode loads agents, modes, commands and skills from, in the
+/// person's configuration directory and a project's `.opencode` (singular and
+/// plural, as OpenCode 1 globs them), are all held for review, a project's as
+/// its configuration; `.agents/skills` comes from the shared convention.
+#[test]
+fn every_folder_opencode_loads_runs_later() {
+    let spec = Host::OpenCode.spec();
+    let entries = spec.protect.runs_later;
+    let has = |glob: &str, agent_config: bool| {
+        entries
+            .iter()
+            .any(|e| e.agent_config == agent_config && e.paths.globs.contains(&glob))
+    };
+    for folder in ["agents", "agent", "modes", "mode", "skills", "skill", "commands", "command"] {
+        assert!(has(&format!("~/.config/opencode/{folder}/**"), false), "{folder}");
+        assert!(has(&format!("**/.opencode/{folder}/**"), true), "{folder}");
+    }
+    for folder in ["agents", "agent", "modes", "mode", "skills", "skill", "commands", "tools"] {
+        assert!(has(&format!("~/.config/opencode/{folder}"), false), "{folder}");
+    }
+    assert!(
+        spec.conventions
+            .iter()
+            .any(|c| c.name == crate::AGENT_SKILLS.name)
+    );
+    // written once, in the convention, not again in OpenCode's own lists
+    assert!(entries.iter().all(|e| !e.paths.globs.iter().any(|g| g.contains(".agents/"))));
+}

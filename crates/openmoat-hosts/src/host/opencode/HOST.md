@@ -123,6 +123,38 @@ by default.
   `.opencode/plugin/` load at start, with no prompt; `openmoat status` and `openmoat
   doctor` warn about them.
 
+## Agents, modes, commands and skills
+
+OpenCode loads these from every configuration directory (the person's
+`~/.config/opencode`, each project `.opencode` from the working directory up to the
+project root, `~/.opencode`, `OPENCODE_CONFIG_DIR`), with no prompt. OpenCode 1.19.4 globs
+`{agent,agents}/**/*.md` and `{mode,modes}/*.md` (`src/config/agent.ts`),
+`{command,commands}/**/*.md` (`command.ts`) and `{skill,skills}/**/SKILL.md`
+(`src/skill/index.ts`); OpenCode 2's docs name the plural folders
+([agents](https://opencode.ai/docs/agents), [commands](https://opencode.ai/docs/commands),
+[skills](https://opencode.ai/docs/skills), [plugins](https://opencode.ai/docs/plugins),
+[config](https://opencode.ai/docs/config)). An agent's frontmatter sets its own prompt,
+model and permissions; a command's `` !`…` `` shell runs outside the agent's permission
+flow; a skill's instructions load into later sessions.
+
+- The person's: writes to `agents/`, `agent/`, `modes/`, `mode/`, `skills/`, `skill/`,
+  `commands/`, `command/`, `tools/` and `tool/` in `~/.config/opencode` (and in the
+  directory `openmoat init` recorded for it), and to those folders themselves (a rename
+  away and back edits them), need review (`runs-later`). The plugin folders and
+  `opencode.json[c]` there are `kernel-self`'s: denied.
+- A project's: the same folders in `.opencode`, at any depth, need review, and are
+  agent configuration: `openmoat run` keeps its commands from writing them.
+- Skills OpenCode also reads by other agents' conventions: `.claude/skills` (Claude
+  Code's, already agent configuration) and the shared Agent Skills folder
+  `.agents/skills`, in a project and in the home (1.19.4 `EXTERNAL_SKILL_PATTERN`). The
+  latter is one fact for every host that loads it (`AGENT_SKILLS` in
+  `contract/convention.rs`): writes to it and to `.agents` and `.agents/skills` need
+  review in any session, and `openmoat run` keeps commands from writing it.
+- Not covered: the system directory (`/etc/opencode`, `/Library/Application
+  Support/opencode`, `%ProgramData%\opencode`), whose `agents/`, `commands/`, `skills/` and
+  `plugins/` OpenCode 2 also loads; skill folders a configuration's `skills.paths` or
+  `skills.urls` adds.
+
 ## Removing OpenMoat's plugin by configuration (OpenCode 2)
 
 OpenCode 2 reads `plugins` (and the old `plugin`) of every configuration file, and an

@@ -149,6 +149,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         ],
         ..crate::contract::Protect::BASE
     },
+    // project skills in `.agents/skills/` (beside `.cursor/skills/`), user ones
+    // in `~/.agents/skills/` (<https://cursor.com/docs/context/skills>)
+    conventions: &[crate::contract::AGENT_SKILLS],
     docs: doc::DOCS,
     tool_token: crate::ToolToken::NotWithheld {
         why: "Cursor documents neither how it starts tool commands nor a setting for them",

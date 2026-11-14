@@ -152,6 +152,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_more: &[],
     }),
     protect: protect::PROTECT,
+    // workspace skills in `.gemini/skills/` or the `.agents/skills/` alias, user
+    // skills in `~/.gemini/skills/` or `~/.agents/skills/`
+    // (<https://geminicli.com/docs/cli/skills/>)
+    conventions: &[crate::contract::AGENT_SKILLS],
     process: protect::PROCESS,
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,

@@ -156,6 +156,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_more: &[],
     }),
     protect: protect::PROTECT,
+    // a workspace's `.agents/skills/`, and the same folder in each parent up to
+    // the repository root (<https://antigravity.google/docs/skills>)
+    conventions: &[crate::contract::AGENT_SKILLS],
     process: protect::PROCESS,
     docs: doc::DOCS,
     tool_token: crate::ToolToken::NotWithheld {

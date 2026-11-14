@@ -180,11 +180,8 @@ const PROTECTED_WRITES: &[&str] = &[
     "**/.claude/**",
     "**/.claude.json",
     "**/.mcp.json",
-    // Codex: its directory (configuration, hooks, skills) and a project's, and the
-    // shared `.agents/skills` folder it and several other agents load skills from
+    // Codex: its directory (configuration, hooks, skills) and a project's
     "**/.codex/**",
-    "**/.agents/skills",
-    "**/.agents/skills/**",
     // Cursor: its directory (hooks, MCP servers, rules) and a project's, and the
     // rules file it loads into every session
     "**/.cursor/**",
@@ -264,6 +261,12 @@ const PROTECTED_WRITES: &[&str] = &[
     "~/.gemini/config/**",
     "**/.agents/hooks.json",
     "**/.agents/mcp_config.json",
+    // Agent Skills, loaded by Codex, Cursor, GitHub Copilot CLI, pi, Gemini CLI,
+    // OpenCode, goose, Antigravity CLI:
+    // the shared `.agents/skills` folder and the folder above it
+    "**/.agents",
+    "**/.agents/skills",
+    "**/.agents/skills/**",
     // /generated
     // OpenMoat's own state (`kernel-self` denies it outright)
     "**/.moat/**",

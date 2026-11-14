@@ -33,6 +33,11 @@ use std::sync::{Mutex, PoisonError};
 
 use openmoat_hosts::{Host, Paths, Protect};
 
+mod conventions {
+    include!("protect/conventions.rs");
+}
+use conventions::{convention_lines, runs_later_groups};
+
 mod policy_blocks {
     include!("common/policy_blocks.rs");
 }
@@ -231,12 +236,12 @@ fn the_default_policy_keeps_each_agents_credentials_from_its_tools() {
 
 #[test]
 fn the_taint_list_protects_each_hosts_own_files() {
-    let body = lines(
-        |p| p.taint,
-        |line| format!("    // {line}"),
-        |glob| format!("    \"{glob}\","),
-    );
+    let comment = |line: &str| format!("    // {line}");
+    let glob = |glob: &str| format!("    \"{glob}\",");
+    let mut body = lines(|p| p.taint, comment, glob);
+    body.push_str(&convention_lines(|c| c.taint, comment, glob));
     assert!(body.contains("**/.copilot/hooks/**"), "{body}");
+    assert!(body.contains("\"**/.agents/skills/**\""), "{body}");
     check(TAINT, TAINT_BEFORE, CORE_AFTER, &body);
 }
 
@@ -381,12 +386,17 @@ fn packed(items: &[String]) -> String {
     out
 }
 
-/// The `runs-later` rule's lines for every host's [`Protect::runs_later`]:
-/// each entry's comment, then its globs.
+/// The `runs-later` rule's lines for every host's [`Protect::runs_later`]
+/// and each convention's: each entry's comment, then its globs.
 fn runs_later_lines() -> String {
     let mut out = String::new();
-    for host in Host::EVERY {
-        for entry in host.spec().protect.runs_later {
+    for group in runs_later_groups() {
+        if group.convention {
+            for line in group.name.lines() {
+                let _ = writeln!(out, "      # {line}");
+            }
+        }
+        for entry in group.entries {
             for line in entry.paths.why.lines() {
                 let _ = writeln!(out, "      # {line}");
             }
@@ -397,22 +407,22 @@ fn runs_later_lines() -> String {
     out
 }
 
-/// `project-fs`'s exceptions for every host's project globs (`**/…`) among
-/// its [`Protect::runs_later`], one group a host.
+/// `project-fs`'s exceptions for every host's and convention's project
+/// globs (`**/…`) among its `runs-later` entries, one group each.
 fn project_fs_lines() -> String {
     let mut out = String::new();
-    for host in Host::EVERY {
-        let excepted: Vec<String> = host
-            .spec()
-            .protect
-            .runs_later
+    for group in runs_later_groups() {
+        let excepted: Vec<String> = group
+            .entries
             .iter()
             .flat_map(|entry| entry.paths.globs)
             .filter(|g| g.starts_with("**/"))
             .map(|g| format!("!${{project}}/{g}"))
             .collect();
         if !excepted.is_empty() {
-            let _ = writeln!(out, "      # {}", host.display_name());
+            for line in group.name.lines() {
+                let _ = writeln!(out, "      # {line}");
+            }
             out.push_str(&packed(&excepted));
         }
     }
@@ -444,26 +454,27 @@ fn project_fs_leaves_out_each_hosts_files_that_run_later() {
 #[test]
 fn agent_configuration_is_named_in_the_project() {
     let mut found = 0;
-    for host in Host::EVERY {
-        for entry in host.spec().protect.runs_later {
+    for group in runs_later_groups() {
+        let group_name = &group.name;
+        for entry in group.entries {
             for glob in entry.paths.globs {
                 let rest = glob.strip_prefix("**/");
                 if entry.agent_config {
                     found += 1;
-                    let rest = rest.unwrap_or_else(|| panic!("{host:?}: {glob} is not `**/…`"));
+                    let rest = rest.unwrap_or_else(|| panic!("{group_name}: {glob} is not `**/…`"));
                     let name = rest.strip_suffix("/**").unwrap_or(rest);
                     assert!(
                         !name.contains(['*', '?', '[', '{']),
-                        "{host:?}: {glob} has a glob below `**/`"
+                        "{group_name}: {glob} has a glob below `**/`"
                     );
                 } else if let Some(rest) = rest {
                     // a project path held for review only is a folder above an
-                    // entry of the host's configuration, or a file the host
-                    // writes itself in such a folder (OpenCode's
+                    // entry of the same group's configuration, or a file the
+                    // host writes itself in such a folder (OpenCode's
                     // `.opencode/package.json`), which `openmoat run` must
                     // leave writable to the host
                     let holds = |folder: &str| {
-                        host.spec().protect.runs_later.iter().any(|e| {
+                        group.entries.iter().any(|e| {
                             e.agent_config
                                 && e.paths
                                     .globs
@@ -476,10 +487,10 @@ fn agent_configuration_is_named_in_the_project() {
                         .is_some_and(|(folder, name)| holds(folder) && !name.contains('*'));
                     assert!(
                         holds(rest) || beside,
-                        "{host:?}: {glob} is neither above nor beside its configuration"
+                        "{group_name}: {glob} is neither above nor beside its configuration"
                     );
                 } else {
-                    assert!(glob.starts_with("~/"), "{host:?}: {glob}");
+                    assert!(glob.starts_with("~/"), "{group_name}: {glob}");
                 }
             }
         }

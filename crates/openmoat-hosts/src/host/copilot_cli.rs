@@ -132,6 +132,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_more: &[],
     }),
     protect: protect::PROTECT,
+    // project skills in `.agents/skills`, personal ones in `~/.agents/skills`
+    // (<https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/create-skills>)
+    conventions: &[crate::contract::AGENT_SKILLS],
     process: protect::PROCESS,
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,

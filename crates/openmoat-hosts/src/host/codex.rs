@@ -157,12 +157,14 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             &["**/.codex/config.toml"],
         )],
         taint: &[crate::contract::Paths::new(
-            "Codex: its directory (configuration, hooks, skills) and a project's, and the\n\
-             shared `.agents/skills` folder it and several other agents load skills from",
-            &["**/.codex/**", "**/.agents/skills", "**/.agents/skills/**"],
+            "Codex: its directory (configuration, hooks, skills) and a project's",
+            &["**/.codex/**"],
         )],
         ..crate::contract::Protect::BASE
     },
+    // `$CWD/.agents/skills`, the folders above it to `$REPO_ROOT/.agents/skills`,
+    // and `$HOME/.agents/skills` (<https://learn.chatgpt.com/docs/build-skills>)
+    conventions: &[crate::contract::AGENT_SKILLS],
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
     // Codex 0.166 sends a call's own working directory (a shell call's

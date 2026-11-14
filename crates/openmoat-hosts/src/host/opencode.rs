@@ -210,6 +210,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_more: &["opencode.jsonc"],
     }),
     protect: protect::PROTECT,
+    // `~/.agents/skills` and a project's `.agents/skills`, searched from the
+    // working directory up to the project root (<https://opencode.ai/docs/skills>;
+    // OpenCode 1.19.4 `src/skill/index.ts`, `EXTERNAL_SKILL_PATTERN`)
+    conventions: &[crate::contract::AGENT_SKILLS],
     process: protect::PROCESS,
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,

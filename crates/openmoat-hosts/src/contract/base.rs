@@ -26,6 +26,7 @@ impl HostSpec {
         detect: None,
         resume_hint: None,
         protect: Protect::BASE,
+        conventions: &[],
         process: ProcessSpec::BASE,
         advisories: super::Advisories::BASE,
         docs: HostDocs::BASE,

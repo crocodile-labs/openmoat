@@ -83,9 +83,39 @@ pub(super) const PROTECT: Protect = Protect {
                 "~/.cache/opencode/node_modules/**",
             ],
         ),
+        // opencode.ai/docs/agents ("~/.config/opencode/agents/<name>.md"),
+        // /docs/skills ("~/.config/opencode/skills"), /docs/commands; OpenCode
+        // 1.19.4 loads `{agent,agents}/**/*.md`, `{mode,modes}/*.md`,
+        // `{command,commands}/**/*.md` and `{skill,skills}/**/SKILL.md` from
+        // each configuration directory (`src/config/agent.ts`, `command.ts`,
+        // `src/skill/index.ts`)
+        RunsLater::review(
+            "OpenCode: the person's agents and modes, which set their own prompt, model\n\
+             and permissions, and skills, loaded into every later session with no\n\
+             prompt; and the folders that hold them and the commands and tools (a\n\
+             rename away and back edits them)",
+            &[
+                "~/.config/opencode/agents/**",
+                "~/.config/opencode/agent/**",
+                "~/.config/opencode/modes/**",
+                "~/.config/opencode/mode/**",
+                "~/.config/opencode/skills/**",
+                "~/.config/opencode/skill/**",
+                "~/.config/opencode/agents",
+                "~/.config/opencode/agent",
+                "~/.config/opencode/modes",
+                "~/.config/opencode/mode",
+                "~/.config/opencode/skills",
+                "~/.config/opencode/skill",
+                "~/.config/opencode/commands",
+                "~/.config/opencode/command",
+                "~/.config/opencode/tools",
+                "~/.config/opencode/tool",
+            ],
+        ),
         RunsLater::agent_config(
-            "OpenCode: a project's plugins, tools, commands, agents and skills (loaded at\n\
-             start, with no prompt), and its configuration, which adds plugins, MCP\n\
+            "OpenCode: a project's plugins, tools, commands, agents, modes and skills\n\
+             (loaded at start, with no prompt), and its configuration, which adds plugins, MCP\n\
              servers and permission rules (a write that removes OpenMoat's plugin is\n\
              denied, `project-settings`)",
             &[
@@ -97,9 +127,14 @@ pub(super) const PROTECT: Protect = Protect {
                 "**/.opencode/command/**",
                 "**/.opencode/agents/**",
                 "**/.opencode/agent/**",
+                // OpenCode 1's modes, primary agents (`{mode,modes}/*.md`)
+                "**/.opencode/modes/**",
+                "**/.opencode/mode/**",
                 // the folder its skills docs name, searched from the working
-                // directory up to the project root (opencode.ai/docs/skills)
+                // directory up to the project root (opencode.ai/docs/skills),
+                // and the singular one OpenCode 1 also reads
                 "**/.opencode/skills/**",
+                "**/.opencode/skill/**",
                 "**/.opencode/opencode.json",
                 "**/.opencode/opencode.jsonc",
                 "**/opencode.json",

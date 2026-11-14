@@ -149,6 +149,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_more: &[],
     }),
     protect: protect::PROTECT,
+    // `~/.agents/skills/` and a project's `.agents/skills/`, found from the
+    // working directory through its ancestors (`packages/coding-agent/docs/skills.md`)
+    conventions: &[crate::contract::AGENT_SKILLS],
     process: protect::PROCESS,
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,

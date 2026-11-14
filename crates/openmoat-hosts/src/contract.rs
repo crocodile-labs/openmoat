@@ -11,6 +11,7 @@ mod advisory;
 mod base;
 mod bundle;
 mod consent;
+mod convention;
 mod docs;
 mod heartbeat;
 mod hook_failure;
@@ -32,6 +33,7 @@ mod workspace;
 pub use advisory::{Advisories, Advisory, Platform, Version};
 pub use bundle::Bundle;
 pub use consent::ConsentFile;
+pub use convention::{AGENT_SKILLS, Convention, every_runs_later};
 pub use docs::{HostDocs, ToolRow};
 pub use heartbeat::{Activity, HEARTBEAT_FLAG, Heartbeat};
 pub use hook_failure::{FailureOutcome, HookFailure};
@@ -162,6 +164,9 @@ pub struct HostSpec {
     /// `agent-credentials` rules and the taint list protect, in their
     /// generated blocks (`tests/protect.rs`).
     pub protect: Protect,
+    /// The shared folder conventions the host's own docs say it loads
+    /// (`.agents/skills`), protected once for every host that names them.
+    pub conventions: &'static [Convention],
     /// How to tell the host's process among a command's ancestors.
     pub process: ProcessSpec,
     /// Published security advisories of the host's releases, which `moat

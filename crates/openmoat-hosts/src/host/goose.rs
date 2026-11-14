@@ -138,6 +138,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_more: &[],
     }),
     protect: protect::PROTECT,
+    // `~/.agents/skills/` for every session and a project's `.agents/skills/`
+    // (<https://goose-docs.ai/docs/guides/context-engineering/using-skills>)
+    conventions: &[crate::contract::AGENT_SKILLS],
     process: protect::PROCESS,
     docs: doc::DOCS,
     // Tools take `GOOSE_SHELL`; hooks are `sh -c` (ADR-075).
