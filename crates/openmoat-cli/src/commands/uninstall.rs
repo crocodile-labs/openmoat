@@ -150,16 +150,22 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
         rewritten.push(home.hosts_path());
     }
     integrity::unpin(&home, &undone, &rewritten)?;
-    // If the proxy service was installed, stop and remove it alongside the
-    // hooks: leaving it behind would keep listening with a stale binary
-    // reference once hooks are gone.
-    match super::service::manager(&home).and_then(|m| m.uninstall()) {
-        Ok(Some(path)) => writeln!(out, "✔ proxy service    removed: {}", path.display())?,
-        Ok(None) => {}
-        Err(e) => writeln!(
-            out,
-            "! proxy service    {e:#}; `openmoat proxy uninstall` removes it by hand"
-        )?,
+    // If the proxy service or the approvals listener's was installed, stop
+    // and remove it alongside the hooks: leaving it behind would keep running
+    // with a stale binary reference once hooks are gone.
+    for (row, job) in [
+        ("proxy service", &super::service::PROXY),
+        ("approvals service", &super::service::APPROVALS),
+    ] {
+        match super::service::manager(&home, job).and_then(|m| m.uninstall()) {
+            Ok(Some(path)) => writeln!(out, "✔ {row:<16} removed: {}", path.display())?,
+            Ok(None) => {}
+            Err(e) => writeln!(
+                out,
+                "! {row:<16} {e:#}; `{}` removes it by hand",
+                job.uninstall
+            )?,
+        }
     }
     if args.purge {
         purge(&home)?;

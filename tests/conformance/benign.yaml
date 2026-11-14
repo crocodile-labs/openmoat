@@ -1812,6 +1812,12 @@
 - id: benign-systemctl-stop-other-service
   action: { shell: "systemctl --user stop my-app" }
   expect: { verdict: defer, rules: [default] }
+- id: benign-systemctl-status-approvals
+  action: { shell: "systemctl --user status openmoat-approvals" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-systemctl-restart-other-service
+  action: { shell: "systemctl --user restart my-app.service" }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-ln-symbolic
   action: { shell: "ln -s ~/.claude/settings.json s.json" }
   expect: { verdict: defer, rules: [default] }

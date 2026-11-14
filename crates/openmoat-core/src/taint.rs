@@ -166,6 +166,12 @@ const PROTECTED_WRITES: &[&str] = &[
     "**/.windsurfrules",
     "**/.windsurf/rules/**",
     "**/.github/instructions/**",
+    // OpenMoat's user services and their systemd drop-ins (`kernel-self`, ADR-094)
+    "**/.config/systemd/user/*moat-*",
+    "**/.config/systemd/user/*moat-*/**",
+    "/run/user/*/systemd/*/*moat-*",
+    "/run/user/*/systemd/*/*moat-*/**",
+    "**/Library/LaunchAgents/dev.openmoat.*",
     // generated:taint from each host spec's `protect.taint` (openmoat-hosts `tests/protect.rs`)
     // Claude Code: the memory file it loads into every session, its directory
     // (settings, hooks, skills, agents, memory) and a project's, the person's MCP
@@ -479,7 +485,7 @@ mod tests {
     /// host specs (which `openmoat-hosts` `tests/protect.rs` checks against
     /// them). A path removed or added by hand changes this count, so the
     /// change is made on purpose, here too.
-    const HAND_WRITTEN: usize = 104;
+    const HAND_WRITTEN: usize = 109;
 
     #[test]
     fn the_hand_written_protected_writes_keep_their_count() {

@@ -34,6 +34,8 @@ WRONLY = "WRONLY" # POSIX `O_WRONLY`, as rustix names it (`OFlags::WRONLY`)
 AppArmor = "AppArmor"
 FinalizationRegistry = "FinalizationRegistry" # JavaScript's built-in, spelt as the language spells it
 OrganizationName = "OrganizationName" # rcgen's `DnType::OrganizationName`
+DumpableBehavior = "DumpableBehavior" # rustix's `prctl(PR_SET_DUMPABLE)` argument
+set_dumpable_behavior = "set_dumpable_behavior" # rustix's `prctl(PR_SET_DUMPABLE)`
 
 [default.extend-words]
 # OpenMoat's own rule id and verdict reason.

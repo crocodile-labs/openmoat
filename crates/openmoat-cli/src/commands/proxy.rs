@@ -144,7 +144,7 @@ pub fn install() -> Result<Code> {
     }
     let home = installed()?;
     let binary = crate::install::hook_binary()?;
-    let manager = service::manager(&home)?;
+    let manager = service::manager(&home, &service::PROXY)?;
     let path = manager.install(&binary, home.root())?;
     let mut out = Deferred::default();
     writeln!(
@@ -174,7 +174,7 @@ pub fn uninstall() -> Result<Code> {
         );
     }
     let home = Home::locate()?;
-    let manager = service::manager(&home)?;
+    let manager = service::manager(&home, &service::PROXY)?;
     let mut out = Deferred::default();
     match manager.uninstall()? {
         Some(path) => writeln!(
@@ -193,7 +193,7 @@ pub fn uninstall() -> Result<Code> {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn status(args: &ProxyStatusArgs) -> Result<Code> {
     let home = Home::locate()?;
-    let manager = service::manager(&home)?;
+    let manager = service::manager(&home, &service::PROXY)?;
     let state = manager.state()?;
     let path = manager.file_path()?;
     if args.format == Format::Json {
@@ -209,7 +209,7 @@ pub fn status(args: &ProxyStatusArgs) -> Result<Code> {
         out,
         "{}  {}",
         service::display_name(),
-        state.describe(&path)
+        state.describe(&service::PROXY, &path)
     )?;
     out.finish()?;
     let code = match state {
@@ -225,7 +225,7 @@ pub fn status(args: &ProxyStatusArgs) -> Result<Code> {
 /// not opted in to a service yet.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn restart_if_installed(home: &Home) -> Result<Option<String>> {
-    let manager = service::manager(home)?;
+    let manager = service::manager(home, &service::PROXY)?;
     let state = manager.state()?;
     match state {
         State::Running | State::Stopped => {
@@ -250,7 +250,7 @@ pub fn status(_args: &ProxyStatusArgs) -> Result<Code> {
 /// The manager is still resolved, so a missing home fails as it does elsewhere.
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn restart_if_installed(home: &Home) -> Result<Option<String>> {
-    service::manager(home)?;
+    service::manager(home, &service::PROXY)?;
     Ok(None)
 }
 

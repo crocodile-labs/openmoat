@@ -5,10 +5,14 @@
 //! terminal (hooks and scripts never have one) and no agent started them
 //! ([`refuse_agent`]): an agent can give a command a terminal through a pty
 //! wrapper, but it cannot remove itself from the command's ancestors. Their
-//! answers are read from the controlling terminal ([`read_answer`]).
+//! answers are read from the controlling terminal ([`read_answer`]), and a
+//! secret with the terminal's echo off ([`read_secret`]).
 
 mod ancestry;
 mod own_binary;
+mod secret;
+
+pub use secret::read_secret;
 
 use std::io::{self, BufRead as _, IsTerminal as _};
 

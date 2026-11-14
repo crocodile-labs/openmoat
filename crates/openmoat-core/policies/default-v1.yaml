@@ -361,6 +361,14 @@ deny:
       - "**/.codex"
       - "**/.cursor"
       - "~/.moat/**"
+      # OpenMoat's user services (the proxy's and the approvals listener's, ADR-094):
+      # their unit or plist, a systemd drop-in beside it or in the runtime control
+      # and transient folders, any of which changes what the service runs
+      - "~/.config/systemd/user/*moat-*"
+      - "~/.config/systemd/user/*moat-*/**"
+      - "/run/user/*/systemd/*/*moat-*"
+      - "/run/user/*/systemd/*/*moat-*/**"
+      - "~/Library/LaunchAgents/dev.openmoat.*"
       - "~/.claude/settings.json"
       - "~/.claude/settings.local.json"
       - "~/.codex/**"
@@ -599,10 +607,19 @@ deny:
       # --heartbeat` (ADR-042) could hide that another agent's plugin never loaded
       - "{moat,*/moat,openmoat,*/openmoat} guard*"
       - "{moat,*/moat,openmoat,*/openmoat} mcp proxy*"
-      # stopping, disabling or masking the proxy service, which only `openmoat proxy
-      # uninstall` removes: systemd's `moat-proxy` and launchd's `dev.openmoat.proxy`
-      - "{systemctl,*/systemctl} * {stop,disable,mask,kill,edit,revert} * *moat-proxy*"
-      - "{launchctl,*/launchctl} {bootout,unload,disable,remove,kill} * *dev.openmoat.proxy*"
+      # changing one of OpenMoat's user services, which only its own install and
+      # uninstall commands do (ADR-094): every systemd unit is `*moat-*`
+      # (`moat-proxy`, `openmoat-approvals`) and every launchd label `dev.openmoat.*`.
+      # Stopping, restarting, editing or replacing one, loading another plist for it,
+      # or setting the environment every service the manager starts gets
+      - "{systemctl,*/systemctl} * {stop,disable,mask,kill,edit,revert,restart,try-restart,reload-or-restart,try-reload-or-restart,reenable,link,set-property,start,enable} * *moat-*"
+      - "{systemctl,*/systemctl} * {set-environment,unset-environment,import-environment}*"
+      - "{launchctl,*/launchctl} {bootout,bootstrap,unload,load,disable,enable,remove,kill,kickstart,submit,stop,start} * *dev.openmoat.*"
+      - "{launchctl,*/launchctl} {setenv,unsetenv}*"
+      # starting the proxy or the approvals listener as a service by hand, outside
+      # the unit or plist its install command wrote
+      - "{systemd-run,*/systemd-run} * {moat,*/moat,openmoat,*/openmoat} {approvals,proxy}*"
+      - "{launchctl,*/launchctl} submit * {moat,*/moat,openmoat,*/openmoat} {approvals,proxy}*"
       # starting OpenCode without its plugins, OpenMoat's among them (`--pure`, or
       # `OPENCODE_PURE` below), replacing the OpenCode the person runs with another
       # major version, whose plugin API OpenMoat's plugin must serve

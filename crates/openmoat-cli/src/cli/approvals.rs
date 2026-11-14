@@ -23,8 +23,17 @@ pub enum ApprovalsCommand {
     /// Send a test message to every approver. Refused unless run from an interactive terminal.
     Test,
     /// Send waiting requests to the approvers and take their answers, until Ctrl-C. Run
-    /// it in a terminal of your own. Refused unless run from an interactive terminal.
-    Listen,
+    /// it in a terminal of your own, or keep it running with `openmoat approvals install`.
+    /// Refused unless run from an interactive terminal.
+    Listen(ListenArgs),
+    /// Keep `openmoat approvals listen` running after the terminal closes: a launchd user
+    /// agent (macOS) or systemd user unit (Linux) started at login and restarted when it
+    /// fails, logging under ~/.moat/logs. Needs a connected channel. Refused unless run
+    /// from an interactive terminal; not supported on Windows.
+    Install,
+    /// Stop and remove the service `openmoat approvals install` wrote. Refused unless run
+    /// from an interactive terminal.
+    Uninstall,
     /// How long the hook waits for an answer while `listen` runs, so an approval runs the
     /// call at once: 0 to 25 seconds, 0 never waits; 20 when not set. Refused unless run
     /// from an interactive terminal.
@@ -57,6 +66,14 @@ pub struct ConnectArgs {
     /// 5 minutes when not given.
     #[arg(long, value_name = "DURATION")]
     pub expires: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct ListenArgs {
+    /// Run as the service `openmoat approvals install` writes: no terminal needed, and
+    /// refused unless the service manager started it from that unchanged service file.
+    #[arg(long)]
+    pub service: bool,
 }
 
 #[derive(Debug, Args)]

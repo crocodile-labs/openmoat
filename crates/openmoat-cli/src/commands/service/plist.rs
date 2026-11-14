@@ -1,12 +1,14 @@
 //! The launchd user agent plist: a deterministic XML string, so a unit test
-//! can lock the exact bytes `moat proxy install` writes.
+//! can lock the exact bytes `moat proxy install` and `openmoat approvals
+//! install` write.
 //!
 //! Only the keys the service needs are rendered: `Label`, `ProgramArguments`,
 //! `EnvironmentVariables` (just `MOAT_HOME`, a path, never a secret),
 //! `RunAtLoad`, `KeepAlive` with `SuccessfulExit=false` so a lock-drift exit
 //! does not loop-restart, `ProcessType=Background`, `StandardOutPath` and
 //! `StandardErrorPath` so launchd writes the proxy's logs somewhere the user
-//! can read.
+//! can read. A [`Job::private`] job also gets `Umask` 077, so its logs and
+//! everything else it creates are owner-only.
 //!
 //! `openmoat-core` must never see this file (`openmoat-core` is pure), so this
 //! stays in the CLI next to the other platform code.
@@ -14,12 +16,15 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-/// The reverse-DNS launchd label the user agent is bootstrapped under.
-pub const LABEL: &str = "dev.openmoat.proxy";
+use super::Job;
+
+/// `Umask` 077, as the decimal integer launchd's XML takes.
+const PRIVATE_UMASK: u32 = 0o077;
 
 /// What goes into the plist. The caller fills everything in: `moat_home` is a
 /// path, never a secret, and `binary` is the pinned `moat` the hooks run.
 pub struct Spec<'a> {
+    pub job: &'a Job,
     pub binary: &'a Path,
     pub moat_home: &'a Path,
     pub stdout_log: &'a Path,
@@ -49,12 +54,12 @@ pub fn render(spec: &Spec<'_>) -> String {
     );
     out.push_str("  </dict>\n");
     key_bool(&mut out, "KeepAlive", "dict", "SuccessfulExit", false);
-    key_value(&mut out, "Label", "string", LABEL);
-    key_array_of_strings(
-        &mut out,
-        "ProgramArguments",
-        &[spec.binary.to_string_lossy().as_ref(), "proxy"],
-    );
+    key_value(&mut out, "Label", "string", spec.job.label);
+    let binary = spec.binary.to_string_lossy();
+    let arguments: Vec<&str> = std::iter::once(binary.as_ref())
+        .chain(spec.job.args.iter().copied())
+        .collect();
+    key_array_of_strings(&mut out, "ProgramArguments", &arguments);
     key_value(&mut out, "ProcessType", "string", "Background");
     out.push_str("  <key>RunAtLoad</key>\n  <true/>\n");
     key_value(
@@ -69,6 +74,9 @@ pub fn render(spec: &Spec<'_>) -> String {
         "string",
         &spec.stdout_log.to_string_lossy(),
     );
+    if spec.job.private {
+        key_value(&mut out, "Umask", "integer", &PRIVATE_UMASK.to_string());
+    }
     out.push_str("</dict>\n</plist>\n");
     out
 }
@@ -162,6 +170,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+    use crate::commands::service::{APPROVALS, PROXY};
 
     fn spec() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
         (
@@ -172,10 +181,63 @@ mod tests {
         )
     }
 
+    /// The proxy's plist is byte for byte what earlier releases wrote, so an
+    /// installed proxy service still reads back unchanged.
+    #[test]
+    fn the_proxy_plist_keeps_its_bytes() {
+        let (bin, home, out_log, err_log) = spec();
+        let text = render(&Spec {
+            job: &PROXY,
+            binary: &bin,
+            moat_home: &home,
+            stdout_log: &out_log,
+            stderr_log: &err_log,
+        });
+        let expected = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+<plist version=\"1.0\">\n<dict>\n  <key>EnvironmentVariables</key>\n  <dict>\n    \
+<key>MOAT_HOME</key>\n    <string>/Users/u/.moat</string>\n  </dict>\n  <key>KeepAlive</key>\n  \
+<dict>\n    <key>SuccessfulExit</key>\n    <false/>\n  </dict>\n  <key>Label</key>\n  \
+<string>dev.openmoat.proxy</string>\n  <key>ProgramArguments</key>\n  <array>\n    \
+<string>/opt/homebrew/bin/moat</string>\n    <string>proxy</string>\n  </array>\n  \
+<key>ProcessType</key>\n  <string>Background</string>\n  <key>RunAtLoad</key>\n  <true/>\n  \
+<key>StandardErrorPath</key>\n  <string>/Users/u/.moat/logs/proxy.err.log</string>\n  \
+<key>StandardOutPath</key>\n  <string>/Users/u/.moat/logs/proxy.out.log</string>\n\
+</dict>\n</plist>\n";
+        assert_eq!(text, expected);
+    }
+
+    /// The listener's plist runs `approvals listen --service` from the pinned
+    /// binary at login, restarts it when it fails, logs under the state
+    /// directory and makes every file it creates owner-only.
+    #[test]
+    fn the_listener_plist_runs_the_service_listener_owner_only() {
+        let text = render(&Spec {
+            job: &APPROVALS,
+            binary: &PathBuf::from("/opt/homebrew/bin/openmoat"),
+            moat_home: &PathBuf::from("/Users/u/.moat"),
+            stdout_log: &PathBuf::from("/Users/u/.moat/logs/approvals.out.log"),
+            stderr_log: &PathBuf::from("/Users/u/.moat/logs/approvals.err.log"),
+        });
+        assert!(text.contains("  <key>Label</key>\n  <string>dev.openmoat.approvals</string>\n"));
+        assert!(text.contains(
+            "  <array>\n    <string>/opt/homebrew/bin/openmoat</string>\n    \
+             <string>approvals</string>\n    <string>listen</string>\n    \
+             <string>--service</string>\n  </array>\n"
+        ));
+        assert!(text.contains("  <key>RunAtLoad</key>\n  <true/>\n"));
+        assert!(text.contains("<key>SuccessfulExit</key>\n    <false/>"));
+        assert!(text.contains("<string>/Users/u/.moat/logs/approvals.err.log</string>"));
+        // 077 octal: owner-only files.
+        assert!(text.ends_with("  <key>Umask</key>\n  <integer>63</integer>\n</dict>\n</plist>\n"));
+        assert_eq!(environment(&text), Some(vec!["MOAT_HOME".to_owned()]));
+    }
+
     #[test]
     fn plist_is_deterministic_and_names_what_the_proxy_needs() {
         let (bin, home, out_log, err_log) = spec();
         let text = render(&Spec {
+            job: &PROXY,
             binary: &bin,
             moat_home: &home,
             stdout_log: &out_log,
@@ -196,6 +258,7 @@ mod tests {
         assert!(text.contains("StandardErrorPath"));
         // Byte-for-byte stability: two renders match.
         let again = render(&Spec {
+            job: &PROXY,
             binary: &bin,
             moat_home: &home,
             stdout_log: &out_log,
@@ -208,6 +271,7 @@ mod tests {
     fn xml_special_characters_in_paths_are_escaped() {
         let home = PathBuf::from("/Users/a&b/<moat>");
         let text = render(&Spec {
+            job: &PROXY,
             binary: &PathBuf::from("/bin/moat"),
             moat_home: &home,
             stdout_log: &PathBuf::from("/tmp/out"),
@@ -221,6 +285,7 @@ mod tests {
     fn environment_names_each_variable_the_plist_sets() {
         let (bin, home, out_log, err_log) = spec();
         let text = render(&Spec {
+            job: &PROXY,
             binary: &bin,
             moat_home: &home,
             stdout_log: &out_log,

@@ -74,7 +74,7 @@ fn write_private(path: &Path, text: &str) {
 }
 
 /// A connected channel, as `openmoat approvals connect` and `allow` leave it.
-fn connect(sb: &Sandbox) {
+pub fn connect(sb: &Sandbox) {
     connect_with(sb, "");
 }
 

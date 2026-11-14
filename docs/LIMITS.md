@@ -28,9 +28,10 @@ Each agent's gaps and the reasons are in
   listen` running, the hook waits up to 20 seconds (at most 25, less where the agent's
   hook time limit is shorter) for the answer; after that an agent that prompts shows its
   prompt, and an approval from the phone lets the same call run once when the agent
-  tries it again before the request expires. Answers arrive only while `openmoat approvals listen` runs,
-  anyone who controls an approver's Telegram account can approve, and the redacted call
-  is sent to Telegram.
+  tries it again before the request expires. Answers arrive only while `openmoat
+  approvals listen` runs (in a terminal, or as the service `openmoat approvals install`
+  writes on macOS and Linux), anyone who controls an approver's Telegram account can
+  approve, and the redacted call is sent to Telegram.
 - **OpenCode 2's `--auto` approves OpenMoat's reviews** as it approves OpenCode's own,
   and OpenMoat's plugin cannot tell. OpenCode before 1.3.4 is not supported:
   `openmoat init` does not set it up and `openmoat status` says to upgrade.
