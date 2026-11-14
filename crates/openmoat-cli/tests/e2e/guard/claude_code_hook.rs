@@ -1,4 +1,4 @@
-//! Other agents running Claude Code's hook (ADR-095), and the variable
+//! Other agents running Claude Code's hook (ADR-097), and the variable
 //! `init` sets so a file the person `@`-mentions is read through the hook.
 
 use crate::common::{Sandbox, fixture, stderr, stdout};

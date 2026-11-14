@@ -91,7 +91,7 @@ const TOOLS: &[ToolRow] = &[
         "a tool OpenMoat's matcher does not match, or a payload in Grok Build's envelope (it \
          carries `hookEventName`): another agent running this hook (Grok Build, the Devin CLI)",
         "every path, URL and command its arguments name, as for any unknown tool; cannot \
-         prompt (ADR-095)",
+         prompt (ADR-097)",
         "`UnknownTool`",
     ),
     ToolRow::new(

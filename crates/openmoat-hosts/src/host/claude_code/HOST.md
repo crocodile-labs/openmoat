@@ -135,7 +135,7 @@ answered as a call that cannot prompt: a `review` is a deny, a `defer` no answer
 
 Grok Build reads `~/.claude/settings.json` and a project's `.claude/settings*.json`, and the
 Devin CLI loads `.claude/` hooks by default; both run them with their own tool names
-(`run_terminal_command`, `exec`), and only exit 2 or their own deny blocks there (ADR-095
+(`run_terminal_command`, `exec`), and only exit 2 or their own deny blocks there (ADR-097
 has the sources). A payload in Grok's envelope (`hookEventName`) or naming a tool the
 matcher does not name is read as an unknown tool: every path, URL and command its
 arguments name is checked, a `review` is a deny that says how to approve it, a `defer` no

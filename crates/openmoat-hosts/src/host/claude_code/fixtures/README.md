@@ -3,7 +3,7 @@
 Payloads Claude Code sends `openmoat guard --host claude-code`, with paths
 replaced by `/p` and `/Users/me`.
 
-## Other agents running Claude Code's hook (ADR-095)
+## Other agents running Claude Code's hook (ADR-097)
 
 Built from the agents' source and documentation, not captured from a run:
 

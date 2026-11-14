@@ -17,7 +17,7 @@ use super::{Route, decide, pre_tool_use};
 /// a tool to its own permission flow (`ungoverned`), which asks the person
 /// unless a permission rule allows the tool by name. Claude Code's hook
 /// receives a tool its matcher does not name only from another agent that
-/// runs it (Grok Build, the Devin CLI), so it checks one (ADR-095).
+/// runs it (Grok Build, the Devin CLI), so it checks one (ADR-097).
 fn unknown_tool(host: Host, tool: &str, input: &Value) -> (Value, bool) {
     match host {
         Host::ClaudeCode => (pre_tool_use(Route::ClaudeCode, tool, input), true),

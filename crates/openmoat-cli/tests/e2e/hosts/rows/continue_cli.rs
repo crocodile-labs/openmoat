@@ -11,7 +11,7 @@ pub fn row() -> Row {
         env: Some("CONTINUE_PROJECT_DIR"),
         governed: "continue/pretooluse-bash.json",
         // Read through Claude Code's hook, which checks a tool its matcher
-        // does not name (ADR-095).
+        // does not name (ADR-097).
         unknown_tool: || pre_tool_use("FutureTool"),
         checks_unknown_tools: true,
         unknown_event: notification,

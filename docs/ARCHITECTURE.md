@@ -284,7 +284,7 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | Claude Code | `mcp__ide__executeCode` (Python in the VS Code notebook's kernel) | `code`, which OpenMoat does not read: at least `review` | `Unchecked` `McpTool` |
 | Claude Code | `mcp__<server>__<tool>` | tool name and arguments | `McpTool` |
 | Claude Code | a payload Cursor sends to this hook (it carries `cursor_version`) | read as Cursor's `preToolUse` (its `Shell` as the command); cannot prompt | as Cursor's rows |
-| Claude Code | a tool OpenMoat's matcher does not match, or a payload in Grok Build's envelope (it carries `hookEventName`): another agent running this hook (Grok Build, the Devin CLI) | every path, URL and command its arguments name, as for any unknown tool; cannot prompt (ADR-095) | `UnknownTool` |
+| Claude Code | a tool OpenMoat's matcher does not match, or a payload in Grok Build's envelope (it carries `hookEventName`): another agent running this hook (Grok Build, the Devin CLI) | every path, URL and command its arguments name, as for any unknown tool; cannot prompt (ADR-097) | `UnknownTool` |
 | Claude Code | any other tool the matcher matches (`Skill`, `TodoWrite`, `EnterWorktree` without `path`) | — | none: `ungoverned` |
 | Codex | `Bash` | `command`; a start of a shell, REPL, editor or login without its own commands, which `write_stdin` types into unhooked | `Shell`; that start `Unchecked` (review) |
 | Codex | `read_mcp_resource` | `server`, `uri` (a `file:` URI as its file) | `McpTool` (`read_resource`) |

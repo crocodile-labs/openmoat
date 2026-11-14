@@ -1,4 +1,4 @@
-# ADR-095: Another agent running a host's hook
+# ADR-097: Another agent running a host's hook
 
 Status: accepted · Date: 2026-11-14 · Builds on ADR-025 (defer), ADR-004 (fail closed) and
 the Cursor reading of Claude Code's hook (`host/claude_code/from_cursor.rs`)

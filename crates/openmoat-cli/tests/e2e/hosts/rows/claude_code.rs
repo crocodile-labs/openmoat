@@ -12,7 +12,7 @@ pub fn row() -> Row {
         hook: "claude-code",
         governed: "claude-code/bash.json",
         // A tool OpenMoat's matcher does not name is another agent's
-        // (ADR-095), checked for what its arguments name.
+        // (ADR-097), checked for what its arguments name.
         unknown_tool: || pre_tool_use("FutureTool"),
         checks_unknown_tools: true,
         unknown_event: notification,

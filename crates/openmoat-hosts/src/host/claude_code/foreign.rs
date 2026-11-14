@@ -1,4 +1,4 @@
-//! Claude Code's hook as another agent runs it (ADR-095).
+//! Claude Code's hook as another agent runs it (ADR-097).
 //!
 //! Some agents load the hooks of `~/.claude/settings.json` and a project's
 //! `.claude/settings*.json` and run them with input of their own:
