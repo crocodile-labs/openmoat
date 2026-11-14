@@ -1,4 +1,4 @@
-//! Hermes Agent's plugin (ADR-095): a Python plugin, `plugin.yaml` and
+//! Hermes Agent's plugin (ADR-099): a Python plugin, `plugin.yaml` and
 //! `__init__.py` whose `register(ctx)` adds a `pre_tool_call` callback
 //! (`ctx.register_hook`), which returns `{"action": "block", "message"}` to
 //! veto a call or `{"action": "approve"}` for Hermes's approval prompt (the
@@ -10,8 +10,10 @@
 use serde_json::Value;
 
 use crate::Host;
-use crate::contract::{Meta, PluginFile, PluginSpec, StandAside};
-use crate::wire::plugin_package::{INSTALL_DIRS, NOT_INSTALLED, PLUGIN_FLAG, PROGRAM};
+use crate::contract::{Meta, Paths, PluginFile, PluginSpec, StandAside};
+use crate::wire::plugin_package::{
+    INSTALL_DIRS, LOCK_FILE, LOCK_UNUSABLE, NOT_INSTALLED, PLUGIN_FLAG, PROGRAM,
+};
 
 /// The Hermes release OpenMoat's hook was last checked against (`HOST.md`).
 const CHECKED: &str = "0.22.5";
@@ -37,6 +39,10 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     ],
     // No answer from the callback lets the call run; a block vetoes it.
     stand_aside: StandAside::NoDecision,
+    deny_exit: 2,
+    // Plugins live in the home's `plugins/`, all of which `kernel-self`
+    // already names from this host's own paths.
+    installed: Paths::new("", &[]),
     marketplace: None,
     files,
 };
@@ -60,7 +66,9 @@ fn files(host: Host, meta: &Meta) -> Vec<PluginFile> {
         .replacen("__FLAG__", &quoted(PLUGIN_FLAG), 1)
         .replacen("__PROGRAM__", &quoted(PROGRAM), 1)
         .replacen("__NOT_INSTALLED__", &quoted(NOT_INSTALLED), 1)
-        .replacen("__INSTALL_DIRS__", &dirs, 1);
+        .replacen("__INSTALL_DIRS__", &dirs, 1)
+        .replacen("__LOCK_FILE__", &quoted(LOCK_FILE), 1)
+        .replacen("__LOCK_UNUSABLE__", &quoted(LOCK_UNUSABLE), 1);
     let manifest = format!(
         "name: {name}\nversion: {version}\ndescription: {description}\nauthor: {author}\n\
          provides_hooks:\n  - {event}\nrequires_hermes: {requires}\n",

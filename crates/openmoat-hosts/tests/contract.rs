@@ -281,7 +281,7 @@ fn every_plugin_reports_that_it_loaded() {
             continue;
         };
         // `WHERE` is the state directory `init` fills in, or in the package of
-        // the host's own channel `--plugin` (ADR-095).
+        // the host's own channel `--plugin` (ADR-099).
         let call = format!(
             r#"["guard", "{HEARTBEAT_FLAG}", "--host", "{}", ...WHERE]"#,
             host.id()

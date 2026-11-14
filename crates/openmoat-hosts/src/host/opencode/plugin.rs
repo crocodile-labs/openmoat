@@ -1,4 +1,4 @@
-//! OpenCode's package (ADR-095): an npm package an `opencode.json`'s
+//! OpenCode's package (ADR-099): an npm package an `opencode.json`'s
 //! `plugins` list names, which OpenCode installs at start; its default export
 //! is the plugin, as a local plugin's is (the plugins and build-plugins
 //! pages). The plugin is the one `openmoat init` writes, for OpenCode 1 and 2,
@@ -8,7 +8,7 @@
 use serde_json::json;
 
 use crate::Host;
-use crate::contract::{Meta, PluginFile, PluginSpec, StandAside};
+use crate::contract::{Meta, Paths, PluginFile, PluginSpec, StandAside};
 use crate::wire::plugin_package::{package_json, packaged};
 
 const FILE: &str = "openmoat.js";
@@ -31,6 +31,18 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     ],
     // A hook that neither throws nor rejects lets the call run.
     stand_aside: StandAside::NoDecision,
+    deny_exit: 2,
+    // OpenCode installs a listed npm plugin and caches it (the plugins page)
+    // without naming the folder; the package's folder is covered wherever an
+    // npm folder holds it. The `plugins` lists are in the configuration files
+    // `kernel-self` already names.
+    installed: Paths::new(
+        "OpenCode: OpenMoat's npm plugin, in whichever npm folder holds it",
+        &[
+            "**/node_modules/@openmoat/opencode",
+            "**/node_modules/@openmoat/opencode/**",
+        ],
+    ),
     marketplace: None,
     files,
 };

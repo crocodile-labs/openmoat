@@ -2876,3 +2876,21 @@
   why: a variable in PowerShell is beyond the simple commands OpenMoat reads on Windows
   action: { shell: "pwsh -c 'echo $Env:HOME'" }
   expect: { verdict: review, rules: [opaque-code] }
+# Another plugin's folder beside OpenMoat's package (ADR-099): only OpenMoat's own
+# folder is `kernel-self`'s, so another plugin's files stay as they were
+- id: review-write-another-claude-code-plugin-package
+  threat: T9
+  action: { fs_write: "~/.claude/plugins/cache/other/tool/1.0.0/hooks/hooks.json" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-another-gemini-extension
+  threat: T9
+  action: { fs_write: "~/.gemini/extensions/helper/gemini-extension.json" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-another-copilot-plugin
+  threat: T9
+  action: { fs_write: "~/.copilot/installed-plugins/other/helper/hooks.json" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-another-npm-package-in-opencode-cache
+  threat: T9
+  action: { fs_write: "~/.cache/opencode/node_modules/helper-plugin/index.js" }
+  expect: { verdict: review, rules: [runs-later] }

@@ -1,4 +1,4 @@
-//! `openmoat guard --plugin` (ADR-095), end to end with Claude Code: the
+//! `openmoat guard --plugin` (ADR-099), end to end with Claude Code: the
 //! guard of the package from Claude Code's own plugin channel gives no
 //! decision where `openmoat init`'s hook is installed and pinned, so each call
 //! is decided once; decides the call where that hook is missing; denies and
@@ -120,6 +120,60 @@ fn a_heartbeat_from_the_package_records_it_and_reads_nothing() {
     assert_eq!(record(&sb)["host"], HOST);
     // Never a report that `init`'s plugin loaded.
     assert!(!sb.home.join(".moat/loaded").exists());
+}
+
+/// `init` ran for another copy of Claude Code (`CLAUDE_CONFIG_DIR`), which
+/// `hosts.json` records; this agent reads the default `~/.claude`, where no
+/// hook of `init`'s is: the package decides, whatever the record says.
+#[test]
+fn a_hook_init_wrote_for_another_config_dir_is_not_stood_aside_for() {
+    let sb = Sandbox::bare(&[".claude-work", DIR]);
+    let work = sb.home.join(".claude-work");
+    let mut init = sb.command();
+    init.args(["init", "--yes"]).env("CLAUDE_CONFIG_DIR", &work);
+    let out = crate::common::output(&mut init, None);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(work.join("settings.json").is_file());
+
+    let out = plugin_guard(&sb, &secret_read(&sb));
+    assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
+    assert_eq!(record(&sb)["stood_aside"], false);
+}
+
+/// A repository can set an agent's environment; a package decides only with
+/// the default state directory.
+#[test]
+fn a_moved_state_directory_is_refused() {
+    let sb = Sandbox::installed(&[DIR]);
+    let elsewhere = sb.home.join("elsewhere");
+    let mut guard = sb.command();
+    guard
+        .args(["guard", "--host", HOST, "--plugin"])
+        .env("MOAT_HOME", &elsewhere);
+    let out = crate::common::output(&mut guard, Some(&bash_payload("s1", &sb.project(), "ls")));
+    assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
+    assert!(text(&out).contains("MOAT_HOME"), "{}", text(&out));
+    // The default one, named, is fine.
+    let mut guard = sb.command();
+    guard
+        .args(["guard", "--host", HOST, "--plugin"])
+        .env("MOAT_HOME", sb.home.join(".moat"));
+    let out = crate::common::output(&mut guard, Some(&secret_read(&sb)));
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert_eq!(stdout(&out), "", "stood aside");
+}
+
+/// A project's settings that turn hooks off leave `init`'s hook unrun: the
+/// package does not stand aside for it there.
+#[test]
+fn a_project_that_turns_inits_hook_off_is_not_stood_aside_for() {
+    let sb = Sandbox::installed(&[DIR]);
+    let settings = sb.project().join(".claude/settings.json");
+    fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    fs::write(&settings, "{\"disableAllHooks\": true}\n").unwrap();
+    let out = plugin_guard(&sb, &secret_read(&sb));
+    assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
+    assert_eq!(record(&sb)["stood_aside"], false);
 }
 
 #[test]

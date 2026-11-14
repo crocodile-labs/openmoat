@@ -117,14 +117,35 @@ fn check(file: &str, before: &str, after: &str, body: &str) {
     );
 }
 
+/// Each host's `kernel-self` paths, then the folder where it keeps OpenMoat's
+/// package from its own plugin channel once installed (ADR-099,
+/// `PluginSpec::installed`), in the host list's order.
+fn self_lines() -> String {
+    let mut out = String::new();
+    for host in Host::EVERY {
+        let installed = openmoat_hosts::plugin::spec(host)
+            .map(|spec| &spec.installed)
+            .filter(|paths| !paths.globs.is_empty());
+        for paths in host.spec().protect.self_paths.iter().chain(installed) {
+            for line in paths.why.lines() {
+                let _ = writeln!(out, "      # {line}");
+            }
+            for glob in paths.globs {
+                let _ = writeln!(out, "      - \"{glob}\"");
+            }
+        }
+    }
+    out
+}
+
 #[test]
 fn the_default_policy_protects_each_hosts_own_files() {
-    let body = lines(
-        |p| p.self_paths,
-        |line| format!("      # {line}"),
-        |glob| format!("      - \"{glob}\""),
-    );
+    let body = self_lines();
     assert!(body.contains("~/.copilot/hooks/**"), "{body}");
+    assert!(
+        body.contains("~/.claude/plugins/cache/crocodile-labs/openmoat/**"),
+        "{body}"
+    );
     check(POLICY, POLICY_BEFORE, POLICY_AFTER, &body);
 }
 

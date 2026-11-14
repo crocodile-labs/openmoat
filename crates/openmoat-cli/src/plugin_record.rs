@@ -1,5 +1,5 @@
 //! What an OpenMoat package installed through an agent's own plugin channel
-//! did last (ADR-095), for `openmoat doctor`.
+//! did last (ADR-099), for `openmoat doctor`.
 //!
 //! The package runs `openmoat guard --plugin --host <id>`, which writes
 //! `plugins/<id>.json` in the state directory: the host, when, this release,

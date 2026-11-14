@@ -1,4 +1,4 @@
-//! GitHub Copilot CLI's plugin (ADR-095): `plugin.json` at the plugin's root
+//! GitHub Copilot CLI's plugin (ADR-099): `plugin.json` at the plugin's root
 //! naming its hooks file (`"hooks": "hooks.json"`, a legacy-layout plugin),
 //! whose shape is `~/.copilot/hooks/*.json`'s: `version: 1` and a `hooks` map
 //! of `preToolUse` and other entries with `bash`, `powershell` and
@@ -11,7 +11,7 @@
 use serde_json::json;
 
 use crate::Host;
-use crate::contract::{Meta, PluginFile, PluginSpec, StandAside};
+use crate::contract::{Meta, Paths, PluginFile, PluginSpec, StandAside};
 use crate::wire::plugin_package::{hook_plugin, json_file};
 
 /// The guard script, and how the hook file names it from the plugin's root.
@@ -38,6 +38,23 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     // Every hook of every source runs and any `deny` blocks; no output is no
     // decision.
     stand_aside: StandAside::NoDecision,
+    // "2: ... For `preToolUse` and `permissionRequest`, it is a deny, even if
+    // stdout reports `allow`" (the hooks configuration reference, exit codes).
+    deny_exit: 2,
+    // `~/.copilot/installed-plugins/MARKETPLACE/PLUGIN-NAME` from a
+    // marketplace, `~/.copilot/installed-plugins/_direct/SOURCE-ID/` from a
+    // repository (the plugin reference); the source id's form is not
+    // documented, so one naming `openmoat` is covered.
+    installed: Paths::new(
+        "GitHub Copilot CLI: OpenMoat's plugin, from a marketplace or straight from\n\
+         its repository",
+        &[
+            "~/.copilot/installed-plugins/*/openmoat",
+            "~/.copilot/installed-plugins/*/openmoat/**",
+            "~/.copilot/installed-plugins/_direct/*openmoat*",
+            "~/.copilot/installed-plugins/_direct/*openmoat*/**",
+        ],
+    ),
     marketplace: None,
     files,
 };

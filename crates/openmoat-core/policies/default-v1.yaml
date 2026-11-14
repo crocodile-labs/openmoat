@@ -379,6 +379,15 @@ deny:
       - "**/.cursor/hooks.json"
       - "**/.cursor/sandbox.json"
       - "**/.codex/hooks.json"
+      # Claude Code: OpenMoat's plugin as its marketplace installs it, and that
+      # marketplace's clone
+      - "~/.claude/plugins/cache/crocodile-labs/openmoat"
+      - "~/.claude/plugins/cache/crocodile-labs/openmoat/**"
+      - "~/.claude/plugins/marketplaces/crocodile-labs"
+      - "~/.claude/plugins/marketplaces/crocodile-labs/**"
+      # Cursor: OpenMoat's plugin, wherever below its plugins folder Cursor keeps it
+      - "~/.cursor/plugins/**/openmoat"
+      - "~/.cursor/plugins/**/openmoat/**"
       # OpenClaw: the state directory, its configuration (which loads OpenMoat's
       # plugin) and the plugin `moat init` writes; its workspace inside stays
       # writable, and its `.env` is `secrets-paths`' (`**/.env`)
@@ -390,6 +399,12 @@ deny:
       # cron jobs its Gateway runs (an OpenClaw `cron` add or update is decided as a
       # write of it), so an agent cannot approve its own commands there
       - "~/.openclaw/state/**"
+      # OpenClaw: OpenMoat's ClawHub package, below its state directory or in an npm
+      # folder
+      - "~/.openclaw/**/openmoat-clawhub"
+      - "~/.openclaw/**/openmoat-clawhub/**"
+      - "**/node_modules/@openmoat/openclaw"
+      - "**/node_modules/@openmoat/openclaw/**"
       # GitHub Copilot CLI: its configuration directory, the hooks directory whose
       # every file it loads (OpenMoat's included), and the user and repository
       # settings whose `disableAllHooks` turns them all off; its session folders
@@ -406,6 +421,12 @@ deny:
       - "**/.copilot/config.json"
       - "**/.github/copilot/settings.json"
       - "**/.github/copilot/settings.local.json"
+      # GitHub Copilot CLI: OpenMoat's plugin, from a marketplace or straight from
+      # its repository
+      - "~/.copilot/installed-plugins/*/openmoat"
+      - "~/.copilot/installed-plugins/*/openmoat/**"
+      - "~/.copilot/installed-plugins/_direct/*openmoat*"
+      - "~/.copilot/installed-plugins/_direct/*openmoat*/**"
       # pi: the agent directory, OpenMoat's extension in it, the settings that
       # can turn the extension off and the trust decisions that load a project's
       # own extensions; other extensions need review (`runs-later`)
@@ -415,6 +436,11 @@ deny:
       - "~/.pi/agent/extensions/openmoat.js"
       - "~/.pi/agent/settings.json"
       - "~/.pi/agent/trust.json"
+      # pi: OpenMoat's package, in whichever npm folder holds it
+      - "~/.pi/agent/**/@openmoat/pi"
+      - "~/.pi/agent/**/@openmoat/pi/**"
+      - "**/node_modules/@openmoat/pi"
+      - "**/node_modules/@openmoat/pi/**"
       # Gemini CLI: its directory, the settings that hold OpenMoat's hook (a
       # project's are merged over them and can turn hooks off) and the folder
       # trust list, which decides whether settings hooks run at all
@@ -423,6 +449,9 @@ deny:
       - "~/.gemini/settings.json"
       - "~/.gemini/trustedFolders.json"
       - "**/.gemini/settings.json"
+      # Gemini CLI: OpenMoat's extension
+      - "~/.gemini/extensions/openmoat"
+      - "~/.gemini/extensions/openmoat/**"
       # OpenCode: its configuration directory, OpenMoat's plugin and the plugin
       # folders around it, the configuration files whose `plugin` list loads
       # plugins and whose `-openmoat` removes OpenMoat's (`config` is the old TOML
@@ -445,6 +474,9 @@ deny:
       - "~/.opencode/plugin"
       - "~/.opencode/opencode.json"
       - "~/.opencode/opencode.jsonc"
+      # OpenCode: OpenMoat's npm plugin, in whichever npm folder holds it
+      - "**/node_modules/@openmoat/opencode"
+      - "**/node_modules/@openmoat/opencode/**"
       # Hermes Agent: its home: the `config.yaml` that holds OpenMoat's hook, the
       # hook allowlist without which a gateway, cron or ACP session skips it, the
       # `.env` that can set `HERMES_SAFE_MODE`, the sticky profile, the plugins and

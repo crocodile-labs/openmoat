@@ -78,7 +78,10 @@ pub(super) fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
         cache.write(&store);
         hangs::enter(Phase::Record);
     }
-    let store = store.with_secrets(known);
+    // A package's decision is no sign that `init`'s plugin loaded (ADR-099).
+    let store = store
+        .with_secrets(known)
+        .from_package(super::entry::from_package());
     let noted = match request {
         Some(r) => drift::noted(&store, &r.session_id, decision, drifted)?,
         None => None,
@@ -137,7 +140,8 @@ pub(super) fn relay_outside(host: Host, request: Option<&HookRequest>) {
          setting that gives the hook these variables",
     );
     let note = |home: Home| -> Result<()> {
-        let store = Store::open_existing(&home.audit_path())?;
+        let store =
+            Store::open_existing(&home.audit_path())?.from_package(super::entry::from_package());
         store.record(&NewEvent {
             host: host.id(),
             session_id: request.map_or("unknown", |r| r.session_id.as_str()),

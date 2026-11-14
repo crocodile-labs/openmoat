@@ -1,5 +1,5 @@
 //! The package a host's own plugin channel installs OpenMoat from
-//! ([`super::HostSpec::plugin`], ADR-095): a thin shim around the `openmoat`
+//! ([`super::HostSpec::plugin`], ADR-099): a thin shim around the `openmoat`
 //! binary, generated into the repository's `plugins/` folder from the host's
 //! spec (`openmoat_hosts::plugin::files`).
 //!
@@ -13,6 +13,7 @@
 //! the host's "no decision" ([`StandAside`]), so each call is decided once.
 
 use crate::Host;
+use crate::contract::Paths;
 
 /// How a host installs OpenMoat from a channel of its own, or why it does not.
 #[derive(Debug, Clone, Copy)]
@@ -44,6 +45,17 @@ pub struct PluginSpec {
     /// What the guard answers when `openmoat init`'s own hook decides the
     /// call in this host.
     pub stand_aside: StandAside,
+    /// The exit code a hook-command package's guard script blocks a call
+    /// with: 2 where the host reads exit 2 as a block, 0 (with the deny on
+    /// stdout) where it ignores every non-zero exit; unused by the other
+    /// packages.
+    pub deny_exit: i32,
+    /// Where the host keeps OpenMoat's package once installed, under the home
+    /// directory: only OpenMoat's own folder, never every plugin's. The
+    /// default policy's `kernel-self` denies an agent writing there, from its
+    /// generated block (`tests/protect.rs`); the settings that turn the
+    /// package off are the host's own files, already in that rule.
+    pub installed: Paths,
     /// The marketplace file that lists the package, for a channel whose
     /// marketplace is a repository of its own; `None` otherwise.
     pub marketplace: Option<Marketplace>,

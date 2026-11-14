@@ -393,8 +393,11 @@ pub mod git_config;
 pub mod other_hooks;
 mod plugins;
 pub mod preflight;
+mod switched;
 pub mod system;
 pub mod written;
+
+pub use switched::hook_switched_off;
 
 pub use plugins::replaced_here;
 

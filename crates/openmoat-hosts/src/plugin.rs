@@ -1,5 +1,5 @@
 //! The repository's `plugins/` folder, generated from the host specs
-//! ([`crate::HostSpec::plugin`], ADR-095): one folder per host whose channel
+//! ([`crate::HostSpec::plugin`], ADR-099): one folder per host whose channel
 //! takes a package, the marketplace files that list them, and a README.
 //!
 //! `cargo test -p openmoat-hosts --test plugins` fails when the folder differs
@@ -77,24 +77,41 @@ pub fn files() -> Vec<PluginFile> {
     out
 }
 
+/// Which `openmoat` a package runs, as the READMEs say it.
+const WHICH: &str = "the one the policy lock pins (`binary` in `~/.moat/policy.lock`, the \
+     absolute path `openmoat init` recorded); with no lock yet, one in `~/.cargo/bin` or \
+     Homebrew's folder, then the search path (the guard then denies every call until `openmoat \
+     init` writes the lock).";
+
+/// What a package alone does not do that `openmoat init`'s hook does, as the
+/// READMEs say it (ADR-099).
+const ALONE: &str = "the package is outside the policy lock: the agent may update it, and you or \
+     a project's settings may turn it off, without OpenMoat seeing it. It decides only with the \
+     default state directory, `~/.moat` (a `MOAT_HOME` naming another is denied), and finds the \
+     lock there from the agent's `HOME`. Its guard script is POSIX `sh`, so native Windows needs \
+     `openmoat init`. `openmoat init`'s hook names its binary and state directory itself and is \
+     pinned by the lock, so keep it as the setup to rely on.";
+
 /// A package's own `README.md`: what it does and how to install it.
 fn package_readme(host: Host, spec: &PluginSpec) -> String {
     format!(
         "# {display} for {name} (preview)\n\n\
          Checks each tool call {name} makes against OpenMoat's policy before it runs. Generated \
          from OpenMoat's host specs; see [the plugins README]({repo}/blob/main/plugins/README.md) \
-         and [ADR-095]({repo}/blob/main/docs/adr/ADR-095-plugin-packages.md).\n\n\
+         and [ADR-099]({repo}/blob/main/docs/adr/ADR-099-plugin-packages.md).\n\n\
          ## Install\n\n\
          1. Install OpenMoat and set it up once: `brew install crocodile-labs/tap/openmoat`, \
          then `openmoat init` in your own terminal (other ways: {homepage}).\n\
          2. Install this package ({channel}): `{install}`\n\n\
          ## What it does\n\n\
-         It holds no binary and downloads nothing. For each call it runs the `{PROGRAM}` on \
-         the search path as `{PROGRAM} guard --host {id} {PLUGIN_FLAG}`. Without `{PROGRAM}`, \
-         or when it gives no answer, the call is blocked; without the policy lock `openmoat \
-         init` writes, every call is denied. Where `openmoat init`'s own hook for {name} is \
-         installed too, this package gives no decision, so each call is decided once. \
-         `openmoat doctor` shows when it last ran.\n",
+         It holds no binary and downloads nothing. For each call it runs `{PROGRAM} guard \
+         --host {id} {PLUGIN_FLAG}`: {WHICH} Without `{PROGRAM}`, or when it gives no answer, \
+         the call is blocked; without the policy lock `openmoat init` writes, every call is \
+         denied. Where `openmoat init`'s own hook for {name} is installed too, this package \
+         gives no decision, so each call is decided once. `openmoat doctor` shows when it \
+         last ran.\n\n\
+         ## With this package alone\n\n\
+         {ALONE}\n",
         display = META.display_name,
         name = host.display_name(),
         repo = META.repository,
@@ -112,16 +129,17 @@ fn readme() -> String {
         "# OpenMoat in each agent's own plugin channel (preview)\n\n\
          Generated from the host specs (`crates/openmoat-hosts/src/host/<module>/plugin.rs`) by \
          `OPENMOAT_TEST_UPDATE_PLUGINS=1 cargo test -p openmoat-hosts --test plugins`; do not \
-         edit. Design: [ADR-095](../docs/adr/ADR-095-plugin-packages.md); install steps: \
+         edit. Design: [ADR-099](../docs/adr/ADR-099-plugin-packages.md); install steps: \
          [docs/INSTALL.md](../docs/INSTALL.md#install-from-an-agents-plugin-channel-preview).\n\n\
          Each folder is a thin package for one agent's channel. It holds no binary and \
-         downloads nothing: it runs the `{PROGRAM}` on the search path as `{PROGRAM} guard \
-         --host <id> {PLUGIN_FLAG}`, the command `openmoat init` writes plus the flag. When \
-         there is no `{PROGRAM}`, or it gives no answer, the call is blocked with: \
-         \"{NOT_INSTALLED}\". Without a policy lock the guard denies every call and names \
-         `openmoat init`, which stays the source of the policy and its lock. Where `openmoat \
-         init`'s own hook for the agent is installed and pinned, the package gives no decision, \
-         so each call is decided once; `openmoat doctor` reports what the package did last.\n\n\
+         downloads nothing: it runs `{PROGRAM} guard --host <id> {PLUGIN_FLAG}`, the command \
+         `openmoat init` writes plus the flag. {WHICH} When there is no `{PROGRAM}`, or it \
+         gives no answer, the call is blocked with: \"{NOT_INSTALLED}\". Without a policy lock \
+         the guard denies every call and names `openmoat init`, which stays the source of the \
+         policy and its lock. Where `openmoat init`'s own hook for the agent is installed and \
+         pinned, the package gives no decision, so each call is decided once; `openmoat \
+         doctor` reports what the package did last.\n\n\
+         **With a package alone**, without `openmoat init`'s hook: {ALONE}\n\n\
          None of these is listed in its channel yet: each is a preview until it is.\n\n\
          | Agent | Folder | Channel | Install, once published | Format sources |\n\
          |---|---|---|---|---|\n"

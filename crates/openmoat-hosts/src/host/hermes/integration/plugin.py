@@ -9,7 +9,7 @@ Hermes calls `register(ctx)` once at start; the plugin registers a
 `{"decision": "block"}` blocks the call, `{"action": "approve"}` goes to
 Hermes's approval prompt, no answer or `{}` lets it run. The guard gives no
 decision where `openmoat init`'s own hook is installed and pinned, so each
-call is decided once (ADR-095).
+call is decided once (ADR-099).
 
 Hermes logs and skips a callback that raises, which would run the call
 unchecked, so every failure here returns a block instead: no `openmoat`, a
@@ -30,6 +30,8 @@ FLAG = __FLAG__
 PROGRAM = __PROGRAM__
 NOT_INSTALLED = __NOT_INSTALLED__
 INSTALL_DIRS = __INSTALL_DIRS__
+LOCK_FILE = __LOCK_FILE__
+LOCK_UNUSABLE = __LOCK_UNUSABLE__
 # Above `openmoat guard`'s own 30 s budget.
 GUARD_TIMEOUT_S = 45
 
@@ -38,16 +40,45 @@ def _block(why):
     return {"action": "block", "message": f"OpenMoat blocked this call: {why}"}
 
 
+def _runnable(path):
+    return os.path.isfile(path) and os.access(path, os.X_OK)
+
+
 def _program():
-    """The `openmoat` on the search path, or in a folder its installers use."""
-    found = shutil.which(PROGRAM)
-    if found:
-        return found
+    """The program to run, or None when there is none.
+
+    The one the policy lock pins (`binary` in ~/.moat/policy.lock, the absolute
+    path `openmoat init` recorded); with no lock yet, one in a folder
+    OpenMoat's installers use, then the search path, which the agent's
+    environment decides and so comes last, where the guard denies every call
+    until `openmoat init` writes the lock (ADR-099). Raises LockUnusable when
+    the lock names no program this can run.
+    """
+    lock = os.path.join(os.path.expanduser("~"), LOCK_FILE)
+    try:
+        with open(lock, encoding="utf-8") as file:
+            text = file.read()
+    except FileNotFoundError:
+        text = None
+    except OSError as error:
+        raise LockUnusable() from error
+    if text is not None:
+        try:
+            binary = json.loads(text).get("binary")
+        except (ValueError, AttributeError) as error:
+            raise LockUnusable() from error
+        if not isinstance(binary, str) or not os.path.isabs(binary) or not _runnable(binary):
+            raise LockUnusable()
+        return binary
     for folder in INSTALL_DIRS:
         path = os.path.join(os.path.expandvars(folder), PROGRAM)
-        if os.path.isfile(path) and os.access(path, os.X_OK):
+        if _runnable(path):
             return path
-    return None
+    return shutil.which(PROGRAM)
+
+
+class LockUnusable(Exception):
+    """The policy lock names no program this plugin can run."""
 
 
 def _payload(tool_name, args, kwargs):
@@ -107,6 +138,8 @@ def check(tool_name=None, args=None, task_id=None, **kwargs):
             check=False,
         )
         return _answer(run.returncode, run.stdout, run.stderr)
+    except LockUnusable:
+        return _block(LOCK_UNUSABLE)
     except subprocess.TimeoutExpired:
         return _block("openmoat guard did not answer in time")
     except Exception as error:  # noqa: BLE001 - every failure must block

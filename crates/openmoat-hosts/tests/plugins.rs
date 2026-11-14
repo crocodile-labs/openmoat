@@ -1,4 +1,4 @@
-//! The `plugins/` folder (ADR-095): generated from the host specs, so the
+//! The `plugins/` folder (ADR-099): generated from the host specs, so the
 //! packages and the hooks `openmoat init` writes cannot drift apart; and what
 //! a package does on its own, before any `openmoat` runs: it blocks the call
 //! when there is none, passes the guard's answer on, adds `--plugin`, and
@@ -160,6 +160,21 @@ fn the_javascript_plugins_say_the_one_install_command() {
         }
         found += 1;
         assert!(file.text.contains(&literal), "{}", file.path);
+        let unusable = serde_json::Value::from(openmoat_hosts::LOCK_UNUSABLE).to_string();
+        assert!(file.text.contains(&unusable), "{}", file.path);
+        // The lock first, then the installers' folders the guard script uses.
+        assert!(file.text.contains(r#"join(home, ".moat", "policy.lock")"#));
+        assert_eq!(openmoat_hosts::LOCK_FILE, ".moat/policy.lock");
+        for dir in openmoat_hosts::INSTALL_DIRS {
+            let js = match dir.strip_prefix("$HOME/") {
+                Some(rest) => {
+                    let parts: Vec<String> = rest.split('/').map(|p| format!("\"{p}\"")).collect();
+                    format!("join(home, {})", parts.join(", "))
+                }
+                None => format!("\"{dir}\""),
+            };
+            assert!(file.text.contains(&js), "{}: {js}", file.path);
+        }
         assert!(
             file.text.contains(&format!(
                 "const MOAT = {};",
@@ -286,9 +301,67 @@ fn without_openmoat_every_hook_package_blocks_and_names_the_install_command() {
             empty.path(),
             home.path(),
         );
-        assert_eq!(code, 2, "{host:?}: {stdout} {stderr}");
+        assert_eq!(code, deny_exit(host), "{host:?}: {stdout} {stderr}");
         assert_eq!(stdout.trim_end(), deny_doc(host, NOT_INSTALLED), "{host:?}");
         assert!(stderr.contains(NOT_INSTALLED), "{host:?}: {stderr}");
+    }
+}
+
+/// The exit code `host`'s guard script blocks with.
+fn deny_exit(host: Host) -> i32 {
+    spec(host).unwrap().deny_exit
+}
+
+/// A policy lock in `home` naming `binary`, as `openmoat init` writes it
+/// (pretty JSON, `binary` at the top level).
+#[cfg(unix)]
+fn lock(home: &Path, binary: &str) {
+    let path = home.join(openmoat_hosts::LOCK_FILE);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let doc =
+        serde_json::json!({ "version": 1, "pinned_at_ms": 1, "binary": binary, "entries": {} });
+    fs::write(&path, serde_json::to_string_pretty(&doc).unwrap() + "\n").unwrap();
+}
+
+/// With a lock, the script runs the binary it pins and nothing on the search
+/// path or in the installers' folders, which the agent's environment or a
+/// repository could fill; a lock naming no program it can run blocks.
+#[cfg(unix)]
+#[test]
+fn a_hook_package_runs_the_binary_the_lock_pins() {
+    for (host, _) in scripts("\"$HOME/none\"") {
+        let pinned = scratch();
+        let planted = scratch();
+        let home = scratch();
+        fake(pinned.path(), "{\"pinned\":1}", 0);
+        fake(planted.path(), "{\"planted\":1}", 0);
+        let found = scripts(&format!("{}", planted.path().display()))
+            .into_iter()
+            .find(|(h, _)| *h == host)
+            .unwrap()
+            .1;
+        let binary = pinned.path().join(PROGRAM);
+        lock(home.path(), &binary.to_string_lossy());
+        let args = ["guard", "--host", host.id()];
+        let (code, stdout, _) = run(&found, &args, planted.path(), home.path());
+        assert_eq!((code, stdout.trim_end()), (0, "{\"pinned\":1}"), "{host:?}");
+
+        // The pinned binary gone, a relative one, or one with an escape: blocked.
+        for named in [
+            pinned.path().join("gone").to_string_lossy().into_owned(),
+            "openmoat".to_owned(),
+            "/a\\\"b/openmoat".to_owned(),
+        ] {
+            lock(home.path(), &named);
+            let (code, stdout, stderr) = run(&found, &args, planted.path(), home.path());
+            assert_eq!(code, deny_exit(host), "{host:?} {named}: {stdout}");
+            assert_eq!(
+                stdout.trim_end(),
+                deny_doc(host, openmoat_hosts::LOCK_UNUSABLE),
+                "{host:?}"
+            );
+            assert!(stderr.contains(openmoat_hosts::LOCK_UNUSABLE), "{stderr}");
+        }
     }
 }
 
@@ -348,16 +421,20 @@ fn a_hook_package_runs_openmoat_with_plugin_and_passes_its_answer_on() {
         let (code, stdout, _) = run(&script, &args, bin.path(), home.path());
         assert_eq!((code, stdout.as_str()), (0, ""), "{host:?}");
 
-        // A deny passes on with its exit code.
+        // A deny passes on, with the exit code the host blocks on.
         fake(bin.path(), "{\"d\":1}", 2);
         let (code, stdout, _) = run(&script, &args, bin.path(), home.path());
-        assert_eq!((code, stdout.trim_end()), (2, "{\"d\":1}"), "{host:?}");
+        assert_eq!(
+            (code, stdout.trim_end()),
+            (deny_exit(host), "{\"d\":1}"),
+            "{host:?}"
+        );
 
         // A crash, or exit 2 without an answer, blocks in the host's own form.
         for code in [1, 2, 64, 101] {
             fake(bin.path(), "", code);
             let (exit, stdout, stderr) = run(&script, &args, bin.path(), home.path());
-            assert_eq!(exit, 2, "{host:?} {code}: {stderr}");
+            assert_eq!(exit, deny_exit(host), "{host:?} {code}: {stderr}");
             assert!(
                 stdout.contains("deny") || stdout.contains("block"),
                 "{host:?}: {stdout}"
@@ -436,13 +513,15 @@ fn the_hermes_package_blocks_without_openmoat_and_reads_the_guard() {
         "{reply}"
     );
 
+    // The binary the lock pins runs, though no search path holds it.
     let bin = scratch();
     fake(
         bin.path(),
         "{\"decision\":\"block\",\"reason\":\"moat: deny [x]\"}",
         2,
     );
-    let reply = hermes(&python, bin.path(), home.path());
+    lock(home.path(), &bin.path().join(PROGRAM).to_string_lossy());
+    let reply = hermes(&python, empty.path(), home.path());
     assert_eq!(reply["message"], "moat: deny [x]", "{reply}");
     let seen = fs::read_to_string(bin.path().join("args")).unwrap();
     assert_eq!(
@@ -452,9 +531,24 @@ fn the_hermes_package_blocks_without_openmoat_and_reads_the_guard() {
 
     fake(bin.path(), "", 0);
     assert_eq!(
-        hermes(&python, bin.path(), home.path()),
+        hermes(&python, empty.path(), home.path()),
         serde_json::Value::Null
     );
     fake(bin.path(), "", 1);
-    assert_eq!(hermes(&python, bin.path(), home.path())["action"], "block");
+    assert_eq!(
+        hermes(&python, empty.path(), home.path())["action"],
+        "block"
+    );
+
+    // A lock naming no program it can run blocks.
+    lock(home.path(), &bin.path().join("gone").to_string_lossy());
+    let reply = hermes(&python, bin.path(), home.path());
+    assert_eq!(reply["action"], "block", "{reply}");
+    assert!(
+        reply["message"]
+            .as_str()
+            .unwrap()
+            .contains(openmoat_hosts::LOCK_UNUSABLE),
+        "{reply}"
+    );
 }

@@ -1,4 +1,4 @@
-//! Antigravity CLI's plugin (ADR-095): `plugin.json` and `<plugin-root>/hooks.json`
+//! Antigravity CLI's plugin (ADR-099): `plugin.json` and `<plugin-root>/hooks.json`
 //! (a `hooks/hooks.json` is not loaded from a native plugin), the layout of
 //! `~/.gemini/config/hooks.json` that `openmoat init` writes: one named group
 //! with `enabled` and a `PreToolUse` list. Command hooks run with the plugin's
@@ -9,7 +9,7 @@
 use serde_json::json;
 
 use crate::Host;
-use crate::contract::{Meta, PluginFile, PluginSpec, StandAside};
+use crate::contract::{Meta, Paths, PluginFile, PluginSpec, StandAside};
 use crate::wire::plugin_package::{hook_plugin, json_file};
 
 /// The guard script, and how the hook file names it from the plugin's root.
@@ -36,6 +36,14 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     // `allow` defers to the next hook or the default policy, the answer the
     // guard gives a `defer`.
     stand_aside: StandAside::NoDecision,
+    // A hook must "exit with code `0` and write a JSON response object to
+    // `stdout`"; "any non-zero exit code is logged as a hook execution error
+    // and ignored (failing open)" (the build-plugins guide), so the deny goes
+    // on stdout with exit 0.
+    deny_exit: 0,
+    // `~/.gemini/config/plugins/<plugin_name>/` (the plugins page), all of
+    // which `kernel-self` already names from this host's own paths.
+    installed: Paths::new("", &[]),
     marketplace: None,
     files,
 };

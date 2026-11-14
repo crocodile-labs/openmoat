@@ -1118,6 +1118,41 @@
   context: { cwd: /p, project: /p, moved_dirs: { "~/.copilot": /srv/copilot } }
   action: { fs_write: "/srv/copilot/hooks/openmoat.json" }
   expect: { verdict: deny, rules: [kernel-self] }
+# The folder where an agent keeps OpenMoat's package from its own plugin channel
+# (ADR-099): its guard script or plugin is what runs `openmoat guard`, so replacing
+# or removing it lets calls run unchecked where the package is the only hook
+- id: T9-edit-claude-code-plugin-package
+  threat: T9
+  action: { fs_write: "~/.claude/plugins/cache/crocodile-labs/openmoat/0.21.0/hooks/openmoat-guard" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-remove-claude-code-plugin-marketplace
+  threat: T9
+  action: { shell: "rm -rf ~/.claude/plugins/marketplaces/crocodile-labs" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-edit-cursor-plugin-package
+  threat: T9
+  action: { fs_write: "~/.cursor/plugins/local/openmoat/hooks/openmoat-guard" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-edit-gemini-extension-package
+  threat: T9
+  action: { fs_write: "~/.gemini/extensions/openmoat/hooks/hooks.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-remove-copilot-plugin-package
+  threat: T9
+  action: { shell: "rm -rf ~/.copilot/installed-plugins/crocodile-labs/openmoat" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-edit-pi-npm-package
+  threat: T9
+  action: { fs_write: "~/.pi/agent/npm/node_modules/@openmoat/pi/openmoat.js" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-edit-opencode-npm-package
+  threat: T9
+  action: { fs_write: "~/.cache/opencode/node_modules/@openmoat/opencode/openmoat.js" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-edit-openclaw-clawhub-package
+  threat: T9
+  action: { fs_write: "~/.openclaw/extensions/openmoat-clawhub/openmoat.mjs" }
+  expect: { verdict: deny, rules: [kernel-self] }
 # pi: OpenMoat's extension in the agent directory is what runs `moat guard`; the
 # settings can turn it off (`-extensions/openmoat.js`), and trust decisions load a
 # project's own extensions. Replacing or removing any of them lets calls run unchecked

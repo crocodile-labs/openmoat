@@ -67,6 +67,7 @@ mod packs;
 mod paths;
 mod permission_mode;
 mod pi;
+mod pi_plugin;
 mod policy_upgrade;
 mod project_settings_writes;
 mod protection;

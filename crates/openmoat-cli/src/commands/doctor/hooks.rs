@@ -49,7 +49,7 @@ pub(super) fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<V
             );
             continue;
         }
-        // A package from the agent's own plugin channel (ADR-095): beside
+        // A package from the agent's own plugin channel (ADR-099): beside
         // `init`'s hook it stands aside; without one it is the hook.
         if let Some(record) = crate::plugin_record::last(home, host) {
             let text = format!("{name:<16} {}", crate::plugin_record::line(&record));

@@ -53,6 +53,7 @@ const MIN_TAINT_TIME: Duration = Duration::from_secs(1);
 pub fn run(args: &GuardArgs) -> Code {
     let host = args.host;
     entry::set(args.event.clone());
+    entry::set_package(args.plugin);
     // The hook's command line names the state directory; the environment the
     // host gave the hook does not get to (ADR-071).
     if let Some(word) = &args.home
@@ -65,7 +66,7 @@ pub fn run(args: &GuardArgs) -> Code {
         }
         return respond(host, &HookEvent::default(), &kernel_error(&error));
     }
-    // A package from the agent's own plugin channel (ADR-095), which starts
+    // A package from the agent's own plugin channel (ADR-099), which starts
     // the budget's deny itself.
     if let Some(code) = plugin::answer(args) {
         return code;
@@ -590,6 +591,9 @@ fn evaluate(
 /// ([`openmoat_hosts::HostSpec::payload_copies`]), so a file is refused at the
 /// same size whichever agent writes it.
 fn read_stdin(host: Host) -> Result<String> {
+    if let Some(payload) = entry::kept_payload() {
+        return Ok(payload);
+    }
     let limit = guard_relay::payload_limit(host);
     let mut payload = String::new();
     // One byte past the limit tells a payload that is too large from one that

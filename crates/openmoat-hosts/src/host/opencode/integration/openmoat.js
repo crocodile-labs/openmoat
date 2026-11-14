@@ -35,6 +35,9 @@
 // @ts-check
 
 import { spawn } from "node:child_process";
+import { readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { isAbsolute, join } from "node:path";
 
 /**
  * What OpenCode 1 hands `server` when it loads the plugin for a project.
@@ -113,11 +116,68 @@ const MOAT_HOME = __MOAT_HOME__;
 // wrote, or, in the package of OpenCode's own channel (`plugins/opencode`,
 // where both are empty and `openmoat` is found on the search path),
 // `--plugin`: the guard finds its state directory and gives no decision where
-// `init`'s own copy of this plugin decides (ADR-095).
+// `init`'s own copy of this plugin decides (ADR-099).
 const WHERE = MOAT_HOME === "" ? ["--plugin"] : ["--home", MOAT_HOME];
 // What the call is blocked with when there is no `openmoat` to run.
 const NOT_INSTALLED =
   "OpenMoat is not installed: install it with `brew install crocodile-labs/tap/openmoat` (other ways: https://github.com/crocodile-labs/openmoat/blob/main/docs/INSTALL.md), then run `openmoat init`";
+// What the call is blocked with when the policy lock names no program to run.
+const LOCK_UNUSABLE =
+  "the policy lock (`~/.moat/policy.lock`) names no `openmoat` this package can run: reinstall OpenMoat, then run `openmoat init`";
+
+/**
+ * Whether `path` is a file.
+ * @param {string} path
+ * @returns {boolean}
+ */
+function isFile(path) {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The program to run. `init`'s copy runs the binary `init` wrote in. The
+ * package runs the one the policy lock pins (`binary` in
+ * `~/.moat/policy.lock`, the absolute path `openmoat init` recorded); with no
+ * lock yet, one in a folder OpenMoat's installers use, then `openmoat` on the
+ * search path, which the agent's environment decides and so comes last, where
+ * the guard denies every call until `openmoat init` writes the lock (ADR-099).
+ * Throws when the lock names no program this can run.
+ * @returns {string}
+ */
+function program() {
+  if (MOAT_HOME !== "") return MOAT;
+  const home = homedir();
+  /** @type {string | undefined} */
+  let text;
+  try {
+    text = readFileSync(join(home, ".moat", "policy.lock"), "utf8");
+  } catch (error) {
+    if (field(error, "code") !== "ENOENT") throw new Error(LOCK_UNUSABLE);
+  }
+  if (text !== undefined) {
+    /** @type {unknown} */
+    let binary;
+    try {
+      binary = field(JSON.parse(text), "binary");
+    } catch {
+      binary = undefined;
+    }
+    if (typeof binary !== "string" || !isAbsolute(binary) || !isFile(binary)) {
+      throw new Error(LOCK_UNUSABLE);
+    }
+    return binary;
+  }
+  const dirs = [join(home, ".cargo", "bin"), "/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin"];
+  for (const dir of dirs) {
+    const found = join(dir, MOAT);
+    if (isFile(found)) return found;
+  }
+  return MOAT;
+}
 // Above `openmoat guard`'s own 30 s budget.
 const GUARD_TIMEOUT_MS = 45_000;
 const MAX_OUTPUT = 1 << 20;
@@ -223,7 +283,7 @@ function guard(payload, cwd) {
       finish({ code: null, stdout: "", stderr: why });
     };
     try {
-      child = spawn(MOAT, ["guard", "--host", "opencode", ...WHERE], {
+      child = spawn(program(), ["guard", "--host", "opencode", ...WHERE], {
         cwd,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
@@ -258,7 +318,7 @@ function guard(payload, cwd) {
 // saying the plugin has not reported.
 function heartbeat() {
   try {
-    const child = spawn(MOAT, ["guard", "--heartbeat", "--host", "opencode", ...WHERE], {
+    const child = spawn(program(), ["guard", "--heartbeat", "--host", "opencode", ...WHERE], {
       stdio: "ignore",
       windowsHide: true,
     });

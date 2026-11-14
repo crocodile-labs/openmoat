@@ -43,7 +43,9 @@ pub use wire::mcp_call::{
 };
 pub use wire::owned_file::{OwnedFile, OwnedFileError, Syntax};
 pub use wire::plugin_config::PluginConfig;
-pub use wire::plugin_package::{NOT_INSTALLED, PLUGIN_FLAG};
+pub use wire::plugin_package::{
+    INSTALL_DIRS, LOCK_FILE, LOCK_UNUSABLE, NOT_INSTALLED, PLUGIN_FLAG,
+};
 
 use std::fmt;
 use std::str::FromStr;

@@ -1,4 +1,4 @@
-//! What the packages of every channel share (ADR-095): the guard script a
+//! What the packages of every channel share (ADR-099): the guard script a
 //! hook-command plugin runs in place of the binary, the hook file in the
 //! host's own layout, and the JavaScript plugin `openmoat init` writes, made
 //! to find `openmoat` on the search path.
@@ -32,7 +32,7 @@ pub const PROGRAM: &str = "openmoat";
 /// installer's `~/.cargo/bin`, Homebrew's prefixes), which the guard script
 /// looks in after the search path: an agent started from a desktop launcher
 /// may have a shorter one than the person's shell.
-pub(crate) const INSTALL_DIRS: &[&str] = &[
+pub const INSTALL_DIRS: &[&str] = &[
     "$HOME/.cargo/bin",
     "/opt/homebrew/bin",
     "/usr/local/bin",
@@ -64,13 +64,29 @@ fn deny(host: Host, why: &str) -> String {
     )
 }
 
+/// The policy lock in the default state directory, relative to the home
+/// directory, whose `binary` names the program `openmoat init` pinned.
+pub const LOCK_FILE: &str = ".moat/policy.lock";
+
+/// Why a package blocks a call whose lock names no program it can run.
+pub const LOCK_UNUSABLE: &str = "the policy lock (`~/.moat/policy.lock`) names no `openmoat` \
+     this package can run: reinstall OpenMoat, then run `openmoat init`";
+
+/// Why a package blocks a call `openmoat guard` gave no answer for.
+const NO_ANSWER: &str =
+    "OpenMoat could not decide this call: `openmoat guard` gave no answer; run `openmoat doctor`";
+
 /// The script a hook-command package runs in place of the `openmoat` binary
-/// (POSIX `sh`): it runs `openmoat` with the hook's arguments and
-/// [`PLUGIN_FLAG`], passes its answer on, and blocks the call when there is
-/// no `openmoat` or it exits without an answer.
+/// (POSIX `sh`). It runs the program the policy lock pins (`binary` in
+/// [`LOCK_FILE`], the absolute path `openmoat init` recorded); without a lock,
+/// the one in a folder OpenMoat's installers use ([`INSTALL_DIRS`]), then on
+/// the search path, which an agent's environment can change and so is read
+/// last and only where the guard denies anyway (no lock). It passes the
+/// hook's arguments and [`PLUGIN_FLAG`], passes the answer on, and blocks the
+/// call, exiting with the host's block code (`deny_exit`), when there is no
+/// program to run or it exits without an answer.
 pub(crate) fn guard_script(host: Host) -> String {
-    let failed = "OpenMoat could not decide this call: `openmoat guard` gave no answer; run \
-                  `openmoat doctor`";
+    let deny_exit = crate::plugin::spec(host).map_or(2, |spec| spec.deny_exit);
     let dirs: Vec<String> = INSTALL_DIRS
         .iter()
         .map(|dir| match dir.strip_prefix("$HOME") {
@@ -85,38 +101,56 @@ pub(crate) fn guard_script(host: Host) -> String {
 #
 # {name} runs this file where `openmoat init`'s hook runs the `openmoat`
 # binary, with the same arguments (`guard --host {id}`, and `--event <event>`
-# where the payload names no event). It runs the `openmoat` on the search
-# path, or in a folder OpenMoat's installers use, with `{flag}` added: the
-# guard decides the call or, where `openmoat init`'s own hook is installed and
-# pinned, gives no decision so that hook decides it alone (ADR-095). Without
-# `openmoat`, or when it exits without an answer, the call is blocked. This
-# file downloads and installs nothing.
+# where the payload names no event), and `{flag}` added: the guard decides
+# the call or, where `openmoat init`'s own hook is installed and pinned, gives
+# no decision so that hook decides it alone (ADR-099).
+#
+# Which `openmoat`: the one the policy lock pins (`~/{lock}`, written by
+# `openmoat init`); with no lock yet, one in a folder OpenMoat's installers
+# use, then the search path (the guard denies every call until `openmoat
+# init` writes the lock). Without one, or when it exits without an answer,
+# the call is blocked. This file downloads and installs nothing.
 
 missing={missing}
-failed={failed_doc}
+unusable={unusable}
+failed={failed}
 
 block() {{
   printf '%s\n' "$1"
   printf 'OpenMoat blocked this call: %s\n' "$2" >&2
-  exit 2
+  exit {deny_exit}
 }}
 
-moat=$(command -v {program} 2>/dev/null) || moat=
-if [ -z "$moat" ]; then
+lock="$HOME/{lock}"
+moat=
+if [ -e "$lock" ]; then
+  moat=$(sed -n 's/^  "binary": "\(.*\)",$/\1/p' "$lock" 2>/dev/null | head -n 1)
+  case $moat in
+    *\\*|*\"*|'') block "$unusable" {unusable_text} ;;
+    /*) ;;
+    *) block "$unusable" {unusable_text} ;;
+  esac
+  [ -x "$moat" ] || block "$unusable" {unusable_text}
+else
   for dir in {dirs}; do
     if [ -x "$dir/{program}" ]; then
       moat=$dir/{program}
       break
     fi
   done
+  [ -n "$moat" ] || moat=$(command -v {program} 2>/dev/null) || moat=
 fi
 [ -n "$moat" ] || block "$missing" {not_installed}
 
 answer=$("$moat" "$@" {flag})
 code=$?
-if [ "$code" -eq 0 ] || {{ [ "$code" -eq 2 ] && [ -n "$answer" ]; }}; then
+if [ "$code" -eq 0 ]; then
   [ -z "$answer" ] || printf '%s\n' "$answer"
-  exit "$code"
+  exit 0
+fi
+if [ "$code" -eq 2 ] && [ -n "$answer" ]; then
+  printf '%s\n' "$answer"
+  exit {deny_exit}
 fi
 block "$failed" "openmoat guard exited $code without an answer"
 "#,
@@ -124,9 +158,12 @@ block "$failed" "openmoat guard exited $code without an answer"
         id = host.id(),
         flag = PLUGIN_FLAG,
         program = PROGRAM,
+        lock = LOCK_FILE,
         missing = shell_word(&deny(host, NOT_INSTALLED)),
-        failed_doc = shell_word(&deny(host, failed)),
+        unusable = shell_word(&deny(host, LOCK_UNUSABLE)),
+        failed = shell_word(&deny(host, NO_ANSWER)),
         not_installed = shell_word(NOT_INSTALLED),
+        unusable_text = shell_word(LOCK_UNUSABLE),
         dirs = dirs.join(" "),
     )
 }

@@ -142,18 +142,7 @@ pub fn judge(facts: &Facts) -> Loaded {
 /// file cannot be read.
 pub fn check(home: &Home, config: &HostConfig) -> Option<Loaded> {
     let heartbeat = spec(config.host)?;
-    let written = modified_ms(&fs::metadata(config.plugin_file()?).ok()?)?;
-    let updated = program_ms(heartbeat.program);
-    let since = match updated {
-        Some(at_ms) if at_ms > written => Since {
-            change: Change::HostUpdated,
-            at_ms,
-        },
-        _ => Since {
-            change: Change::PluginWritten,
-            at_ms: written,
-        },
-    };
+    let since = since(config, heartbeat)?;
     let decided_ms = openmoat_audit::Store::open_read_only(&home.audit_path())
         .ok()
         .and_then(|store| store.host_seen_since(config.host.id(), since.at_ms).ok())
@@ -164,6 +153,37 @@ pub fn check(home: &Home, config: &HostConfig) -> Option<Loaded> {
         decided_ms,
         active_ms: newest_activity(config.dir(), heartbeat.activity),
     }))
+}
+
+/// The last change `config`'s plugin has to have loaded after: OpenMoat
+/// writing it, or a newer host program; `None` when the file cannot be read.
+fn since(config: &HostConfig, heartbeat: &Heartbeat) -> Option<Since> {
+    let written = modified_ms(&fs::metadata(config.plugin_file()?).ok()?)?;
+    Some(match program_ms(heartbeat.program) {
+        Some(at_ms) if at_ms > written => Since {
+            change: Change::HostUpdated,
+            at_ms,
+        },
+        _ => Since {
+            change: Change::PluginWritten,
+            at_ms: written,
+        },
+    })
+}
+
+/// Whether `init`'s plugin for `config`'s host has itself reported loading
+/// (`guard --heartbeat`) since it last changed. Only its own report counts:
+/// a decision recorded for the host may have come from a package of the
+/// host's own plugin channel instead (ADR-099). `true` for a host that runs a
+/// hook command, which has nothing to load.
+pub fn reported_since_change(home: &Home, config: &HostConfig) -> bool {
+    let Some(heartbeat) = spec(config.host) else {
+        return true;
+    };
+    match (since(config, heartbeat), last(home, config.host)) {
+        (Some(since), Some(reported_ms)) => reported_ms >= since.at_ms,
+        _ => false,
+    }
 }
 
 /// One host's [`Loaded`], for `openmoat status --format json` (`plugins`).

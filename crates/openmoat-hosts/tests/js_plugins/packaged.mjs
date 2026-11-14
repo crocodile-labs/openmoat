@@ -1,4 +1,4 @@
-// Loads the extension of pi's package (`plugins/pi/openmoat.js`, ADR-095) the
+// Loads the extension of pi's package (`plugins/pi/openmoat.js`, ADR-099) the
 // way pi does and drives `tool_call` twice: with a stand-in `openmoat` on the
 // search path, which records its arguments and denies, and with none there.
 // Prints what happened as JSON for `packaged.rs`. The stand-in is a script
@@ -50,15 +50,29 @@ async function call(list) {
   return result?.block ? `blocked: ${result.reason}` : "ran";
 }
 
+/** A policy lock in the scratch home naming `binary`, as `openmoat init` writes it. */
+function lock(binary) {
+  mkdirSync(join(dir, ".moat"), { recursive: true });
+  const doc = { version: 1, pinned_at_ms: 1, binary, entries: {} };
+  writeFileSync(join(dir, ".moat", "policy.lock"), `${JSON.stringify(doc, null, 2)}\n`);
+}
+
 try {
-  process.env.PATH = bin;
+  // The package reads the lock in the home directory: never the real one.
+  process.env.HOME = dir;
+  process.env.PATH = empty;
+  // With a lock, the binary it pins runs, though it is on no search path.
+  lock(join(bin, "openmoat"));
   const list = await handlers();
   const beats = await heartbeats(dir, 1);
   const denied = await call(list);
   const argv = JSON.parse(readFileSync(join(dir, "args.json"), "utf8"));
-  process.env.PATH = empty;
+  lock(join(dir, "gone", "openmoat"));
+  const unusable = await call(list);
+  // Without a lock, and with nothing on the search path.
+  rmSync(join(dir, ".moat"), { recursive: true, force: true });
   const missing = await call(list);
-  console.log(JSON.stringify({ heartbeats: beats, argv, denied, missing }));
+  console.log(JSON.stringify({ heartbeats: beats, argv, denied, missing, unusable }));
 } finally {
   try {
     rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });

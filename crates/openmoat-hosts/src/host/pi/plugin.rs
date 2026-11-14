@@ -1,4 +1,4 @@
-//! pi's package (ADR-095): an npm package whose `package.json` names its
+//! pi's package (ADR-099): an npm package whose `package.json` names its
 //! extensions under `pi.extensions` and carries the `pi-package` keyword for
 //! the pi.dev gallery (`docs/packages.md`). The extension is the one `openmoat
 //! init` writes, finding `openmoat` on the search path instead of the path and
@@ -7,7 +7,7 @@
 use serde_json::json;
 
 use crate::Host;
-use crate::contract::{Meta, PluginFile, PluginSpec, StandAside};
+use crate::contract::{Meta, Paths, PluginFile, PluginSpec, StandAside};
 use crate::wire::plugin_package::{package_json, packaged};
 
 const FILE: &str = "openmoat.js";
@@ -28,6 +28,20 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     ],
     // A handler that returns nothing does not block; the first block wins.
     stand_aside: StandAside::NoDecision,
+    deny_exit: 2,
+    // npm packages are "installed under the Pi npm directory", which the
+    // packages page does not locate, and the install is recorded in the
+    // settings file `kernel-self` already names; the package's folder is
+    // covered wherever an npm folder holds it.
+    installed: Paths::new(
+        "pi: OpenMoat's package, in whichever npm folder holds it",
+        &[
+            "~/.pi/agent/**/@openmoat/pi",
+            "~/.pi/agent/**/@openmoat/pi/**",
+            "**/node_modules/@openmoat/pi",
+            "**/node_modules/@openmoat/pi/**",
+        ],
+    ),
     marketplace: None,
     files,
 };

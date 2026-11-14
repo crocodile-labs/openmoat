@@ -1,4 +1,4 @@
-//! Cursor's plugin (ADR-095): `.cursor-plugin/plugin.json` and
+//! Cursor's plugin (ADR-099): `.cursor-plugin/plugin.json` and
 //! `hooks/hooks.json`, the parser's default hooks location, in the layout of
 //! `~/.cursor/hooks.json` (`version: 1`, a `hooks` map of entries with
 //! `command`, `timeout` and `failClosed`). A plugin's hooks run from its
@@ -9,7 +9,7 @@
 use serde_json::json;
 
 use crate::Host;
-use crate::contract::{Marketplace, Meta, PluginFile, PluginSpec, StandAside};
+use crate::contract::{Marketplace, Meta, Paths, PluginFile, PluginSpec, StandAside};
 use crate::wire::plugin_package::{hook_plugin, json_file};
 
 /// The guard script, and how the hook file names it from the install directory.
@@ -34,9 +34,20 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
         "https://cursor.com/docs/agent/hooks",
     ],
     // Cursor's hooks have no "no decision"; it runs every matching hook and
-    // takes deny over ask over allow, whatever their source, so `allow`
-    // leaves `openmoat init`'s answer as it is.
+    // "any `deny` wins over `ask`, and `ask` wins over `allow`, regardless of
+    // source" (<https://cursor.com/docs/agent/hooks>), so `allow` leaves
+    // `openmoat init`'s answer as it is.
     stand_aside: StandAside::Allow,
+    // Exit 2 blocks the action, "equivalent to returning `permission:
+    // \"deny\"`" (the hooks page, exit codes).
+    deny_exit: 2,
+    // Cursor names only `~/.cursor/plugins/local` for a plugin on disk (the
+    // plugins page); a Marketplace install's folder is not documented, so
+    // every folder named `openmoat` below `~/.cursor/plugins` is covered.
+    installed: Paths::new(
+        "Cursor: OpenMoat's plugin, wherever below its plugins folder Cursor keeps it",
+        &["~/.cursor/plugins/**/openmoat", "~/.cursor/plugins/**/openmoat/**"],
+    ),
     marketplace: Some(Marketplace {
         file: ".cursor-plugin/marketplace.json",
         source_prefix: "",

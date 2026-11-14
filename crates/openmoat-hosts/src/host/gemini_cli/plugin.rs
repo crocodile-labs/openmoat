@@ -1,4 +1,4 @@
-//! Gemini CLI's extension (ADR-095): `gemini-extension.json` at the root,
+//! Gemini CLI's extension (ADR-099): `gemini-extension.json` at the root,
 //! and the hooks in `hooks/hooks.json`, not in the manifest; `${extensionPath}`
 //! is the extension's absolute directory in both files (the extension
 //! reference). The entries are the ones `openmoat init` writes into
@@ -9,7 +9,7 @@
 use serde_json::json;
 
 use crate::Host;
-use crate::contract::{Meta, PluginFile, PluginSpec, StandAside};
+use crate::contract::{Meta, Paths, PluginFile, PluginSpec, StandAside};
 use crate::wire::plugin_package::{hook_plugin, json_file};
 
 /// The guard script, and how the hook file names it.
@@ -34,6 +34,14 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     ],
     // No output from a `BeforeTool` hook is no decision.
     stand_aside: StandAside::NoDecision,
+    // Exit 2 is a "System Block" (the hooks page).
+    deny_exit: 2,
+    // Extensions load from `<home>/.gemini/extensions`, each in a folder named
+    // as the extension (the extension reference).
+    installed: Paths::new(
+        "Gemini CLI: OpenMoat's extension",
+        &["~/.gemini/extensions/openmoat", "~/.gemini/extensions/openmoat/**"],
+    ),
     marketplace: None,
     files,
 };

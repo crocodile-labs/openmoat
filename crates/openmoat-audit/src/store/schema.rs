@@ -5,7 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, 
 use super::StoreError;
 
 /// Schema version this build writes, kept in `PRAGMA user_version`.
-pub(super) const SCHEMA_VERSION: i64 = 10;
+pub(super) const SCHEMA_VERSION: i64 = 11;
 
 /// The first version with the hash chain ([`V2`]).
 pub(super) const CHAIN_VERSION: i64 = 2;
@@ -23,6 +23,9 @@ pub(super) const MCP_FLOW_VERSION: i64 = 9;
 /// The first version with the fingerprints of untrusted content each session
 /// read ([`V10`]).
 pub(super) const INJECTED_INPUTS_VERSION: i64 = 10;
+/// The first version that marks the events a package from an agent's own
+/// plugin channel decided ([`V11`]).
+pub(super) const PACKAGE_EVENTS_VERSION: i64 = 11;
 
 /// Version 1: the events table.
 const V1: &str = "
@@ -272,6 +275,17 @@ CREATE TABLE IF NOT EXISTS injected_inputs (
 CREATE INDEX IF NOT EXISTS injected_inputs_ts ON injected_inputs(ts_ms);
 ";
 
+/// Version 11: the events `openmoat guard --plugin` decided (ADR-099), one row
+/// each, written in the event's own transaction. They come from a package of
+/// the agent's own channel, not from `openmoat init`'s hook or plugin, so they
+/// never count as `init`'s plugin having loaded (`seen.rs`). A row is an id
+/// only; the event itself stays in the chain. `IF NOT EXISTS`, as for [`V4`].
+const V11: &str = "
+CREATE TABLE IF NOT EXISTS package_events (
+    event_id    INTEGER PRIMARY KEY
+);
+";
+
 /// A `CHECK` of one table that a step widens: `from` becomes `to`, which
 /// accepts every value `from` accepts, and more.
 struct Widening {
@@ -413,6 +427,9 @@ pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
     }
     if found < INJECTED_INPUTS_VERSION {
         tx.execute_batch(V10)?;
+    }
+    if found < PACKAGE_EVENTS_VERSION {
+        tx.execute_batch(V11)?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;

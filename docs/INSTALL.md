@@ -204,35 +204,57 @@ calls or commands. See [Codex's host contract](../crates/openmoat-hosts/src/host
 > [!NOTE]
 > **Preview.** The packages below are in the repository's
 > [`plugins/`](../plugins/README.md) folder, generated from the host specs
-> ([ADR-095](adr/ADR-095-plugin-packages.md)). None is listed in its channel yet; until
+> ([ADR-099](adr/ADR-099-plugin-packages.md)). None is listed in its channel yet; until
 > one is, install it from the folder or keep using `openmoat init` alone.
 
 Each agent below can take OpenMoat's hook from its own plugin channel in one step. A
 package holds no binary and downloads nothing: you still install `openmoat` and run
-`openmoat init` once, which writes the policy and its lock. The package runs the
-`openmoat` on your search path (or in `~/.cargo/bin` or Homebrew's folder) as
-`openmoat guard --host <id> --plugin`:
+`openmoat init` once, which writes the policy and its lock. The package runs
+`openmoat guard --host <id> --plugin` with the `openmoat` the policy lock pins (`binary`
+in `~/.moat/policy.lock`, the path `openmoat init` recorded). Before there is a lock it
+looks in `~/.cargo/bin` and Homebrew's folder, then on the search path; the guard then
+denies every call anyway.
 
 - **No `openmoat`**, or it gives no answer: every call is blocked, and the message
   names the install command (`brew install crocodile-labs/tap/openmoat`, then
-  `openmoat init`).
+  `openmoat init`). A lock that names no program the package can run blocks every call
+  too.
 - **No policy lock** (`openmoat init` not run yet): every call is denied, and the reason
   says to run `openmoat init`.
 - **`openmoat init`'s own hook installed for the agent as well**: the package gives no
   decision (on Cursor, `allow`, which never changes what the other hook answers), so
   each call is decided once, by `init`'s hook, which the lock pins and which runs the
-  binary by its path. The package stands aside only while the lock is intact, it pins
-  the hook file the agent reads, the entry there is the one `init` wrote and, for pi,
-  OpenCode and OpenClaw, `init`'s plugin has reported loading since it last changed;
-  otherwise the package decides.
+  binary by its path. The package stands aside only when all of these hold:
+  - the lock is intact;
+  - it pins the hook file this agent reads, taken from the agent's own environment
+    (its `CLAUDE_CONFIG_DIR` and the like, else the default folder), never from where
+    `init` last ran;
+  - OpenMoat's entry there is the one `init` wrote;
+  - no settings file the agent reads, yours or the project's, turns that hook off;
+  - for pi, OpenCode and OpenClaw, `init`'s plugin has itself reported loading since
+    it last changed. A call the package decided does not count.
+
+  Otherwise the package decides.
 - **Only the package**: it decides each call as `init`'s hook would. Answer `n` for that
   agent in `openmoat init` to keep it that way.
 
 `openmoat doctor` reports each package that ran: when, and whether it stood aside for
-`init`'s hook or decided itself (`~/.moat/plugins/<id>.json`). The guard scripts are
-POSIX `sh`, so on native Windows use `openmoat init`. A package installed this way is
-outside the lock: the agent may update it and you may turn it off without OpenMoat
-seeing it, so `openmoat init`'s hook stays the recommended setup.
+`init`'s hook or decided itself (`~/.moat/plugins/<id>.json`). The default policy's
+`kernel-self` keeps an agent from changing the folder where its host keeps OpenMoat's
+package, by that folder's name: another plugin's folder is left as it was.
+
+**With a package alone**, without `openmoat init`'s hook:
+
+- The package is outside the lock. The agent may update it, and you or a project's
+  settings may turn it off, without OpenMoat seeing it.
+- It decides only with the default state directory, `~/.moat`; a `MOAT_HOME` that names
+  another one is denied. It finds the lock from the agent's `HOME`.
+- A plugin's report that `init`'s plugin loaded stays valid until that plugin's file or
+  the agent's program changes; it says nothing about the process now running.
+- The guard scripts are POSIX `sh`, so on native Windows use `openmoat init`.
+
+`openmoat init`'s hook names its binary and state directory itself and is pinned by the
+lock, so it stays the setup to rely on.
 
 ### Claude Code
 
@@ -315,7 +337,9 @@ agy plugin install https://github.com/crocodile-labs/openmoat-antigravity
 ```
 
 Antigravity CLI is a preview host: check that the hook fires (`openmoat doctor` shows
-the package's last run) before you rely on it.
+the package's last run) before you rely on it. Its build-plugins guide says a plugin
+hook must exit 0 with its JSON answer and that any other exit is ignored, so the
+package blocks with the deny on stdout and exit 0.
 
 ### Codex, Cline and goose
 
@@ -413,7 +437,7 @@ Read the [CHANGELOG](../CHANGELOG.md) entries since your version first; so far t
 kinds of change have happened:
 
 - **The audit log schema moves forward** (version 3 in 0.5.0, version 4 in 0.6.0,
-  version 5 in 0.11.0, version 7 in 0.12.0, version 8 in 0.14.0, version 10 in 0.16.0). The
+  version 5 in 0.11.0, version 7 in 0.12.0, version 8 in 0.14.0, version 10 in 0.16.0, version 11 in the release after 0.21.0). The
   new `openmoat` updates the log when it first opens it; an older `openmoat` then refuses to
   open it (`schema too new`), and its hook denies every call. Going back to an older
   release is not supported.

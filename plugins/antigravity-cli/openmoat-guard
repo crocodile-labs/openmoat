@@ -4,37 +4,55 @@
 #
 # Antigravity CLI runs this file where `openmoat init`'s hook runs the `openmoat`
 # binary, with the same arguments (`guard --host antigravity-cli`, and `--event <event>`
-# where the payload names no event). It runs the `openmoat` on the search
-# path, or in a folder OpenMoat's installers use, with `--plugin` added: the
-# guard decides the call or, where `openmoat init`'s own hook is installed and
-# pinned, gives no decision so that hook decides it alone (ADR-095). Without
-# `openmoat`, or when it exits without an answer, the call is blocked. This
-# file downloads and installs nothing.
+# where the payload names no event), and `--plugin` added: the guard decides
+# the call or, where `openmoat init`'s own hook is installed and pinned, gives
+# no decision so that hook decides it alone (ADR-099).
+#
+# Which `openmoat`: the one the policy lock pins (`~/.moat/policy.lock`, written by
+# `openmoat init`); with no lock yet, one in a folder OpenMoat's installers
+# use, then the search path (the guard denies every call until `openmoat
+# init` writes the lock). Without one, or when it exits without an answer,
+# the call is blocked. This file downloads and installs nothing.
 
 missing='{"decision":"deny","reason":"moat: deny [kernel-error] — OpenMoat is not installed: install it with `brew install crocodile-labs/tap/openmoat` (other ways: https://github.com/crocodile-labs/openmoat/blob/main/docs/INSTALL.md), then run `openmoat init`"}'
+unusable='{"decision":"deny","reason":"moat: deny [kernel-error] — the policy lock (`~/.moat/policy.lock`) names no `openmoat` this package can run: reinstall OpenMoat, then run `openmoat init`"}'
 failed='{"decision":"deny","reason":"moat: deny [kernel-error] — OpenMoat could not decide this call: `openmoat guard` gave no answer; run `openmoat doctor`"}'
 
 block() {
   printf '%s\n' "$1"
   printf 'OpenMoat blocked this call: %s\n' "$2" >&2
-  exit 2
+  exit 0
 }
 
-moat=$(command -v openmoat 2>/dev/null) || moat=
-if [ -z "$moat" ]; then
+lock="$HOME/.moat/policy.lock"
+moat=
+if [ -e "$lock" ]; then
+  moat=$(sed -n 's/^  "binary": "\(.*\)",$/\1/p' "$lock" 2>/dev/null | head -n 1)
+  case $moat in
+    *\\*|*\"*|'') block "$unusable" 'the policy lock (`~/.moat/policy.lock`) names no `openmoat` this package can run: reinstall OpenMoat, then run `openmoat init`' ;;
+    /*) ;;
+    *) block "$unusable" 'the policy lock (`~/.moat/policy.lock`) names no `openmoat` this package can run: reinstall OpenMoat, then run `openmoat init`' ;;
+  esac
+  [ -x "$moat" ] || block "$unusable" 'the policy lock (`~/.moat/policy.lock`) names no `openmoat` this package can run: reinstall OpenMoat, then run `openmoat init`'
+else
   for dir in "$HOME/.cargo/bin" /opt/homebrew/bin /usr/local/bin /home/linuxbrew/.linuxbrew/bin; do
     if [ -x "$dir/openmoat" ]; then
       moat=$dir/openmoat
       break
     fi
   done
+  [ -n "$moat" ] || moat=$(command -v openmoat 2>/dev/null) || moat=
 fi
 [ -n "$moat" ] || block "$missing" 'OpenMoat is not installed: install it with `brew install crocodile-labs/tap/openmoat` (other ways: https://github.com/crocodile-labs/openmoat/blob/main/docs/INSTALL.md), then run `openmoat init`'
 
 answer=$("$moat" "$@" --plugin)
 code=$?
-if [ "$code" -eq 0 ] || { [ "$code" -eq 2 ] && [ -n "$answer" ]; }; then
+if [ "$code" -eq 0 ]; then
   [ -z "$answer" ] || printf '%s\n' "$answer"
-  exit "$code"
+  exit 0
+fi
+if [ "$code" -eq 2 ] && [ -n "$answer" ]; then
+  printf '%s\n' "$answer"
+  exit 0
 fi
 block "$failed" "openmoat guard exited $code without an answer"

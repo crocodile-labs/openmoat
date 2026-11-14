@@ -235,7 +235,7 @@ pub struct HostSpec {
     /// does not (`scripts/ci/latest-agents/agents.json` is written from it).
     pub weekly: Weekly,
     /// The package the host's own plugin channel installs OpenMoat from, or
-    /// why it has none (ADR-095); `plugins/` is generated from it.
+    /// why it has none (ADR-099); `plugins/` is generated from it.
     pub plugin: Plugin,
 }
 

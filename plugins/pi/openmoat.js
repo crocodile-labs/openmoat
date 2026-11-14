@@ -17,6 +17,9 @@
 // @ts-check
 
 import { spawn } from "node:child_process";
+import { readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { isAbsolute, join } from "node:path";
 
 // `openmoat run`'s relay variables, which this extension's guard needs and
 // pi's tool commands must not get (ADR-075): pi copies `process.env` for each
@@ -86,11 +89,68 @@ const MOAT_HOME = "";
 // wrote, or, in the package of pi's own channel (`plugins/pi`, where both are
 // empty and `openmoat` is found on the search path), `--plugin`: the guard
 // finds its state directory and gives no decision where `init`'s own copy of
-// this extension decides (ADR-095).
+// this extension decides (ADR-099).
 const WHERE = MOAT_HOME === "" ? ["--plugin"] : ["--home", MOAT_HOME];
 // What the call is blocked with when there is no `openmoat` to run.
 const NOT_INSTALLED =
   "OpenMoat is not installed: install it with `brew install crocodile-labs/tap/openmoat` (other ways: https://github.com/crocodile-labs/openmoat/blob/main/docs/INSTALL.md), then run `openmoat init`";
+// What the call is blocked with when the policy lock names no program to run.
+const LOCK_UNUSABLE =
+  "the policy lock (`~/.moat/policy.lock`) names no `openmoat` this package can run: reinstall OpenMoat, then run `openmoat init`";
+
+/**
+ * Whether `path` is a file.
+ * @param {string} path
+ * @returns {boolean}
+ */
+function isFile(path) {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The program to run. `init`'s copy runs the binary `init` wrote in. The
+ * package runs the one the policy lock pins (`binary` in
+ * `~/.moat/policy.lock`, the absolute path `openmoat init` recorded); with no
+ * lock yet, one in a folder OpenMoat's installers use, then `openmoat` on the
+ * search path, which the agent's environment decides and so comes last, where
+ * the guard denies every call until `openmoat init` writes the lock (ADR-099).
+ * Throws when the lock names no program this can run.
+ * @returns {string}
+ */
+function program() {
+  if (MOAT_HOME !== "") return MOAT;
+  const home = homedir();
+  /** @type {string | undefined} */
+  let text;
+  try {
+    text = readFileSync(join(home, ".moat", "policy.lock"), "utf8");
+  } catch (error) {
+    if (field(error, "code") !== "ENOENT") throw new Error(LOCK_UNUSABLE);
+  }
+  if (text !== undefined) {
+    /** @type {unknown} */
+    let binary;
+    try {
+      binary = field(JSON.parse(text), "binary");
+    } catch {
+      binary = undefined;
+    }
+    if (typeof binary !== "string" || !isAbsolute(binary) || !isFile(binary)) {
+      throw new Error(LOCK_UNUSABLE);
+    }
+    return binary;
+  }
+  const dirs = [join(home, ".cargo", "bin"), "/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin"];
+  for (const dir of dirs) {
+    const found = join(dir, MOAT);
+    if (isFile(found)) return found;
+  }
+  return MOAT;
+}
 // Above `openmoat guard`'s own 30 s budget; the wait for a person's answer to
 // an ask comes after it and has no limit.
 const GUARD_TIMEOUT_MS = 45_000;
@@ -199,7 +259,7 @@ function guard(payload, cwd, signal) {
     };
     const onAbort = () => stop("the tool call was cancelled");
     try {
-      child = spawn(MOAT, ["guard", "--host", "pi", ...WHERE], {
+      child = spawn(program(), ["guard", "--host", "pi", ...WHERE], {
         cwd,
         env: { ...process.env, ...relayEnv },
         stdio: ["pipe", "pipe", "pipe"],
@@ -236,7 +296,7 @@ function guard(payload, cwd, signal) {
 // saying the extension has not reported.
 function heartbeat() {
   try {
-    const child = spawn(MOAT, ["guard", "--heartbeat", "--host", "pi", ...WHERE], {
+    const child = spawn(program(), ["guard", "--heartbeat", "--host", "pi", ...WHERE], {
       env: { ...process.env, ...relayEnv },
       stdio: "ignore",
       windowsHide: true,

@@ -20,6 +20,7 @@ mod export_verify;
 mod injected_inputs;
 mod mcp_flow;
 mod mcp_tickets;
+mod package;
 mod provenance;
 mod rules;
 mod schema;
@@ -221,6 +222,9 @@ pub struct Store {
     version: i64,
     /// Masked in every event this handle records.
     secrets: KnownSecrets,
+    /// Every event this handle records was decided for a package of the
+    /// agent's own plugin channel ([`Store::from_package`]).
+    from_package: bool,
 }
 
 impl Store {
@@ -263,6 +267,7 @@ impl Store {
             conn,
             version: found,
             secrets: KnownSecrets::default(),
+            from_package: false,
         })
     }
 
@@ -280,6 +285,7 @@ impl Store {
             conn,
             version: schema::SCHEMA_VERSION,
             secrets: KnownSecrets::default(),
+            from_package: false,
         })
     }
 
@@ -403,6 +409,9 @@ impl Store {
                 fields.hash(),
             ],
         )?;
+        if self.from_package {
+            package::mark(&tx, id)?;
+        }
         tx.commit()?;
         Ok(EventId(id))
     }

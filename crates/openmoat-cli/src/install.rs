@@ -158,6 +158,22 @@ impl HostConfig {
         }
     }
 
+    /// `host`'s configuration where this process's environment puts it: the
+    /// host's own variable, else its default under the home directory; never
+    /// `hosts.json`. A hook inherits the agent's environment, so this is the
+    /// hook file the agent that started it reads (ADR-099), which a record of
+    /// where `init` once ran need not be.
+    pub fn for_environment(home: &Home, host: Host) -> Result<Self> {
+        if let Some(locate) = location::custom(host) {
+            let located = match location::from_env(locate)? {
+                Some(located) => located,
+                None => locate.default_for(&user_home()?),
+            };
+            return Self::with_spec(home, host, located.config, located.dir);
+        }
+        Self::at(home, host, env_config_dir(host)?)
+    }
+
     /// The configuration directory and hook file of a host with its own
     /// location rules (OpenClaw's state directory and `openclaw.json`), with
     /// those rules; `None` for any other host.

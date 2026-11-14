@@ -1,4 +1,4 @@
-//! OpenClaw's package (ADR-095): a native plugin as `ClawHub` publishes it, an
+//! OpenClaw's package (ADR-099): a native plugin as `ClawHub` publishes it, an
 //! npm-style folder with `openclaw.plugin.json` (`id` and `configSchema`
 //! required) and a `package.json` whose `openclaw` block names the entry
 //! (`extensions`) and the compatibility `ClawHub` requires
@@ -10,7 +10,7 @@
 use serde_json::json;
 
 use crate::Host;
-use crate::contract::{Meta, PluginFile, PluginSpec, StandAside};
+use crate::contract::{Meta, Paths, PluginFile, PluginSpec, StandAside};
 use crate::wire::plugin_package::{json_file, package_json, packaged};
 
 const FILE: &str = "openmoat.mjs";
@@ -42,6 +42,22 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     ],
     // A handler that returns nothing makes no decision; a block is final.
     stand_aside: StandAside::NoDecision,
+    deny_exit: 2,
+    // `openclaw plugins install` puts a plugin "into the active OpenClaw
+    // workspace" (the ClawHub page) without naming the folder; the package's
+    // folder is covered below the state directory and in any npm folder.
+    // `plugins.entries.<id>.enabled` is in `openclaw.json`, which `kernel-self`
+    // already names.
+    installed: Paths::new(
+        "OpenClaw: OpenMoat's ClawHub package, below its state directory or in an npm\n\
+         folder",
+        &[
+            "~/.openclaw/**/openmoat-clawhub",
+            "~/.openclaw/**/openmoat-clawhub/**",
+            "**/node_modules/@openmoat/openclaw",
+            "**/node_modules/@openmoat/openclaw/**",
+        ],
+    ),
     marketplace: None,
     files,
 };

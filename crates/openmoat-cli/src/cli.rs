@@ -654,7 +654,7 @@ pub struct GuardArgs {
     #[arg(long)]
     pub heartbeat: bool,
     /// Run from an OpenMoat package installed through the agent's own plugin
-    /// channel (ADR-095): decide the call, or give no decision where `openmoat
+    /// channel (ADR-099): decide the call, or give no decision where `openmoat
     /// init`'s own hook for the agent is installed and pinned, so each call is
     /// decided once. `openmoat doctor` reports what it did last.
     #[arg(long, conflicts_with = "home")]
