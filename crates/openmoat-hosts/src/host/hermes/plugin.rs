@@ -3,7 +3,7 @@
 //! (`ctx.register_hook`), which returns `{"action": "block", "message"}` to
 //! veto a call or `{"action": "approve"}` for Hermes's approval prompt (the
 //! plugins guide). Hermes's human-reviewed Plugin Catalog takes a
-//! `plugin-catalog/<name>.yaml` pinned to a full commit (the catalog
+//! `plugin-catalog/<name>.yaml` pinned to a full commit (the Plugin Catalog
 //! submission page and `plugin-catalog/README.md`); the folder holds that
 //! entry with the commit left for the person who submits it.
 
