@@ -8,7 +8,7 @@ use anyhow::{Context as _, Result};
 use openmoat_hosts::{Host, SandboxFormat};
 use toml_edit::DocumentMut;
 
-use super::backend::{Pin, SandboxBackend};
+use super::backend::{Output, Pin, SandboxBackend};
 use super::{Plan, Report};
 use crate::home::{Home, write_private};
 use crate::install::{HostConfig, Recorded, SANDBOX_BACKUP};
@@ -28,14 +28,7 @@ pub fn format(host: Host) -> Option<SandboxFormat> {
 
 /// `host`'s sandbox backend; `None` for a host OpenMoat writes no sandbox for.
 pub fn backend(host: Host) -> Option<&'static dyn SandboxBackend> {
-    format(host).map(super::backend::backend)
-}
-
-/// The host whose sandbox settings are in `format`.
-pub fn host_with(format: SandboxFormat) -> Result<Host> {
-    hosts()
-        .find(|h| self::format(*h) == Some(format))
-        .with_context(|| format!("no host keeps its sandbox as {format:?}"))
+    format(host).map(super::backend_of)
 }
 
 /// Why `host`'s sandbox is not written on this OS, as `init`, `sandbox`,
@@ -106,8 +99,8 @@ pub struct Rendered {
 /// would not change. Reads `hosts.json` for the Claude Code rules OpenMoat
 /// owns, writes nothing.
 pub fn render(home: &Home, host: Host, plan: &Plan, current: &str) -> Result<Option<Rendered>> {
-    match backend(host) {
-        Some(backend) => backend.render(home, host, plan, current),
+    match plan.output(host) {
+        Some(output) => output.render(home, host, current),
         None => Ok(None),
     }
 }
@@ -134,7 +127,7 @@ pub fn report(host: Host, plan: &Plan) -> &Report {
         losses: Vec::new(),
         allowances: Vec::new(),
     };
-    backend(host).map_or(&NONE, |b| b.report(plan))
+    plan.output(host).map_or(&NONE, Output::report)
 }
 
 /// Whether any host's backend that masks the policy's secrets is
@@ -208,14 +201,14 @@ pub fn problems(
     plan: &Plan,
     lock: Option<&Lock>,
 ) -> Result<Option<Vec<String>>> {
-    let Some(backend) = backend(host) else {
+    let Some(output) = plan.output(host) else {
         return Ok(None);
     };
     let path = settings_path(home, host)?;
     if !path.parent().is_some_and(Path::is_dir) {
         return Ok(None);
     }
-    let mut problems = backend.problems(home, &path, plan, lock)?;
+    let mut problems = output.problems(home, &path, plan, lock)?;
     problems.dedup();
     Ok(Some(problems))
 }

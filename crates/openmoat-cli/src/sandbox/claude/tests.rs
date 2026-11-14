@@ -4,6 +4,7 @@ use serde_json::{Value, json};
 use super::*;
 use crate::sandbox::{assert_golden, lower_for_hosts};
 
+mod differential;
 mod git;
 mod nodes;
 

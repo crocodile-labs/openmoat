@@ -4,6 +4,10 @@ use serde_json::{Value, json};
 use super::*;
 use crate::sandbox::{assert_golden, lower_for_hosts};
 
+// On Unix only, where this reading has always run.
+#[cfg(unix)]
+mod differential;
+
 pub(super) fn generated(yaml: &str) -> Generated {
     let policy = Policy::parse(yaml).expect("test policy lints");
     let ir = lower_for_hosts(&policy, "/Users/me", None, Vec::new(), false).expect("lowers");

@@ -21,6 +21,8 @@ pub mod backend;
 // Its tests walk real Unix paths, so they run on macOS too, not on Windows.
 #[cfg(any(target_os = "linux", all(test, unix)))]
 pub mod bwrap;
+// The host sandbox backends, one per format a host's spec names: with
+// `backend_of` below, the one place that lists them.
 pub mod claude;
 pub mod codex;
 pub mod cursor;
@@ -37,10 +39,24 @@ mod links;
 pub mod own_login;
 mod patterns;
 pub(crate) use patterns::RUNS_LATER;
+mod plan;
+pub use plan::Plan;
 pub mod seatbelt;
 #[cfg(any(target_os = "linux", test))]
 pub mod seccomp;
 pub mod shared_temp;
+
+/// The backend that writes `format`: the one list of host sandbox backends,
+/// with their module declarations above. The match is exhaustive, so a format
+/// a host's spec can name without a backend fails to compile.
+pub fn backend_of(format: openmoat_hosts::SandboxFormat) -> &'static dyn backend::SandboxBackend {
+    use openmoat_hosts::SandboxFormat;
+    match format {
+        SandboxFormat::ClaudeSettings => &claude::backend::BACKEND,
+        SandboxFormat::CodexProfile => &codex::backend::BACKEND,
+        SandboxFormat::CursorSandbox => &cursor::backend::BACKEND,
+    }
+}
 
 use openmoat_core::ir::{Access, Allowance, Effect, Enforcement, Loss};
 use openmoat_core::{EvalContext, Policy, PolicyError};
@@ -87,25 +103,6 @@ pub fn lower_for_hosts(
             case_insensitive_paths,
         },
     )
-}
-
-/// Everything the Standard tier writes for one policy on this machine.
-#[derive(Debug)]
-pub struct Plan {
-    /// The policy had no `sandbox.read_roots`, so the default policy's apply.
-    pub default_read_roots: bool,
-    /// The loopback port the host sandboxes send their commands' traffic to,
-    /// when the policy opts in.
-    pub proxy_port: Option<u16>,
-    /// `sandbox.proxy_serve_without_credential` (ADR-044): `openmoat proxy`
-    /// serves requests that carry no session credential.
-    pub serve_without_credential: bool,
-    /// Claude Code's settings.
-    pub claude: claude::Generated,
-    /// Codex's permissions profile.
-    pub codex: codex::Generated,
-    /// Cursor's `sandbox.json` keys.
-    pub cursor: cursor::Generated,
 }
 
 /// `policy`, with the default policy's `sandbox.read_roots` when it has no
@@ -360,118 +357,6 @@ fn project_spellings(ctx: &EvalContext) -> Vec<String> {
         .chain(&ctx.project)
         .cloned()
         .collect()
-}
-
-/// Codex's `config.toml`, next to the hook file (`$CODEX_HOME` or `~/.codex`).
-pub fn codex_config_path(home: &crate::home::Home) -> anyhow::Result<std::path::PathBuf> {
-    let codex = install::host_with(openmoat_hosts::SandboxFormat::CodexProfile)?;
-    let hooks = crate::install::HostConfig::for_host(home, codex)?.settings_path;
-    Ok(codex_config_beside(&hooks))
-}
-
-/// Codex's `config.toml` next to its hook file `hooks`.
-pub fn codex_config_beside(hooks: &std::path::Path) -> std::path::PathBuf {
-    hooks.with_file_name("config.toml")
-}
-
-impl Plan {
-    /// Generate every backend for `policy` and the current user's home, for
-    /// the `moat` binary the lock recorded.
-    pub fn new(home: &crate::home::Home, policy: &Policy) -> anyhow::Result<Self> {
-        let binary = crate::install::self_paths::recorded_binary(home)?;
-        Self::for_binary(home, policy, &binary)
-    }
-
-    /// [`Plan::new`] for hooks that run `binary`, whose paths every backend
-    /// keeps from writes (`moat init` passes the binary it is about to record).
-    pub fn for_binary(
-        state: &crate::home::Home,
-        policy: &Policy,
-        binary: &std::path::Path,
-    ) -> anyhow::Result<Self> {
-        let binary_paths = crate::install::self_paths::sandbox_paths(binary);
-        let mut policy = policy.clone();
-        crate::install::self_paths::protect(&mut policy, &binary_paths);
-        let (policy, default_read_roots) = with_read_roots(&policy)?;
-        let (home, real_home) = crate::context::home_spellings()?;
-        let homes: Vec<String> = std::iter::once(home.clone())
-            .chain(real_home.clone())
-            .collect();
-        let ir = lower_for_hosts(
-            &policy,
-            &home,
-            real_home,
-            crate::context::moved_dirs(state)?,
-            crate::context::CASE_INSENSITIVE_PATHS,
-        )?;
-        let proxy_port = proxy_port(&policy);
-        let mut claude = claude::generate(&ir, proxy_port, cfg!(target_os = "linux"))?;
-        let claude_host = install::host_with(openmoat_hosts::SandboxFormat::ClaudeSettings)?;
-        let claude_settings = install::settings_path(state, claude_host)?;
-        claude::protect(&mut claude, &claude_settings);
-        claude::deny_write(&mut claude, &binary_paths);
-        claude::deny_edit(&mut claude, &binary_paths);
-        let mut codex = codex::generate(&ir, &homes, proxy_port)?;
-        let codex_config = codex_config_path(state)?;
-        let codex_home = codex_config.parent();
-        if let Some(codex_home) = codex_home {
-            codex::protect(&mut codex, codex_home);
-        }
-        let checker = ir.checker()?;
-        codex::read_only(&mut codex, &binary_paths, |path| {
-            let read = openmoat_core::AtomicAction::FsRead {
-                path: path.to_owned(),
-            };
-            checker.check_os(&read) == Some(Effect::Allow)
-        });
-        if cfg!(target_os = "linux") {
-            codex::read_own_binary(&mut codex, codex::own_binary().as_deref(), codex_home);
-            codex::deny_names(&mut codex);
-        }
-        Ok(Self {
-            default_read_roots,
-            proxy_port,
-            serve_without_credential: policy
-                .sandbox
-                .as_ref()
-                .is_some_and(|s| s.proxy_serve_without_credential),
-            claude,
-            codex,
-            cursor: cursor::generate(&ir, proxy_port)?,
-        })
-    }
-}
-
-impl Plan {
-    /// The absolute directories the host sandboxes let commands write besides
-    /// the project and the temp directory: Claude Code's `allowWrite`, Codex's
-    /// `write` paths and Cursor's `additionalReadwritePaths`.
-    pub fn writable_dirs(&self) -> Vec<String> {
-        let strings = |value: Option<&serde_json::Value>| -> Vec<String> {
-            value
-                .and_then(serde_json::Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(|v| v.as_str().map(str::to_owned))
-                .collect()
-        };
-        let claude = self.claude.sandbox.get("filesystem");
-        let mut dirs = strings(claude.and_then(|f| f.get("allowWrite")));
-        dirs.extend(strings(
-            self.cursor.settings.get("additionalReadwritePaths"),
-        ));
-        let codex = self
-            .codex
-            .profile
-            .get("filesystem")
-            .and_then(|f| f.as_table());
-        for (key, mode) in codex.into_iter().flat_map(toml_edit::Table::iter) {
-            if !key.starts_with(':') && mode.as_str() == Some("write") {
-                dirs.push(key.to_owned());
-            }
-        }
-        dirs
-    }
 }
 
 /// How one backend's output differs from the IR.

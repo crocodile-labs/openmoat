@@ -3,7 +3,8 @@
 
 use openmoat_core::{DEFAULT_POLICY, EvalContext, Policy, SandboxSettings};
 
-use super::{Enforcement, Grants, claude, codex, cursor, landlock, lower_for_hosts, seatbelt};
+use super::backend::Input;
+use super::{Enforcement, Grants, install, landlock, lower_for_hosts, seatbelt};
 
 const FILES: [&str; 3] = [
     ".m2/settings.xml",
@@ -49,40 +50,41 @@ fn grants() -> Grants {
     }
 }
 
-/// Every host's and tier's output for `policy`, as text.
-fn outputs(policy: &Policy) -> Vec<(&'static str, String)> {
+/// Every host's and tier's output for `policy`, as text: each sandboxed
+/// host's settings as on macOS and as on Linux.
+fn outputs(policy: &Policy) -> Vec<(String, String)> {
     let home = "/Users/me";
     let hosts = lower_for_hosts(policy, home, None, Vec::new(), false).expect("lowers");
     let ir = session(policy, home);
-    vec![
-        (
-            "claude",
-            format!("{:?}", claude::generate(&hosts, None, false).unwrap()),
-        ),
-        (
-            "claude linux",
-            format!("{:?}", claude::generate(&hosts, None, true).unwrap()),
-        ),
-        (
-            "codex",
-            format!(
-                "{:?}",
-                codex::generate(&hosts, &[home.into()], None).unwrap()
-            ),
-        ),
-        (
-            "cursor",
-            format!("{:?}", cursor::generate(&hosts, None).unwrap()),
-        ),
-        (
-            "seatbelt",
-            format!("{:?}", seatbelt::generate(&ir, &grants())),
-        ),
-        (
-            "landlock",
-            format!("{:?}", landlock::generate(&ir, &grants()).unwrap()),
-        ),
-    ]
+    let homes = [home.to_owned()];
+    let mut out = Vec::new();
+    for host in install::hosts() {
+        let backend = install::backend(host).expect("a sandboxed host has a backend");
+        let settings = std::path::Path::new(home).join(host.id()).join("settings");
+        for linux in [false, true] {
+            let input = Input {
+                ir: &hosts,
+                proxy_port: None,
+                homes: &homes,
+                binary_paths: &[],
+                linux,
+            };
+            let generated = backend.generate(&input, &settings).unwrap();
+            out.push((
+                format!("{} linux={linux}", host.id()),
+                format!("{generated:?}"),
+            ));
+        }
+    }
+    out.push((
+        "seatbelt".into(),
+        format!("{:?}", seatbelt::generate(&ir, &grants())),
+    ));
+    out.push((
+        "landlock".into(),
+        format!("{:?}", landlock::generate(&ir, &grants()).unwrap()),
+    ));
+    out
 }
 
 #[test]
