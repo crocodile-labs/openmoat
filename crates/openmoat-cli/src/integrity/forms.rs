@@ -16,7 +16,7 @@
 //! until a re-pin, which records the owner.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use openmoat_hosts::Host;
 

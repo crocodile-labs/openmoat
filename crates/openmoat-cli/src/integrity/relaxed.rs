@@ -131,13 +131,13 @@ fn is_relaxed(lock: &Lock, drift: &Drift, recorded: &Recorded, kept: &Kept) -> b
         return false;
     };
     let stored = path.to_string_lossy();
-    let (Some(owner), Some(bytes)) = (lock.hook_owner(&stored), kept.drifted(path)) else {
+    let (Some(host), Some(bytes)) = (lock.hook_owner(&stored), kept.drifted(path)) else {
         return false;
     };
     let Some(install) = lock.relaxing(&stored) else {
         return false;
     };
-    let owned = recorded.written_rules(owner);
+    let owned = recorded.written_rules(host);
     match install.relaxed_check {
         RelaxedCheck::Rest => lock
             .relaxed_rest
