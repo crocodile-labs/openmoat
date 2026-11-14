@@ -5,9 +5,9 @@
 //! changed or disappeared, so an agent that edits `~/.moat/policy.yaml` or removes
 //! a hook gets a `deny`, not a quieter kernel. Only a human can re-pin
 //! (`moat init`, or `moat doctor --accept` from a terminal). Drift of only the
-//! Claude Code settings `relaxed.rs` lists, or of only the keys a host's spec
-//! lists as relaxed (`spec_keys.rs`), is reported the same way, but the guard
-//! keeps deciding through it.
+//! keys a host's spec lists as relaxed in its hook file (`relaxed.rs`,
+//! `spec_keys.rs`) is reported the same way, but the guard keeps deciding
+//! through it.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -28,12 +28,13 @@ mod digest;
 mod forms;
 mod kept;
 mod keys;
+mod owner;
 mod relaxed;
 mod spec_keys;
 
 pub use checkpoint::{Checkpoint, repin_after};
 pub use digest::sha256_hex;
-use digest::{digest, digests, is_settings_json};
+use digest::{digest, digests};
 pub use kept::{Kept, verify_state};
 pub use relaxed::{check, split};
 
@@ -56,8 +57,9 @@ pub struct Lock {
     /// from a file changed under the same release.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub binary_version: Option<String>,
-    /// Canonical path → lowercase hex SHA-256 of the file contents (of a Claude
-    /// Code `settings.json`, without its cosmetic `theme` key; see `digest.rs`).
+    /// Canonical path → lowercase hex SHA-256 of the file contents (of a hook
+    /// file, without the keys its host's spec leaves out, Claude Code's
+    /// `theme`; see `digest.rs`).
     pub entries: BTreeMap<String, String>,
     /// Codex `config.toml` → SHA-256 of the part OpenMoat owns (its permissions
     /// profile, ADR-018). Codex edits the rest of that file itself.
@@ -67,8 +69,10 @@ pub struct Lock {
     /// can name the keys that changed. Locks written before #288 have none.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub keys: BTreeMap<String, BTreeMap<String, String>>,
-    /// Claude Code `settings.json` → `permissions` key → SHA-256 of its value,
-    /// so the guard can tell a changed toggle from a changed hook (`relaxed.rs`).
+    /// Hook file whose host compares its relaxed keys one by one → key of the
+    /// object they are in (Claude Code's `permissions`) → SHA-256 of its
+    /// value, so the guard can tell a changed toggle from a changed hook
+    /// (`relaxed.rs`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub permission_keys: BTreeMap<String, BTreeMap<String, String>>,
     /// A hook file whose host lists relaxed keys (Gemini CLI's `settings.json`)
@@ -86,6 +90,12 @@ pub struct Lock {
     /// from before #653, which `forms.rs` reads by file name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pinned_forms: Option<BTreeMap<String, String>>,
+    /// Pinned hook file → id of the host that owns it, for every hook file,
+    /// so drift in it is read by that host's spec and never by the file's
+    /// name (`owner.rs`). `None` in a lock from before it, which `owner.rs`
+    /// reads by the place the spec puts each host's file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hook_owners: Option<BTreeMap<String, String>>,
 }
 
 /// Which hook files a re-pin covers, besides OpenMoat's own state files.
@@ -325,6 +335,7 @@ pub fn unpin(home: &Home, paths: &[PathBuf], rewritten: &[PathBuf]) -> Result<()
         .filter(|(stored, _)| rewritten.iter().any(|p| key(p) == key(stored)))
         .collect();
     let mut forms = lock.owner_ids();
+    let mut hook_owners = lock.hook_owner_ids();
     for path in paths.iter().map(|p| key(p)) {
         lock.codex_profiles.remove(&path);
     }
@@ -334,10 +345,13 @@ pub fn unpin(home: &Home, paths: &[PathBuf], rewritten: &[PathBuf]) -> Result<()
         lock.permission_keys.remove(&path);
         lock.relaxed_rest.remove(&path);
         forms.remove(&path);
+        hook_owners.remove(&path);
     }
     let fresh = Lock::pin_owned(Path::new(&lock.binary), rewritten, &owners)?;
     forms.extend(fresh.pinned_forms.unwrap_or_default());
     lock.pinned_forms = Some(forms);
+    hook_owners.extend(fresh.hook_owners.unwrap_or_default());
+    lock.hook_owners = Some(hook_owners);
     lock.entries.extend(fresh.entries);
     lock.keys.extend(fresh.keys);
     lock.permission_keys.extend(fresh.permission_keys);
@@ -378,20 +392,26 @@ impl fmt::Display for Drift {
 }
 
 impl Lock {
-    /// [`Self::pin_owned`] with no file in a host's pinned form.
+    /// [`Self::pin_owned`], each file owned by the host a lock from before
+    /// the owners were recorded reads it as (`owner.rs`): a `settings.json`
+    /// is Claude Code's, one in `.gemini` Gemini CLI's, any other no host's.
     #[cfg(test)]
     pub fn pin(binary: &Path, paths: &[PathBuf]) -> Result<Self> {
-        Self::pin_owned(binary, paths, &[])
+        let owners: Vec<(PathBuf, Host)> = paths
+            .iter()
+            .filter_map(|path| Some((path.clone(), owner::assumed(path)?)))
+            .collect();
+        Self::pin_owned(binary, paths, &owners)
     }
 
     /// Pin the current contents of `paths`. Files that do not exist are skipped;
     /// callers pass only files they just wrote or verified. Each hook file in
-    /// `owners` is pinned in its host's pinned form (`forms.rs`) with that host
-    /// recorded; every other file by its bytes.
+    /// `owners` is pinned as its host's spec says, with that host recorded: in
+    /// its pinned form (`forms.rs`), without its unpinned keys, with what its
+    /// relaxed keys are compared by (`owner.rs`); every other file by its bytes.
     pub fn pin_owned(binary: &Path, paths: &[PathBuf], owners: &[(PathBuf, Host)]) -> Result<Self> {
         let owners: BTreeMap<String, Host> = owners
             .iter()
-            .filter(|(_, host)| forms::form_of(*host).is_some())
             .map(|(path, host)| (key(path), *host))
             .collect();
         let (mut entries, mut keys, mut permission_keys, mut relaxed_rest, mut pinned_forms) = (
@@ -401,23 +421,29 @@ impl Lock {
             BTreeMap::new(),
             BTreeMap::new(),
         );
-        for path in paths {
-            if path.is_file() {
-                let owner = owners.get(&key(path)).copied();
-                if let Some(host) = owner {
+        let mut hook_owners = BTreeMap::new();
+        for path in paths.iter().filter(|path| path.is_file()) {
+            let owner = owners.get(&key(path)).copied();
+            let form = owner.and_then(forms::form_of);
+            if let Some(host) = owner {
+                hook_owners.insert(key(path), host.id().to_owned());
+                if form.is_some() {
                     pinned_forms.insert(key(path), host.id().to_owned());
                 }
-                let form = owner.and_then(forms::form_of);
-                entries.insert(key(path), digest(path, is_settings_json(path), form)?);
-                if let Some(digests) = keys::key_digests(path) {
-                    keys.insert(key(path), digests);
-                }
-                if let Some(digests) = relaxed::permission_digests(path) {
-                    permission_keys.insert(key(path), digests);
-                }
-                if let Some(rest) = spec_keys::pinned_rest(path) {
-                    relaxed_rest.insert(key(path), rest);
-                }
+            }
+            let unpinned = owner::unpinned_of(owner);
+            entries.insert(key(path), digest(path, unpinned, form)?);
+            if let Some(digests) = keys::key_digests(path, unpinned) {
+                keys.insert(key(path), digests);
+            }
+            let Some(install) = owner.and_then(|host| host.spec().install.as_ref()) else {
+                continue;
+            };
+            if let Some(digests) = relaxed::parent_digests(path, install) {
+                permission_keys.insert(key(path), digests);
+            }
+            if let Some(rest) = spec_keys::pinned_rest(path, install) {
+                relaxed_rest.insert(key(path), rest);
             }
         }
         Ok(Self {
@@ -433,6 +459,7 @@ impl Lock {
             relaxed_rest,
             mcp_servers: None,
             pinned_forms: Some(pinned_forms),
+            hook_owners: Some(hook_owners),
         })
     }
 
@@ -509,7 +536,11 @@ impl Lock {
         if let Some(drift) = self.verify_one(target) {
             return Some(drift);
         }
-        match digests(proposal, is_settings_json(target), self.form(&key(target))) {
+        match digests(
+            proposal,
+            self.unpinned(&key(target)),
+            self.form(&key(target)),
+        ) {
             Ok(actual) if actual.contains(expected) => None,
             Ok(_) => Some(Drift::Proposed {
                 proposal: proposal.to_path_buf(),

@@ -25,9 +25,9 @@ pub use contract::{
     HookLayout, HookSpec, HookTrust, HookVersions, HostDocs, HostSpec, InstallSpec, KeyShape,
     Locate, Located, Location, McpAutoStart, McpCommandForm, McpFile, McpNames, McpReader,
     McpServer, McpSpec, McpSyntax, OtherHooks, Paths, Platform, PluginDir, ProcessSpec,
-    ProjectSettingsSpec, Protect, ProxySessions, RelaxedKey, Reviews, RunFacts, RunWrite,
-    RunsLater, SandboxFormat, SandboxSpec, SessionDir, SettingsFile, SettingsReader, SystemFile,
-    SystemSettingsSpec, ToolRow, ToolToken, Unseen, Version, WindowsSandboxLevel,
+    ProjectSettingsSpec, Protect, ProxySessions, RelaxedCheck, RelaxedKey, Reviews, RunFacts,
+    RunWrite, RunsLater, SandboxFormat, SandboxSpec, SessionDir, SettingsFile, SettingsReader,
+    SystemFile, SystemSettingsSpec, ToolRow, ToolToken, Unseen, Version, WindowsSandboxLevel,
     WindowsSandboxMode, WindowsSandboxReader,
 };
 pub use host::claude_code::config_change::proposal_target;

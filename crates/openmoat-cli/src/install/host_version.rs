@@ -20,14 +20,20 @@
 //! installed, upgraded or replaced.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use openmoat_hosts::{Advisory, Host};
 use serde::{Deserialize, Serialize};
 
-use super::claude_version::{Version, parse, run_version};
+/// A version as `major.minor.patch`.
+pub type Version = (u64, u64, u64);
+
+/// How long `<program> --version` may take before it counts as unknown.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+/// How often the probe checks whether `<program> --version` has exited.
+const POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 /// The state directory whose `host-versions.json` this process reads and
 /// writes, once [`prefetch_present`] named it; `init` asks without it.
@@ -113,12 +119,12 @@ pub fn bundled_lines(host: Host) -> Vec<(bool, String)> {
     super::bundled::copies(host)
         .into_iter()
         .map(|copy| {
-            let old = blocks && !super::claude_version::supports_on_failure(copy.version);
+            let old = blocks && !super::on_failure::reads_flag(host, copy.version);
             let note = if old {
                 format!(
                     "; older than {}, so a failed hook runs the call: update the extension, \
                      then run `openmoat init`",
-                    super::claude_version::on_failure_since()
+                    super::on_failure::since_text(host)
                 )
             } else {
                 String::new()
@@ -281,6 +287,51 @@ fn remember(dir: &Path, seen: Seen) {
     if let Ok(bytes) = serde_json::to_vec_pretty(&all) {
         let _ = crate::home::write_private(&dir.join("host-versions.json"), &bytes);
     }
+}
+
+/// The standard output of `command --version`, or `None` when it cannot start,
+/// fails, or takes longer than [`PROBE_TIMEOUT`].
+pub(super) fn run_version(mut command: Command) -> Option<String> {
+    let mut child = command
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let deadline = Instant::now() + PROBE_TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => break,
+            Ok(Some(_)) | Err(_) => return None,
+            Ok(None) if Instant::now() >= deadline => {
+                // Best effort: the probe is abandoned whether or not the kill lands.
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+            Ok(None) => std::thread::sleep(POLL_INTERVAL),
+        }
+    }
+    let mut text = String::new();
+    std::io::Read::read_to_string(&mut child.stdout.take()?, &mut text).ok()?;
+    Some(text)
+}
+
+/// `2.1.295 (Claude Code)` as `(2, 1, 295)`; a pre-release or build suffix on
+/// the last number (`2.1.295-beta.1`) is ignored.
+pub(super) fn parse(text: &str) -> Option<Version> {
+    let first = text.split_whitespace().next()?;
+    let mut parts = first.trim_start_matches('v').splitn(3, '.');
+    let number = |part: Option<&str>| -> Option<u64> {
+        let digits: String = part?.chars().take_while(char::is_ascii_digit).collect();
+        digits.parse().ok()
+    };
+    Some((
+        number(parts.next())?,
+        number(parts.next())?,
+        number(parts.next())?,
+    ))
 }
 
 /// The first word of `text` that reads as a version: `1.19.4`, and also

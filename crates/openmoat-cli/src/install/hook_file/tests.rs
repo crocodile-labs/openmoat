@@ -31,7 +31,7 @@ fn config(dir: &Path) -> HostConfig {
         dir: dir.to_path_buf(),
         hooks: SPECS,
         layout: layout_of("claude-code"),
-        blocks_on_failure: || false,
+        blocks_on_failure: |_| false,
         state_dir: std::path::PathBuf::from("/h/.moat"),
     }
 }
@@ -39,7 +39,7 @@ fn config(dir: &Path) -> HostConfig {
 /// Claude Code v2.1.295 or later.
 fn config_blocking(dir: &Path) -> HostConfig {
     HostConfig {
-        blocks_on_failure: || true,
+        blocks_on_failure: |_| true,
         ..config(dir)
     }
 }
@@ -134,14 +134,14 @@ fn codex_and_cursor_never_get_on_failure() {
         dir: dir.path().to_path_buf(),
         hooks: &SPECS[..1],
         layout: layout_of("codex"),
-        blocks_on_failure: || false,
+        blocks_on_failure: |_| false,
         state_dir: std::path::PathBuf::from("/h/.moat"),
     };
     install(&codex, Path::new("/x/moat"), false).unwrap();
     assert_eq!(on_failure(&codex, "PreToolUse"), Value::Null);
     let cursor = HostConfig {
         layout: layout_of("cursor"),
-        blocks_on_failure: || true,
+        blocks_on_failure: |_| true,
         settings_path: dir.path().join("cursor-hooks.json"),
         ..codex
     };
@@ -162,7 +162,7 @@ fn cursor_format_sets_version_fail_closed_and_a_quoted_command() {
         dir: dir.path().to_path_buf(),
         hooks: SHELL,
         layout: layout_of("cursor"),
-        blocks_on_failure: || false,
+        blocks_on_failure: |_| false,
         state_dir: std::path::PathBuf::from("/h/.moat"),
     };
     let binary = Path::new("/Applications/My Tools/moat");
@@ -335,7 +335,7 @@ fn remove_undoes_install_and_keeps_foreign_entries() {
         dir: created.path().to_path_buf(),
         hooks: &SPECS[..1],
         layout: layout_of("cursor"),
-        blocks_on_failure: || true,
+        blocks_on_failure: |_| true,
         state_dir: std::path::PathBuf::from("/h/.moat"),
     };
     install(&cursor, Path::new("/x/moat"), false).unwrap();

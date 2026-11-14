@@ -2,7 +2,6 @@
 
 mod binary;
 pub mod bundled;
-mod claude_version;
 pub mod consent;
 mod dirs;
 mod hook_file;
@@ -11,6 +10,7 @@ pub mod host_version;
 pub mod json5_file;
 pub mod location;
 pub mod migrate_hooks;
+mod on_failure;
 pub mod owned;
 pub mod plugin_config;
 pub mod self_paths;
@@ -24,9 +24,9 @@ use anyhow::{Context as _, Result, bail};
 use openmoat_hosts::{ExtraFile, Host, InstallSpec, Locate, Located};
 
 pub use binary::{alias_of, hook_binary, other_name, stale_hint};
-pub use claude_version::on_failure_since;
 pub use dirs::{Recorded, also_dirs};
 pub use hook_file::{HookState, Outcome, read_or_empty};
+pub use on_failure::since_text as on_failure_since;
 pub use openmoat_hosts::{GUARD_BUDGET_S, HookLayout, HookSpec};
 
 use crate::home::{Home, user_home};
@@ -85,7 +85,7 @@ pub struct HostConfig {
     /// Whether the host's version knows `onFailure`; asked only when an
     /// entry with [`HookSpec::block_on_failure`] lacks the key, so commands
     /// that never compare entries (`uninstall`) never ask.
-    pub blocks_on_failure: fn() -> bool,
+    pub blocks_on_failure: fn(Host) -> bool,
     /// The state directory the hook's guard is given on its command line
     /// (`--home`, ADR-071): the one of the command that located this host.
     pub state_dir: PathBuf,
@@ -184,21 +184,14 @@ impl HostConfig {
     /// writing the entries and layout its spec names.
     fn with_spec(home: &Home, host: Host, settings_path: PathBuf, dir: PathBuf) -> Result<Self> {
         let install = install_spec(host)?;
-        // Only Claude Code's entries ask for `onFailure`, and whether its
-        // version knows the key is asked of the `claude` on `PATH`.
-        let blocks_on_failure: fn() -> bool =
-            if install.hooks.iter().any(|spec| spec.block_on_failure) {
-                claude_version::blocks_on_failure
-            } else {
-                || false
-            };
         Ok(Self {
             host,
             settings_path,
             dir,
             hooks: install.hooks,
             layout: install.hook_file,
-            blocks_on_failure,
+            // Whether the host's version knows the flag is asked of its copies.
+            blocks_on_failure: on_failure::blocks_on_failure,
             state_dir: home.root().to_path_buf(),
         })
     }

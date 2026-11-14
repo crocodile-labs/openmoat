@@ -1,0 +1,2 @@
+### Security
+- The policy lock now records which agent owns each pinned hook file, and the settings an agent may change without stopping the guard (Claude Code's display toggles, permission lists and model, Gemini CLI's model and theme) apply only to that agent's own file. Before, any pinned file named `settings.json` took Claude Code's list by its name; an agent added later with a file of that name now drifts on any change. Locks from earlier releases keep verifying as before until the next re-pin ([#9401](https://github.com/crocodile-labs/openmoat/pull/9401)).

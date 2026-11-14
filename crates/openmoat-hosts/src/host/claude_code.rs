@@ -22,6 +22,7 @@ mod mcp;
 mod post_tool_use;
 pub(crate) mod project_settings;
 mod session_start;
+mod settings;
 
 /// Every Claude Code tool `openmoat-hosts` maps to an action; a tool missing here
 /// never reaches `moat guard`.
@@ -99,9 +100,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         config_file: "settings.json",
         hooks: HOOKS,
         hook_file: HookLayout::Entries(&crate::wire::hook_file::nested::Nested),
-        // Claude Code's list, with its permission lists, is the CLI's
-        // (`integrity/relaxed.rs`).
-        relaxed_keys: &[],
+        relaxed_keys: settings::RELAXED_KEYS,
+        relaxed_check: crate::RelaxedCheck::ByKey,
+        unpinned_keys: settings::UNPINNED_KEYS,
         ..InstallSpec::BASE
     }),
     mcp: Some(McpSpec {

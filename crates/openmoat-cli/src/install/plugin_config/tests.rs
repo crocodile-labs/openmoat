@@ -35,7 +35,7 @@ fn config(dir: &Path) -> HostConfig {
         dir: dir.to_path_buf(),
         hooks: SPECS,
         layout: HookLayout::Plugin(layout()),
-        blocks_on_failure: || false,
+        blocks_on_failure: |_| false,
         state_dir: std::path::PathBuf::from("/h/.moat"),
     }
 }

@@ -1438,7 +1438,8 @@ something OpenMoat claims to stop.
   submit`, an `at` or `batch` job).
 - **Some agent settings may drift without stopping the guard.** Claude Code's
   `settings.json` is pinned, but a change limited to an allowlist of its keys
-  (`crates/openmoat-cli/src/integrity/relaxed.rs`) does not deny every call: display
+  (Claude Code's spec, `crates/openmoat-hosts/src/host/claude_code/settings.rs`, applied
+  only to the file the lock pinned as Claude Code's) does not deny every call: display
   and reply toggles, the model Claude Code writes when the person switches models
   (`model` as a string, `switchModelsOnFlag` as a string, number or boolean), and
   Claude Code's own `permissions.allow`, `ask`, `deny` and

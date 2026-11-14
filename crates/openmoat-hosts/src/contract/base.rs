@@ -55,6 +55,8 @@ impl InstallSpec {
         dir_variable_is_home: false,
         hook_file: HookLayout::Entries(&Nested),
         relaxed_keys: &[],
+        relaxed_check: super::RelaxedCheck::Rest,
+        unpinned_keys: &[],
         trust_step: None,
         hook_trust: None,
         location: super::Location::OneDir,

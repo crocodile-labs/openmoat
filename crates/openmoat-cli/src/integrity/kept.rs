@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::digest::{ReadOnce, is_settings_json};
-use super::{Drift, Lock, key, keys, spec_keys};
+use super::digest::ReadOnce;
+use super::{Drift, Lock, key, keys};
 use crate::home::Home;
 
 /// The pin of a state file that was missing when a person re-pinned: one
@@ -21,8 +21,8 @@ pub struct Kept {
     /// Each requested file that is pinned and intact, under the path it was
     /// requested by, with the bytes that matched its pin.
     intact: BTreeMap<PathBuf, Vec<u8>>,
-    /// Each Claude Code settings file, or hook file with relaxed keys
-    /// (`spec_keys.rs`), whose top-level keys drifted and that is a regular
+    /// Each hook file whose host lists relaxed keys (`owner.rs`), whose
+    /// top-level keys drifted and that is a regular
     /// file, under the path its drift names, with the bytes read.
     drifted: BTreeMap<PathBuf, Vec<u8>>,
 }
@@ -112,7 +112,7 @@ impl Lock {
                 Err((found, read)) => {
                     if let (Drift::KeysChanged(path, _), Some(read)) = (&found, read)
                         && read.regular
-                        && (is_settings_json(path) || spec_keys::listed(path).is_some())
+                        && self.relaxing(stored).is_some()
                     {
                         kept.drifted.insert(path.clone(), read.contents);
                     }
@@ -163,7 +163,7 @@ impl Lock {
             )
         })?;
         if read
-            .digests(is_settings_json(path), self.form(&key(path)))
+            .digests(self.unpinned(&key(path)), self.form(&key(path)))
             .iter()
             .any(|d| d == expected)
         {
@@ -179,7 +179,7 @@ impl Lock {
     /// [`Drift::KeysChanged`] when the pin recorded the file's top-level keys
     /// and some differ in `contents`, else [`Drift::Modified`].
     fn modified(&self, path: PathBuf, contents: &[u8]) -> Drift {
-        let now = keys::key_digests_of(&path, contents);
+        let now = keys::key_digests_of(&path, contents, self.unpinned(&key(&path)));
         let pinned = self.keys.get(&key(&path));
         match pinned.zip(now).and_then(|(p, n)| keys::describe(p, &n)) {
             Some(keys) => Drift::KeysChanged(path, keys),

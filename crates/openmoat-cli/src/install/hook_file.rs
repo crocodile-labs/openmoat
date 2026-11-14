@@ -157,7 +157,7 @@ fn upsert_all(root: &mut Value, config: &HostConfig, binary: &Path) -> Result<Ou
             config.host.id(),
             config.hooks,
             &config.guard(binary),
-            config.blocks_on_failure,
+            || (config.blocks_on_failure)(config.host),
         )
         .map_err(anyhow::Error::new)
 }
@@ -208,7 +208,9 @@ fn state_for(config: &HostConfig, binary: &Path) -> HookState {
     };
     let id = config.host.id();
     let guard = config.guard(binary);
-    let state = match layout.state(&root, id, config.hooks, &guard, config.blocks_on_failure) {
+    let state = match layout.state(&root, id, config.hooks, &guard, || {
+        (config.blocks_on_failure)(config.host)
+    }) {
         HookFileState::Missing => HookState::Missing,
         HookFileState::Installed => HookState::Installed,
         HookFileState::Stale { command } => HookState::Stale { command },

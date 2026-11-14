@@ -133,3 +133,13 @@ fn every_advisory_has_a_source_and_a_fix() {
     }
     assert!(count > 30, "{count}");
 }
+
+#[test]
+fn parses_what_a_version_flag_prints() {
+    assert_eq!(parse("2.1.295 (Claude Code)\n"), Some((2, 1, 295)));
+    assert_eq!(parse("v2.2.0"), Some((2, 2, 0)));
+    assert_eq!(parse("2.1.300-beta.1 (Claude Code)"), Some((2, 1, 300)));
+    assert_eq!(parse(""), None);
+    assert_eq!(parse("Claude Code"), None);
+    assert_eq!(parse("2.1"), None);
+}

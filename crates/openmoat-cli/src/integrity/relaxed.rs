@@ -1,11 +1,15 @@
-//! Drift in a Claude Code `settings.json`, or in the keys a host's spec lists
-//! as relaxed (`spec_keys.rs`), that leaves every guard decision as it was, so
-//! the guard keeps deciding each call instead of denying them all.
+//! Drift in a host's hook file limited to the keys its spec lists as relaxed
+//! ([`openmoat_hosts::InstallSpec::relaxed_keys`]) that leaves every guard
+//! decision as it was, so the guard keeps deciding each call instead of
+//! denying them all. A host's keys are compared by the rest of the file
+//! (`spec_keys.rs`) or key by key (here, Claude Code's `settings.json`), as its
+//! spec's [`openmoat_hosts::InstallSpec::relaxed_check`] says.
 //!
 //! Such drift is still drift: `moat status` and `moat doctor` report it, and
 //! only a person re-pins it (`moat doctor --accept`). What may drift is an
-//! explicit allowlist of keys. Any other key, a file that no longer parses, a
-//! symlink, a removed rule OpenMoat wrote, or a lock without the baseline to
+//! explicit allowlist of keys, applied only to a file the lock pinned as that
+//! host's hook file (`owner.rs`). Any other key, a file that no longer parses,
+//! a symlink, a removed rule OpenMoat wrote, or a lock without the baseline to
 //! compare against counts as tampering, and the guard denies every call.
 
 use std::collections::BTreeMap;
@@ -14,114 +18,22 @@ use std::path::Path;
 
 use anyhow::{Result, bail};
 use openmoat_core::{Decision, Verdict};
+use openmoat_hosts::{InstallSpec, RelaxedCheck, RelaxedKey};
 use serde_json::{Map, Value};
 
-use super::digest::is_settings_json;
 use super::keys::{differing, object_digests};
 use super::spec_keys;
 use super::{Drift, Kept, Lock, deny_for};
 use crate::home::Home;
 use crate::install::Recorded;
 
-/// Top-level keys of a Claude Code `settings.json` that may change while the
-/// guard keeps deciding. Each changes only how Claude Code looks, words its
-/// replies or asks the person itself. None runs a program, loads code, sets
-/// the endpoint, or changes a hook, and the hook still decides every call.
-/// `theme` is left out of the digest altogether (`digest.rs`); the model the
-/// person picks is in [`MODEL_KEYS`].
-const RELAXED_KEYS: &[&str] = &[
-    // The JSON schema an editor validates the file with; Claude Code ignores it.
-    "$schema",
-    // Whether and how long the model thinks: same model, same endpoint.
-    "alwaysThinkingEnabled",
-    "effortLevel",
-    // The text Claude Code adds to commits and pull requests.
-    "attribution",
-    "includeCoAuthoredBy",
-    // Not `autoMode`: its rules tell Claude Code's auto-mode classifier which
-    // calls to run unasked, and a call the hook defers is then run on their
-    // word, as under a `defaultMode` that does not ask (`PROMPTING_MODES`).
-    // How long Claude Code keeps its transcripts; OpenMoat's audit log is its own.
-    "cleanupPeriodDays",
-    // The language and style of replies: wording only.
-    "language",
-    "outputStyle",
-    // Display only: motion, spinner, turn timing, the terminal's progress bar.
-    "prefersReducedMotion",
-    "showTurnDuration",
-    "spinnerTipsEnabled",
-    "spinnerTipsOverride",
-    "spinnerVerbs",
-    "terminalProgressBarEnabled",
-    // Whether Claude Code's file picker lists ignored files; the hook decides
-    // every read whatever the picker shows.
-    "respectGitignore",
-];
-
-/// Whether a value has the shape a key allows.
-type Shape = fn(&Value) -> bool;
-
-/// Top-level keys Claude Code writes itself when the person switches models
-/// (`/model`, #591), each with the only shape its value may take. The model
-/// is a name: the endpoint it is sent to (`env`), the key (`apiKeyHelper`) and
-/// every hook stay pinned, so it changes which model answers, never what runs
-/// or what OpenMoat allows. A value of any other shape, an object or a list,
-/// is drift like any other key's. A removed key has no value and may go.
-const MODEL_KEYS: &[(&str, Shape)] = &[
-    ("model", Value::is_string),
-    ("switchModelsOnFlag", is_scalar),
-];
-
-/// The top-level key whose own keys are checked one by one.
-const PERMISSIONS: &str = "permissions";
-/// The list in [`PERMISSIONS`] that holds the rules OpenMoat wrote.
-const DENY: &str = "deny";
-
-/// Keys of `permissions` that may change: Claude Code's own permission lists
-/// and a mode that keeps its prompts. They decide only whether Claude Code
-/// asks the person about a call the hook left to it; Claude Code runs the
-/// `PreToolUse` hook in every mode and a hook deny is final whatever these say.
-///
-/// Left out on purpose: `additionalDirectories`, which also adds directories
-/// Claude Code's own sandbox lets commands write, so it can widen an OS
-/// boundary the guard does not see; and a [`MODE`] other than
-/// [`PROMPTING_MODES`].
-const RELAXED_PERMISSIONS: &[&str] = &[
-    // Kept relaxed on purpose: the person's own allow list, which Claude Code
-    // reads only for calls the hook defers.
-    "allow",
-    "ask",
-    // Only while every rule OpenMoat wrote stays (`keeps_owned_rules`).
-    DENY,
-    // Only to a mode in `PROMPTING_MODES`, or removed (`mode_relaxed`).
-    MODE,
-    // Narrows what sandboxed commands and file tools may read. Turning it off
-    // widens only the OS sandbox, and `moat status` shows the agent as `hook
-    // only` while it is off. One guard decision reads the sandbox's state: a
-    // call that runs code its session wrote needs review without an OS sandbox
-    // (ADR-039, `session_code.rs`); `protection::os_sandboxed_by_lock` keys its
-    // kept answer by this drift too, so the hold applies as soon as it is off.
-    "blockReadsOutsideWorkingDirectories",
-];
-
-/// The `permissions` key naming the mode Claude Code starts in.
-const MODE: &str = "defaultMode";
-
-/// The modes in which Claude Code still asks the person before a call the
-/// hook deferred runs: `default` asks, `plan` runs nothing, `dontAsk` refuses
-/// what no allow rule names. `acceptEdits` writes files unasked, `auto` lets a
-/// classifier run calls unasked and `bypassPermissions` runs every call
-/// unasked, so a change to one of them (or to any value not listed here) is
-/// drift: a deferred call would then run with nobody asked.
-const PROMPTING_MODES: &[&str] = &["default", "plan", "dontAsk"];
-
 /// The lock as `moat guard` decides by it.
 #[derive(Debug, Default)]
 pub struct Checked {
     /// The `kernel-integrity` deny, when anything drifted beyond the allowlist.
     pub deny: Option<Decision>,
-    /// Drift the guard decides through: allowlisted keys of a Claude Code
-    /// settings file, or a host's relaxed keys, only. Reported, never accepted.
+    /// Drift the guard decides through: a host's relaxed keys in its hook
+    /// file only. Reported, never accepted.
     pub relaxed: Vec<Drift>,
 }
 
@@ -195,16 +107,26 @@ pub fn split(home: &Home, lock: &Lock, drift: Vec<Drift>) -> Checked {
     }
 }
 
-/// The digests of the `permissions` keys of the Claude Code settings file at
-/// `path`, pinned with it; `None` for any other file or one without them.
-pub(super) fn permission_digests(path: &Path) -> Option<BTreeMap<String, String>> {
-    let root = settings_object(path)?;
-    object_digests(root.get(PERMISSIONS)?.as_object()?, false)
+/// The digests of the keys of the object the dotted relaxed keys of
+/// `install` are in (Claude Code's `permissions`), in its hook file at
+/// `path`, pinned with it; `None` for a host whose keys are compared
+/// otherwise, a link, or a file without that object.
+pub(super) fn parent_digests(
+    path: &Path,
+    install: &InstallSpec,
+) -> Option<BTreeMap<String, String>> {
+    if install.relaxed_check != RelaxedCheck::ByKey
+        || !fs::symlink_metadata(path).ok()?.file_type().is_file()
+    {
+        return None;
+    }
+    let root = object(&fs::read(path).ok()?)?;
+    let parent = RelaxedCheck::parent(install.relaxed_keys)?;
+    object_digests(root.get(parent)?.as_object()?, &[])
 }
 
-/// Whether `drift` touches only allowlisted keys of a Claude Code settings
-/// file, or only the relaxed keys of a host whose spec lists them, `owned`
-/// being the `permissions.deny` rules OpenMoat wrote in Claude Code's and
+/// Whether `drift` touches only the relaxed keys of the host whose hook file
+/// the lock pinned there, `owned` being the rules OpenMoat wrote into it and
 /// `kept` holding the file's bytes as the check read them.
 fn is_relaxed(lock: &Lock, drift: &Drift, owned: &[String], kept: &Kept) -> bool {
     // A plain `Modified` has no keys to compare: no baseline, no object, a link.
@@ -212,83 +134,90 @@ fn is_relaxed(lock: &Lock, drift: &Drift, owned: &[String], kept: &Kept) -> bool
         return false;
     };
     let stored = path.to_string_lossy();
-    // A host's own list replaces Claude Code's for its file.
-    if let Some(keys) = spec_keys::listed(path) {
-        return lock
+    let (Some(install), Some(bytes)) = (lock.relaxing(&stored), kept.drifted(path)) else {
+        return false;
+    };
+    match install.relaxed_check {
+        RelaxedCheck::Rest => lock
             .relaxed_rest
             .get(stored.as_ref())
-            .zip(kept.drifted(path))
-            .is_some_and(|(pinned, bytes)| spec_keys::only_relaxed(path, bytes, keys, pinned));
+            .is_some_and(|pinned| spec_keys::only_relaxed(bytes, install, pinned)),
+        RelaxedCheck::ByKey => by_key(lock, &stored, bytes, install, owned),
+        _ => false,
     }
-    let Some(pinned) = lock.keys.get(stored.as_ref()) else {
+}
+
+/// [`RelaxedCheck::ByKey`]: whether every top-level key whose digest changed
+/// is a relaxed key holding a value of its shape (or removed), or the object
+/// the dotted ones are in with only those changed in it.
+fn by_key(
+    lock: &Lock,
+    stored: &str,
+    bytes: &[u8],
+    install: &InstallSpec,
+    owned: &[String],
+) -> bool {
+    let Some(pinned) = lock.keys.get(stored) else {
         return false;
     };
-    // Kept only for a regular Claude Code settings file.
-    let Some(root) = kept
-        .drifted(path)
-        .and_then(|bytes| settings_root(path, bytes))
-    else {
+    let Some(root) = object(bytes) else {
         return false;
     };
-    let Some(now) = object_digests(&root, true) else {
+    let Some(now) = object_digests(&root, install.unpinned_keys) else {
         return false;
     };
-    let pinned_permissions = lock.permission_keys.get(stored.as_ref());
-    let had_permissions = pinned.contains_key(PERMISSIONS);
+    let keys = install.relaxed_keys;
+    let parent = RelaxedCheck::parent(keys);
     differing(pinned, &now).all(|key| {
-        RELAXED_KEYS.contains(&key.as_str())
-            || model_key_relaxed(key, &root)
-            || (key == PERMISSIONS
-                && permissions_relaxed(pinned_permissions, had_permissions, &root, owned))
+        if parent == Some(key.as_str()) {
+            let pinned_inner = lock.permission_keys.get(stored);
+            inner_relaxed(
+                pinned_inner,
+                pinned.contains_key(key),
+                key,
+                &root,
+                keys,
+                owned,
+            )
+        } else {
+            relaxed_value(keys, key, root.get(key), owned)
+        }
     })
 }
 
-/// Whether `key` is one of [`MODEL_KEYS`] and its value in `root`, if any,
-/// has the shape that key allows.
-fn model_key_relaxed(key: &str, root: &Map<String, Value>) -> bool {
-    MODEL_KEYS
-        .iter()
-        .any(|(name, shape)| *name == key && root.get(key).is_none_or(shape))
+/// Whether `path` is one of `keys` and `value`, if any, has its shape.
+fn relaxed_value(keys: &[RelaxedKey], path: &str, value: Option<&Value>, owned: &[String]) -> bool {
+    keys.iter().any(|k| {
+        k.path == path
+            && match value {
+                Some(value) => k.shape.holds(value, owned),
+                None => k.shape.may_be_removed(),
+            }
+    })
 }
 
-/// A string, number or boolean: a value with no structure inside it.
-fn is_scalar(value: &Value) -> bool {
-    value.is_string() || value.is_number() || value.is_boolean()
-}
-
-/// The settings object at `path`, read once; `None` unless it is a regular
-/// Claude Code settings file holding a JSON object.
-fn settings_object(path: &Path) -> Option<Map<String, Value>> {
-    if !is_settings_json(path) || !fs::symlink_metadata(path).ok()?.file_type().is_file() {
-        return None;
-    }
-    settings_root(path, &fs::read(path).ok()?)
-}
-
-/// The JSON object in `bytes`, read from `path`; `None` unless `path` is a
-/// Claude Code settings file and `bytes` hold an object.
-fn settings_root(path: &Path, bytes: &[u8]) -> Option<Map<String, Value>> {
-    if !is_settings_json(path) {
-        return None;
-    }
+/// The JSON object in `bytes`; `None` unless they hold one.
+fn object(bytes: &[u8]) -> Option<Map<String, Value>> {
     match serde_json::from_slice(bytes).ok()? {
         Value::Object(root) => Some(root),
         _ => None,
     }
 }
 
-/// Whether only [`RELAXED_PERMISSIONS`] keys of `permissions` changed and the
-/// rules OpenMoat wrote are all still denied.
-fn permissions_relaxed(
+/// Whether only relaxed keys of the object `parent` in `root` changed, each
+/// to a value of its shape, against the `pinned` digests of its keys.
+fn inner_relaxed(
     pinned: Option<&BTreeMap<String, String>>,
-    had_permissions: bool,
+    had_parent: bool,
+    parent: &str,
     root: &Map<String, Value>,
+    keys: &[RelaxedKey],
     owned: &[String],
 ) -> bool {
     let empty = Map::new();
-    let now = match root.get(PERMISSIONS) {
+    let now = match root.get(parent) {
         None => &empty,
-        Some(Value::Object(permissions)) => permissions,
+        Some(Value::Object(inner)) => inner,
         Some(_) => return false,
     };
     // Without the pinned keys (a lock written before them, or a pinned value
@@ -296,35 +225,14 @@ fn permissions_relaxed(
     let none = BTreeMap::new();
     let pinned = match pinned {
         Some(pinned) => pinned,
-        None if !had_permissions => &none,
+        None if !had_parent => &none,
         None => return false,
     };
-    let Some(digests) = object_digests(now, false) else {
+    let Some(digests) = object_digests(now, &[]) else {
         return false;
     };
-    let mut changed = differing(pinned, &digests);
-    changed.all(|key| {
-        RELAXED_PERMISSIONS.contains(&key.as_str()) && (key != MODE || mode_relaxed(now))
-    }) && (pinned.get(DENY) == digests.get(DENY) || keeps_owned_rules(now, owned))
-}
-
-/// Whether the changed [`MODE`] is removed or one of [`PROMPTING_MODES`].
-fn mode_relaxed(permissions: &Map<String, Value>) -> bool {
-    permissions
-        .get(MODE)
-        .is_none_or(|mode| mode.as_str().is_some_and(|m| PROMPTING_MODES.contains(&m)))
-}
-
-/// Whether `permissions.deny` still holds every rule OpenMoat wrote. With no
-/// record of them a changed list cannot be told from a removed rule, so no.
-fn keeps_owned_rules(permissions: &Map<String, Value>, owned: &[String]) -> bool {
-    let Some(list) = permissions.get(DENY).and_then(Value::as_array) else {
-        return false;
-    };
-    !owned.is_empty()
-        && owned
-            .iter()
-            .all(|rule| list.iter().any(|v| v.as_str() == Some(rule.as_str())))
+    differing(pinned, &digests)
+        .all(|key| relaxed_value(keys, &format!("{parent}.{key}"), now.get(key), owned))
 }
 
 #[cfg(test)]

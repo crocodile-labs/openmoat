@@ -20,7 +20,7 @@ fn the_entry_is_installed_once_and_removed_alone() {
         dir: dir.path().to_path_buf(),
         hooks: spec.hooks,
         layout: spec.hook_file,
-        blocks_on_failure: || false,
+        blocks_on_failure: |_| false,
         state_dir: std::path::PathBuf::from("/h/.moat"),
     };
     let theirs = json!({

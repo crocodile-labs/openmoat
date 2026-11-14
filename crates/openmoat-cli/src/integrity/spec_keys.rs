@@ -1,7 +1,7 @@
 //! Drift in a host's hook file limited to the keys its spec lists as relaxed
-//! ([`openmoat_hosts::InstallSpec::relaxed_keys`]): Gemini CLI's
-//! `settings.json`, which Gemini CLI rewrites itself for a new model, theme or
-//! sign-in method.
+//! ([`openmoat_hosts::InstallSpec::relaxed_keys`]), compared by the rest of
+//! the file ([`RelaxedCheck::Rest`]): Gemini CLI's `settings.json`, which
+//! Gemini CLI rewrites itself for a new model, theme or sign-in method.
 //!
 //! The lock pins such a file twice: whole, as every hook file, and by the
 //! digest of what is left with the relaxed keys taken out ([`pinned_rest`]).
@@ -13,52 +13,49 @@
 use std::fs;
 use std::path::Path;
 
-use openmoat_hosts::{Host, RelaxedKey};
+use openmoat_hosts::{InstallSpec, RelaxedCheck, RelaxedKey};
 use serde_json::{Map, Value};
 
-use super::digest::{COSMETIC_KEY, is_settings_json};
 use super::sha256_hex;
 
-/// The relaxed keys of the host whose hook file is at `path`, found by its
-/// `<dir_name>/<config_file>` ending; `None` for any other file.
-pub(super) fn listed(path: &Path) -> Option<&'static [RelaxedKey]> {
-    Host::ALL
-        .into_iter()
-        .filter_map(|host| host.spec().install.as_ref())
-        .filter(|install| !install.relaxed_keys.is_empty())
-        .find(|install| path.ends_with(Path::new(install.dir_name).join(install.config_file)))
-        .map(|install| install.relaxed_keys)
+/// `install`, when its relaxed keys are compared by the rest of the file.
+fn by_rest(install: &InstallSpec) -> Option<&InstallSpec> {
+    (!install.relaxed_keys.is_empty() && install.relaxed_check == RelaxedCheck::Rest)
+        .then_some(install)
 }
 
-/// The digest to pin for the regular file at `path` without its relaxed keys;
-/// `None` for a file with none, a link, or one that holds no JSON object.
-pub(super) fn pinned_rest(path: &Path) -> Option<String> {
-    let keys = listed(path)?;
+/// The digest to pin for the regular file at `path`, the hook file of the
+/// host `install` is of, without its relaxed keys; `None` for a host whose
+/// keys are compared otherwise, a link, or a file that holds no JSON object.
+pub(super) fn pinned_rest(path: &Path, install: &InstallSpec) -> Option<String> {
+    let install = by_rest(install)?;
     if !fs::symlink_metadata(path).ok()?.file_type().is_file() {
         return None;
     }
-    rest_digest(path, &fs::read(path).ok()?, keys)
+    rest_digest(&fs::read(path).ok()?, install)
 }
 
-/// Whether `bytes`, the drifted file at `path` as the lock check read them,
-/// differ from the pinned file only in relaxed keys: their rest has the
-/// `pinned` digest.
-pub(super) fn only_relaxed(path: &Path, bytes: &[u8], keys: &[RelaxedKey], pinned: &str) -> bool {
-    rest_digest(path, bytes, keys).is_some_and(|rest| rest == pinned)
+/// Whether `bytes`, the drifted hook file of the host `install` is of as the
+/// lock check read them, differ from the pinned file only in relaxed keys:
+/// their rest has the `pinned` digest.
+pub(super) fn only_relaxed(bytes: &[u8], install: &InstallSpec, pinned: &str) -> bool {
+    by_rest(install)
+        .and_then(|install| rest_digest(bytes, install))
+        .is_some_and(|rest| rest == pinned)
 }
 
-/// The SHA-256 of the JSON object in `bytes` with each of `keys` that holds a
-/// value of its shape taken out, serialised compactly with sorted keys. A
-/// value of another shape stays, so changing it is drift. Without the
-/// cosmetic key too for a settings file, whose pin leaves it out (`digest.rs`).
-fn rest_digest(path: &Path, bytes: &[u8], keys: &[RelaxedKey]) -> Option<String> {
+/// The SHA-256 of the JSON object in `bytes` with each relaxed key that holds
+/// a value of its shape taken out, serialised compactly with sorted keys. A
+/// value of another shape stays, so changing it is drift. Without the keys
+/// the file's pin leaves out too ([`InstallSpec::unpinned_keys`]).
+fn rest_digest(bytes: &[u8], install: &InstallSpec) -> Option<String> {
     let Value::Object(mut root) = serde_json::from_slice(bytes).ok()? else {
         return None;
     };
-    if is_settings_json(path) {
-        root.remove(COSMETIC_KEY);
+    for key in install.unpinned_keys {
+        root.remove(*key);
     }
-    for key in keys {
+    for key in install.relaxed_keys {
         let names: Vec<&str> = key.path.split('.').collect();
         take_out(&mut root, &names, key);
     }
@@ -75,7 +72,7 @@ fn take_out(object: &mut Map<String, Value>, names: &[&str], key: &RelaxedKey) {
         return;
     };
     if rest.is_empty() {
-        if object.get(*first).is_some_and(|v| key.shape.holds(v)) {
+        if object.get(*first).is_some_and(|v| key.shape.holds(v, &[])) {
             object.remove(*first);
         }
         return;

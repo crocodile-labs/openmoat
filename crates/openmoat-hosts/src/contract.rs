@@ -42,7 +42,7 @@ pub use mcp::{
 };
 pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
 pub use protect::{Helper, Paths, ProcessSpec, Protect, RunsLater};
-pub use relaxed::{KeyShape, RelaxedKey};
+pub use relaxed::{KeyShape, RelaxedCheck, RelaxedKey};
 pub use reviews::{Reviews, Unseen};
 pub(crate) use reviews::{answer, decided};
 pub use run_facts::{RunFacts, RunWrite};
@@ -362,10 +362,17 @@ pub struct InstallSpec {
     /// `moat doctor` reports the drift; any other change still denies them all.
     /// Only keys that cannot run a program, change a hook, the sandbox, MCP
     /// servers, tools, the files the agent may touch or the network belong
-    /// here. Found by the file's path ending in `<dir_name>/<config_file>`.
-    /// Empty for most hosts; Claude Code's own list, with its permission
-    /// lists, is the CLI's (`integrity/relaxed.rs`).
+    /// here. Applied only to a file the lock pinned as this host's hook file,
+    /// never to another host's file of the same name. Empty for most hosts.
     pub relaxed_keys: &'static [RelaxedKey],
+    /// How the lock compares [`Self::relaxed_keys`]; [`RelaxedCheck::Rest`]
+    /// unless the host names another.
+    pub relaxed_check: RelaxedCheck,
+    /// Top-level keys of the hook file the lock leaves out of its digest
+    /// altogether, because the host rewrites them for colours alone (Claude
+    /// Code's `theme`, #287). A change to one is no drift at all. Empty for
+    /// most hosts.
+    pub unpinned_keys: &'static [&'static str],
     /// What the person must do in the host after `moat init` writes or changes
     /// its hook entry before the host runs it, when the host keeps a record
     /// of its own that OpenMoat cannot grant; `moat doctor` repeats it.
@@ -499,7 +506,10 @@ pub struct HookSpec {
     pub timeout: u64,
     /// Whether the entry asks the host to block the call when `moat guard`
     /// fails to run, crashes or times out (Claude Code `onFailure`), where the
-    /// host's version knows the key (the CLI asks the `claude` on `PATH`).
+    /// host's version knows the key: the version its spec's
+    /// [`HookFailure::flag_since`] names, which the CLI asks of each copy of
+    /// the host's program ([`ProcessSpec::names`] on `PATH`, and
+    /// [`HostSpec::bundled`]).
     pub block_on_failure: bool,
     /// Whether the entry's command names its event (`guard --event <event>`),
     /// for a host whose payload names none: the guard then reads the payload

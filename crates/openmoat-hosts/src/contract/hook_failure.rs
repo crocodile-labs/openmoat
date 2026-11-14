@@ -95,6 +95,19 @@ impl HookFailure {
         sources: &[],
     };
 
+    /// The version from which the host blocks a failed hook's call when its
+    /// entry carries the flag that asks for it ([`FailureOutcome::BlocksFrom`]
+    /// in [`Self::fails`]), which `openmoat init` writes only where every copy
+    /// of the host found is that version or later; `None` for a host without
+    /// such a flag.
+    #[must_use]
+    pub fn flag_since(&self) -> Option<Version> {
+        match self.fails {
+            FailureOutcome::BlocksFrom(version) => Some(version),
+            _ => None,
+        }
+    }
+
     /// The cases in which the call runs with no decision, in words, from the
     /// facts alone ([`FailureOutcome::runs`]); empty for a host that blocks
     /// both. `blocks_from` says whether a [`FailureOutcome::BlocksFrom`] holds
