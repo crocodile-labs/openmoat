@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_CODE_DISABLE_FILE_MENTIONS": "1"
+  },
   "hooks": {
     "ConfigChange": [
       {

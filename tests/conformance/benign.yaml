@@ -2722,6 +2722,7 @@
   expect: { verdict: allow, rules: [project-fs] }
 - id: benign-write-project-copy-of-enterprise-hooks
   action: { fs_write: "/p/deploy/etc/cursor/hooks.json" }
+  expect: { verdict: allow, rules: [project-fs] }
 # Beside OpenMoat's package from an agent's plugin channel (ADR-099): only its own
 # folder is `kernel-self`'s; another plugin and another `@openmoat` package stay as before
 - id: benign-write-another-cursor-plugin
