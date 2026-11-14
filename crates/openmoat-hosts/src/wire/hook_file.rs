@@ -63,6 +63,15 @@ pub trait HookFile: Sync + std::fmt::Debug {
             .is_some_and(|value| *value != Value::Bool(true))
     }
 
+    /// Variables, with their values, that `init` puts in the file's
+    /// top-level `env` object, which the host copies into its own
+    /// environment (Claude Code's `CLAUDE_CODE_DISABLE_FILE_MENTIONS`); a
+    /// file without one is stale, and `uninstall` takes out each that still
+    /// holds the value. Empty for most layouts.
+    fn env(&self) -> &'static [(&'static str, &'static str)] {
+        &[]
+    }
+
     /// Whether the layout carries `"version": 1` beside `hooks`.
     fn has_version(&self) -> bool {
         false
@@ -117,6 +126,9 @@ pub enum HookFileError {
     /// The object that holds its event lists is not an object.
     #[error("the hooks object in {0} is not an object")]
     HooksNotObject(String),
+    /// Its `env` is not an object.
+    #[error("`env` in {0} is not an object")]
+    EnvNotObject(String),
     /// The list for an event is not an array.
     #[error("the `{event}` list in {file} is not an array")]
     EventNotArray {
@@ -149,7 +161,39 @@ impl dyn HookFile {
             outcome =
                 outcome.max(self.upsert_one(root, file, id, spec, &guard, blocks_on_failure)?);
         }
+        Ok(outcome.max(self.upsert_env(root, file)?))
+    }
+
+    /// Put each of [`HookFile::env`] in `root`'s `env` with its value.
+    fn upsert_env(&self, root: &mut Value, file: &str) -> Result<HookOutcome, HookFileError> {
+        let mut outcome = HookOutcome::Unchanged;
+        if self.env().is_empty() {
+            return Ok(outcome);
+        }
+        let Value::Object(top) = root else {
+            return Err(HookFileError::NotObject(file.to_owned()));
+        };
+        let env = top
+            .entry("env")
+            .or_insert_with(|| Value::Object(Map::new()));
+        let Value::Object(env) = env else {
+            return Err(HookFileError::EnvNotObject(file.to_owned()));
+        };
+        for (var, value) in self.env() {
+            if env.get(*var).and_then(Value::as_str) != Some(*value) {
+                env.insert((*var).to_owned(), Value::from(*value));
+                outcome = HookOutcome::Updated;
+            }
+        }
         Ok(outcome)
+    }
+
+    /// Whether `root`'s `env` holds each of [`HookFile::env`] with its value.
+    #[must_use]
+    pub fn has_env(&self, root: &Value) -> bool {
+        self.env().iter().all(|(var, value)| {
+            root.pointer(&format!("/env/{var}")).and_then(Value::as_str) == Some(*value)
+        })
     }
 
     fn upsert_one(
@@ -261,7 +305,7 @@ impl dyn HookFile {
             }
         }
         match (found, stale_command) {
-            (n, None) if n == hooks.len() => HookFileState::Installed,
+            (n, None) if n == hooks.len() && self.has_env(root) => HookFileState::Installed,
             (0, None) => HookFileState::Missing,
             (_, Some(command)) => HookFileState::Stale { command },
             (_, None) => HookFileState::Stale {
@@ -309,10 +353,11 @@ impl dyn HookFile {
         let Value::Object(top) = root else {
             return false;
         };
+        let env_removed = self.remove_env(top);
         let section = self.section();
         let switch = self.section_switch();
         let Some(Value::Object(hooks)) = top.get_mut(section) else {
-            return false;
+            return env_removed;
         };
         let mut removed = false;
         hooks.retain(|_, entries| {
@@ -329,6 +374,25 @@ impl dyn HookFile {
         }
         if removed && self.has_version() && top.len() == 1 {
             top.retain(|key, value| key != "version" || *value != json!(1));
+        }
+        removed || env_removed
+    }
+
+    /// Take each of [`HookFile::env`] that still holds its value out of
+    /// `top`'s `env`, and `env` when that empties it.
+    fn remove_env(&self, top: &mut Map<String, Value>) -> bool {
+        let Some(Value::Object(env)) = top.get_mut("env") else {
+            return false;
+        };
+        let before = env.len();
+        for (var, value) in self.env() {
+            if env.get(*var).and_then(Value::as_str) == Some(*value) {
+                env.remove(*var);
+            }
+        }
+        let removed = env.len() != before;
+        if removed && env.is_empty() {
+            top.remove("env");
         }
         removed
     }

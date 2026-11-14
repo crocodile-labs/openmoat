@@ -221,7 +221,7 @@ fn relaxed_keys_change_nothing_that_runs_or_decides() {
 #[test]
 fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
     let expected: [(Host, &str, &[&str]); 12] = [
-        (Host::ClaudeCode, "Entries(Nested)", &["PreToolUse"]),
+        (Host::ClaudeCode, "Entries(Settings)", &["PreToolUse"]),
         (Host::Codex, "Entries(Codex)", &[]),
         (Host::Cursor, "Entries(Cursor)", &[]),
         (Host::OpenClaw, "Plugin(OwnedFile(OpenClaw plugin))", &[]),

@@ -45,6 +45,16 @@ OpenMoat's `review` is sent as Claude Code's `"ask"`, which Claude Code puts to 
   tools are named `mcp__<server>__<tool>`.
 - Project settings merged over the user's `settings.json`: `.claude/settings.json` and
   `.claude/settings.local.json`.
+- `@` file mentions: Claude Code reads a file the person names with `@` while it builds
+  the prompt, with no tool call, so no `PreToolUse` hook sees it. `openmoat init` puts
+  `CLAUDE_CODE_DISABLE_FILE_MENTIONS=1` in the user `settings.json`'s `env`
+  ([`hook_file.rs`](hook_file.rs)): Claude then gets the paths and reads them with its
+  file tools, which the hook decides and records, so a secret's read is denied. Claude Code reads the variable from 2.1.299, and only from the shell, user
+  or managed settings (<https://code.claude.com/docs/en/hooks>, `PreToolUse`); an
+  install without it is reported stale until `openmoat init` runs again, and `openmoat
+  uninstall` takes it out. Where the sandbox block is written, its `Read` deny rules keep
+  those paths out of a mention on older versions too; under `openmoat run` the OS
+  sandbox denies the read to Claude Code itself.
 
 Credentials: the login Claude Code keeps in a file (`.credentials.json` in its
 configuration directory on Linux and Windows, and on macOS when the Keychain refuses

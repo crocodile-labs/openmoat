@@ -17,6 +17,7 @@ pub(crate) mod config_change;
 mod advisories;
 mod doc;
 mod from_cursor;
+mod hook_file;
 mod ide_tools;
 mod mcp;
 mod post_tool_use;
@@ -100,7 +101,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_name: ".claude",
         config_file: "settings.json",
         hooks: HOOKS,
-        hook_file: HookLayout::Entries(&crate::wire::hook_file::nested::Nested),
+        hook_file: HookLayout::Entries(&hook_file::Settings),
         relaxed_keys: settings::RELAXED_KEYS,
         relaxed_check: crate::RelaxedCheck::ByKey,
         unpinned_keys: settings::UNPINNED_KEYS,

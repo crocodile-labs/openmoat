@@ -5,6 +5,7 @@ use serde_json::Value;
 
 use crate::common::{Sandbox, fixture, hook_output as decision, stderr, stdout};
 
+mod claude_code_hook;
 mod state_dir;
 mod tools;
 
@@ -189,13 +190,14 @@ fn guard_allows_ordinary_work_and_defers_installs() {
     );
 }
 
-/// An ungoverned tool is left to Claude Code (no output, exit 0), never
+/// An ungoverned tool (`Skill`, which the matcher names and OpenMoat leaves
+/// to Claude Code) is left to Claude Code (no output, exit 0), never
 /// approved past its own prompt, and recorded.
 #[test]
 fn guard_leaves_ungoverned_tools_to_the_host() {
     let sb = Sandbox::bare(&[".claude"]);
     sb.moat(&["init", "--yes"]);
-    let out = sb.guard("claude-code", &fixture("claude-code/ungoverned.json"));
+    let out = sb.guard("claude-code", &fixture("claude-code/skill.json"));
     assert_eq!(out.status.code(), Some(0));
     assert!(out.stdout.is_empty(), "{}", stderr(&out));
     let shown = sb.moat(&["show", "--recent", "1"]);
