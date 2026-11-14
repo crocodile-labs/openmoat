@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 600" width="980" height="600" role="img" aria-label="OpenMoat sits between your AI coding agents and your machine. Twelve agents (Claude Code, Codex, Cursor and nine more) send every tool call through OpenMoat. Its parts: a policy engine that decides each call before it runs, OS sandboxes for the code an allowed call runs, an egress proxy that lets network reach only allowed hosts, a secret broker that keeps your tokens out of the agent, an MCP gateway that pins servers and tools, an audit trail of every decision, a merge check for pull requests and a policy lock the agent cannot change. It guards your files and secrets, shell and programs, network, MCP servers, and git, CI and editors. One policy, on your machine, no AI model.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 600" width="980" height="600" role="img" aria-label="OpenMoat sits between your AI coding agents and your machine. Twelve agents (Claude Code, Codex, Cursor and nine more) send the tool calls their hooks report through OpenMoat. Its parts: a policy engine that decides each call before it runs, OS sandboxes for the code an allowed call runs, an egress proxy that lets network reach only allowed hosts, a secret broker that keeps your tokens out of the agent, an MCP gateway that pins servers and tools, an audit trail of every decision, a merge check for pull requests and a policy lock the agent's calls cannot change. It guards your files and secrets, shell and programs, network, MCP servers, and git, CI and editors. One policy, on your machine, no AI model.">
 <defs>
 <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8b949e"/></marker>
 <pattern id="dots" width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#30363d"/></pattern>
@@ -29,7 +29,7 @@
 <rect x="258" y="128" width="230" height="92" rx="12" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
 <circle cx="278" cy="150" r="5" fill="#68a1cb"/>
 <text x="292" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#e6edf3" text-anchor="start">Policy engine</text>
-<text x="274" y="177" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">decides every tool call</text>
+<text x="274" y="177" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">decides each hooked call</text>
 <text x="274" y="192" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">before it runs</text>
 <text x="274" y="210" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="600" fill="#68a1cb" text-anchor="start">openmoat init</text>
 <rect x="502" y="128" width="230" height="92" rx="12" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
@@ -71,8 +71,8 @@
 <rect x="502" y="440" width="230" height="92" rx="12" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
 <circle cx="522" cy="462" r="5" fill="#68a1cb"/>
 <text x="536" y="467" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#e6edf3" text-anchor="start">Policy lock</text>
-<text x="518" y="489" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">the agent cannot change</text>
-<text x="518" y="504" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">the rules or switch it off</text>
+<text x="518" y="489" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">the agent's calls cannot</text>
+<text x="518" y="504" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">change rules or switch it off</text>
 <text x="518" y="522" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="600" fill="#68a1cb" text-anchor="start">openmoat doctor</text>
 <line x1="748" y1="298" x2="788" y2="298" stroke="#8b949e" stroke-width="1.6" marker-end="url(#head)"/>
 <rect x="790" y="96" width="170" height="404" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1"/>
@@ -92,5 +92,5 @@
 <rect x="806" y="412" width="138" height="54" rx="10" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
 <text x="818" y="432" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3" text-anchor="start">Git, CI and editors</text>
 <text x="818" y="451" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#8b949e" text-anchor="start">what runs later</text>
-<text x="490.0" y="586" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#8b949e" text-anchor="middle">Every call is checked before it runs; what an allowed call does is bounded and recorded.</text>
+<text x="490.0" y="586" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#8b949e" text-anchor="middle">Each call a hook reports is checked before it runs, and recorded; a sandbox bounds allowed code.</text>
 </svg>

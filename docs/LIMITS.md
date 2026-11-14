@@ -318,11 +318,12 @@ rest of each agent's protection on each OS, with the runs that back them.
   directory. `openmoat doctor` lists these denials of the last day
   ([ARCHITECTURE.md, "Session cache"](ARCHITECTURE.md)).
 
-- **Injected input is linked only with Claude Code, the Continue CLI, Codex, Gemini CLI,
+- **Injected input is linked only with Claude Code, Codex, Gemini CLI,
   GitHub Copilot CLI, the Cline CLI and wrapped MCP servers, and only for the same
   request.** Other
   agents report no call output (their
-  wrapped MCP servers' results are read by the gateway). A PowerShell command (every
+  wrapped MCP servers' results are read by the gateway), and the released Continue CLI
+  runs no hook at all. A PowerShell command (every
   Gemini CLI shell command on Windows, the PowerShell tools of Claude Code and the Cline
   CLI) is not parsed, so it is linked by the hosts and paths its text names, not by its
   commands. Paths are read in the forms POLICY.md §4.1.2 lists (drive, `~\`,

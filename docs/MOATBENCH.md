@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Read this when** you want to run the attack and everyday scenarios per agent, read the scorecard, or score another hook.
 
-**On this page:** [Reproduce it: openmoat bench](#reproduce-it-openmoat-bench) · [Proof report: openmoat bench --report](#proof-report-openmoat-bench---report) · [Scenario format](#scenario-format) · [Known gaps](#known-gaps) · [Developer workflows](#developer-workflows) · [Adding a scenario](#adding-a-scenario) · [Scorecard: OpenMoat 0.12.0 on every agent](#scorecard-openmoat-0120-on-every-agent)
+**On this page:** [Reproduce it: openmoat bench](#reproduce-it-openmoat-bench) · [Proof report: openmoat bench --report](#proof-report-openmoat-bench---report) · [Scenario format](#scenario-format) · [Known gaps](#known-gaps) · [Developer workflows](#developer-workflows) · [Adding a scenario](#adding-a-scenario) · [Scorecard: OpenMoat 0.12.0, nine agents (rerun pending)](#scorecard-openmoat-0120-nine-agents-rerun-pending)
 
 End-to-end scenarios of what a steered agent tries, run through the real `openmoat`
 binary with each host's own payload shape. The conformance suite
@@ -311,11 +311,15 @@ fixture in `tests/conformance/benign.yaml` or `review.yaml`.
    it with a conformance fixture, or open an issue and mark the gap. Never change the
    default policy just to make a scenario pass.
 
-## Scorecard: OpenMoat 0.12.0 on every agent
+## Scorecard: OpenMoat 0.12.0, nine agents (rerun pending)
 
-The full set on OpenMoat 0.12.0 (2026-10-30, macOS, `openmoat bench`), every scenario
-run as each of the nine agents' hook payloads (the Cline CLI and goose, added in 0.14.0,
-are not in these counts):
+These counts were measured on OpenMoat 0.12.0 (2026-10-30, macOS, `openmoat bench`),
+every scenario run as each of the nine agents' hook payloads then supported. They are
+not current: the Cline CLI, goose and the Antigravity CLI were added later, and so were
+scenarios, so a run today gives other totals. A rerun of this table on the current release
+is pending; until then run `openmoat bench` for today's figures. What does hold on every
+change is the pass condition: the end-to-end test `moatbench` runs `openmoat bench` in
+CI's `test` job and fails on any mismatch or false positive (see above).
 
 | Category | Runs | Blocked | Reviewed | Allowed | OS sandbox | Left to the agent |
 |---|---|---|---|---|---|---|
@@ -330,7 +334,7 @@ are not in these counts):
 | workflows | 66 | 0 | 17 | 8 | 0 | 41 |
 | **total** | **551** | **287** | **88** | **78** | **9** | **89** |
 
-0 false positives, 0 known gaps, 0 mismatches with the expected answers. The eight
+On 0.12.0: 0 false positives, 0 known gaps, 0 mismatches with the expected answers. The eight
 developer workflows (git feature branch, Node app, Python package, Rust crate, Go
 module, Docker image, make targets, editing project files) ran 556 steps with 17 reviews,
 all of them expected. "Left to the agent" (`passthrough`) means OpenMoat returned no

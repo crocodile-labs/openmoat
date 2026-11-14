@@ -46,6 +46,12 @@ one that runs none is not checked, as for every other call.
 The released Continue CLI does not run hooks, so OpenMoat cannot check its tool calls;
 run it under `openmoat run` ([SANDBOX.md](../../../../../docs/SANDBOX.md)).
 
+Upstream: the [continuedev/continue](https://github.com/continuedev/continue) README says
+the repository "is no longer actively maintained and is read-only for all users", after a
+final 2.0.0 release of the VS Code extension, the CLI and the JetBrains plugin. OpenMoat
+keeps recognising `cn` (its calls, `doctor` and `status` warnings, credential paths) for
+anyone still running it.
+
 ## Sandbox
 
 None from OpenMoat's hook path; `openmoat run` runs the whole agent in an OS sandbox.

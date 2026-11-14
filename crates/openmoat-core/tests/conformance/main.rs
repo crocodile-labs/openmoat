@@ -24,6 +24,7 @@ use serde::Deserialize;
 
 mod evidence;
 mod owasp;
+mod stateful;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -482,6 +483,25 @@ fn threat_coverage_is_complete_and_documented() {
             count(t, "review.yaml"),
             count(t, "benign.yaml")
         );
+    }
+    doc.push_str(&stateful::rows());
+    let carrying = |rule: &str| -> Vec<(String, String, String)> {
+        fixtures
+            .iter()
+            .filter(|(file, f)| file != "benign.yaml" && f.expect.rules.iter().any(|r| r == rule))
+            .map(|(file, f)| {
+                let class = f.threat.clone().unwrap_or_default();
+                (
+                    f.id.clone(),
+                    file.trim_end_matches(".yaml").to_owned(),
+                    class,
+                )
+            })
+            .collect()
+    };
+    match stateful::section(&root, carrying) {
+        Ok(section) => doc.push_str(&section),
+        Err(wrong) => panic!("{}", wrong.join("\n")),
     }
     doc.push_str(&owasp::section(count, &tests));
     let fixture_ids = |risk: &str| -> Vec<String> {

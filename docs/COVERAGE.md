@@ -23,6 +23,32 @@ OS sandbox, network boundary) is the proof report of `openmoat bench --report`
 | T10 | Hook supply chain (trojaned hook binary) | ASI04 | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | ASI02 | 31 | 6 | 6 |
 | T12 | Network to unknown hosts | ASI02 | 115 | 25 | 27 |
+| T13 | Publishing through a push | — | 0 | 0 | 0 |
+| T14 | A backdoor in a pull request | — | 0 | 0 | 0 |
+| T15 | Acting on injected input | — | 0 | 0 | 0 |
+
+## Classes no fixture is tagged with
+
+T13 to T15 have no fixture tagged with them: a fixture is one tool call, and these are decided from more than one. They are tested by the end-to-end and unit tests named below, not by conformance fixtures, and they have no OWASP column above.
+
+### T13: Publishing through a push
+
+- Tagged fixtures: none; the push check reads the commits a `git push` or `gh pr create` would send, which a single call does not carry.
+- Tests (6): `crates/openmoat-cli/tests/e2e/push.rs`
+- Fixtures of other classes expecting `push-secret` (0): none
+- Fixtures of other classes expecting `push-runs-later` (0): none
+- Fixtures of other classes expecting `push-unchecked` (0): none
+
+### T14: A backdoor in a pull request
+
+- Tagged fixtures: none; `openmoat policy check-diff` reads a diff, not a tool call.
+- Tests (33): `crates/openmoat-cli/tests/e2e/check_diff.rs`, `crates/openmoat-core/src/diffscan/tests.rs`, `crates/openmoat-core/src/diffscan/tests`
+
+### T15: Acting on injected input
+
+- Tagged fixtures: none; a call is linked to what an earlier call returned; the fixtures that carry the rule are tagged with the class of what the planted call does.
+- Tests (11): `crates/openmoat-cli/tests/e2e/injected.rs`, `crates/openmoat-cli/tests/e2e/injected_hosts.rs`, `crates/openmoat-cli/tests/e2e/mcp_gateway/injected.rs`
+- Fixtures of other classes expecting `injected-input` (15): `T12-injected-page-host-then-curl-download` (attacks, T12), `T8-injected-mcp-result-host-then-curl` (attacks, T8), `T8-injected-gh-issue-body-host-then-curl` (attacks, T8), `T8-injected-page-command-from-code-span` (attacks, T8), `T9-injected-page-path-then-write-outside-project` (attacks, T9), `T12-injected-tab-url-host-then-curl` (attacks, T12), `T8-injected-tab-title-command` (attacks, T8), `review-injected-page-url-host-then-curl-subdomain` (review, T12), `review-injected-gh-issue-url-host-then-curl-deep-subdomain` (review, T12), `review-injected-page-host-then-curl-upper-case-trailing-dot` (review, T12), `review-injected-page-command-then-sh-c` (review, T8), `review-injected-page-command-then-env-prefix-and-nohup` (review, T8), `review-injected-mcp-wrapped-command-then-bare` (review, T8), `review-injected-page-host-then-powershell-upload` (review, T12), `review-injected-powershell-fetch-then-curl` (review, T12)
 
 ## By OWASP agentic risk
 
@@ -30,7 +56,7 @@ All ten risks of the list. `covered` means fixtures or end-to-end tests test it,
 
 | Risk | Name | Status | Reason | Classes | Attacks | Reviews | End-to-end tests |
 |---|---|---|---|---|---|---|---|
-| ASI01 | Agent Goal Hijack | partial | Does not detect the hijack: it limits the calls that follow, and links a later call to what untrusted output named only on Claude Code, the Continue CLI, Codex, Gemini CLI, GitHub Copilot CLI, the Cline CLI and wrapped MCP servers. | — | — | — | 4 |
+| ASI01 | Agent Goal Hijack | partial | Does not detect the hijack: it limits the calls that follow, and links a later call to what untrusted output named only on Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, the Cline CLI and wrapped MCP servers. | — | — | — | 4 |
 | ASI02 | Tool Misuse and Exploitation | covered | Each tool call a hook reports is decided by the policy. Not covered: tools no hook exposes, a deferred call an auto-approve mode runs, and misuse through an allowed command or host. | T1, T2, T4, T8, T11, T12 | 480 | 171 | 0 |
 | ASI03 | Identity and Privilege Abuse | covered | Secret paths, secret-shaped variables, agent logins and OpenMoat's own state are guarded. Not covered: what a credential can do on a remote service, and the agent's own login, which commands under `openmoat run` can read. | T1, T2, T3, T9 | 869 | 266 | 0 |
 | ASI04 | Agentic Supply Chain Vulnerabilities | covered | Downloads piped into a shell, near-miss package names, MCP server definitions and the hook binary are checked. Not covered: other installs, left to the agent's own prompt, and the command of an MCP server `openmoat init` was not allowed to wrap, or a project's own, which runs before any check. | T5, T8, T10 | 94 | 100 | 0 |

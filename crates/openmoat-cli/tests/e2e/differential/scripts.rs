@@ -205,10 +205,13 @@ fn evidence_table_is_current() {
          `claude -p --bare` against a local fake Anthropic API that asks for that one Bash call,\n\
          with only the generated settings (no hook, so the sandbox alone is measured), and\n\
          codex-cli 0.160.1 runs `codex sandbox -P moat`. No account, API key or internet is\n\
-         used. A cell is what the operating system did to the payload. CI asserts it on every\n\
-         pull request, together with its side effects (no secret printed, no file written,\n\
-         nothing reached the listener), and fails when it changes. Network targets are loopback\n\
-         listeners the test owns.\n\n",
+         used. A cell is what the operating system did to the payload, asserted together with\n\
+         its side effects (no secret printed, no file written, nothing reached the listener);\n\
+         the suite fails when one changes. CI asserts the `openmoat run` columns on every pull\n\
+         request. The Claude Code and Codex columns run only where the pinned host binaries\n\
+         are installed (`scripts/ci/host-binaries.sh`): CI does not fetch them, so those cells\n\
+         are checked by hand, not on every change (see \"Layers\"). Network targets are\n\
+         loopback listeners the test owns.\n\n",
     );
     doc.push_str("| Case | Threat | Payload |");
     for (_, heading) in LAYERS {

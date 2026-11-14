@@ -13,10 +13,13 @@ configures it (Standard tier, [SANDBOX.md](SANDBOX.md)): Claude Code 2.1.290 run
 `claude -p --bare` against a local fake Anthropic API that asks for that one Bash call,
 with only the generated settings (no hook, so the sandbox alone is measured), and
 codex-cli 0.160.1 runs `codex sandbox -P moat`. No account, API key or internet is
-used. A cell is what the operating system did to the payload. CI asserts it on every
-pull request, together with its side effects (no secret printed, no file written,
-nothing reached the listener), and fails when it changes. Network targets are loopback
-listeners the test owns.
+used. A cell is what the operating system did to the payload, asserted together with
+its side effects (no secret printed, no file written, nothing reached the listener);
+the suite fails when one changes. CI asserts the `openmoat run` columns on every pull
+request. The Claude Code and Codex columns run only where the pinned host binaries
+are installed (`scripts/ci/host-binaries.sh`): CI does not fetch them, so those cells
+are checked by hand, not on every change (see "Layers"). Network targets are
+loopback listeners the test owns.
 
 | Case | Threat | Payload | `openmoat run`, macOS (Seatbelt) | `openmoat run --no-isolate`, Linux (Landlock + seccomp, network namespace) | `openmoat run --no-isolate`, Linux without bubblewrap (Landlock + seccomp) | `openmoat run --isolate`, Linux (bubblewrap; the default where it works) | Claude Code sandbox, macOS | Claude Code sandbox, Linux | Codex `moat` profile, macOS | Codex `moat` profile, Linux |
 |---|---|---|---|---|---|---|---|---|---|---|

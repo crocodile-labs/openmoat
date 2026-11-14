@@ -1,9 +1,11 @@
 # OpenMoat
 
 **The security layer between your AI coding agents and your machine.** OpenMoat checks
-every tool call an agent makes before it runs, keeps your secrets and network out of
-reach, confines the code that does run, and records every decision, for every agent, with
-one policy that stays on your machine.
+each tool call an agent's hook reports before it runs: it denies reads of your secrets and
+sends to hosts your policy does not list, and holds what outlives the session for your
+review. Where an OS sandbox applies (the agent's own, or `openmoat run`), it also confines
+the code an allowed call runs. Every decision is recorded, for twelve agents, with one
+policy that stays on your machine. What it does not stop is in [Limits](#limits).
 
 <p align="center">
   <a href="https://github.com/crocodile-labs/openmoat/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/crocodile-labs/openmoat/ci.yml?branch=main&style=flat-square&label=ci" alt="CI status"></a>
@@ -27,29 +29,33 @@ https://github.com/user-attachments/assets/017fbe34-b743-477f-b4a1-faa5216ee956
 ## What OpenMoat is
 
 OpenMoat sits between the agents you run and everything on your machine they can reach.
-Every agent's tool calls go through it, and each of its parts covers one way an agent can
-do harm:
+Each supported agent's hook sends it the tool calls the agent reports, and each of its
+parts covers one way an agent can do harm (what a hook does not report, and agents that
+run a call when the hook fails, are in [Limits](#limits)):
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/overview-dark.svg">
-    <img src="docs/assets/overview-light.svg" width="880" alt="OpenMoat sits between your AI coding agents and your machine. Twelve agents send every tool call through OpenMoat. Its parts: a policy engine, OS sandboxes, an egress proxy, a secret broker, an MCP gateway, an audit trail, a merge check and a policy lock. It guards your files and secrets, shell and programs, network, MCP servers, and git, CI and editors.">
+    <img src="docs/assets/overview-light.svg" width="880" alt="OpenMoat sits between your AI coding agents and your machine. Twelve agents send the tool calls their hooks report through OpenMoat. Its parts: a policy engine, OS sandboxes, an egress proxy, a secret broker, an MCP gateway, an audit trail, a merge check and a policy lock. It guards your files and secrets, shell and programs, network, MCP servers, and git, CI and editors.">
   </picture>
 </p>
 
 | Part | What it does | Start with |
 |---|---|---|
-| **Policy engine** | Decides every tool call before it runs, from what the call really does: it reads the shell the way a shell does and checks the files, hosts and programs a call touches. | `openmoat init` |
+| **Policy engine** | Decides each tool call the hook reports before it runs, from what the call really does: it reads the shell the way a shell does and checks the files, hosts and programs a call touches. | `openmoat init` |
 | **OS sandboxes** | Confine the code an allowed call runs: the agents' own sandboxes written from the same policy, or `openmoat run` for any agent. | `openmoat run` |
 | **Egress proxy** | Lets network from the sandbox reach only the hosts the policy lists. | `openmoat proxy` |
 | **Secret broker** | Gives the agent a placeholder; the proxy adds your real token for one host only. | `openmoat secret add` |
 | **MCP gateway** | Starts only the MCP servers you accepted, pins each tool's description, and holds data from one server sent into another's writing tool. | `openmoat mcp wrap` |
 | **Audit trail** | Records every decision in a local, hash-chained log; explains any block, follows calls live, and shows which lines of a commit an agent wrote. | `openmoat watch`, `why`, `provenance` |
 | **Merge check** | Checks a pull request for what its changes do: CI and hook edits, agent settings, look-alike packages, new hosts. Runs in CI and as a GitHub Action. | `openmoat policy check-diff` |
-| **Policy lock** | Pins the policy and hook files: the agent cannot change the rules, approve its own blocked call or switch OpenMoat off. | `openmoat doctor` |
+| **Policy lock** | Pins the policy and hook files: an agent's call that changes the rules, approves its own blocked call or switches OpenMoat off is denied, and a changed file blocks every call until you review it. Outside an OS sandbox, a program running as you can still rewrite both, and some agents load project settings that turn hooks off before any check ([Limits](#limits)). | `openmoat doctor` |
 
-It is one Rust binary for macOS, Linux and Windows. No AI model decides, and OpenMoat
-sends nothing off your machine. Building your own agent? The
+It is one Rust binary for macOS, Linux and Windows. No AI model decides. OpenMoat sends
+nothing off your machine unless you set that up: a [remote approval
+channel](docs/APPROVALS.md) sends each call held for review, redacted, to your phone, and
+[live audit delivery](docs/DELIVERY.md) sends each decision, masked, to the log collectors
+you name. Building your own agent? The
 [SDKs](docs/SDK.md) give it the same decisions, from Rust or JavaScript.
 
 ## Why OpenMoat
@@ -173,12 +179,12 @@ sets up each:
 | Cline CLI | OpenMoat's `PreToolUse` and `PostToolUse` hook scripts in `~/.cline/hooks` | hook only | `cline` |
 | goose | `PreToolUse` hook in OpenMoat's plugin, `~/.agents/plugins/openmoat/hooks/hooks.json`, with `on_failure: block` | hook only | `goose` |
 | Antigravity CLI | `PreToolUse` hook in `~/.gemini/config/hooks.json` | hook only | `antigravity-cli` |
-| Continue CLI | `cn` runs the Claude Code hook, but the released `cn` runs no hooks yet | not checked yet; use `openmoat run` | none |
+| Continue CLI | `cn` reads the Claude Code hook, but the released `cn` runs no hooks, and [Continue's repository](https://github.com/continuedev/continue) is no longer maintained | not checked yet; use `openmoat run` | none |
 <!-- /generated -->
 
 | Protection | What it means |
 |---|---|
-| **hook + OS sandbox** | Every tool call is checked, and `openmoat init` also writes the agent's own sandbox settings from the same policy, so the operating system confines the commands it runs. |
+| **hook + OS sandbox** | Each tool call the hook reports is checked, and `openmoat init` also writes the agent's own sandbox settings from the same policy, so the operating system confines the commands it runs in that sandbox. Not every tool runs there: Claude Code's file tools, `WebFetch` and MCP servers run outside its sandbox, and Cursor runs some commands outside its own ([Limits](docs/LIMITS.md#sandboxes-and-allowed-code)). |
 | **hook only** | Every tool call the agent's hook reports is checked; the hook's decision is the only check. For OS confinement too, start the agent with `openmoat run` (macOS, Linux). |
 
 **In your editor:**
@@ -203,15 +209,15 @@ Everything OpenMoat does, by area. Each links to the page that explains it.
 | Risk | What OpenMoat does | Rules |
 |---|---|---|
 | **Secrets read or sent** | SSH keys, `.env`, cloud credentials and every agent's login files are denied however the path is spelt; so are secret variables and environment dumps. | `secrets-paths`, `agent-credentials`, `env-secrets`, `env-dump` |
-| **Data leaving the machine** | Sending to a host the policy does not list is denied, and so are cloud metadata services, tokens sent to the wrong host, encoded data after a secret read and card numbers. | `default.net`, `cloud-metadata`, `token-egress`, `encoded-egress`, `card-egress` |
+| **Data leaving the machine** | Sending to a host the policy does not list is denied, and so are cloud metadata services, tokens sent to the wrong host, encoded data after a secret read and card numbers the call's own text shows (not one read from a file, encoded or split). | `default.net`, `cloud-metadata`, `token-egress`, `encoded-egress`, `card-egress` |
 | **Instructions planted in what the agent reads** | A command or write that uses a host, path or command a fetched page or tool result named waits for you, with the source named; also in another spelling of the same request. | `injected-input` |
 | **Code that runs later** | CI workflows, git hooks, login items, `PATH` folders, editor and package-manager configuration, virtual environments and dev containers wait for you; shell startup files and the agents' system-wide settings are denied. | `runs-later`, `git-internals`, `persistence`, `shell-rc`, `managed-settings` |
 | **Look-alike and fresh packages** | A name one typo away from a popular npm, PyPI, crates.io, RubyGems or Go package waits for you; inside `openmoat run`, npm and uv skip versions published in the last 7 days. | `package-near-miss` |
-| **Downloaded or hidden code** | Piping a download or a decoded payload into a shell is denied; without an OS sandbox, a script the session wrote waits for you. | `pipe-to-shell`, `session-written-code`, `opaque-code` |
+| **Downloaded or hidden code** | Piping a download or a decoded payload into a shell is denied; without an OS sandbox, a script the session wrote waits for you before an interpreter runs it (a test runner, build tool or package script running that file does not wait). | `pipe-to-shell`, `session-written-code`, `opaque-code` |
 | **Containers handed the host** | `--privileged`, host namespaces or the Docker socket mounted in wait for you. | `container-host` |
 | **MCP servers** | Calls are checked by the paths and URLs in their arguments; a new or changed server is held until you accept it; data from one server sent into another's writing tool waits for you. | `mcp-cross-server` |
 | **Destructive commands** | `git push --force`, `git reset --hard`, `rm -rf ~` are denied. | `destructive` |
-| **OpenMoat switched off** | The agent cannot edit the policy, approve its own block or uninstall OpenMoat; a changed policy or hook file blocks every call until you review it. | `kernel-self`, `kernel-integrity` |
+| **OpenMoat switched off** | An agent's call that edits the policy, approves its own block or uninstalls OpenMoat is denied; a changed policy or hook file blocks every call until you review it. Not stopped: a program running as you outside an OS sandbox, and project settings some agents load at start that turn hooks off (`openmoat status` warns). | `kernel-self`, `kernel-integrity` |
 
 Every rule and how to change it: [docs/POLICY.md](docs/POLICY.md). After untrusted
 content or a secret read, the session itself is watched more closely
@@ -308,14 +314,15 @@ Every command, and what to do when OpenMoat gets in your way: [docs/USAGE.md](do
 - **Measured.** `openmoat bench` runs the MoatBench attack scenarios against OpenMoat or
   any other hook ([docs/MOATBENCH.md](docs/MOATBENCH.md)); fuzz targets cover the shell
   parser, policy parsing, repository-policy merging, host payloads, the proxy, the MCP
-  gateway's framing and the pull request check's diff parser.
+  gateway's framing and the pull request check's diff parser; they are run by hand, not
+  in CI ([CONTRIBUTING](CONTRIBUTING.md)).
 
 ## How a call is decided
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/how-it-works-dark.svg">
-    <img src="docs/assets/how-it-works-light.svg" width="860" alt="How OpenMoat works. An AI coding agent wants to run a tool call. Through the agent's own hook, before the call runs, OpenMoat reads what the call really does, checks it against one local policy and answers: allow (npm test runs), defer (an unknown install goes to the agent's own prompt), review (a git hook change waits for you) or deny (reading ~/.ssh/id_rsa never runs). Allowed code is still confined by the OS sandbox and the egress proxy, the policy is locked against the agent, and every decision goes into a local hash-chained audit log.">
+    <img src="docs/assets/how-it-works-light.svg" width="860" alt="How OpenMoat works. An AI coding agent wants to run a tool call. Through the agent's own hook, before the call runs, OpenMoat reads what the call really does, checks it against one local policy and answers: allow (npm test runs), defer (an unknown install goes to the agent's own prompt), review (a git hook change waits for you) or deny (reading ~/.ssh/id_rsa never runs). Where an OS sandbox applies, allowed code is still confined by it and the egress proxy, the policy is locked against the agent's calls, and every decision goes into a local hash-chained audit log.">
   </picture>
 </p>
 
@@ -370,7 +377,7 @@ The most important gaps:
   plugin), and agent settings can turn hooks off. `openmoat status` reports what it can see.
 - **Tools no hook exposes are not seen**, and a repository's git configuration can run a
   program before any hook.
-- **Injected input is linked only with Claude Code, the Continue CLI, Codex, Gemini CLI,
+- **Injected input is linked only with Claude Code, Codex, Gemini CLI,
   GitHub Copilot CLI, the Cline CLI and wrapped MCP servers**; a host by another name or a reworded command is not linked.
 - **A program running as you outside any sandbox** can change the policy and the lock.
 

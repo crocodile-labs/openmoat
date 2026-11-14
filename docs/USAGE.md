@@ -530,7 +530,8 @@ The link works until this stops (Ctrl-C). Anyone holding it can read what `openm
   it, and the default policy denies it to agents ([ADR-066](adr/ADR-066-openmoat-serve.md)).
 
 Credentials are redacted before anything is stored. The log is a SQLite file in
-`~/.moat`; nothing leaves your machine.
+`~/.moat`; nothing leaves your machine unless you run `openmoat audit export` or turn on
+live delivery ([DELIVERY.md](DELIVERY.md)).
 
 Someone who can write that file can delete its newest events and leave a log that
 still checks out. To catch that later, record the log's head outside it now and then:

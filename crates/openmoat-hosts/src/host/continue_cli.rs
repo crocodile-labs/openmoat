@@ -39,8 +39,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             "https://github.com/continuedev/continue/blob/main/extensions/cli/src/hooks/hookRunner.ts",
         ],
     },
+    // Upstream: the README of https://github.com/continuedev/continue says the
+    // repository "is no longer actively maintained and is read-only", after a
+    // final 2.0.0 release of the extension, CLI and plugin.
     gaps: "the released Continue CLI does not run hooks, so OpenMoat cannot check its tool \
-         calls; run it under `openmoat run`",
+         calls; run it under `openmoat run`. Continue's repository is no longer maintained \
+         and is read-only (github.com/continuedev/continue)",
     // `cn` reads its own configuration and fires no hook.
     mcp: None,
     // Its global directory (`CONTINUE_GLOBAL_DIR`, else `~/.continue`, as `cn`
@@ -76,7 +80,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     // Its tool calls are Claude Code's, mapped by Claude Code's rows.
     docs: HostDocs {
-        hooked_by: "`cn` runs the Claude Code hook, but the released `cn` runs no hooks yet",
+        hooked_by: "`cn` reads the Claude Code hook, but the released `cn` runs no hooks, and \
+             [Continue's repository](https://github.com/continuedev/continue) is no longer \
+             maintained",
         protection: "not checked yet; use `openmoat run`",
         ..HostDocs::BASE
     },
