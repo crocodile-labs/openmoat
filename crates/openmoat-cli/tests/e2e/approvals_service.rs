@@ -165,10 +165,13 @@ mod service {
         assert_eq!(out.status.code(), Some(USAGE));
         assert!(text(&out).contains("did not start this"), "{}", text(&out));
 
-        // A steered environment is refused before anything else is read.
+        // A steered environment is refused before anything else is read. Any
+        // `DYLD_*` is refused; the test uses one dyld itself tolerates, since a
+        // missing `DYLD_INSERT_LIBRARIES` library aborts the process in dyld
+        // before OpenMoat's code runs.
         for (name, value) in [
             ("SSL_CERT_FILE", "/tmp/attacker-ca.pem"),
-            ("DYLD_INSERT_LIBRARIES", "/tmp/x.dylib"),
+            ("DYLD_FALLBACK_LIBRARY_PATH", "/tmp/attacker-libs"),
             ("LD_PRELOAD", "/tmp/x.so"),
         ] {
             let out = listen_as_service(&sb, Some((name, value)));
