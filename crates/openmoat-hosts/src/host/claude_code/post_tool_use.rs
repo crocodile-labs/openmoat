@@ -29,7 +29,12 @@ struct Payload {
 
 pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError> {
     // The same mapping as the call's `PreToolUse`, editor tools included.
-    let mut request = pre_tool_use::parse_with(host, payload, super::ide_tools::action)?;
+    let request = pre_tool_use::parse_with(host, payload, super::ide_tools::action)?;
+    with_output(request, payload)
+}
+
+/// `request`, the call `payload` reports, as what it returned.
+pub(super) fn with_output(mut request: HookRequest, payload: &str) -> Result<HookRequest, HostError> {
     let p: Payload = serde_json::from_str(payload)?;
     let output = output::text_of(&p.tool_response);
     request.event = HookEvent::PostToolUse { output };

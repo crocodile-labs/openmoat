@@ -26,9 +26,13 @@ Anthropic's Claude Code. Its `PreToolUse` format is also what the Continue CLI s
   file its `uri` names, else the working directory), `mcp__ide__executeCode` (`Unchecked`
   `McpTool`: at least `review`).
 - `EnterWorktree` with a `path` (`FsRead`).
-- Ungoverned: `Task`, `Skill`, `EnterWorktree` without a `path`, and any other tool.
+- Ungoverned: `Skill`, `EnterWorktree` without a `path`, and any other tool the matcher
+  matches (it is an unanchored regular expression: `Write` matches `TodoWrite`); `Task`
+  never reaches the hook.
 - A payload Cursor sends to this hook (it carries `cursor_version`) is read as Cursor's
   `preToolUse` ([`from_cursor.rs`](from_cursor.rs), below).
+- A payload another agent sends to this hook (Grok Build's envelope, or a tool the matcher
+  does not name) is read as an unknown tool ([`foreign.rs`](foreign.rs), below).
 
 The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
@@ -126,6 +130,17 @@ own hooks win a conflict; it fails open on any exit but 0 and 2 for them and doe
 answered as a call that cannot prompt: a `review` is a deny, a `defer` no answer. A Cursor
 `sessionStart` decides nothing. This hook is not Cursor's protection: the Cursor hooks
 `openmoat init` installs are. With both set up, a call is recorded twice, once by each.
+
+## Run by other agents
+
+Grok Build reads `~/.claude/settings.json` and a project's `.claude/settings*.json`, and the
+Devin CLI loads `.claude/` hooks by default; both run them with their own tool names
+(`run_terminal_command`, `exec`), and only exit 2 or their own deny blocks there (ADR-095
+has the sources). A payload in Grok's envelope (`hookEventName`) or naming a tool the
+matcher does not name is read as an unknown tool: every path, URL and command its
+arguments name is checked, a `review` is a deny that says how to approve it, a `defer` no
+answer. Neither agent is protected by this: its own tools outside what the matcher maps
+onto them never reach the hook, and both run a call whose hook fails.
 
 ## Known gaps
 

@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "read",
+  "tool_input": { "file_path": "/p/README.md" },
+  "session_id": "3f8d1c2a"
+}

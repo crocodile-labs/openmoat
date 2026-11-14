@@ -32,16 +32,14 @@ struct Payload {
     permission_mode: Option<String>,
 }
 
-/// The action of one of a host's own tools, from its name, input and the
-/// payload's `cwd`; `None` for a tool the shared mapping reads.
-pub(crate) type OwnTools = fn(&str, &Value, Option<&str>) -> Option<Result<Action, HostError>>;
-
 /// The payload, with the tools only this host has (Codex `view_image`,
-/// Claude Code's editor tools) mapped by `own` before the shared mapping.
+/// Claude Code's editor tools) mapped by `own` before the shared mapping:
+/// the action of one of them from its name, input and the payload's `cwd`,
+/// `None` for a tool the shared mapping reads.
 pub(crate) fn parse_with(
     host: Host,
     payload: &str,
-    own: OwnTools,
+    own: impl Fn(&str, &Value, Option<&str>) -> Option<Result<Action, HostError>>,
 ) -> Result<HookRequest, HostError> {
     let p: Payload = serde_json::from_str(payload)?;
     let action = match own(&p.tool_name, &p.tool_input, p.cwd.as_deref()) {

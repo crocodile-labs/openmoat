@@ -16,6 +16,7 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 pub(crate) mod config_change;
 mod advisories;
 mod doc;
+mod foreign;
 mod from_cursor;
 mod hook_file;
 mod ide_tools;
@@ -294,6 +295,11 @@ impl HostAdapter for Adapter {
     ) -> Result<HookRequest, HostError> {
         if from_cursor::sent_by_cursor(payload) {
             return from_cursor::parse(event, payload);
+        }
+        if matches!(event, None | Some(pre_tool_use::EVENT | post_tool_use::EVENT))
+            && foreign::sent_by_another_agent(payload, TOOL_MATCHER)
+        {
+            return foreign::parse(host, event, payload, TOOL_MATCHER);
         }
         match event {
             None | Some(pre_tool_use::EVENT) => {

@@ -238,7 +238,7 @@ fn doctor_and_accept_name_the_keys_that_changed() {
 #[test]
 fn ungoverned_tool_is_denied_while_the_lock_shows_drift() {
     let sb = sandbox();
-    let ungoverned = fixture("claude-code/ungoverned.json");
+    let ungoverned = fixture("claude-code/skill.json");
     assert_eq!(sb.guard("claude-code", &ungoverned).status.code(), Some(OK));
 
     let mut policy = std::fs::read_to_string(policy_path(&sb)).unwrap();

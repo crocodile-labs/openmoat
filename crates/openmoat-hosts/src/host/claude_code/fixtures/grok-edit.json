@@ -1,0 +1,9 @@
+{
+  "hookEventName": "pre_tool_use", "sessionId": "grok-s1", "cwd": "/p", "workspaceRoot": "/p",
+  "timestamp": "2026-11-14T10:00:01Z",
+  "toolName": "search_replace", "toolUseId": "call-2",
+  "toolInput": { "file_path": "/p/src/main.rs", "old_string": "a", "new_string": "b" },
+  "hook_event_name": "PreToolUse", "session_id": "grok-s1",
+  "tool_name": "search_replace",
+  "tool_input": { "file_path": "/p/src/main.rs", "old_string": "a", "new_string": "b" }
+}

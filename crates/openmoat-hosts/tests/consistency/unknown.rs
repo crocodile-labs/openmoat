@@ -13,12 +13,14 @@ use super::payloads::{
 use super::{Route, decide, pre_tool_use};
 
 /// The payload `host` sends for its tool `tool` with arguments `input`, and
-/// whether its adapter maps a tool it does not know at all: Claude Code and
-/// Codex leave such a tool to their own permission flow (`ungoverned`), which
-/// asks the person unless a permission rule allows the tool by name.
+/// whether its adapter maps a tool it does not know at all: Codex leaves such
+/// a tool to its own permission flow (`ungoverned`), which asks the person
+/// unless a permission rule allows the tool by name. Claude Code's hook
+/// receives a tool its matcher does not name only from another agent that
+/// runs it (Grok Build, the Devin CLI), so it checks one (ADR-095).
 fn unknown_tool(host: Host, tool: &str, input: &Value) -> (Value, bool) {
     match host {
-        Host::ClaudeCode => (pre_tool_use(Route::ClaudeCode, tool, input), false),
+        Host::ClaudeCode => (pre_tool_use(Route::ClaudeCode, tool, input), true),
         Host::Codex => (pre_tool_use(Route::Codex, tool, input), false),
         Host::Cursor => (cursor_tool(tool, input), true),
         Host::OpenClaw => (openclaw(tool, input), true),
@@ -42,8 +44,8 @@ fn received(host: Host, payload: &Value) -> (Verdict, Vec<String>) {
 
 /// An unknown tool that names a secret, as a path argument at any depth, as
 /// a path by its look under any key, or in a shell command under a command
-/// key, is denied by every host that hands it to OpenMoat; Claude Code and
-/// Codex leave it to their own prompt.
+/// key, is denied by every host that hands it to OpenMoat; Codex leaves it to
+/// its own prompt.
 #[test]
 fn an_unknown_tool_naming_a_secret_is_denied_everywhere() {
     let inputs = [

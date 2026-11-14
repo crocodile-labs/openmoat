@@ -88,7 +88,15 @@ const TOOLS: &[ToolRow] = &[
         "as Cursor's rows",
     ),
     ToolRow::new(
-        "any other tool (`Task`, `Skill`, …)",
+        "a tool OpenMoat's matcher does not match, or a payload in Grok Build's envelope (it \
+         carries `hookEventName`): another agent running this hook (Grok Build, the Devin CLI)",
+        "every path, URL and command its arguments name, as for any unknown tool; cannot \
+         prompt (ADR-095)",
+        "`UnknownTool`",
+    ),
+    ToolRow::new(
+        "any other tool the matcher matches (`Skill`, `TodoWrite`, `EnterWorktree` without \
+         `path`)",
         "—",
         "none: `ungoverned`",
     ),
