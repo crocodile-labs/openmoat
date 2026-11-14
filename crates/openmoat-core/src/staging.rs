@@ -19,7 +19,7 @@ pub const DEFAULT_OUTSIDE_FOLDERS: u32 = 2;
 /// default policy generates from the host specs: reads there never count
 /// either. Not the whole of `/tmp`: a home or a project can be below a
 /// temporary folder, and what is read there is no less collected.
-const AGENT_TEMP: &str = "agent-temp";
+pub(crate) const AGENT_TEMP: &str = "agent-temp";
 
 /// Where reads never count as collection: dependency caches and toolchains an
 /// agent reads to build, besides the policy's [`AGENT_TEMP`] rule.

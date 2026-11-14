@@ -89,7 +89,7 @@ pub(super) fn decision(
             if let Some((spec, name)) = project_file(request, source) {
                 for file in unnamed_project_files(request.cwd.as_deref(), spec, name)? {
                     if !lock.pins(&file)
-                        && let Some(blocked) = project_change(home, request, spec, &file)
+                        && let Some(blocked) = project_change(home, request, spec, &file)?
                     {
                         return Ok(blocked);
                     }
@@ -134,7 +134,7 @@ pub(super) fn decision(
     // what it will become) comes from the repository: checked by its contents.
     if let Some((spec, _)) = project_file(request, source)
         && !lock.pins(path)
-        && let Some(blocked) = project_change(home, request, spec, path)
+        && let Some(blocked) = project_change(home, request, spec, path)?
     {
         return Ok(blocked);
     }
@@ -175,25 +175,28 @@ fn unnamed_project_files(
 /// OpenMoat off, run a program or redirect the agent, that cannot be read, or
 /// that changed between the check and the decision; `None` when it may load.
 /// `spec`'s reader judges the file, with the hook file OpenMoat installed for
-/// the host whose files they are; when that cannot be placed, an entry that
-/// names it is not recognised, and everything else is still judged.
+/// the host whose files they are, which an entry may name to turn it off. A
+/// hook file that cannot be placed is an error, so the change is denied: the
+/// file is not judged without it.
 fn project_change(
     home: &Home,
     request: &HookRequest,
     spec: &ProjectSettingsSpec,
     path: &Path,
-) -> Option<Decision> {
+) -> Result<Option<Decision>> {
     let hook_file = HostConfig::for_host(home, format(request))
-        .map(|config| config.settings_path)
-        .unwrap_or_default();
-    let found = project_settings::check_unchanged(path, spec, &hook_file)?;
+        .context("placing OpenMoat's hook file to judge the project settings")?
+        .settings_path;
+    let Some(found) = project_settings::check_unchanged(path, spec, &hook_file) else {
+        return Ok(None);
+    };
     let mut deny = Decision::new(Verdict::Deny);
     deny.rules.push(project_settings::RULE.to_owned());
     deny.reasons.push(format!(
         "{} (project settings) {found}; the change is not loaded into this session. Review the file and remove what you did not add; a new session loads the file as it is",
         path.display()
     ));
-    Some(deny)
+    Ok(Some(deny))
 }
 
 fn drift_blocks_change(drift: &[Drift]) -> Decision {

@@ -284,6 +284,12 @@ fn managed_settings_lines() -> String {
         let mut folders: Vec<&str> = Vec::new();
         for file in system.files {
             let (folder, _) = file.path.rsplit_once('/').unwrap();
+            assert!(
+                is_own_folder(folder),
+                "{host:?}: {} is not in a folder of its own; `{folder}/**` would deny \
+                 writes to a shared system folder",
+                file.path
+            );
             if !folders.contains(&folder) {
                 folders.push(folder);
             }
@@ -294,6 +300,55 @@ fn managed_settings_lines() -> String {
         }
     }
     out
+}
+
+/// Whether `folder` (absolute, `/` separators) is one program's own: at
+/// least two folders below the root, the last one not a folder every program
+/// shares (`/etc/x.json` sits in `/etc`, whose `/**` would deny every system
+/// file). A drive (`C:`) is the root.
+fn is_own_folder(folder: &str) -> bool {
+    const SHARED: &[&str] = &[
+        "etc",
+        "Library",
+        "Application Support",
+        "Program Files",
+        "ProgramData",
+        "usr",
+        "local",
+        "share",
+        "opt",
+        "var",
+    ];
+    let rest = folder
+        .split_once(":/")
+        .filter(|(drive, _)| drive.len() == 1)
+        .map_or(folder.trim_start_matches('/'), |(_, rest)| rest);
+    let segments: Vec<&str> = rest.split('/').filter(|s| !s.is_empty()).collect();
+    segments.len() >= 2
+        && segments
+            .last()
+            .is_some_and(|last| !SHARED.contains(last) && !last.contains(['*', '?', '{', '[']))
+}
+
+#[test]
+fn system_settings_folders_are_each_programs_own() {
+    for own in [
+        "/etc/codex",
+        "/Library/Application Support/ClaudeCode",
+        "C:/ProgramData/OpenAI/Codex",
+    ] {
+        assert!(is_own_folder(own), "{own}");
+    }
+    for shared in [
+        "/etc",
+        "/",
+        "C:",
+        "C:/ProgramData",
+        "/Library/Application Support",
+        "/usr/local",
+    ] {
+        assert!(!is_own_folder(shared), "{shared}");
+    }
 }
 
 #[test]

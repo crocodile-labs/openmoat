@@ -475,6 +475,38 @@ mod tests {
         }
     }
 
+    /// The list's hand-written paths, outside the block generated from the
+    /// host specs (which `openmoat-hosts` `tests/protect.rs` checks against
+    /// them). A path removed or added by hand changes this count, so the
+    /// change is made on purpose, here too.
+    const HAND_WRITTEN: usize = 104;
+
+    #[test]
+    fn the_hand_written_protected_writes_keep_their_count() {
+        let source = include_str!("taint.rs");
+        let list = source
+            .split_once("const PROTECTED_WRITES")
+            .and_then(|(_, rest)| rest.split_once("\n];"))
+            .unwrap()
+            .0;
+        let (mut hand, mut generated, mut inside) = (0, 0, false);
+        for line in list.lines().map(str::trim) {
+            if line.starts_with("// generated:") {
+                inside = true;
+            } else if line.starts_with("// /generated") {
+                inside = false;
+            } else if line.starts_with('"') {
+                *(if inside { &mut generated } else { &mut hand }) += 1;
+            }
+        }
+        assert_eq!(
+            hand, HAND_WRITTEN,
+            "a hand-written path was added or removed"
+        );
+        assert_ne!(generated, 0, "the generated block is empty");
+        assert_eq!(hand + generated, super::PROTECTED_WRITES.len());
+    }
+
     #[test]
     fn provenance_is_on_unless_the_policy_turns_it_off() {
         use super::TaintSettings;

@@ -11,6 +11,7 @@ use std::fmt;
 mod check_diff;
 mod ports;
 mod secrets;
+mod staging;
 mod taint;
 mod titles;
 
@@ -128,6 +129,7 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
     }
     check_diff::turned_off(policy, &mut out);
     taint::metadata_tools(policy, &mut out);
+    staging::agent_temp(policy, &mut out);
     if policy.trust_mcp_first_sight() {
         out.push(Warning {
             rule: "mcp.trust_first_sight".to_owned(),
