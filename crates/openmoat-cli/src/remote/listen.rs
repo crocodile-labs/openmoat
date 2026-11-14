@@ -104,6 +104,10 @@ impl<'a> Listener<'a> {
             }
         }
         channel.handled();
+        // The beat that lets a guard wait for an answer (ADR-093), only after
+        // a round that reached the channel. One not written only means the
+        // guard does not wait, as with no listener.
+        let _ = super::live::beat(self.store, self.key, self.spec.name, now());
         Ok(())
     }
 
@@ -349,8 +353,8 @@ impl<'a> Listener<'a> {
         ));
         let text = match verdict {
             answer::Verdict::Approve => {
-                "Approved: the call runs once when the agent tries it again before the request \
-                 expires."
+                "Approved: the call runs once, now if the agent is still waiting for the answer, \
+                 or when it tries the call again before the request expires."
             }
             answer::Verdict::Deny => "Denied: the call stays blocked until the request expires.",
         };

@@ -57,8 +57,8 @@ fn both(key: &Key, request: &Request, capabilities: &Capabilities) -> Prompt {
     let deny = answer::button(key, Verdict::Deny, request);
     let (tail, choices) = if capabilities.uses_buttons() {
         (
-            "Approve lets this exact call run once, when the agent tries it again before the \
-             request expires. Deny blocks it until then."
+            "Approve lets this exact call run once: now if the agent is still waiting, or when \
+             it tries the call again before the request expires. Deny blocks it until then."
                 .to_owned(),
             vec![
                 Choice {
@@ -74,8 +74,8 @@ fn both(key: &Key, request: &Request, capabilities: &Capabilities) -> Prompt {
     } else {
         (
             format!(
-                "To approve this exact call once, when the agent tries it again before the \
-                 request expires, send back this line alone:\n{approve}\n\
+                "To approve this exact call once (now if the agent is still waiting, or when it \
+                 tries the call again before the request expires), send back this line alone:\n{approve}\n\
                  To deny it until then, send back:\n{deny}"
             ),
             Vec::new(),

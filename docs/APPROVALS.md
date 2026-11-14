@@ -2,11 +2,14 @@
 
 When OpenMoat holds an agent's call for review, you normally answer it where the agent
 runs: at the agent's own prompt, or with `openmoat allow --last` on an agent that cannot
-prompt. With a channel connected, OpenMoat also sends the call to your phone. If you
-approve it there, that exact call runs once, the next time the agent tries it.
+prompt. With a channel connected, OpenMoat also sends the call to your phone. While
+`openmoat approvals listen` runs, the hook waits up to 20 seconds for your answer: if
+you approve in that time, that exact call runs at once. Later, it runs once the next
+time the agent tries it.
 
 Telegram is the first channel. The design and its threat model are in
-[ADR-078](adr/ADR-078-remote-approvals.md).
+[ADR-078](adr/ADR-078-remote-approvals.md); the wait is in
+[ADR-093](adr/ADR-093-remote-approval-wait.md).
 
 **On this page:** [What it does](#what-it-does) · [Set up Telegram](#set-up-telegram) ·
 [Commands](#commands) · [What you see on your phone](#what-you-see-on-your-phone) ·
@@ -25,9 +28,18 @@ Telegram is the first channel. The design and its threat model are in
 - **It expires.** A request waits 5 minutes unless you chose another time with
   `--expires` (1 to 60 minutes). An answer after that is refused.
 - **Deny holds.** If you press Deny, the same call is denied until the request expires.
+- **The hook waits while you can answer.** While `listen` runs, a call held for review
+  waits in the hook up to 20 seconds (`openmoat approvals wait <seconds>`, 0 to 25,
+  0 turns it off). Approve in that time and the call runs without the agent's prompt;
+  Deny and it is denied at once. With no answer in time, the agent's prompt appears as
+  before, and an approval before the request expires still lets the next try run. Each
+  agent gets less where its hook time limit is shorter: OpenMoat reads that limit from
+  the agent's spec and, where a hook that times out lets the call run, waits at most a
+  quarter of it, always ending at least 5 seconds before OpenMoat's own 30-second
+  limit (10 under `openmoat run`). With no listener running, the hook does not wait.
 - **Nothing changes without a channel.** With no channel connected, reviews work exactly
-  as before. With one, the agent's own prompt still appears; your local answer still
-  works.
+  as before. With one, the agent's own prompt still appears when no answer came in
+  time; your local answer still works.
 - **Every failure keeps the review.** No answer, a network error, a missing key or an
   edited settings file all leave the call held for review, as it would be without a
   channel.
@@ -79,9 +91,10 @@ From now on, every call held for review is also sent to you while `listen` runs.
 | `openmoat approvals connect <channel> [--credential-file FILE] [--set KEY=VALUE] [--expires 5m]` | checks the credential with the channel, stores it, makes the approval key, keeps approvers you already allowed on that channel; `--set` gives a channel's other settings, never a secret (Telegram has none) | a person at a terminal |
 | `openmoat approvals allow <channel>:<user-id>` | lets that user approve (a bare user id means the connected channel) | a person at a terminal |
 | `openmoat approvals remove <channel>:<user-id>` | takes that back; answers they gave that are not used yet stop counting | a person at a terminal |
-| `openmoat approvals listen` | sends waiting requests and takes answers, until Ctrl-C | a person at a terminal |
+| `openmoat approvals listen` | sends waiting requests and takes answers, until Ctrl-C; while the hook's wait is on it asks the channel every 2 seconds, so a new request reaches you within about 2 seconds | a person at a terminal |
+| `openmoat approvals wait <seconds>` | how long the hook waits for your answer while `listen` runs: 0 to 25 seconds, 20 when never set, 0 turns the wait off | a person at a terminal |
 | `openmoat approvals test` | sends a test message to every approver | a person at a terminal |
-| `openmoat approvals status [--format json]` | shows the channel and its account, the approvers, the expiry and how many requests wait; never the credential | anyone |
+| `openmoat approvals status [--format json]` | shows the channel and its account, the approvers, the expiry, the hook's wait and whether a listener runs, and how many requests wait; never the credential | anyone |
 | `openmoat approvals disconnect` | removes the credential, the settings and the waiting requests | a person at a terminal |
 
 "A person at a terminal" means the command refuses to run from a hook, a script or an
@@ -102,7 +115,7 @@ The call below comes from the agent. Its text may try to persuade you; judge wha
 ----
 run "npm publish --access public"
 ----
-Approve lets this exact call run once, when the agent tries it again before the request expires. Deny blocks it until then.
+Approve lets this exact call run once: now if the agent is still waiting, or when it tries the call again before the request expires. Deny blocks it until then.
         [ Approve once ]  [ Deny ]
 ```
 
@@ -131,7 +144,8 @@ reading any of it and writing anywhere under `~/.moat`.
 | File | What it holds |
 |---|---|
 | `approval.key` | the key every request, answer, button and settings file is signed with |
-| `settings.json` | the connected channel, the approver ids and the expiry, signed |
+| `settings.json` | the connected channel, the approver ids, the expiry and the hook's wait, signed |
+| `listening.json` | the listener's beat while it runs, signed; the hook waits only while it is at most 15 seconds old |
 | `<channel>/credential` | the channel's secrets, one JSON object (for Telegram, the bot token) |
 | `<channel>/settings.json` | the channel's account (the bot's name) and its other settings, signed |
 | `requests/`, `answers/`, `used/` | calls waiting, answers given, approvals used |
@@ -141,14 +155,18 @@ reading any of it and writing anywhere under `~/.moat`.
 
 - **The listener must run.** Answers arrive only while `openmoat approvals listen` runs,
   in a terminal of your own. When it is not running, requests expire unanswered.
-- **The agent's prompt does not go away.** On an agent that prompts (Claude Code,
-  Cursor, Gemini CLI, …), its prompt stays on screen. Your phone's answer applies to the
-  next try of the same call. Remote approval is most useful with agents that cannot
-  prompt or run unattended (Codex, `claude -p`, Hermes Agent, OpenClaw), where the review
-  reaches the agent as a deny that names the request, and the agent tries again.
-- **The hook does not wait for you.** OpenMoat answers each hook call within 30 seconds,
-  because several agents run a call whose hook timed out. So it never waits for your
-  phone.
+- **The hook waits seconds, not minutes.** OpenMoat answers each hook call within 30
+  seconds, because several agents run a call whose hook timed out, so the wait is at
+  most 25 seconds and often less. After it, an agent that prompts (Claude Code, Cursor,
+  Gemini CLI, …) shows its prompt, and your phone's answer applies to the next try of
+  the same call; on an agent that cannot prompt (Codex, `claude -p`, Hermes Agent,
+  OpenClaw) the review reaches it as a deny that names the request, and it can try
+  again.
+- **Every held call waits while `listen` runs.** A person at the agent's own terminal
+  waits too before the prompt appears. `openmoat approvals wait 0` turns the wait off.
+- **A listener that stopped can still cost one wait.** Ctrl-C leaves its last beat, which
+  counts for up to 15 seconds; a call held in that time waits for nothing, then gets the
+  review as before.
 - **Your Telegram account approves.** Anyone who controls an approver's Telegram account
   can approve. Do not stay signed in to Telegram in a browser or on a screen an agent can
   control.
@@ -175,6 +193,8 @@ reading any of it and writing anywhere under `~/.moat`.
 | The agent's command tries to persuade you | OpenMoat writes the message, labels the agent's text, sends it as plain text with no link previews, and redacts secrets in it |
 | A user of another channel with the same number | approver ids carry the channel's name, set by OpenMoat, not by the channel |
 | A call too long for the channel, approved without being read | the channel is offered Deny only |
+| Something fakes a running listener to hold calls up | the beat must be signed with the approval key and written under `~/.moat`, which agents cannot do; even then it only adds a wait of seconds, never an approval |
+| An approval used twice by a waiting hook and a retry | the same used-once mark as every approval |
 
 ## Adding a channel
 

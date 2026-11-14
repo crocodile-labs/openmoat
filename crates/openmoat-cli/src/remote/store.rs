@@ -10,7 +10,9 @@
 //! - `answers/<id>.json`: answers, written by `openmoat approvals listen`;
 //! - `used/<id>`: the replay store, one empty file per approval used;
 //! - `refused/<id>.json`: an approval used for a call the guard then refused,
-//!   signed, for the listener to tell the approver ([`Refused`]).
+//!   signed, for the listener to tell the approver ([`Refused`]);
+//! - `listening.json`: the listener's signed beat, while it runs
+//!   ([`super::live`]).
 //!
 //! A channel's folder is named by its registered [`Spec`], never by text
 //! read from a file, so no setting can point a path elsewhere.
@@ -216,6 +218,12 @@ impl Store {
         }
         let text = fs::read_to_string(self.answer_path(id)).ok()?;
         serde_json::from_str(&text).ok()
+    }
+
+    /// Whether a file stands where the answer to request `id` goes: one
+    /// `stat`, for the guard that waits for it.
+    pub fn has_answer(&self, id: &str) -> bool {
+        plain_id(id) && self.answer_path(id).exists()
     }
 
     /// Write `answer` unless its request has one already; whether it was written.

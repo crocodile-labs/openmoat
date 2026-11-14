@@ -11,6 +11,7 @@
 )]
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use std::fmt::Write as _;
 
@@ -20,6 +21,9 @@ use sha2::{Digest as _, Sha256};
 use crate::common::{OK, Sandbox, USAGE, bash_payload, hook_output, text};
 
 const COMMAND: &str = "npm install left-pad-pro";
+/// The agent these tests run as, and its configuration folder.
+const HOST: &str = "claude-code";
+const CONFIG: &[&str] = &[".claude"];
 /// An approver id: the channel's name, then the user id on it.
 const APPROVER: &str = "telegram:4242";
 /// Made for this test; no real key.
@@ -71,14 +75,32 @@ fn write_private(path: &Path, text: &str) {
 
 /// A connected channel, as `openmoat approvals connect` and `allow` leave it.
 fn connect(sb: &Sandbox) {
+    connect_with(sb, "");
+}
+
+/// [`connect`], with `extra` (`,"wait_s":2`) after the expiry, as
+/// `openmoat approvals wait` leaves it.
+fn connect_with(sb: &Sandbox, extra: &str) {
     write_private(&remote(sb).join("approval.key"), &format!("{KEY_HEX}\n"));
     // Signed as the binary encodes its settings: fields in declaration order.
     let unsigned = format!(
-        r#"{{"version":1,"channel":"telegram","approvers":["{APPROVER}"],"expiry_s":300,"mac":""}}"#
+        r#"{{"version":1,"channel":"telegram","approvers":["{APPROVER}"],"expiry_s":300{extra},"mac":""}}"#
     );
     let mut settings: Value = serde_json::from_str(&unsigned).unwrap();
     settings["mac"] = Value::from(mac(b"openmoat-remote-settings-v1\n", unsigned.as_bytes()));
     write_private(&remote(sb).join("settings.json"), &settings.to_string());
+}
+
+/// The beat `openmoat approvals listen` writes after each round, now.
+fn listening(sb: &Sandbox) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    let unsigned = format!(r#"{{"version":1,"channel":"telegram","at_ms":{now},"mac":""}}"#);
+    let mut beat: Value = serde_json::from_str(&unsigned).unwrap();
+    beat["mac"] = Value::from(mac(b"openmoat-remote-listening-v1\n", unsigned.as_bytes()));
+    write_private(&remote(sb).join("listening.json"), &beat.to_string());
 }
 
 fn requests(sb: &Sandbox) -> Vec<Value> {
@@ -105,7 +127,7 @@ fn answer(sb: &Sandbox, request: &Value, verdict: &str, approver: &str) {
 }
 
 fn decide(sb: &Sandbox, command: &str) -> Value {
-    hook_output(&sb.guard("claude-code", &bash_payload("s1", &sb.project(), command)))
+    hook_output(&sb.guard(HOST, &bash_payload("s1", &sb.project(), command)))
 }
 
 #[test]
@@ -155,7 +177,7 @@ fn an_approved_call_runs_once_and_only_that_call() {
     assert_eq!(d["permissionDecision"], "ask", "{d}");
     let sent = requests(&sb);
     assert_eq!(sent.len(), 1, "{sent:?}");
-    assert_eq!(sent[0]["host"], "claude-code");
+    assert_eq!(sent[0]["host"], HOST);
     assert_eq!(sent[0]["session"], "s1");
 
     // Someone not on the list, or the approver's bare number: still a review.
@@ -191,4 +213,78 @@ fn a_deny_is_never_sent_for_approval() {
     let d = decide(&sb, "cat ~/.ssh/id_rsa");
     assert_eq!(d["permissionDecision"], "deny", "{d}");
     assert_eq!(requests(&sb), Vec::<Value>::new());
+}
+
+/// The hook's answer to `args` (`guard --host <agent>`, with
+/// `--relayed` as `openmoat run` starts it outside its sandbox) for
+/// [`COMMAND`], while an approver approves once the request is sent when
+/// `approve` is set, and how long the hook took.
+fn decide_while(sb: &Sandbox, args: &[&str], approve: bool) -> (Value, Duration) {
+    let payload = bash_payload("s1", &sb.project(), COMMAND);
+    std::thread::scope(|scope| {
+        let guard = scope.spawn(|| {
+            let started = Instant::now();
+            let out = sb.moat_stdin(args, &payload);
+            (hook_output(&out), started.elapsed())
+        });
+        if approve {
+            let started = Instant::now();
+            let sent = loop {
+                if let Some(sent) = requests(sb).pop() {
+                    break sent;
+                }
+                assert!(started.elapsed() < Duration::from_secs(20), "never sent");
+                std::thread::sleep(Duration::from_millis(20));
+            };
+            answer(sb, &sent, "approve", APPROVER);
+        }
+        guard.join().unwrap()
+    })
+}
+
+#[cfg(unix)]
+#[test]
+fn with_a_listener_an_approval_during_the_wait_allows_the_held_call() {
+    let sb = Sandbox::installed_with_review(CONFIG);
+    connect_with(&sb, r#","wait_s":3"#);
+    listening(&sb);
+    let (d, took) = decide_while(&sb, &["guard", "--host", HOST], true);
+    assert_eq!(d["permissionDecision"], "allow", "{d}");
+    // An allow can only come from the wait: after it the hook answers `ask`.
+    assert!(took < Duration::from_secs(10), "{took:?}");
+    let show = text(&sb.moat(&["show", "--format", "json"]));
+    assert!(show.contains("approved-remote"), "{show}");
+    assert!(show.contains(APPROVER), "{show}");
+    // Used once: the next try is held again.
+    assert_eq!(decide(&sb, COMMAND)["permissionDecision"], "ask");
+}
+
+#[cfg(unix)]
+#[test]
+fn with_a_listener_and_no_answer_the_review_comes_after_the_wait() {
+    let sb = Sandbox::installed_with_review(CONFIG);
+    connect_with(&sb, r#","wait_s":1"#);
+    listening(&sb);
+    let (d, took) = decide_while(&sb, &["guard", "--host", HOST], false);
+    assert_eq!(d["permissionDecision"], "ask", "{d}");
+    assert!(
+        took >= Duration::from_secs(1) && took < Duration::from_secs(10),
+        "{took:?}"
+    );
+    // Without a listener the hook does not wait at all.
+    std::fs::remove_file(remote(&sb).join("listening.json")).unwrap();
+    let (d, took) = decide_while(&sb, &["guard", "--host", HOST], false);
+    assert_eq!(d["permissionDecision"], "ask", "{d}");
+    assert!(took < Duration::from_secs(1), "{took:?}");
+}
+
+#[cfg(unix)]
+#[test]
+fn the_guard_openmoat_run_relays_to_waits_too() {
+    let sb = Sandbox::installed_with_review(CONFIG);
+    connect_with(&sb, r#","wait_s":3"#);
+    listening(&sb);
+    let (d, took) = decide_while(&sb, &["guard", "--host", HOST, "--relayed"], true);
+    assert_eq!(d["permissionDecision"], "allow", "{d}");
+    assert!(took < Duration::from_secs(10), "{took:?}");
 }

@@ -20,6 +20,7 @@ use crate::proxy_session::Key;
 mod another;
 mod listen;
 mod text;
+mod wait;
 
 /// 2026-11-10 12:00:00 UTC.
 const NOW: i64 = 1_794_312_000_000;

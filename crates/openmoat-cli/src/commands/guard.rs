@@ -250,11 +250,12 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
     }
     // Where the host has no flow of its own for `defer`, OpenMoat holds the call for review (ADR-025).
     // Last: a `review` a person approved from another device runs once, and
-    // one not yet sent is sent (ADR-078); anything else is left as it is.
+    // one not yet sent is sent (ADR-078), its answer waited for a bounded
+    // time while the listener runs (ADR-093); anything else is left as it is.
     let mut approved = None;
     if let Some(r) = &request {
-        (decision, approved) =
-            crate::remote::gated(r, host.decided(&r.event, decision), &out.known);
+        let decided = host.decided(&r.event, decision);
+        (decision, approved) = crate::remote::gated(r, decided, &out.known, (started, by_run));
     }
     // What the agent and its person read about a deny or review (ADR-059);
     // presentation only, never recorded. A deny that replaces the decision

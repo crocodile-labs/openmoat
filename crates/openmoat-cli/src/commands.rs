@@ -74,6 +74,7 @@ pub fn run(cli: Cli) -> Result<Code> {
             ApprovalsCommand::Status(args) => approvals::status(&args),
             ApprovalsCommand::Test => approvals::test(),
             ApprovalsCommand::Listen => approvals::listen(),
+            ApprovalsCommand::Wait(args) => approvals::wait(&args),
             ApprovalsCommand::Disconnect => approvals::disconnect(),
         },
         Command::Trust(args) => trust::run(&args),

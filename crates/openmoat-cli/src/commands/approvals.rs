@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use anyhow::{Context as _, Result, bail};
 
-use crate::cli::{ApprovalsStatusArgs, ApproverArgs, ConnectArgs, Format};
+use crate::cli::{ApprovalsStatusArgs, ApproverArgs, ConnectArgs, Format, WaitArgs};
 use crate::exit::Code;
 use crate::home::Home;
 use crate::proxy_session::Key;
@@ -23,6 +23,13 @@ use crate::render::Deferred;
 
 /// How long one poll of the channel waits for a reply.
 const POLL: Duration = Duration::from_secs(25);
+/// The same while the hook waits for answers (ADR-093): a request the guard
+/// writes during a poll is sent when the poll ends, so polls are short.
+const POLL_WHILE_WAITING: Duration = Duration::from_secs(2);
+const _: () = assert!(
+    POLL_WHILE_WAITING.as_secs() * 4 < crate::remote::live::LIVE_MS.unsigned_abs() / 1000,
+    "several rounds fit in a beat's life"
+);
 /// The pause after a failed round, so a channel that is down is not hammered.
 const BACKOFF: Duration = Duration::from_secs(5);
 
@@ -203,6 +210,8 @@ struct State {
     settings: Settings,
     account: Option<String>,
     waiting: usize,
+    /// Whether a listener's beat is fresh ([`crate::remote::live`]).
+    listening: bool,
     problem: Option<String>,
 }
 
@@ -216,6 +225,7 @@ fn state(store: &Store) -> Result<State> {
         .flatten()
         .filter(|r| r.verified(&key) && !r.expired(now))
         .count();
+    let listening = crate::remote::live::live(store, &key, &settings.channel, now);
     let (account, problem) = match REGISTRY.find(&settings.channel) {
         Ok(spec) => (
             crate::remote::account(store, &REGISTRY, &key, &settings),
@@ -227,6 +237,7 @@ fn state(store: &Store) -> Result<State> {
         settings,
         account,
         waiting,
+        listening,
         problem,
     })
 }
@@ -247,6 +258,8 @@ pub fn status(args: &ApprovalsStatusArgs) -> Result<Code> {
                 "account": s.account,
                 "approvers": s.settings.approvers,
                 "expiry_s": s.settings.expiry_s,
+                "wait_s": s.settings.wait().as_secs(),
+                "listening": s.listening,
                 "waiting": s.waiting,
                 "problem": s.problem,
             }),
@@ -274,6 +287,21 @@ pub fn status(args: &ApprovalsStatusArgs) -> Result<Code> {
                 writeln!(out, "approvers: {}", s.settings.approvers.join(", "))?;
             }
             writeln!(out, "requests wait: {} minute(s)", s.settings.expiry_s / 60)?;
+            match s.settings.wait().as_secs() {
+                0 => writeln!(
+                    out,
+                    "the hook waits: no (`openmoat approvals wait <seconds>`)"
+                )?,
+                wait => writeln!(
+                    out,
+                    "the hook waits: up to {wait} s while the listener runs ({})",
+                    if s.listening {
+                        "running now"
+                    } else {
+                        "not running now"
+                    }
+                )?,
+            }
             writeln!(out, "waiting now: {}", s.waiting)?;
             if let Some(problem) = s.problem {
                 writeln!(out, "problem: {problem}")?;
@@ -336,20 +364,27 @@ pub fn listen() -> Result<Code> {
     let (spec, mut channel) = crate::remote::open(&store, &REGISTRY, &key, &settings)?;
     let mut records = AuditRecords { home: &home };
     let mut listener = Listener::new(&store, &key, spec, settings);
+    // A listener that stops says so at once, not when its beat is stale
+    // (Ctrl-C ends the process without this, and the beat goes stale).
+    let _stopped = Stopped(&store);
     eprintln!(
         "listening for answers over {}; Ctrl-C stops (requests then wait unanswered and expire)",
         spec.title
     );
     loop {
         // Approvers a person changed meanwhile, and a channel disconnected.
-        match connected(&store) {
+        let poll = match connected(&store) {
             Ok((_, settings)) if settings.channel != spec.name => {
                 bail!("stopped: another channel was connected; run `listen` again")
             }
-            Ok((_, settings)) => listener.update(settings),
+            Ok((_, settings)) => {
+                let poll = poll_for(&settings);
+                listener.update(settings);
+                poll
+            }
             Err(error) => bail!("stopped: {error:#}"),
-        }
-        let round = listener.step(channel.as_mut(), &mut records, POLL, &crate::time::now_ms);
+        };
+        let round = listener.step(channel.as_mut(), &mut records, poll, &crate::time::now_ms);
         for line in listener.log.drain(..) {
             eprintln!("{} {line}", crate::time::clock(crate::time::now_ms()));
         }
@@ -358,6 +393,51 @@ pub fn listen() -> Result<Code> {
             std::thread::sleep(BACKOFF);
         }
     }
+}
+
+/// How long each poll of the channel waits under `settings`.
+fn poll_for(settings: &Settings) -> Duration {
+    if settings.wait().is_zero() {
+        POLL
+    } else {
+        POLL_WHILE_WAITING
+    }
+}
+
+/// Removes the listener's beat when `listen` returns.
+struct Stopped<'a>(&'a Store);
+
+impl Drop for Stopped<'_> {
+    fn drop(&mut self) {
+        crate::remote::live::stop(self.0);
+    }
+}
+
+/// `openmoat approvals wait <seconds>`: how long the hook waits for an answer
+/// while `listen` runs (ADR-093); `0` never waits.
+pub fn wait(args: &WaitArgs) -> Result<Code> {
+    person("openmoat approvals wait")?;
+    let (_home, store) = store()?;
+    let (key, mut settings) = connected(&store)?;
+    settings.set_wait(args.seconds)?;
+    settings.save(&store.settings_path(), &key)?;
+    let mut out = Deferred::default();
+    if args.seconds == 0 {
+        writeln!(
+            out,
+            "the hook no longer waits: an approval from {} runs the call on its next try",
+            settings.channel
+        )?;
+    } else {
+        writeln!(
+            out,
+            "while `openmoat approvals listen` runs, the hook waits up to {} s for an answer \
+             (less where the agent's hook time limit or the guard's own budget leaves less)",
+            args.seconds
+        )?;
+    }
+    out.finish()?;
+    Ok(Code::Ok)
 }
 
 /// `openmoat approvals disconnect`.
