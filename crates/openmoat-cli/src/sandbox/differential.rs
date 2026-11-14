@@ -454,12 +454,14 @@ mod sbpl {
 
 /// The policies lowered as for the hosts: the project is the placeholder each
 /// host maps to its workspace.
+#[cfg(unix)]
 pub(super) fn host_ir(yaml: &str) -> Enforcement {
     let policy = Policy::parse(yaml).expect("test policy lints");
     super::lower_for_hosts(&policy, HOME, None, Vec::new(), false).expect("lowers")
 }
 
 /// Whether `path` is `root` or below it.
+#[cfg(unix)]
 pub(super) fn under(path: &str, root: &str) -> bool {
     root == "/" || path == root || super::patterns::is_below(path, root)
 }
