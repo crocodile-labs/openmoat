@@ -51,11 +51,16 @@ fn the_extension_names_the_binary_once_and_waits_as_the_spec_says() {
     assert!(crate::install::GUARD_BUDGET_S < timeout);
     let wait = format!("const GUARD_TIMEOUT_MS = {timeout}_000;");
     assert!(extension().source.contains(&wait), "{wait}");
+    // Installed by `openmoat init`, the extension runs the binary it names
+    // with `--home`; only the package from pi's channel (no home) looks
+    // further (ADR-099).
+    let source = &extension().source;
+    assert!(source.contains(r#"spawn(program(), ["guard", "--host", "pi", ...WHERE]"#));
     assert!(
-        extension()
-            .source
-            .contains(r#"spawn(MOAT, ["guard", "--host", "pi", "--home", MOAT_HOME]"#)
+        source
+            .contains(r#"const WHERE = MOAT_HOME === "" ? ["--plugin"] : ["--home", MOAT_HOME];"#)
     );
+    assert!(source.contains(r#"if (MOAT_HOME !== "") return MOAT;"#));
 }
 
 #[test]
