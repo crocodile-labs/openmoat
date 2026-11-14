@@ -45,6 +45,7 @@ use crate::contract::{
 use crate::wire::owned_file::{OwnedFile, Syntax};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod hook_off;
 mod bench;
 mod doc;
 mod mcp;
@@ -173,6 +174,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     run_env: &["CLINE_DATA_DIR"],
     weekly: weekly::WEEKLY,
+    hook_off: hook_off::HOOK_OFF,
     ..HostSpec::BASE
 };
 

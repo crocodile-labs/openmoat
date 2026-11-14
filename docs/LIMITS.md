@@ -287,7 +287,11 @@ rest of each agent's protection on each OS, with the runs that back them.
   a variable it cannot resolve, or is a program OpenMoat cannot read (a script, a
   PowerShell command). An agent that answers reviews on its own (OpenCode 2 `--auto`)
   lets those through, and the next session started there runs without OpenMoat until
-  `openmoat status` reports it.
+  `openmoat status` reports it. A project that comes with such a file (a clone, a
+  checkout) is loaded when the session starts: `openmoat run` refuses to start the
+  agent over it (ADR-095), but an agent started directly loads it. `openmoat init
+  --managed` puts OpenMoat's hook where a project cannot turn it off for Claude Code
+  and GitHub Copilot CLI; the other agents have no such place OpenMoat writes.
 - **Other plugins share the agent's process.** OpenCode loads other plugins and a
   project's `.opencode/plugins/` at start, with no prompt, and they can change what
   OpenMoat's plugin does; `openmoat status` and `openmoat doctor` warn about a

@@ -30,6 +30,7 @@ use crate::contract::{
 use crate::wire::owned_file::{OwnedFile, Syntax};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod hook_off;
 mod advisories;
 mod bench;
 mod doc;
@@ -205,6 +206,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         "XIAOMI_TOKEN_PLAN_SGP_API_KEY",
     ],
     weekly: weekly::WEEKLY,
+    hook_off: hook_off::HOOK_OFF,
     ..HostSpec::BASE
 };
 

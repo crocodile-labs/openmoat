@@ -25,6 +25,7 @@ use crate::report::Style;
 use crate::sandbox::{self, Plan};
 
 mod ask;
+mod managed;
 mod mcp;
 mod preview;
 mod summary;
@@ -36,6 +37,9 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     let dry_run = args.dry_run;
     // A dry run is a list of what would be written: every line of it shows.
     let verbose = args.verbose || dry_run;
+    if args.managed.managed {
+        managed::refuse_unless_person()?;
+    }
     let home = Home::locate()?;
     let binary = crate::install::hook_binary()?;
     refuse_writable_binary(&home, &binary)?;
@@ -100,6 +104,9 @@ pub fn run(args: &InitArgs) -> Result<Code> {
         )?;
     }
     steps.changed |= sandboxes(&home, &binary, &hosts, dry_run, &mut files)?;
+    if args.managed.managed {
+        managed::write(&home, &binary, &hosts, dry_run, files.out)?;
+    }
 
     if dry_run {
         let detail = &mut *files.detail;

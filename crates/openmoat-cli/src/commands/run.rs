@@ -24,6 +24,7 @@
 // close-on-exec (`inherited.rs`, ADR-088).
 mod boundary;
 mod env;
+mod hook_off;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod inherited;
 mod isolation;
@@ -115,6 +116,13 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         .context("listening on a loopback port for the proxy")?;
     let port = listener.local_addr()?.port();
     let mut policy = home.load_policy()?;
+    let agent_host = match owner {
+        Owner::Agent(host) => Some(host),
+        Owner::Unknown => None,
+    };
+    // Before the agent starts: a project file that would turn its hook off
+    // as the session starts (ADR-095).
+    let hook_off = hook_off::check(&home, Path::new(&ctx.cwd), agent_host, rest, &policy)?;
     crate::install::self_paths::protect_recorded(&home, &mut policy)?;
     // Kerberos tickets: the default caches and the session's own, wherever
     // `KRB5CCNAME` puts it, denied in this sandbox too.
@@ -135,10 +143,6 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         })
         .transpose()?;
     let ca_notice = terminating.as_ref().and_then(|t| t.notice.clone());
-    let agent_host = match owner {
-        Owner::Agent(host) => Some(host),
-        Owner::Unknown => None,
-    };
     // Tool commands do not receive the relay token (ADR-075): what commands
     // may write must not hold the wrapper that keeps it from them.
     let write_roots: Vec<String> = ctx
@@ -182,6 +186,9 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     };
     own_login::report(agent.report_mut(), &kept, &ctx);
     refuse_port_only(args.netns, strict.as_deref(), agent.warning())?;
+    if let hook_off::Preflight::Override { args, .. } = &hook_off {
+        agent.command().args(*args);
+    }
     agent.command().args(rest);
     let allowed = env::Allowed::new(platform::BASE_ENV, agent_host, &policy, &args.envs);
     let release_age = package_release_age(&policy, ctx.project.as_deref());
@@ -200,6 +207,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let run_session = credential.session().to_owned();
     // A run weaker than the default is on record before the agent starts.
     isolation::record(&home, &run_session, &ctx.cwd, &tier)?;
+    hook_off::record(&home, (&run_session, &ctx.cwd), &hook_off)?;
     // The whole boundary goes on record once the agent started (ADR-089).
     let landlock = platform::landlock();
     // And a project top the person's policy opened (`sandbox.project_top`, ADR-090).
@@ -240,6 +248,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     }
     let notices = ca_notice
         .into_iter()
+        .chain(hook_off::notice(agent_host, &hook_off))
         .chain(release_age.notices)
         .chain(request_poc::notice())
         .chain(trust.iter().filter_map(Trust::notice));

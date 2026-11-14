@@ -2715,3 +2715,11 @@
 - id: benign-powershell-lists-logs
   action: { shell: "powershell -c \"Get-ChildItem *.log\"" }
   expect: { verdict: defer }
+# a project's own copy of an administrator's hook layout (a deployment repo,
+# ADR-095) is the project's file, not the machine's
+- id: benign-write-project-copy-of-policy-hooks
+  action: { fs_write: "/p/deploy/etc/github-copilot/policy.d/openmoat.json" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-project-copy-of-enterprise-hooks
+  action: { fs_write: "/p/deploy/etc/cursor/hooks.json" }
+  expect: { verdict: allow, rules: [project-fs] }

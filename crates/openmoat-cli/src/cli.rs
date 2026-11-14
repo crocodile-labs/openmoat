@@ -219,7 +219,22 @@ pub struct InitArgs {
     pub verbose: bool,
 
     #[command(flatten)]
+    pub managed: InitManagedArgs,
+
+    #[command(flatten)]
     pub mcp: InitMcpArgs,
+}
+
+/// `init`'s managed hook flag (ADR-095).
+#[derive(Debug, Args)]
+pub struct InitManagedArgs {
+    /// Also write OpenMoat's hook where an administrator's hooks live, for each
+    /// agent set up that has such a place (its managed settings, policy or
+    /// enterprise hooks), so a repository's settings cannot turn it off. A
+    /// person at a terminal only. Where the file needs root, OpenMoat prints
+    /// the command that installs it instead.
+    #[arg(long)]
+    pub managed: bool,
 }
 
 /// `init`'s MCP proxy flags.

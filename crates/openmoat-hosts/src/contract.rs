@@ -16,6 +16,7 @@ mod docs;
 mod heartbeat;
 mod hook_failure;
 mod hook_file;
+mod hook_off;
 mod hook_trust;
 mod location;
 mod mcp;
@@ -38,6 +39,9 @@ pub use docs::{HostDocs, ToolRow};
 pub use heartbeat::{Activity, HEARTBEAT_FLAG, Heartbeat};
 pub use hook_failure::{FailureOutcome, HookFailure};
 pub use hook_file::HookLayout;
+pub use hook_off::{
+    HookOff, Managed, ManagedHooks, ManagedShape, ProjectFile, ProjectOff, SessionOverride,
+};
 pub use hook_trust::HookTrust;
 pub use location::{Locate, Located, Location};
 pub use mcp::{
@@ -208,6 +212,11 @@ pub struct HostSpec {
     /// The settings an administrator deploys for the whole machine, which
     /// outrank the person's own; `None` for a host OpenMoat reads none of.
     pub system_settings: Option<SystemSettingsSpec>,
+    /// What a project's files can do to OpenMoat's user hook when a session
+    /// starts, the option that keeps it on for one session, and where an
+    /// administrator's hooks live (ADR-095): `openmoat run` reads the first
+    /// before it starts the agent, `openmoat init --managed` writes the last.
+    pub hook_off: HookOff,
     /// How `openmoat run` keeps its relay token from the host's tool commands
     /// (ADR-075).
     pub tool_token: ToolToken,

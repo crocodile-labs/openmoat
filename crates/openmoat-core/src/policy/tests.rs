@@ -217,3 +217,28 @@ fn the_project_top_is_protected_unless_the_policy_says_writable() {
     let written = crate::yaml::to_string(&SandboxSettings::default()).unwrap();
     assert!(!written.contains("project_top"), "{written}");
 }
+
+/// `sandbox.project_hook_off` (ADR-095): `openmoat run` refuses unless the
+/// person's own policy says `start`; any other value is an error, and the
+/// default policy and one written back out leave it unsaid.
+#[test]
+fn a_project_that_turns_the_hook_off_is_refused_unless_the_policy_says_start() {
+    let off = |yaml: &str| Policy::parse(yaml).map(|p| p.project_hook_off());
+    assert_eq!(off("version: 1\n").unwrap(), ProjectHookOff::Refuse);
+    assert_eq!(off(crate::DEFAULT_POLICY).unwrap(), ProjectHookOff::Refuse);
+    assert_eq!(
+        off("version: 1\nsandbox: { project_hook_off: start }\n").unwrap(),
+        ProjectHookOff::Start
+    );
+    for bad in ["allow", "true", "Start"] {
+        assert!(
+            off(&format!(
+                "version: 1\nsandbox: {{ project_hook_off: {bad} }}\n"
+            ))
+            .is_err(),
+            "{bad}"
+        );
+    }
+    let written = crate::yaml::to_string(&SandboxSettings::default()).unwrap();
+    assert!(!written.contains("project_hook_off"), "{written}");
+}

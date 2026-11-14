@@ -13,6 +13,7 @@ use crate::contract::{
 use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod hook_off;
 pub(crate) mod config_change;
 mod advisories;
 mod doc;
@@ -251,6 +252,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         ],
     }),
     weekly: weekly::WEEKLY,
+    hook_off: hook_off::HOOK_OFF,
     ..HostSpec::BASE
 };
 

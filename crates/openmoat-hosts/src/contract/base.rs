@@ -38,6 +38,7 @@ impl HostSpec {
         other_hooks: None,
         bundled: &[],
         system_settings: None,
+        hook_off: super::HookOff::BASE,
         tool_token: super::ToolToken::BASE,
         run: super::RunFacts::BASE,
         run_env: &[],

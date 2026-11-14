@@ -31,6 +31,7 @@ use crate::contract::{
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod hook_off;
 mod advisories;
 mod after_tool;
 mod bench;
@@ -217,6 +218,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         "GOOGLE_CLOUD_LOCATION",
     ],
     weekly: weekly::WEEKLY,
+    hook_off: hook_off::HOOK_OFF,
     ..HostSpec::BASE
 };
 

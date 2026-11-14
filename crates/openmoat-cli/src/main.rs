@@ -21,6 +21,7 @@ mod install;
 mod integrity;
 mod json5;
 mod key_file;
+mod managed;
 mod mcp;
 mod notice;
 mod os_version;

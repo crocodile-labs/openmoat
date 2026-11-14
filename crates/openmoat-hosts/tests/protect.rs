@@ -283,11 +283,20 @@ fn the_default_policy_lets_each_host_read_its_temporary_folders() {
 fn managed_settings_lines() -> String {
     let mut out = String::new();
     for host in Host::EVERY {
-        let Some(system) = &host.spec().system_settings else {
+        let spec = host.spec();
+        // The system settings it reads, then the place of an administrator's
+        // hooks (ADR-095), which `openmoat init --managed` may write.
+        let files: Vec<&openmoat_hosts::SystemFile> = spec
+            .system_settings
+            .iter()
+            .flat_map(|system| system.files)
+            .chain(spec.hook_off.managed.locations())
+            .collect();
+        if files.is_empty() {
             continue;
-        };
+        }
         let mut folders: Vec<&str> = Vec::new();
-        for file in system.files {
+        for file in files {
             let (folder, _) = file.path.rsplit_once('/').unwrap();
             assert!(
                 is_own_folder(folder),
@@ -295,7 +304,11 @@ fn managed_settings_lines() -> String {
                  writes to a shared system folder",
                 file.path
             );
-            if !folders.contains(&folder) {
+            // A folder inside one already listed is covered by its `/**`.
+            let covered = folders
+                .iter()
+                .any(|f| *f == folder || folder.starts_with(&format!("{f}/")));
+            if !covered {
                 folders.push(folder);
             }
         }

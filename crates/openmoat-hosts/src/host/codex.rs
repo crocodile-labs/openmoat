@@ -14,6 +14,7 @@ use crate::contract::{
 use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod hook_off;
 mod advisories;
 mod doc;
 mod hook_file;
@@ -197,6 +198,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     run_env: &["OPENAI_API_KEY", "CODEX_ACCESS_TOKEN"],
     weekly: weekly::WEEKLY,
+    hook_off: hook_off::HOOK_OFF,
     ..HostSpec::BASE
 };
 

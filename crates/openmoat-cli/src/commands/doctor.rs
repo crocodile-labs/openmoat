@@ -147,6 +147,13 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         let name = warning.host.display_name();
         report.warn(&format!("{name:<16} other hook {}", warning.text));
     }
+    // OpenMoat's hook where an administrator's hooks live (ADR-095).
+    for row in crate::managed::doctor_rows(&home, &binary) {
+        match row {
+            crate::managed::Row::Note(text) => report.note(&text),
+            crate::managed::Row::Warn(text) => report.warn(&text),
+        }
+    }
     // Run by the agent's own git when a session starts, before any hook.
     for warning in crate::project_settings::git_config::warnings_here() {
         report.warn(&format!("{:<16} git config {warning}", "Repository"));

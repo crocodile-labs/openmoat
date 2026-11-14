@@ -446,6 +446,32 @@ pub struct SandboxSettings {
     /// or a pack has no `sandbox:`.
     #[serde(default, skip_serializing_if = "ProjectTop::is_protected")]
     pub project_top: ProjectTop,
+    /// What `openmoat run` does when a file of the project would turn the
+    /// agent's OpenMoat hook off as the session starts (ADR-095): `refuse`
+    /// (absent) does not start the agent; `start` starts it anyway, says so
+    /// and records it. Read from the person's own policy alone: a repository
+    /// policy or a pack has no `sandbox:`.
+    #[serde(default, skip_serializing_if = "ProjectHookOff::is_refuse")]
+    pub project_hook_off: ProjectHookOff,
+}
+
+/// `sandbox.project_hook_off` (ADR-095).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProjectHookOff {
+    /// The agent does not start.
+    #[default]
+    Refuse,
+    /// The agent starts without OpenMoat's hook; the run says so and records it.
+    Start,
+}
+
+impl ProjectHookOff {
+    /// Whether this is the default, [`ProjectHookOff::Refuse`].
+    #[must_use]
+    pub fn is_refuse(&self) -> bool {
+        *self == Self::Refuse
+    }
 }
 
 /// `sandbox.project_top` (ADR-090).
@@ -526,6 +552,17 @@ impl Policy {
         self.sandbox
             .as_ref()
             .map(|s| s.project_top)
+            .unwrap_or_default()
+    }
+
+    /// What `openmoat run` does when a project's file would turn the agent's
+    /// hook off (`sandbox.project_hook_off`, ADR-095); [`ProjectHookOff::Refuse`]
+    /// unless the person's own policy says otherwise.
+    #[must_use]
+    pub fn project_hook_off(&self) -> ProjectHookOff {
+        self.sandbox
+            .as_ref()
+            .map(|s| s.project_hook_off)
             .unwrap_or_default()
     }
 

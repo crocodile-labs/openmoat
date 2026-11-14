@@ -151,6 +151,7 @@ mod tests {
             for source in sources {
                 assert!(source.starts_with("https://"), "{host:?}: {source}");
             }
+            hook_off_is_sourced(host);
             if let Some(install) = &spec.install {
                 for (field, value) in [
                     ("dir_variable", install.dir_variable),
@@ -173,6 +174,71 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    /// Every fact of [`crate::HostSpec::hook_off`] names where the host says
+    /// it (ADR-095), and fits the rest of the spec: a project file that turns
+    /// the hook off is one of the host's project settings, and a managed hook
+    /// file is written only for a host whose hook file is a JSON document.
+    fn hook_off_is_sourced(host: Host) {
+        use crate::{Managed, ProjectOff};
+        let spec = spec(host);
+        let off = &spec.hook_off;
+        let sourced = |what: &str, source: &str| {
+            assert!(
+                source.starts_with("https://") || source.starts_with("crates/"),
+                "{host:?} names no source for {what}: {source:?}"
+            );
+        };
+        match &off.project {
+            ProjectOff::Files { example, source } => {
+                sourced("project", source);
+                let settings = spec.project_settings.as_ref();
+                let listed = settings.is_some_and(|s| {
+                    s.files().iter().any(|name| {
+                        let rel = if s.dir.is_empty() {
+                            (*name).to_owned()
+                        } else {
+                            format!("{}/{name}", s.dir)
+                        };
+                        rel == example.path
+                    })
+                });
+                assert!(
+                    listed,
+                    "{host:?}: {} is no project settings file",
+                    example.path
+                );
+                assert!(!example.text.is_empty(), "{host:?}");
+            }
+            ProjectOff::Nothing { why, source } => {
+                sourced("project", source);
+                assert!(
+                    !why.is_empty(),
+                    "{host:?} says not why no project file turns it off"
+                );
+            }
+        }
+        if let Some(over) = &off.session_override {
+            sourced("session override", over.source);
+            assert!(!over.args.is_empty() && !over.keys.is_empty(), "{host:?}");
+            assert!(
+                matches!(off.project, ProjectOff::Files { .. }),
+                "{host:?}: an override of nothing"
+            );
+        }
+        sourced("managed", off.managed.source());
+        match &off.managed {
+            Managed::Written(hooks) => {
+                assert!(!hooks.files.is_empty(), "{host:?}");
+                let json = spec.install.as_ref().and_then(|i| i.hook_file.entries());
+                assert!(json.is_some(), "{host:?}: a managed file of another format");
+            }
+            Managed::Manual { locations, why, .. } => {
+                assert!(!locations.is_empty() && !why.is_empty(), "{host:?}");
+            }
+            Managed::None { why, .. } => assert!(!why.is_empty(), "{host:?}"),
         }
     }
 

@@ -53,9 +53,11 @@ pub fn person_for(command: &str) -> bool {
     interactive() && refuse_agent(command).is_ok()
 }
 
-/// Whether `command` must run from the binary the policy lock records.
+/// Whether `command` must run from the binary the policy lock records:
+/// `openmoat init`, with or without `--managed`, points the hooks at the
+/// binary it runs, which is what it is for.
 fn checks_binary(command: &str) -> bool {
-    command != "openmoat init"
+    !matches!(command, "openmoat init" | "openmoat init --managed")
 }
 
 /// Refuse `command` when an agent host (each spec's `HostSpec::process`, a Cursor editor

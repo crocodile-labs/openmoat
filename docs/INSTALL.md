@@ -373,11 +373,37 @@ again so the service file names the new path.
 `openmoat init` writes OpenMoat's Claude Code hooks to the user `settings.json`. A
 repository's `.claude/settings.json` can turn every user-level hook off with
 `"disableAllHooks": true`, and Claude Code loads it when a session starts, before any
-hook runs. OpenMoat blocks such a change mid-session and `openmoat doctor` and `openmoat status`
-warn about it, but cannot stop it at start (THREAT_MODEL §5). Only Claude Code's
+hook runs. OpenMoat blocks such a change mid-session, `openmoat doctor` and `openmoat status`
+warn about it, and `openmoat run` refuses to start the agent over it (or starts Claude
+Code with `--settings '{"disableAllHooks":false}'`; POLICY.md §9.5, ADR-095), but an
+agent started directly loads it (THREAT_MODEL §5). Only Claude Code's
 [managed settings](https://code.claude.com/docs/en/managed-settings), which an
 administrator deploys and the user cannot edit, make the hooks immune: a `disableAllHooks`
-outside them cannot turn off a hook set in them. For teams:
+outside them cannot turn off a hook set in them.
+
+```bash
+openmoat init --managed
+```
+
+writes the same entries `openmoat init` writes to the user file into a drop-in of its
+own, `managed-settings.d/50-openmoat.json`, and does the same for the other agents set
+up that have such a place: GitHub Copilot CLI's policy hooks (`policy.d/openmoat.json`,
+which a repository's `disableAllHooks` cannot turn off either) and Cursor's enterprise
+`hooks.json` (only while there is none, or it holds OpenMoat's hook alone). It needs a
+person at a terminal. Where the folder needs root, or the agent loads the file only when
+root owns it (Copilot CLI), OpenMoat keeps the file at `~/.moat/managed/<agent>.json` and
+prints the `sudo install` command to run; it never escalates itself. It is idempotent and
+never edits an administrator's own file; `openmoat uninstall` removes it (or prints the
+command that does), and `openmoat doctor` reports it. Codex's `requirements.toml`, Gemini
+CLI's system settings and OpenCode's system directory are named but not written: each is
+an administrator's one file, or its behaviour towards a project is not documented.
+
+The managed file applies to every account of the machine and runs this person's
+`openmoat` with their state directory: use it on a machine one person uses, or in an
+image an administrator builds. Claude Code applies one managed source: a device profile
+or server-managed settings take the files' place.
+
+For teams that deploy managed settings themselves:
 
 1. Copy the `PreToolUse`, `PostToolUse`, `ConfigChange` and `SessionStart` entries `openmoat init` wrote to
    `~/.claude/settings.json` (they run `openmoat` by its stable path, ADR-016) into the
@@ -387,8 +413,9 @@ outside them cannot turn off a hook set in them. For teams:
    plugin hooks (except plugins the managed settings force on) and to take `statusLine`
    and file suggestion commands only from managed settings.
 
-OpenMoat does not write or pin managed settings; whoever deploys them keeps them in step
-with `openmoat init` after an upgrade that changes the hook entries.
+OpenMoat does not pin managed settings; whoever deploys them keeps them in step with
+`openmoat init` after an upgrade that changes the hook entries (`openmoat doctor` says
+when OpenMoat's drop-in is outdated).
 
 `openmoat status` and `openmoat doctor` read the system-wide settings of three agents,
 without changing them, and call the agent not protected when they keep its hook from

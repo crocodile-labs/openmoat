@@ -667,7 +667,10 @@ deny:
   # the agents' system-wide settings, which outrank the user's and the project's:
   # Claude Code's managed settings (`managed-settings.json`, `managed-settings.d/`,
   # `managed-mcp.json`), Gemini CLI's system settings and defaults, Codex's
-  # `requirements.toml`. One can turn every hook off or add its own. An
+  # `requirements.toml`, and the places an administrator's hooks live, which
+  # `openmoat init --managed` may write (GitHub Copilot CLI's `policy.d`, Cursor's
+  # enterprise `hooks.json`, OpenCode's system folder; ADR-095). One can turn every
+  # hook off or add its own. An
   # administrator deploys them; where the folder is writable (`/etc/claude-code` on
   # WSL, a loosely permissioned `ProgramData`) the agent could too. `hook_only`
   # (ADR-034): the OS sandboxes grant no write there anyway
@@ -685,10 +688,21 @@ deny:
       # Codex
       - "/etc/codex/**"
       - "C:/ProgramData/OpenAI/Codex/**"
+      # Cursor
+      - "/Library/Application Support/Cursor/**"
+      - "/etc/cursor/**"
+      - "C:/ProgramData/Cursor/**"
+      # GitHub Copilot CLI
+      - "/etc/github-copilot/policy.d/**"
+      - "C:/ProgramData/GitHub/Copilot/policy.d/**"
       # Gemini CLI
       - "/Library/Application Support/GeminiCli/**"
       - "/etc/gemini-cli/**"
       - "C:/ProgramData/gemini-cli/**"
+      # OpenCode
+      - "/Library/Application Support/opencode/**"
+      - "/etc/opencode/**"
+      - "C:/ProgramData/opencode/**"
   # Windows: work handed to the Windows Subsystem for Linux. A command inside a
   # WSL distribution reads the distribution's own files (its `~/.ssh`, its shell
   # start-up files), which no Windows path in this policy names, and reaches the

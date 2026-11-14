@@ -127,6 +127,15 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
                 .to_owned(),
         });
     }
+    if policy.project_hook_off() == crate::policy::ProjectHookOff::Start {
+        out.push(Warning {
+            rule: "sandbox.project_hook_off".to_owned(),
+            message: "`openmoat run` starts an agent whose project turns its OpenMoat hook off: \
+                      the hook then checks none of that session's calls, and only the sandbox \
+                      holds"
+                .to_owned(),
+        });
+    }
     check_diff::turned_off(policy, &mut out);
     taint::metadata_tools(policy, &mut out);
     staging::agent_temp(policy, &mut out);
@@ -451,6 +460,17 @@ mod tests {
         assert!(w[0].contains("`.git/hooks`"), "{w:?}");
         assert_eq!(
             warn("version: 1\nsandbox: { project_top: protected }\n"),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn starting_over_a_hook_a_project_turns_off_is_reported() {
+        let w = warn("version: 1\nsandbox: { project_hook_off: start }\n");
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(w[0].contains("only the sandbox"), "{w:?}");
+        assert_eq!(
+            warn("version: 1\nsandbox: { project_hook_off: refuse }\n"),
             Vec::<String>::new()
         );
     }

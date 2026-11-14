@@ -380,6 +380,7 @@ pub fn warnings_here(home: &Home) -> Vec<Warning> {
 pub mod git_config;
 pub mod other_hooks;
 mod plugins;
+pub mod preflight;
 pub mod system;
 pub mod written;
 

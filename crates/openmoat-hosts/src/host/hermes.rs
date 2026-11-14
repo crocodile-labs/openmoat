@@ -38,6 +38,7 @@ use crate::contract::{
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod hook_off;
 mod advisories;
 mod bench;
 mod consent;
@@ -164,6 +165,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         writes: &[crate::RunWrite::ConfigDir],
     },
     weekly: weekly::WEEKLY,
+    hook_off: hook_off::HOOK_OFF,
     ..HostSpec::BASE
 };
 

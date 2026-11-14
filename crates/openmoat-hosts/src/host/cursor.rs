@@ -20,6 +20,7 @@ use crate::contract::{
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod hook_off;
 mod bench;
 mod doc;
 pub(crate) mod hook_file;
@@ -158,6 +159,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     run_env: &["CURSOR_API_KEY"],
     weekly: weekly::WEEKLY,
+    hook_off: hook_off::HOOK_OFF,
     ..HostSpec::BASE
 };
 
