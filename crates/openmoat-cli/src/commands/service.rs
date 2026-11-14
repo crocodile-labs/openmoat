@@ -25,6 +25,8 @@
 mod job;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod lines;
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
+pub mod loaded;
 #[cfg(any(target_os = "macos", test))]
 pub mod plist;
 #[cfg(any(target_os = "macos", target_os = "linux", test))]
@@ -149,10 +151,12 @@ pub trait Manager {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn job(&self) -> &'static Job;
     /// Refused unless this process was started by the service manager as the
-    /// job's service. A consistency check, not a boundary: a process of the
-    /// same user can imitate what it reads (ADR-094).
+    /// job's service, from the installed file alone, running `program` (the
+    /// installed binary and the job's arguments, [`loaded`]). A consistency
+    /// check, not a boundary: a process of the same user can imitate what it
+    /// reads (ADR-094).
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    fn started_as_service(&self) -> Result<()>;
+    fn started_as_service(&self, program: &[String]) -> Result<()>;
     /// What state the service is in now.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn state(&self) -> Result<State>;
@@ -224,7 +228,11 @@ pub fn check_started(home: &Home, job: &'static Job) -> Result<()> {
             job.install
         );
     }
-    manager.started_as_service()
+    let binary = crate::install::hook_binary()?;
+    let program: Vec<String> = std::iter::once(binary.to_string_lossy().into_owned())
+        .chain(job.args.iter().map(|a| (*a).to_owned()))
+        .collect();
+    manager.started_as_service(&program)
 }
 
 /// No user service here, so nothing runs as one.

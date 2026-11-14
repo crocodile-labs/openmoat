@@ -17,7 +17,7 @@ use anyhow::{Context as _, Result, bail};
 use super::{connected, person, store};
 use crate::cli::ListenArgs;
 use crate::exit::Code;
-use crate::home::{Home, write_private};
+use crate::home::Home;
 use crate::proxy_session::Key;
 use crate::remote::listen::run::{self, Shared};
 use crate::remote::{AuditRecords, Listener, REGISTRY, Settings, Spec, Store};
@@ -75,14 +75,18 @@ fn service_launch(home: &Home) -> Result<()> {
 /// The lock on `store`'s listener, held while the returned file is open.
 /// `None` when another listener holds it.
 fn try_lock(store: &Store) -> Result<Option<File>> {
-    let path = store.dir().join("listen.lock");
-    if !path.exists() {
-        write_private(&path, b"")?;
+    lock_at(&store.dir().join("listen.lock"))
+}
+
+/// [`try_lock`] on `path`. The file is opened (made, owner-only, when
+/// missing) in place, never written to a temporary name and renamed: two
+/// first starts would each lock their own file then, and both run.
+fn lock_at(path: &std::path::Path) -> Result<Option<File>> {
+    if let Some(parent) = path.parent() {
+        crate::home::create_private_dir(parent)?;
     }
-    let file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(&path)
+    let file = crate::home::private_lock_options()
+        .open(path)
         .with_context(|| format!("opening {}", path.display()))?;
     match file.try_lock() {
         Ok(()) => Ok(Some(file)),
@@ -188,6 +192,8 @@ fn refresh(store: &Store, spec: &Spec) -> Result<Settings> {
 /// unconfirmed, so its replies come again.
 fn run(home: &Home, store: &Store, service: bool, interrupted: &Arc<AtomicBool>) -> Result<()> {
     let (key, settings) = connected(store)?;
+    // Answers a listener that stopped mid-answer staged and never placed.
+    store.sweep_unplaced();
     let (spec, mut sender) = crate::remote::open(store, &REGISTRY, &key, &settings)?;
     let (_, poller) = crate::remote::open(store, &REGISTRY, &key, &settings)?;
     let shared = Arc::new(Shared::new(Arc::clone(interrupted)));
@@ -270,6 +276,26 @@ fn deny_inspection() {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Of two first starts, one holds the lock and the other is refused:
+    /// both open the same file, made in place.
+    #[test]
+    fn two_first_starts_get_one_lock() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("remote").join("listen.lock");
+        let (first, second) = std::thread::scope(|scope| {
+            let a = scope.spawn(|| lock_at(&path).unwrap());
+            let b = scope.spawn(|| lock_at(&path).unwrap());
+            (a.join().unwrap(), b.join().unwrap())
+        });
+        assert_eq!(
+            usize::from(first.is_some()) + usize::from(second.is_some()),
+            1,
+            "exactly one lock"
+        );
+        drop((first, second));
+        assert!(lock_at(&path).unwrap().is_some(), "free again once closed");
+    }
 
     #[test]
     fn variables_that_steer_tls_or_the_loader_are_named() {

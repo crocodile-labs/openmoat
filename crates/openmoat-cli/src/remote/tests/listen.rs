@@ -200,3 +200,75 @@ fn an_approved_call_refused_after_all_is_told_to_the_approver() {
     );
     assert!(none.is_none());
 }
+
+/// Records that write the row, and meanwhile something takes the answer's
+/// place (a folder where the answer goes), so it cannot be put there.
+struct PlaceTaken {
+    place: std::path::PathBuf,
+    rows: Vec<Row>,
+}
+
+impl Records for PlaceTaken {
+    fn record(&mut self, row: Row) -> Result<()> {
+        std::fs::create_dir_all(&self.place).unwrap();
+        self.rows.push(row);
+        Ok(())
+    }
+}
+
+#[test]
+fn an_answer_recorded_but_not_placed_is_recorded_as_not_applied() {
+    let s = setup();
+    let req = call("s1", "npm publish");
+    gated(&s, &req, review(), NOW);
+    let request = only_request(&s);
+    let mut records = PlaceTaken {
+        place: s
+            .store
+            .dir()
+            .join("answers")
+            .join(format!("{}.json", request.id)),
+        rows: Vec::new(),
+    };
+    let mut fake = Fake::default();
+    let mut listener = Listener::new(&s.store, &s.key, &FAKE, s.settings.clone());
+    let reply = press(APPROVER, &approve_button(&s, &request));
+    listener
+        .answer(&mut fake, &mut records, &[reply], &|| NOW + 1)
+        .unwrap();
+    let rules: Vec<&str> = records.rows.iter().map(|r| r.rule).collect();
+    assert_eq!(rules, [super::APPROVED_ROW_RULE, REFUSED_RULE], "{rules:?}");
+    assert!(records.rows[1].reason.contains("could not be applied"));
+    assert!(
+        fake.settled[0].1.contains("not applied"),
+        "{:?}",
+        fake.settled
+    );
+    // Nothing a guard could use, and nothing staged or claimed is left.
+    assert_eq!(gated(&s, &req, review(), NOW + 2).verdict, Verdict::Review);
+    let left: Vec<_> = std::fs::read_dir(s.store.dir().join("answers"))
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with('.'))
+        .collect();
+    assert_eq!(left, Vec::<String>::new());
+}
+
+#[test]
+fn a_stale_staged_or_claimed_answer_is_swept() {
+    let s = setup();
+    let answers = s.store.dir().join("answers");
+    std::fs::create_dir_all(&answers).unwrap();
+    for name in [".staged-00", ".claim-00", "keep.json"] {
+        std::fs::write(answers.join(name), b"x").unwrap();
+    }
+    s.store.sweep_unplaced();
+    let mut left: Vec<_> = std::fs::read_dir(&answers)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    left.sort();
+    assert_eq!(left, ["keep.json"]);
+}

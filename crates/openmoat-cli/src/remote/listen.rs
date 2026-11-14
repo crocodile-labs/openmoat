@@ -14,7 +14,7 @@ use super::answer::{self, Answer};
 use super::channel::{Channel, Reply, Spec, approver_id, local_id};
 use super::request::Request;
 use super::settings::Settings;
-use super::store::Store;
+use super::store::{Placing, Store};
 use super::{APPROVED_ROW_RULE, DENIED_RULE, EXPIRED_RULE, REFUSED_RULE};
 use crate::proxy_session::Key;
 
@@ -386,15 +386,22 @@ impl<'a> Listener<'a> {
             ))
         });
         match recorded {
-            Ok(true) => {}
-            Ok(false) => {
-                self.log.push(format!(
-                    "request {} was answered meanwhile by another listener; this answer was \
-                     recorded but not applied",
-                    request.code()
-                ));
+            Ok(Placing::Placed) => {}
+            Ok(Placing::AlreadyAnswered) => {
                 let _ = channel.settle(reply, "This request was already answered.");
                 return Ok(());
+            }
+            Ok(Placing::Lost(error)) => {
+                // Its row says answered; one more says it did not count.
+                let what = format!(
+                    "request {}'s answer was recorded but could not be applied: {error:#}",
+                    request.code()
+                );
+                let noted =
+                    records.record(row(&request, REFUSED_RULE, Verdict::Deny, what.clone()));
+                self.log.push(what);
+                let _ = channel.settle(reply, "Recorded but not applied; try again.");
+                return noted;
             }
             Err(error) => {
                 let _ = channel.settle(reply, "Not recorded, so not applied; try again.");

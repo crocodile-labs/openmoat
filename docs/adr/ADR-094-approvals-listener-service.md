@@ -91,6 +91,19 @@ of the launch itself. In order:
 4. The service manager started it: on macOS its parent is launchd (pid 1) and
    `XPC_SERVICE_NAME` is the job's label; on Linux `INVOCATION_ID` is set and its control
    group is the unit's.
+5. The service manager loaded the installed file, alone, and runs the installed program
+   (`commands/service/loaded.rs`), asked by absolute path with an empty environment (on
+   Linux only the variables that find the user bus): the installed file reading back
+   right is not enough when the manager runs something else under the same name.
+   - Linux: `systemctl --user show <unit> -p FragmentPath -p DropInPaths -p
+     NeedDaemonReload -p ExecStart` must give the installed unit as `FragmentPath`, no
+     `DropInPaths` (a drop-in beside the unit, or in the runtime `user.control/` or
+     `transient/` folders, changes `ExecStart`, `ExecStartPre` or the output without
+     touching the unit), `NeedDaemonReload=no`, and one `ExecStart` whose `argv[]` is
+     the installed binary and `approvals listen --service`.
+   - macOS: `launchctl print gui/<uid>/<label>` must give the installed plist as `path`
+     and the same `arguments`: a plist bootstrapped from another path under the same
+     label passes checks 3 and 4.
 
 Checks 2 to 4 are consistency checks, not a boundary: a process of the same user can
 imitate what they read (a double fork reparents to pid 1, a variable can be set, a
@@ -101,12 +114,25 @@ command: code an agent runs outside every sandbox, as the same user, can do what
 user can.
 
 `kernel-self` denies `openmoat approvals install`, `uninstall` and `listen --service` as it
-denies every `openmoat approvals` command.
+denies every `openmoat approvals` command, by name, by path and under `systemd-run` and
+`launchctl submit`. It also denies changing any of OpenMoat's user services by hand, with
+one pattern for every one (systemd units `*moat-*`, launchd labels `dev.openmoat.*`, so
+the proxy's and the listener's alike): `systemctl` `stop`, `restart`, `edit`, `disable`,
+`mask`, `set-property` and the like for such a unit, `launchctl` `bootout`, `bootstrap`,
+`kickstart`, `load`, `unload` and the like for such a label, setting the environment
+every service gets (`systemctl --user set-environment`/`import-environment`,
+`launchctl setenv`), and writing their unit or plist or a drop-in for them
+(`~/.config/systemd/user/*moat-*`, the same under `/run/user/*/systemd/`,
+`~/Library/LaunchAgents/dev.openmoat.*`). `systemctl --user daemon-reload` names no
+unit and stays allowed: with drop-ins denied and refused at start (check 5), it loads
+nothing new for OpenMoat's.
 
 ## Decision 4: one listener, and a service that waits
 
 Two listeners would each send every request and race for the channel's replies. `listen`
-takes an exclusive lock on `~/.moat/remote/listen.lock` (`File::try_lock`); a person's
+takes an exclusive lock on `~/.moat/remote/listen.lock` (`File::try_lock`, the file opened
+in place, owner-only, never written under a temporary name and renamed, so two first
+starts lock the same file); a person's
 second `listen` is refused with the reason, the service waits for the lock. When the
 channel is disconnected or another is connected, a person's listener stops as before;
 the service logs the reason once and looks again every 30 seconds, so `disconnect` and
@@ -139,4 +165,7 @@ process gets the listener's task port only with a debugger's authorization.
 | An agent installs or runs the listener service | `kernel-self`; `install` needs a person; `--service` keeps the ancestry check | e2e `approvals_service::an_agent_cannot_install_or_run_the_listener_service` |
 | The service file changed to run something else or with more variables | `--service` refuses a file that does not read back; `status` and `doctor` name the change | e2e `approvals_service::install_writes_the_listener_service_owner_only_and_uninstall_removes_it` |
 | The service environment changed to trust another CA or load a library | `--service` refuses to start | the same e2e; `commands::approvals::listen::tests` |
+| A drop-in, a transient unit or another plist under the same name makes the manager run something else | check 5: the manager must report the installed file alone and the installed program; `kernel-self` denies the writes and the `systemctl`/`launchctl` commands | `commands::service::loaded::tests`; conformance `T9-write-approvals-drop-in`, `T9-write-approvals-runtime-drop-in`, `T9-launchctl-bootout-approvals`, `T9-systemctl-restart-approvals`, `T9-systemctl-set-environment` |
+| The listener started by hand as the service | `kernel-self` by name, by path, under `systemd-run` and `launchctl submit`; checks 3 to 5 | conformance `T9-openmoat-approvals-listen-service*`, `T9-systemd-run-approvals-listen-service`, `T9-launchctl-submit-approvals-listen-service` |
+| Two first starts both take the lock | the lock file is opened in place | `commands::approvals::listen::tests::two_first_starts_get_one_lock` |
 | Another user reads the service's log | `Umask`/`UMask` 077 and log files created owner-only | plist and unit tests; the same e2e |

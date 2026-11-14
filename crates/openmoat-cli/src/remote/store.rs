@@ -39,8 +39,23 @@ const REQUESTS: &str = "requests";
 const ANSWERS: &str = "answers";
 const USED: &str = "used";
 const REFUSED: &str = "refused";
+/// Prefixes in `answers/` of an answer not yet recorded, and of one claimed
+/// for its request while its row is written; no guard reads either.
+const STAGED: &str = ".staged-";
+const CLAIM: &str = ".claim-";
 /// How long a used marker is kept: far longer than any request lives.
 const USED_KEPT_MS: i64 = 24 * 60 * 60 * 1000;
+
+/// What became of an answer once its row was recorded, or that none was.
+#[derive(Debug)]
+pub enum Placing {
+    /// Recorded and in place: guards use it.
+    Placed,
+    /// The request had an answer already; nothing was recorded.
+    AlreadyAnswered,
+    /// Recorded, but it could not be put in place: no guard uses it.
+    Lost(anyhow::Error),
+}
 
 #[derive(Debug, Clone)]
 pub struct Store {
@@ -226,36 +241,63 @@ impl Store {
         plain_id(id) && self.answer_path(id).exists()
     }
 
-    /// Write `answer` under a name no guard reads, run `record` (its audit
-    /// row), and only once that succeeded put it where guards look, unless
-    /// its request has an answer already: whether it was put there. When
-    /// `record` fails nothing is left and its error is returned.
+    /// Put `answer` where guards look only once `record` (its audit row)
+    /// succeeded: written under a name no guard reads, claimed for its
+    /// request with create-new semantics (a second answer finds the claim),
+    /// recorded, then linked into place, never over an answer already there.
+    /// `Err` when nothing was recorded (`record` failed, or the answer could
+    /// not be claimed); nothing is left behind then.
     pub fn put_answer_once_recorded(
         &self,
         answer: &Answer,
         record: impl FnOnce() -> Result<()>,
-    ) -> Result<bool> {
+    ) -> Result<Placing> {
         if !plain_id(&answer.id) {
             bail!("not a request id");
         }
+        let place = self.answer_path(&answer.id);
+        if place.exists() {
+            return Ok(Placing::AlreadyAnswered);
+        }
         let text = serde_json::to_vec(answer).context("encoding an answer")?;
-        let staged = self
-            .dir
-            .join(ANSWERS)
-            .join(format!(".staged-{}", answer.id));
+        let dir = self.dir.join(ANSWERS);
+        let staged = dir.join(format!("{STAGED}{}", answer.id));
+        let claim = dir.join(format!("{CLAIM}{}", answer.id));
         write_private(&staged, &text)?;
+        let claimed = fs::hard_link(&staged, &claim);
+        let _ = fs::remove_file(&staged);
+        match claimed {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                return Ok(Placing::AlreadyAnswered);
+            }
+            Err(e) => return Err(e).context("claiming the answer"),
+        }
         if let Err(error) = record() {
-            let _ = fs::remove_file(&staged);
+            let _ = fs::remove_file(&claim);
             return Err(error);
         }
-        // A hard link never replaces an answer already there.
-        let placed = match fs::hard_link(&staged, self.answer_path(&answer.id)) {
-            Ok(()) => Ok(true),
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
-            Err(e) => Err(e).context("placing an answer"),
+        let placed = fs::hard_link(&claim, &place);
+        let _ = fs::remove_file(&claim);
+        Ok(match placed {
+            Ok(()) => Placing::Placed,
+            Err(e) => Placing::Lost(anyhow::Error::new(e).context("placing the answer")),
+        })
+    }
+
+    /// Remove answers a listener staged or claimed and never placed: left by
+    /// one that stopped mid-answer. Run before a listener starts.
+    pub fn sweep_unplaced(&self) {
+        let Ok(entries) = fs::read_dir(self.dir.join(ANSWERS)) else {
+            return;
         };
-        let _ = fs::remove_file(&staged);
-        placed
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with(STAGED) || name.starts_with(CLAIM) {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
     }
 
     /// Write `answer` unless its request has one already; whether it was written.

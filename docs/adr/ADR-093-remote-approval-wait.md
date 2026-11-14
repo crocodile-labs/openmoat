@@ -103,9 +103,12 @@ A unit test checks the bound for every host in the registry; today every host ge
    other sees the marker and keeps the `review`. A deny denies at once (`remote-denied`).
    A `cut` or `redacted` request still uses no approval.
    **An answer is visible only once its row is recorded:** `listen` writes it under a
-   name no guard reads, records the `remote-approved` or `remote-denied` row, and only
-   then links it into place (create-new). If the row fails the staged answer is removed,
-   so a waiting guard can never run a call whose approval was not recorded.
+   name no guard reads, claims it for its request (a create-new link, so a second answer
+   finds the claim), records the `remote-approved` or `remote-denied` row, and only then
+   links it into place (create-new). If the row fails the claim is removed, so a waiting
+   guard can never run a call whose approval was not recorded; if placing fails after
+   the row, a `remote-refused` row says the answer was not applied and the approver is
+   told so. A listener clears answers left staged or claimed when it starts.
 3. **The audit row** of an approved call is ADR-078's: `allow`, rule `approved-remote`,
    the approver and channel in the reason, plus "answered while the hook waited N s".
    An approval a retry used first leaves the `review` saying it was used, with no such

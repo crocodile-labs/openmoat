@@ -24,6 +24,9 @@ use crate::install::{SANDBOX_BACKUP, backup_path};
 
 pub const DISPLAY: &str = "launchd user agent";
 
+/// `launchctl` by absolute path, for the check of what launchd loaded.
+const LAUNCHCTL: &str = "/bin/launchctl";
+
 /// What launchd sets in the environment of each job it starts: the job's label.
 const SERVICE_NAME: &str = "XPC_SERVICE_NAME";
 
@@ -104,13 +107,37 @@ impl Manager for LaunchdManager {
 
     /// launchd starts a user agent as a child of itself (pid 1) with the
     /// job's label in `XPC_SERVICE_NAME`.
-    fn started_as_service(&self) -> Result<()> {
+    fn started_as_service(&self, program: &[String]) -> Result<()> {
         let parent = rustix::process::getppid();
         let name = std::env::var_os(SERVICE_NAME);
         if parent != Some(rustix::process::Pid::INIT)
             || name.as_deref() != Some(OsStr::new(self.job.label))
         {
             bail!("launchd did not start this as `{}`", self.job.label);
+        }
+        // What launchd loaded under the label: the same label bootstrapped
+        // from another plist passes everything above.
+        let out = Command::new(LAUNCHCTL)
+            .env_clear()
+            .args(["print", &self.target()?])
+            .output()
+            .context("asking launchd what it loaded")?;
+        if !out.status.success() {
+            bail!(
+                "launchctl print {} failed: {}",
+                self.target()?,
+                String::from_utf8_lossy(&out.stderr).trim()
+            );
+        }
+        let print = String::from_utf8_lossy(&out.stdout);
+        let findings = super::loaded::launchd(&print, &self.plist_path(), program);
+        if !findings.is_empty() {
+            bail!(
+                "refusing to run as `{}`: {}; `{}` writes it again",
+                self.job.label,
+                findings.join("; "),
+                self.job.install
+            );
         }
         Ok(())
     }

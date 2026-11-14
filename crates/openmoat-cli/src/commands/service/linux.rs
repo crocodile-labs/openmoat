@@ -58,6 +58,46 @@ where
         .context("running systemctl --user; install systemd")
 }
 
+/// Where `systemctl` is, by absolute path: never one found on a `PATH` the
+/// service's environment may have changed.
+const SYSTEMCTL: &[&str] = &["/usr/bin/systemctl", "/bin/systemctl"];
+
+/// What systemd loaded for `unit` ([`super::loaded::systemd`]), asked of the
+/// user manager with only the variables that find its bus.
+fn shown(unit: &str) -> Result<String> {
+    let program = SYSTEMCTL
+        .iter()
+        .find(|p| Path::new(p).is_file())
+        .context("systemctl is not in /usr/bin or /bin")?;
+    let mut command = Command::new(program);
+    command.env_clear().env("LC_ALL", "C");
+    for name in ["XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] {
+        if let Some(value) = std::env::var_os(name) {
+            command.env(name, value);
+        }
+    }
+    let out = command
+        .args([
+            "--user",
+            "show",
+            unit,
+            "-p",
+            "FragmentPath",
+            "-p",
+            "DropInPaths",
+        ])
+        .args(["-p", "NeedDaemonReload", "-p", "ExecStart"])
+        .output()
+        .context("asking systemd what it loaded")?;
+    if !out.status.success() {
+        bail!(
+            "systemctl --user show {unit} failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
 impl Manager for SystemdManager {
     fn file_path(&self) -> Result<PathBuf> {
         Ok(self.unit_path())
@@ -83,13 +123,23 @@ impl Manager for SystemdManager {
 
     /// systemd starts a service with `INVOCATION_ID` set, in a control group
     /// named after its unit (`…/app.slice/<unit>`).
-    fn started_as_service(&self) -> Result<()> {
+    fn started_as_service(&self, program: &[String]) -> Result<()> {
         let group = fs::read_to_string("/proc/self/cgroup").unwrap_or_default();
         let in_unit = group
             .lines()
             .any(|line| line.trim_end().rsplit('/').next() == Some(self.job.unit));
         if std::env::var_os(INVOCATION_ID).is_none() || !in_unit {
             bail!("systemd did not start this as `{}`", self.job.unit);
+        }
+        let show = shown(self.job.unit)?;
+        let findings = super::loaded::systemd(&show, &self.unit_path(), program);
+        if !findings.is_empty() {
+            bail!(
+                "refusing to run as `{}`: {}; `{}` writes it again",
+                self.job.unit,
+                findings.join("; "),
+                self.job.install
+            );
         }
         Ok(())
     }

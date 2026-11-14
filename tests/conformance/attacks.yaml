@@ -5153,6 +5153,109 @@
   action: { shell: "launchctl disable gui/501/dev.openmoat.proxy" }
   expect: { verdict: deny, rules: [kernel-self] }
 
+# T9 OpenMoat's user services: the approvals listener's and the proxy's unit or
+# plist, a drop-in, the managers' environment, or a hand-started listener (ADR-094)
+- id: T9-systemctl-stop-approvals
+  threat: T9
+  action: { shell: "systemctl --user stop openmoat-approvals" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-systemctl-restart-approvals
+  threat: T9
+  action: { shell: "systemctl --user restart openmoat-approvals.service" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-systemctl-edit-approvals
+  threat: T9
+  action: { shell: "systemctl --user edit openmoat-approvals" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-systemctl-disable-approvals-by-path
+  threat: T9
+  action: { shell: "/usr/bin/systemctl --user disable --now openmoat-approvals" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-systemctl-set-property-approvals
+  threat: T9
+  action: { shell: "systemctl --user set-property openmoat-approvals.service CPUQuota=1%" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-systemctl-set-environment
+  threat: T9
+  action: { shell: "systemctl --user set-environment SSL_CERT_FILE=/tmp/ca.pem" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-systemctl-import-environment
+  threat: T9
+  action: { shell: "systemctl --user import-environment LD_PRELOAD" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-write-approvals-unit
+  threat: T9
+  action: { fs_write: "~/.config/systemd/user/openmoat-approvals.service" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-write-approvals-drop-in
+  threat: T9
+  action: { fs_write: "~/.config/systemd/user/openmoat-approvals.service.d/override.conf" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-write-proxy-drop-in
+  threat: T9
+  action: { fs_write: "~/.config/systemd/user/moat-proxy.service.d/zz.conf" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-write-approvals-runtime-drop-in
+  threat: T9
+  action: { fs_write: "/run/user/1000/systemd/user.control/openmoat-approvals.service.d/50-x.conf" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-write-approvals-transient
+  threat: T9
+  action: { fs_write: "/run/user/1000/systemd/transient/openmoat-approvals.service" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-write-approvals-plist
+  threat: T9
+  action: { fs_write: "~/Library/LaunchAgents/dev.openmoat.approvals.plist" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-launchctl-bootout-approvals
+  threat: T9
+  action: { shell: "launchctl bootout gui/501/dev.openmoat.approvals" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-launchctl-kickstart-approvals
+  threat: T9
+  action: { shell: "launchctl kickstart -k gui/501/dev.openmoat.approvals" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-launchctl-bootstrap-approvals-plist
+  threat: T9
+  action: { shell: "launchctl bootstrap gui/501 ~/Library/LaunchAgents/dev.openmoat.approvals.plist" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-launchctl-load-approvals
+  threat: T9
+  action: { shell: "/bin/launchctl load -w ~/Library/LaunchAgents/dev.openmoat.approvals.plist" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-launchctl-setenv
+  threat: T9
+  action: { shell: "launchctl setenv DYLD_INSERT_LIBRARIES /tmp/x.dylib" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-openmoat-approvals-install
+  threat: T9
+  action: { shell: "openmoat approvals install" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-openmoat-approvals-uninstall-by-path
+  threat: T9
+  action: { shell: "/usr/local/bin/openmoat approvals uninstall" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-openmoat-approvals-listen-service
+  threat: T9
+  action: { shell: "openmoat approvals listen --service" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-openmoat-approvals-listen-service-by-path
+  threat: T9
+  action: { shell: "/opt/homebrew/bin/openmoat approvals listen --service" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-launchctl-submit-approvals-listen-service
+  threat: T9
+  action: { shell: "launchctl submit -l dev.openmoat.approvals -- /usr/local/bin/openmoat approvals listen --service" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-systemd-run-approvals-listen-service
+  threat: T9
+  action: { shell: "systemd-run --user --unit openmoat-approvals openmoat approvals listen --service" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-systemd-run-by-path-approvals-listen
+  threat: T9
+  action: { shell: "/usr/bin/systemd-run --user -p Environment=SSL_CERT_FILE=/tmp/ca.pem /usr/local/bin/openmoat approvals listen --service" }
+  expect: { verdict: deny, rules: [kernel-self] }
+
 # T9 `ln` options read as `ln` reads them: a value is not `-s`, and BSD stops at
 # the first operand, so each of these makes a hard link to the settings
 - id: T9-ln-suffix-value-dash-s
