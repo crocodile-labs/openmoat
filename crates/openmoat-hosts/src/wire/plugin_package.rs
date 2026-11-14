@@ -124,7 +124,17 @@ block() {{
 lock="$HOME/{lock}"
 moat=
 if [ -e "$lock" ]; then
-  moat=$(sed -n 's/^  "binary": "\(.*\)",$/\1/p' "$lock" 2>/dev/null | head -n 1)
+  # Read with the shell's own `read`, no program from the search path, which
+  # the agent's environment or a repository could fill.
+  while IFS= read -r line || [ -n "$line" ]; do
+    case $line in
+      '  "binary": "'*)
+        moat=${{line#'  "binary": "'}}
+        moat=${{moat%,}}
+        moat=${{moat%\"}}
+        break ;;
+    esac
+  done < "$lock" 2>/dev/null
   case $moat in
     *\\*|*\"*|'') block "$unusable" {unusable_text} ;;
     /*) ;;
