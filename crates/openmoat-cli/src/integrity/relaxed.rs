@@ -89,11 +89,8 @@ pub fn split(home: &Home, lock: &Lock, drift: Vec<Drift>) -> Checked {
     }
     // `hosts.json` is pinned as well: when it drifted, that drift denies.
     let kept = home.kept();
-    let relaxed = Recorded::load(home).is_ok_and(|r| {
-        drift
-            .iter()
-            .all(|d| is_relaxed(lock, d, &r.claude_rules, kept))
-    });
+    let relaxed =
+        Recorded::load(home).is_ok_and(|r| drift.iter().all(|d| is_relaxed(lock, d, &r, kept)));
     if relaxed {
         Checked {
             deny: None,
@@ -126,17 +123,21 @@ pub(super) fn parent_digests(
 }
 
 /// Whether `drift` touches only the relaxed keys of the host whose hook file
-/// the lock pinned there, `owned` being the rules OpenMoat wrote into it and
-/// `kept` holding the file's bytes as the check read them.
-fn is_relaxed(lock: &Lock, drift: &Drift, owned: &[String], kept: &Kept) -> bool {
+/// the lock pinned there, `recorded` naming the rules OpenMoat wrote into
+/// that host's file and `kept` holding the file's bytes as the check read them.
+fn is_relaxed(lock: &Lock, drift: &Drift, recorded: &Recorded, kept: &Kept) -> bool {
     // A plain `Modified` has no keys to compare: no baseline, no object, a link.
     let Drift::KeysChanged(path, _) = drift else {
         return false;
     };
     let stored = path.to_string_lossy();
-    let (Some(install), Some(bytes)) = (lock.relaxing(&stored), kept.drifted(path)) else {
+    let (Some(owner), Some(bytes)) = (lock.hook_owner(&stored), kept.drifted(path)) else {
         return false;
     };
+    let Some(install) = lock.relaxing(&stored) else {
+        return false;
+    };
+    let owned = recorded.written_rules(owner);
     match install.relaxed_check {
         RelaxedCheck::Rest => lock
             .relaxed_rest
@@ -180,19 +181,32 @@ fn by_key(
                 owned,
             )
         } else {
-            relaxed_value(keys, key, root.get(key), owned)
+            relaxed_value(keys, None, key, root.get(key), owned)
         }
     })
 }
 
-/// Whether `path` is one of `keys` and `value`, if any, has its shape.
-fn relaxed_value(keys: &[RelaxedKey], path: &str, value: Option<&Value>, owned: &[String]) -> bool {
+/// Whether the key `name`, at the top (`parent` `None`) or in the object
+/// `parent`, is one of `keys` and `value`, if any, has its shape. Matched by
+/// the path's names, so a top-level key that is literally named
+/// `permissions.allow` is no relaxed key: only `allow` inside `permissions`
+/// is.
+fn relaxed_value(
+    keys: &[RelaxedKey],
+    parent: Option<&str>,
+    name: &str,
+    value: Option<&Value>,
+    owned: &[String],
+) -> bool {
     keys.iter().any(|k| {
-        k.path == path
-            && match value {
-                Some(value) => k.shape.holds(value, owned),
-                None => k.shape.may_be_removed(),
-            }
+        let at = match k.path.split_once('.') {
+            Some((outer, inner)) => parent == Some(outer) && inner == name,
+            None => parent.is_none() && k.path == name,
+        };
+        at && match value {
+            Some(value) => k.shape.holds(value, owned),
+            None => k.shape.may_be_removed(),
+        }
     })
 }
 
@@ -232,7 +246,7 @@ fn inner_relaxed(
         return false;
     };
     differing(pinned, &digests)
-        .all(|key| relaxed_value(keys, &format!("{parent}.{key}"), now.get(key), owned))
+        .all(|key| relaxed_value(keys, Some(parent), key, now.get(key), owned))
 }
 
 #[cfg(test)]

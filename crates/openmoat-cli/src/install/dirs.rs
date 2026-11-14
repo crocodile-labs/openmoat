@@ -10,7 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_hosts::{AlsoDir, Host};
+use openmoat_hosts::{AlsoDir, Host, SandboxFormat};
 use serde::{Deserialize, Serialize};
 
 use crate::home::{Home, write_private};
@@ -62,6 +62,20 @@ impl Recorded {
                 fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
             Self::parse(&text, path)
         })
+    }
+
+    /// The rules OpenMoat wrote into `host`'s hook file, which a relaxed key
+    /// that keeps them ([`openmoat_hosts::KeyShape::KeepsWrittenRules`]) must
+    /// still hold: those the sandbox writes into a settings file of the
+    /// [`SandboxFormat::ClaudeSettings`] format, for a host whose sandbox is
+    /// kept in its hook file in that format; none for any other host.
+    pub fn written_rules(&self, host: Host) -> &[String] {
+        let spec = host.spec();
+        let hook_file = spec.install.as_ref().map(|i| i.config_file);
+        let writes = spec.sandbox.as_ref().is_some_and(|s| {
+            s.format == SandboxFormat::ClaudeSettings && Some(s.file) == hook_file
+        });
+        if writes { &self.claude_rules } else { &[] }
     }
 
     /// The record in `text`, read from `path` (named in errors).

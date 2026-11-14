@@ -63,3 +63,33 @@ fn hermes_profiles_are_found_and_recorded() {
     assert!(old.also.is_empty());
     assert!(!serde_json::to_string(&old).unwrap().contains("also"));
 }
+
+/// The rules OpenMoat wrote belong to the host whose sandbox writes them into
+/// its hook file, and to no other: a host whose relaxed keys keep written
+/// rules finds none of another host's.
+#[test]
+fn written_rules_are_the_writing_hosts_only() {
+    let recorded = Recorded {
+        claude_rules: vec!["Read(//**/.ssh/**)".to_owned()],
+        ..Recorded::default()
+    };
+    let writes = |host: Host| {
+        let spec = host.spec();
+        spec.sandbox.as_ref().is_some_and(|s| {
+            s.format == SandboxFormat::ClaudeSettings
+                && spec
+                    .install
+                    .as_ref()
+                    .is_some_and(|i| i.config_file == s.file)
+        })
+    };
+    assert_eq!(Host::ALL.into_iter().filter(|h| writes(*h)).count(), 1);
+    for host in Host::ALL {
+        let expected: &[String] = if writes(host) {
+            &recorded.claude_rules
+        } else {
+            &[]
+        };
+        assert_eq!(recorded.written_rules(host), expected, "{host:?}");
+    }
+}

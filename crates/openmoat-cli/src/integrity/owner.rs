@@ -14,11 +14,11 @@
 //! verifying; any other file is pinned by its bytes until a re-pin records
 //! its owner.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use openmoat_hosts::{Host, InstallSpec};
 
-use super::Lock;
+use super::{Lock, key};
 
 /// `host`'s install spec, for a host OpenMoat installs a hook for.
 fn install(host: Host) -> Option<&'static InstallSpec> {
@@ -38,10 +38,7 @@ fn legacy_owner(stored: &Path) -> Option<Host> {
         .into_iter()
         .filter(|host| install(*host).is_some_and(|i| shapes_drift(i) && name == i.config_file))
         .collect();
-    let placed = |host: &&Host| {
-        install(**host).is_some_and(|i| stored.ends_with(Path::new(i.dir_name).join(i.config_file)))
-    };
-    if let Some(host) = named.iter().find(placed) {
+    if let Some(host) = named.iter().find(|host| placed(stored, **host)) {
         return Some(*host);
     }
     // A variable that names the directory itself puts the file anywhere.
@@ -55,7 +52,42 @@ fn legacy_owner(stored: &Path) -> Option<Host> {
     }
 }
 
+/// Whether `stored` is where `host`'s spec puts its hook file by default:
+/// ending in its `<dir_name>/<config_file>`.
+fn placed(stored: &Path, host: Host) -> bool {
+    install(host).is_some_and(|i| stored.ends_with(Path::new(i.dir_name).join(i.config_file)))
+}
+
 impl Lock {
+    /// [`Self::owners_with`] with no hook file installed here.
+    pub(super) fn owners(&self) -> Vec<(PathBuf, Host)> {
+        self.owners_with(&[])
+    }
+
+    /// Each pinned hook file with the host a re-pin records for it again.
+    /// Every owner this lock records is kept. From a lock before
+    /// [`Self::hook_owners`], whose owners are read from the files' places
+    /// and names, one is kept only where it is more than a name: for a file
+    /// in `installed` (this shell's hook files, with their hosts), one exactly
+    /// where its host's spec puts it, or one the lock's pinned forms name;
+    /// any other file is recorded as no host's, so it is pinned by its bytes
+    /// and drifts on any change.
+    pub(super) fn owners_with(&self, installed: &[(PathBuf, Host)]) -> Vec<(PathBuf, Host)> {
+        self.entries
+            .keys()
+            .filter_map(|stored| {
+                let host = self.hook_owner(stored)?;
+                let kept = self.hook_owners.is_some()
+                    || self.form_host(stored) == Some(host)
+                    || placed(Path::new(stored), host)
+                    || installed
+                        .iter()
+                        .any(|(p, h)| *h == host && key(p) == *stored);
+                kept.then(|| (PathBuf::from(stored), host))
+            })
+            .collect()
+    }
+
     /// The host whose hook file is pinned under `stored`; `None` for a state
     /// file, a file of no host, or one a recorded lock does not name.
     pub(super) fn hook_owner(&self, stored: &str) -> Option<Host> {

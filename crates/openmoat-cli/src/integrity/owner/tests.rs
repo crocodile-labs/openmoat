@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use openmoat_hosts::{Host, RelaxedCheck};
 
@@ -70,5 +70,26 @@ fn a_lock_with_owners_reads_only_them() {
             "/a/custom.json".into(),
             rest.id().into()
         )]))
+    );
+}
+
+/// A file exactly where its host's spec puts it keeps its guessed owner on a
+/// re-pin of an older lock; one owned only by its name does not.
+#[test]
+fn a_guessed_owner_is_kept_only_at_its_hosts_place() {
+    let (_, by_key) = hosts();
+    let lock = Lock::parse(
+        br#"{"version":1,"pinned_at_ms":0,"binary":"","entries":{
+            "/home/me/.claude/settings.json":"a","/srv/elsewhere/settings.json":"b"}}"#,
+        Path::new("policy.lock"),
+    )
+    .unwrap();
+    assert_eq!(
+        lock.hook_owner("/srv/elsewhere/settings.json"),
+        Some(by_key)
+    );
+    assert_eq!(
+        lock.owners(),
+        [(PathBuf::from("/home/me/.claude/settings.json"), by_key)]
     );
 }

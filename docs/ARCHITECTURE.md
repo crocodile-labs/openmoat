@@ -717,7 +717,11 @@ away. Codex has no such key: a failed hook "continues the tool call"
   says which of its keys may drift (`integrity/owner.rs`): a file is never read as
   Claude Code's by its name, so another host's `settings.json` drifts on any change. A
   lock written before the owners were recorded reads a file in `.gemini` as Gemini CLI's
-  and any other `settings.json` as Claude Code's, as it did. For Claude Code's
+  and any other `settings.json` as Claude Code's, as it did, until a re-pin, which
+  keeps such an owner only for a file this shell installed as that host's hook file
+  or one exactly at its host's `<dir_name>/<config_file>` and pins any other by its
+  bytes (ADR-092). A relaxed key matches by its path's names, so a top-level key
+  literally named `permissions.allow` is drift. For Claude Code's
   `settings.json`, whose spec compares its keys one by one (`RelaxedCheck::ByKey`), the
   lock also records a digest per key of `permissions`. With them, `guard` (and `openmoat
   policy check`) keep deciding while the only drift is in the allowlist of Claude Code's

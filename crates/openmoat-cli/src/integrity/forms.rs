@@ -68,15 +68,6 @@ impl Lock {
         form_of(self.form_host(stored)?)
     }
 
-    /// Each pinned hook file with the host that owns it
-    /// ([`Lock::hook_owner`]), which a re-pin pins it for again.
-    pub(super) fn owners(&self) -> Vec<(PathBuf, Host)> {
-        self.entries
-            .keys()
-            .filter_map(|stored| Some((PathBuf::from(stored), self.hook_owner(stored)?)))
-            .collect()
-    }
-
     /// The files of [`Self::owners`] digested in their host's pinned form, as
     /// [`Lock::pinned_forms`] records them.
     pub(super) fn owner_ids(&self) -> BTreeMap<String, String> {

@@ -137,7 +137,22 @@ pub fn repin_with(
     if had_lock {
         match (Lock::load(&lock_path), hooks) {
             (Ok(old), _) => {
-                owners = old.owners();
+                // This shell's hook files, which an older lock's guessed
+                // owners are kept for (`owner.rs`); none when they cannot be
+                // told, and none needed when the lock records its owners.
+                let here: Vec<(PathBuf, Host)> = if old.hook_owners.is_some() {
+                    Vec::new()
+                } else {
+                    installed_hooks(home, binary)
+                        .map(|found| {
+                            found
+                                .iter()
+                                .map(|c| (c.settings_path.clone(), c.host))
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                };
+                owners = old.owners_with(&here);
                 // Only `moat mcp accept` and `moat doctor --accept` change these.
                 mcp_servers = old.mcp_servers;
                 paths.extend(old.entries.into_keys().map(PathBuf::from));

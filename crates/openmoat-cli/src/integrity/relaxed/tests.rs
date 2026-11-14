@@ -576,3 +576,93 @@ fn a_lock_without_owners_reads_settings_json_as_before() {
     fs::write(&setup.settings, settings.to_string()).unwrap();
     assert_relaxed(&check(&setup.home).unwrap());
 }
+
+/// A top-level key whose name is a relaxed key's dotted path is not that key:
+/// only `allow` inside `permissions` is. Each denies every call, naming the
+/// file.
+#[test]
+fn a_top_level_key_named_like_a_nested_relaxed_key_denies() {
+    for name in [
+        "permissions.allow",
+        "permissions.ask",
+        "permissions.deny",
+        "permissions.defaultMode",
+        "permissions.blockReadsOutsideWorkingDirectories",
+    ] {
+        let checked = after(|s| s[name] = json!(["Bash(*)"]));
+        assert_denied(&checked);
+        let deny = checked.deny.unwrap();
+        assert!(
+            deny.reasons
+                .iter()
+                .any(|r| r.contains("settings.json was modified") && r.contains(name)),
+            "{name}: {:?}",
+            deny.reasons
+        );
+    }
+    let checked = after(|s| s["permissions.defaultMode"] = json!("default"));
+    assert_denied(&checked);
+}
+
+/// A re-pin of a lock from before the owners were recorded keeps a guessed
+/// owner only where it is more than a name. Claude Code's file here is in no
+/// `.claude` folder and not this shell's hook file, so after the re-pin it is
+/// no host's: pinned by its bytes, a new model denies every call.
+#[test]
+fn a_repin_does_not_record_an_owner_guessed_from_a_name() {
+    let setup = installed(&baseline(), true);
+    let mut lock = Lock::load(&setup.home.lock_path()).unwrap();
+    lock.hook_owners = None;
+    lock.save(&setup.home.lock_path()).unwrap();
+    let stored = super::super::key(&setup.settings);
+    let lock = Lock::load(&setup.home.lock_path()).unwrap();
+    let (by_key, _) = hosts();
+    assert_eq!(
+        lock.hook_owner(&stored),
+        Some(by_key),
+        "still read as before"
+    );
+    assert_eq!(lock.owners(), Vec::new());
+    assert_eq!(
+        lock.owners_with(&[(setup.settings.clone(), by_key)]),
+        [(PathBuf::from(&stored), by_key)],
+        "kept for this shell's own hook file"
+    );
+    super::super::unpin(&setup.home, &[], &[]).unwrap();
+    let lock = Lock::load(&setup.home.lock_path()).unwrap();
+    assert_eq!(lock.hook_owner(&stored), None);
+    let mut settings = baseline();
+    settings["model"] = json!("claude-opus-4");
+    fs::write(&setup.settings, settings.to_string()).unwrap();
+    assert_denied(&check(&setup.home).unwrap());
+}
+
+/// The rules a list must keep are the ones OpenMoat wrote into that host's
+/// file: with none written for the host, a changed `permissions.deny` cannot
+/// be told from a removed rule and denies.
+#[test]
+fn a_deny_list_change_without_written_rules_denies() {
+    let keys = [RelaxedKey::keeping_written_rules("permissions.deny")];
+    let list = json!([OWNED, "Bash(rm:*)"]);
+    assert!(relaxed_value(
+        &keys,
+        Some("permissions"),
+        "deny",
+        Some(&list),
+        &[OWNED.to_owned()]
+    ));
+    assert!(!relaxed_value(
+        &keys,
+        Some("permissions"),
+        "deny",
+        Some(&list),
+        &[]
+    ));
+    assert!(!relaxed_value(
+        &keys,
+        None,
+        "permissions.deny",
+        Some(&list),
+        &[OWNED.to_owned()]
+    ));
+}

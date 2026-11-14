@@ -34,11 +34,17 @@ without stopping the guard.
    spec says which keys may drift and which are left out of the digest. A file the
    lock does not record as a host's hook file, or one of a host whose spec lists no
    keys, drifts on any change to its bytes.
-3. **Older locks keep verifying.** A lock written before `hook_owners` is read as
-   before: a file at a host's `<dir_name>/<config_file>` is that host's, and a file
-   named like the `config_file` of the one host with such keys whose variable names
-   the directory itself (Claude Code's `CLAUDE_CONFIG_DIR`) is that host's. Any
-   re-pin records the owners.
+3. **Older locks keep verifying, and migrate without keeping a guess by name.** A
+   lock written before `hook_owners` is read as before until it is re-pinned: a file
+   at a host's `<dir_name>/<config_file>` is that host's, and a file named like the
+   `config_file` of the one host with such keys whose variable names the directory
+   itself (Claude Code's `CLAUDE_CONFIG_DIR`) is that host's. The first re-pin
+   (`openmoat init`, `doctor --accept`, `allow` and the other re-pinning commands,
+   `uninstall`'s unpin) records an owner only where it is more than a name: a file
+   this shell installed as that host's hook file, one exactly at its host's
+   `<dir_name>/<config_file>`, or one the lock's pinned forms name. Any other file
+   is recorded as no host's: pinned by its bytes, it drifts on any change until
+   `openmoat init`, from a shell whose variables point at it, records its owner.
 4. **The version gate is a spec fact too.** Whether `openmoat init` writes the flag that
    makes a host block a failed hook's call (`HookSpec::block_on_failure`, Claude Code's
    `onFailure`) is asked of every copy of the host's programs (`ProcessSpec::names` on
@@ -46,6 +52,13 @@ without stopping the guard.
    (`FailureOutcome::BlocksFrom`, `HookFailure::flag_since`), per host
    (`install/on_failure.rs`); debug builds read the version on `PATH` from
    `MOAT_<ID>_VERSION`.
+5. **Matched by names, per host.** A relaxed key matches by its path's names: a
+   top-level key matches only a path with no `.`, and `parent.key` only `key` inside
+   the object `parent`, so a top-level key literally named `permissions.allow` is
+   drift. The rules a `KeepsWrittenRules` list must keep are the ones OpenMoat wrote
+   into that host's own hook file (`Recorded::written_rules`: the sandbox rules of the
+   host whose `ClaudeSettings` sandbox lives in its hook file); any other host has
+   none, so its list cannot change without denying.
 
 ## Consequences
 
