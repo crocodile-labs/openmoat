@@ -114,6 +114,15 @@ pub const RUN_ISOLATION_UNAVAILABLE: &str = "run-isolation-unavailable";
 /// The row of a run whose policy opened the project's top to commands
 /// (`sandbox.project_top: writable`, ADR-090).
 pub const RUN_PROJECT_TOP_OPEN: &str = "run-project-top-open";
+/// The row of a run started over a project file that turns the agent's hook off
+/// (`sandbox.project_hook_off: start`, ADR-098).
+pub const RUN_PROJECT_HOOK_OFF: &str = "run-project-hook-off";
+/// The row of a run that kept the hook on with the host's own option (ADR-098).
+pub const RUN_PROJECT_HOOK_OFF_OVERRIDDEN: &str = "run-project-hook-off-overridden";
+/// The row of a run refused because a project file turns the hook off (ADR-098).
+pub const RUN_PROJECT_HOOK_OFF_REFUSED: &str = "run-project-hook-off-refused";
+/// The row of a run whose person's own settings turn the agent's hooks off (ADR-098).
+pub const RUN_OWN_SETTINGS_HOOK_OFF: &str = "run-own-settings-hook-off";
 /// The row of a run's boundary.
 pub const RUN_BOUNDARY: &str = "run-boundary";
 /// The row a guard leaves when it found the relay variables but was not in a
@@ -284,6 +293,10 @@ pub const BUILTIN_RULES: &[BuiltinRule] = &[
     quiet(RUN_NO_ISOLATE),
     quiet(RUN_ISOLATION_UNAVAILABLE),
     quiet(RUN_PROJECT_TOP_OPEN),
+    quiet(RUN_PROJECT_HOOK_OFF),
+    quiet(RUN_PROJECT_HOOK_OFF_OVERRIDDEN),
+    quiet(RUN_PROJECT_HOOK_OFF_REFUSED),
+    quiet(RUN_OWN_SETTINGS_HOOK_OFF),
     quiet(RUN_BOUNDARY),
     quiet(RUN_GUARD_OUTSIDE),
     quiet(RUN_GUARD_TOKEN),

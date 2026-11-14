@@ -79,6 +79,34 @@ fn lines(
     out
 }
 
+/// The folders where each host keeps OpenMoat's package from its own plugin
+/// channel (ADR-099, `PluginSpec::installed`), as taint globs: `kernel-self`
+/// denies writing them, so session taint protects them too. A home path is
+/// matched wherever it lies (`~/` becomes `**/`, as the hosts' own taint lines do).
+fn plugin_taint_lines(comment: fn(&str) -> String, glob: fn(&str) -> String) -> String {
+    let mut out = String::new();
+    for host in Host::EVERY {
+        let Some(spec) = openmoat_hosts::plugin::spec(host) else {
+            continue;
+        };
+        if spec.installed.globs.is_empty() {
+            continue;
+        }
+        for line in spec.installed.why.lines() {
+            out.push_str(&comment(line));
+            out.push('\n');
+        }
+        for g in spec.installed.globs {
+            let g = g
+                .strip_prefix("~/")
+                .map_or_else(|| (*g).to_owned(), |rest| format!("**/{rest}"));
+            out.push_str(&glob(&g));
+            out.push('\n');
+        }
+    }
+    out
+}
+
 /// `text` with what lies between the line ending in `before` and the line
 /// `after` that follows it replaced by `body`.
 fn splice(text: &str, before: &str, after: &str, body: &str) -> Result<String, String> {
@@ -261,6 +289,7 @@ fn the_taint_list_protects_each_hosts_own_files() {
     let glob = |glob: &str| format!("    \"{glob}\",");
     let mut body = lines(|p| p.taint, comment, glob);
     body.push_str(&convention_lines(|c| c.taint, comment, glob));
+    body.push_str(&plugin_taint_lines(comment, glob));
     assert!(body.contains("**/.copilot/hooks/**"), "{body}");
     assert!(body.contains("\"**/.agents/skills/**\""), "{body}");
     check(TAINT, TAINT_BEFORE, CORE_AFTER, &body);

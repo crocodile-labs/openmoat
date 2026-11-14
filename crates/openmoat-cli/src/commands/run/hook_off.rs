@@ -35,14 +35,14 @@ use crate::home::Home;
 use crate::install::{HookState, HostConfig};
 use crate::project_settings::preflight::{self, Off};
 
-/// The rule of the row a run started over such a file writes.
-pub const STARTED_RULE: &str = "run-project-hook-off";
-/// The rule of the row a run that kept the hook on with the host's option writes.
-pub const OVERRIDDEN_RULE: &str = "run-project-hook-off-overridden";
-/// The rule of the row a refused run writes.
-pub const REFUSED_RULE: &str = "run-project-hook-off-refused";
-/// The rule of the row a run whose person's own settings turn hooks off writes.
-pub const OWN_RULE: &str = "run-own-settings-hook-off";
+/// The rules of the rows a run started over such a file, a run that kept the
+/// hook on with the host's option, a refused run, and a run whose person's own
+/// settings turn hooks off write.
+pub use openmoat_core::rule_id::{
+    RUN_OWN_SETTINGS_HOOK_OFF as OWN_RULE, RUN_PROJECT_HOOK_OFF as STARTED_RULE,
+    RUN_PROJECT_HOOK_OFF_OVERRIDDEN as OVERRIDDEN_RULE,
+    RUN_PROJECT_HOOK_OFF_REFUSED as REFUSED_RULE,
+};
 /// The tool those rows name: never a host id (`isolation.rs`).
 const TOOL: &str = "preflight";
 

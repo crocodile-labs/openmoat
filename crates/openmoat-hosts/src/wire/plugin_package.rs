@@ -41,7 +41,7 @@ pub const INSTALL_DIRS: &[&str] = &[
 
 /// The rule id of a package's own block, the one the guard gives a call it
 /// could not decide.
-const RULE: &str = "kernel-error";
+use openmoat_core::rule_id::KERNEL_ERROR as BLOCK_RULE;
 
 /// `value` as a file: pretty JSON and a final newline.
 pub(crate) fn json_file(value: &Value) -> String {
@@ -60,7 +60,7 @@ fn shell_word(text: &str) -> String {
 fn deny(host: Host, why: &str) -> String {
     host.render_response(
         &HookEvent::default(),
-        &Decision::single(Verdict::Deny, RULE, why),
+        &Decision::single(Verdict::Deny, BLOCK_RULE, why),
     )
 }
 

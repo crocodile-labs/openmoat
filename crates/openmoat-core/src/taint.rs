@@ -267,6 +267,38 @@ const PROTECTED_WRITES: &[&str] = &[
     "**/.agents",
     "**/.agents/skills",
     "**/.agents/skills/**",
+    // Claude Code: OpenMoat's plugin as its marketplace installs it, and that
+    // marketplace's clone
+    "**/.claude/plugins/cache/crocodile-labs/openmoat",
+    "**/.claude/plugins/cache/crocodile-labs/openmoat/**",
+    "**/.claude/plugins/marketplaces/crocodile-labs",
+    "**/.claude/plugins/marketplaces/crocodile-labs/**",
+    // Cursor: OpenMoat's plugin, wherever below its plugins folder Cursor keeps it
+    "**/.cursor/plugins/**/openmoat",
+    "**/.cursor/plugins/**/openmoat/**",
+    // OpenClaw: OpenMoat's ClawHub package, below its state directory or in an npm
+    // folder
+    "**/.openclaw/**/openmoat-clawhub",
+    "**/.openclaw/**/openmoat-clawhub/**",
+    "**/node_modules/@openmoat/openclaw",
+    "**/node_modules/@openmoat/openclaw/**",
+    // GitHub Copilot CLI: OpenMoat's plugin, from a marketplace or straight from
+    // its repository
+    "**/.copilot/installed-plugins/*/openmoat",
+    "**/.copilot/installed-plugins/*/openmoat/**",
+    "**/.copilot/installed-plugins/_direct/*openmoat*",
+    "**/.copilot/installed-plugins/_direct/*openmoat*/**",
+    // pi: OpenMoat's package, in whichever npm folder holds it
+    "**/.pi/agent/**/@openmoat/pi",
+    "**/.pi/agent/**/@openmoat/pi/**",
+    "**/node_modules/@openmoat/pi",
+    "**/node_modules/@openmoat/pi/**",
+    // Gemini CLI: OpenMoat's extension
+    "**/.gemini/extensions/openmoat",
+    "**/.gemini/extensions/openmoat/**",
+    // OpenCode: OpenMoat's npm plugin, in whichever npm folder holds it
+    "**/node_modules/@openmoat/opencode",
+    "**/node_modules/@openmoat/opencode/**",
     // /generated
     // OpenMoat's own state (`kernel-self` denies it outright)
     "**/.moat/**",
