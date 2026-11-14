@@ -15,7 +15,9 @@ mod snapshot;
 
 mod timeline;
 
-pub use approvals::{ApprovalsCommand, ApprovalsStatusArgs, ApproverArgs, ConnectArgs, WaitArgs};
+pub use approvals::{
+    ApprovalsCommand, ApprovalsStatusArgs, ApproverArgs, ConnectArgs, ListenArgs, WaitArgs,
+};
 pub use audit::{
     AnchorArgs, AuditCommand, DeliverCommand, DeliverFlushArgs, DeliverStatusArgs, DeliverTestArgs,
     EvidenceArgs, ExportArgs, TeamReportArgs, VerifyArgs,

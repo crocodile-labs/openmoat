@@ -4,11 +4,13 @@
 //! agent can neither connect a channel, add an approver nor answer.
 //!
 //! No command names a channel: each takes it from the registry
-//! ([`crate::remote::REGISTRY`]) and the settings.
+//! ([`crate::remote::REGISTRY`]) and the settings. `listen` also runs as the
+//! user service `install` writes ([`service`], ADR-094).
+
+mod listen;
+mod service;
 
 use std::io::Write as _;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 
 use anyhow::{Context as _, Result, bail};
 
@@ -16,12 +18,14 @@ use crate::cli::{ApprovalsStatusArgs, ApproverArgs, ConnectArgs, Format, WaitArg
 use crate::exit::Code;
 use crate::home::Home;
 use crate::proxy_session::Key;
-use crate::remote::listen::run::{self, Shared};
 use crate::remote::{
-    AuditRecords, Credential, DEFAULT_EXPIRY_S, Listener, MAX_EXPIRY_S, MIN_EXPIRY_S, Options,
-    REGISTRY, Secrets, Settings, Spec, Store,
+    Credential, DEFAULT_EXPIRY_S, MAX_EXPIRY_S, MIN_EXPIRY_S, Options, REGISTRY, Secrets, Settings,
+    Spec, Store,
 };
 use crate::render::Deferred;
+
+pub use listen::listen;
+pub use service::{install, lines as service_lines, uninstall};
 
 fn person(command: &str) -> Result<()> {
     crate::terminal::refuse_agent(command)?;
@@ -105,11 +109,17 @@ fn fields(spec: &Spec, args: &ConnectArgs) -> Result<(Secrets, Options)> {
         if have {
             continue;
         }
-        let answer = Credential::new(ask(field.ask)?);
         if field.secret {
-            secrets.insert(field.key.to_owned(), answer);
+            // Echo off, never printed back, and never from piped input.
+            let secret = crate::terminal::read_secret(field.ask).with_context(|| {
+                format!(
+                    "reading {}'s {} (--credential-file FILE reads it from a file)",
+                    spec.title, field.key
+                )
+            })?;
+            secrets.insert(field.key.to_owned(), secret);
         } else {
-            options.insert(field.key.to_owned(), answer.to_string());
+            options.insert(field.key.to_owned(), ask(field.ask)?);
         }
     }
     Ok((secrets, options))
@@ -195,6 +205,18 @@ pub fn remove(args: &ApproverArgs) -> Result<Code> {
     Ok(Code::Ok)
 }
 
+/// The service's lines as `status --format json` gives them: `null` when it
+/// is not installed.
+fn service_json(lines: &[(bool, String)]) -> serde_json::Value {
+    if lines.is_empty() {
+        return serde_json::Value::Null;
+    }
+    serde_json::json!({
+        "ok": lines.iter().all(|(ok, _)| *ok),
+        "lines": lines.iter().map(|(_, line)| line).collect::<Vec<_>>(),
+    })
+}
+
 /// What `status` reports of a connected channel.
 struct State {
     settings: Settings,
@@ -234,7 +256,8 @@ fn state(store: &Store) -> Result<State> {
 
 /// `openmoat approvals status`: read-only, so no terminal is needed.
 pub fn status(args: &ApprovalsStatusArgs) -> Result<Code> {
-    let (_home, store) = store()?;
+    let (home, store) = store()?;
+    let service = service::lines(&home);
     let state = if store.connected() {
         state(&store)
     } else {
@@ -252,10 +275,12 @@ pub fn status(args: &ApprovalsStatusArgs) -> Result<Code> {
                 "listening": s.listening,
                 "waiting": s.waiting,
                 "problem": s.problem,
+                "service": service_json(&service),
             }),
             Err(error) => serde_json::json!({
                 "connected": false,
                 "problem": store.connected().then(|| format!("{error:#}")),
+                "service": service_json(&service),
             }),
         };
         crate::render::json(&value)?;
@@ -296,10 +321,13 @@ pub fn status(args: &ApprovalsStatusArgs) -> Result<Code> {
             if let Some(problem) = s.problem {
                 writeln!(out, "problem: {problem}")?;
             }
-            writeln!(
-                out,
-                "answers arrive only while `openmoat approvals listen` runs"
-            )?;
+            if service.is_empty() {
+                writeln!(
+                    out,
+                    "answers arrive only while `openmoat approvals listen` runs; `openmoat \
+                     approvals install` keeps it running"
+                )?;
+            }
         }
         Err(_) if !store.connected() => writeln!(
             out,
@@ -310,6 +338,9 @@ pub fn status(args: &ApprovalsStatusArgs) -> Result<Code> {
             out,
             "channel settings unusable, so no remote answer is accepted: {error:#}"
         )?,
+    }
+    for (ok, line) in &service {
+        writeln!(out, "{} {line}", if *ok { "✔" } else { "✗" })?;
     }
     out.finish()?;
     Ok(Code::Ok)
@@ -346,86 +377,6 @@ pub fn test() -> Result<Code> {
     Ok(if failed { Code::Failed } else { Code::Ok })
 }
 
-/// `openmoat approvals listen`: until Ctrl-C. Two halves (ADR-093,
-/// [`crate::remote::listen::run`]): this thread sends requests as they
-/// appear and keeps the beat; another long-polls the channel for answers,
-/// with a channel of its own. Ctrl-C stops both and removes the beat; a
-/// poll still in flight is dropped with the process, unconfirmed, so its
-/// replies come again on the next `listen`.
-pub fn listen() -> Result<Code> {
-    person("openmoat approvals listen")?;
-    let (home, store) = store()?;
-    let (key, settings) = connected(&store)?;
-    let (spec, mut sender) = crate::remote::open(&store, &REGISTRY, &key, &settings)?;
-    let (_, poller) = crate::remote::open(&store, &REGISTRY, &key, &settings)?;
-    let stop = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&stop))
-        .context("stopping on Ctrl-C")?;
-    let shared = Arc::new(Shared::new(stop));
-    eprintln!(
-        "listening for answers over {}; Ctrl-C stops (requests then wait unanswered and expire)",
-        spec.title
-    );
-    {
-        let (home, store, settings, shared) = (
-            home.clone(),
-            store.clone(),
-            settings.clone(),
-            Arc::clone(&shared),
-        );
-        let mut poller = poller;
-        // Detached: it may be waiting on the channel's server when Ctrl-C
-        // comes, and nothing it holds needs more than the process's end.
-        std::thread::spawn(move || {
-            let key = match Key::load(&store.key_path()) {
-                Ok(key) => key,
-                Err(error) => {
-                    print(&format!("cannot take answers: {error:#}"));
-                    shared.halt();
-                    return;
-                }
-            };
-            let mut records = AuditRecords { home: &home };
-            let mut listener = Listener::new(&store, &key, spec, settings);
-            let refresh = || refresh(&store, spec);
-            run::answering(
-                &mut listener,
-                (poller.as_mut(), &mut records),
-                &shared,
-                &refresh,
-                &print,
-            );
-        });
-    }
-    let mut records = AuditRecords { home: &home };
-    let mut listener = Listener::new(&store, &key, spec, settings);
-    run::sending(
-        &mut listener,
-        (sender.as_mut(), &mut records),
-        &shared,
-        &|| refresh(&store, spec),
-        &print,
-    )
-    .context("stopped")?;
-    eprintln!("stopped; requests now wait unanswered and expire");
-    Ok(Code::Ok)
-}
-
-/// One line of `listen`'s, with the time.
-fn print(line: &str) {
-    eprintln!("{} {line}", crate::time::clock(crate::time::now_ms()));
-}
-
-/// The settings as a person left them, refused once another channel than
-/// `spec` is connected or none is.
-fn refresh(store: &Store, spec: &Spec) -> Result<Settings> {
-    let (_, settings) = connected(store)?;
-    if settings.channel != spec.name {
-        bail!("another channel was connected; run `listen` again");
-    }
-    Ok(settings)
-}
-
 /// `openmoat approvals wait <seconds>`: how long the hook waits for an answer
 /// while `listen` runs (ADR-093); `0` never waits.
 pub fn wait(args: &WaitArgs) -> Result<Code> {
@@ -456,7 +407,7 @@ pub fn wait(args: &WaitArgs) -> Result<Code> {
 /// `openmoat approvals disconnect`.
 pub fn disconnect() -> Result<Code> {
     person("openmoat approvals disconnect")?;
-    let (_home, store) = store()?;
+    let (home, store) = store()?;
     let (was, removed) = crate::remote::disconnect(&store, &REGISTRY)?;
     let mut out = Deferred::default();
     if removed {
@@ -470,6 +421,13 @@ pub fn disconnect() -> Result<Code> {
         }
     } else {
         writeln!(out, "no channel was connected")?;
+    }
+    if !service::lines(&home).is_empty() {
+        writeln!(
+            out,
+            "the listener's service keeps running and waits for a channel; `openmoat \
+             approvals uninstall` removes it"
+        )?;
     }
     out.finish()?;
     Ok(Code::Ok)

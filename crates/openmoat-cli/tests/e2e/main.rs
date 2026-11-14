@@ -13,6 +13,7 @@ mod allow_files;
 mod anchor;
 mod antigravity_cli;
 mod approvals;
+mod approvals_service;
 mod audit;
 #[cfg(unix)]
 mod binary_path;

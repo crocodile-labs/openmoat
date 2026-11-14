@@ -1,23 +1,26 @@
-//! The systemd user unit for `moat proxy`: a deterministic ini-style string
-//! unit tests can lock byte for byte.
+//! The systemd user unit for a [`Job`] (`moat proxy`, `openmoat approvals
+//! listen`): a deterministic ini-style string unit tests can lock byte for
+//! byte.
 //!
 //! Only what the service needs is set: `Description`, `ExecStart` naming the
 //! pinned `moat` binary, `Environment=MOAT_HOME=…` (a path, never a secret),
 //! `Restart=on-failure` so a lock-drift exit (which is a clean exit) does not
 //! loop-restart, and `WantedBy=default.target` so `systemctl --user enable`
-//! starts it on login.
+//! starts it on login. A [`Job::private`] job also gets `UMask=0077` and its
+//! output appended to owner-only files under `MOAT_HOME/logs/`.
 
 use std::fmt::Write as _;
 use std::path::Path;
 
-/// The systemd unit name, written as `moat-proxy.service` in the user unit
-/// directory.
-pub const NAME: &str = "moat-proxy.service";
+use super::Job;
 
 /// What goes into the unit; `moat_home` is a path, never a secret.
 pub struct Spec<'a> {
+    pub job: &'a Job,
     pub binary: &'a Path,
     pub moat_home: &'a Path,
+    /// Where a [`Job::private`] job's output goes: (stdout, stderr).
+    pub logs: (&'a Path, &'a Path),
 }
 
 /// A deterministic unit file. systemd accepts unquoted values that contain
@@ -25,10 +28,11 @@ pub struct Spec<'a> {
 /// because systemd would otherwise read it as a line continuation or token.
 pub fn render(spec: &Spec<'_>) -> String {
     let mut out = String::new();
-    out.push_str("# OpenMoat egress proxy, installed by `openmoat proxy install`.\n");
+    let job = spec.job;
+    let _ = writeln!(out, "# {}, installed by `{}`.", job.title, job.install);
     out.push_str("# Managed by moat; do not edit by hand.\n");
     out.push_str("\n[Unit]\n");
-    out.push_str("Description=OpenMoat default-deny egress proxy\n");
+    let _ = writeln!(out, "Description={}", job.description);
     // `moat sandbox sync` restarts it, so start late enough that /home is up;
     // `default.target` is the user session's analogue of `multi-user.target`.
     out.push_str("After=default.target\n");
@@ -36,8 +40,9 @@ pub fn render(spec: &Spec<'_>) -> String {
     out.push_str("Type=simple\n");
     let _ = writeln!(
         out,
-        "ExecStart={} proxy",
-        escape(&spec.binary.to_string_lossy())
+        "ExecStart={} {}",
+        escape(&spec.binary.to_string_lossy()),
+        job.args.join(" ")
     );
     let _ = writeln!(
         out,
@@ -58,6 +63,20 @@ pub fn render(spec: &Spec<'_>) -> String {
     out.push_str("NoNewPrivileges=yes\n");
     out.push_str("PrivateTmp=yes\n");
     out.push_str("ProtectSystem=full\n");
+    if job.private {
+        out.push_str("UMask=0077\n");
+        let (stdout, stderr) = spec.logs;
+        let _ = writeln!(
+            out,
+            "StandardOutput=append:{}",
+            escape(&stdout.to_string_lossy())
+        );
+        let _ = writeln!(
+            out,
+            "StandardError=append:{}",
+            escape(&stderr.to_string_lossy())
+        );
+    }
     out.push_str("\n[Install]\n");
     out.push_str("WantedBy=default.target\n");
     out
@@ -138,17 +157,78 @@ fn assignments(value: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use super::*;
+    use crate::commands::service::{APPROVALS, PROXY};
+
+    const LOGS: (&str, &str) = (
+        "/home/u/.moat/logs/x.out.log",
+        "/home/u/.moat/logs/x.err.log",
+    );
+
+    fn proxy<'a>(binary: &'a Path, moat_home: &'a Path) -> Spec<'a> {
+        Spec {
+            job: &PROXY,
+            binary,
+            moat_home,
+            logs: (Path::new(LOGS.0), Path::new(LOGS.1)),
+        }
+    }
+
+    /// The proxy's unit is byte for byte what earlier releases wrote, so an
+    /// installed proxy service still reads back unchanged.
+    #[test]
+    fn the_proxy_unit_keeps_its_bytes() {
+        let text = render(&proxy(Path::new("/bin/moat"), Path::new("/home/u/.moat")));
+        assert_eq!(
+            text,
+            "# OpenMoat egress proxy, installed by `openmoat proxy install`.\n\
+             # Managed by moat; do not edit by hand.\n\n[Unit]\n\
+             Description=OpenMoat default-deny egress proxy\nAfter=default.target\n\n\
+             [Service]\nType=simple\nExecStart=/bin/moat proxy\n\
+             Environment=MOAT_HOME=/home/u/.moat\nRestart=on-failure\nRestartSec=2\n\
+             StartLimitBurst=5\nStartLimitIntervalSec=30\nNoNewPrivileges=yes\n\
+             PrivateTmp=yes\nProtectSystem=full\n\n[Install]\nWantedBy=default.target\n"
+        );
+    }
+
+    /// The listener's unit runs `approvals listen --service` from the pinned
+    /// binary at login, restarts it when it fails, and writes its output to
+    /// owner-only files rather than the journal.
+    #[test]
+    fn the_listener_unit_runs_the_service_listener_owner_only() {
+        let text = render(&Spec {
+            job: &APPROVALS,
+            binary: Path::new("/home/u/.cargo/bin/openmoat"),
+            moat_home: Path::new("/home/u/.moat"),
+            logs: (
+                Path::new("/home/u/.moat/logs/approvals.out.log"),
+                Path::new("/home/u/.moat/logs/approvals.err.log"),
+            ),
+        });
+        assert!(text.starts_with(
+            "# OpenMoat approvals listener, installed by `openmoat approvals install`.\n"
+        ));
+        assert!(
+            text.contains("\nExecStart=/home/u/.cargo/bin/openmoat approvals listen --service\n")
+        );
+        assert!(text.contains("\nRestart=on-failure\n"));
+        assert!(text.contains("\nUMask=0077\n"));
+        assert!(text.contains("\nStandardOutput=append:/home/u/.moat/logs/approvals.out.log\n"));
+        assert!(text.contains("\nStandardError=append:/home/u/.moat/logs/approvals.err.log\n"));
+        assert!(text.ends_with("[Install]\nWantedBy=default.target\n"));
+        assert_eq!(environment(&text), Some(vec!["MOAT_HOME".to_owned()]));
+    }
 
     #[test]
     fn unit_names_the_binary_and_moat_home_and_restarts_only_on_failure() {
-        assert_eq!(NAME, "moat-proxy.service");
-        let text = render(&Spec {
-            binary: &PathBuf::from("/home/u/.cargo/bin/moat"),
-            moat_home: &PathBuf::from("/home/u/.moat"),
-        });
+        assert_eq!(PROXY.unit, "moat-proxy.service");
+        let (binary, home) = (
+            PathBuf::from("/home/u/.cargo/bin/moat"),
+            PathBuf::from("/home/u/.moat"),
+        );
+        let text = render(&proxy(&binary, &home));
         assert!(text.contains("Description=OpenMoat"));
         assert!(text.contains("ExecStart=/home/u/.cargo/bin/moat proxy"));
         assert!(text.contains("Environment=MOAT_HOME=/home/u/.moat"));
@@ -161,20 +241,14 @@ mod tests {
 
     #[test]
     fn render_is_deterministic() {
-        let spec = Spec {
-            binary: &PathBuf::from("/opt/moat"),
-            moat_home: &PathBuf::from("/x/.moat"),
-        };
+        let spec = proxy(Path::new("/opt/moat"), Path::new("/x/.moat"));
         assert_eq!(render(&spec), render(&spec));
     }
 
     #[test]
     fn backslashes_tabs_and_newlines_in_a_path_are_escaped() {
         let home = PathBuf::from("/home/weird\t\\path");
-        let text = render(&Spec {
-            binary: &PathBuf::from("/bin/moat"),
-            moat_home: &home,
-        });
+        let text = render(&proxy(Path::new("/bin/moat"), &home));
         assert!(
             text.contains("Environment=MOAT_HOME=/home/weird\\t\\\\path"),
             "{text}"
@@ -183,10 +257,7 @@ mod tests {
 
     #[test]
     fn environment_names_what_each_service_line_sets() {
-        let text = render(&Spec {
-            binary: &PathBuf::from("/bin/moat"),
-            moat_home: &PathBuf::from("/home/u/.moat"),
-        });
+        let text = render(&proxy(Path::new("/bin/moat"), Path::new("/home/u/.moat")));
         assert_eq!(environment(&text), Some(vec!["MOAT_HOME".to_owned()]));
         let tampered = text.replace(
             "Restart=on-failure\n",

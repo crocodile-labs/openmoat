@@ -15,7 +15,7 @@
 //! while the last successful poll ended within the channel's `poll_wait`
 //! plus [`POLL_SLACK`] ([`Shared::answers`]). An answering half that ends
 //! for any reason, a panic included, stops `listen`. Ctrl-C sets
-//! [`Shared::stop`]; the sending half removes the beat and returns, after
+//! [`Shared::interrupted`]; the sending half removes the beat and returns, after
 //! any reply being answered is finished ([`Shared::finish`]).
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -48,8 +48,10 @@ const TICK: Duration = Duration::from_millis(100);
 
 /// What the two halves share.
 pub struct Shared {
-    /// Set by Ctrl-C, or by a half that stops.
-    pub stop: Arc<AtomicBool>,
+    /// Set by a half that stops, for both.
+    pub stop: AtomicBool,
+    /// Set by Ctrl-C, for every listener of the process.
+    interrupt: Arc<AtomicBool>,
     /// When the last poll of the channel succeeded, or the listener started.
     polled: Mutex<Instant>,
     /// Held while replies are answered, so a stop never cuts one short.
@@ -57,9 +59,11 @@ pub struct Shared {
 }
 
 impl Shared {
-    pub fn new(stop: Arc<AtomicBool>) -> Self {
+    /// Halves that also stop when `interrupt` is set (by Ctrl-C).
+    pub fn new(interrupt: Arc<AtomicBool>) -> Self {
         Self {
-            stop,
+            stop: AtomicBool::new(false),
+            interrupt,
             polled: Mutex::new(Instant::now()),
             answering: Mutex::new(()),
         }
@@ -87,7 +91,12 @@ impl Shared {
     }
 
     fn stopped(&self) -> bool {
-        self.stop.load(Ordering::Relaxed)
+        self.stop.load(Ordering::Relaxed) || self.interrupted()
+    }
+
+    /// Whether Ctrl-C stopped the halves.
+    pub fn interrupted(&self) -> bool {
+        self.interrupt.load(Ordering::Relaxed)
     }
 
     /// Stop both halves and wait for replies being answered, if any; until

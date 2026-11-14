@@ -1,4 +1,5 @@
-//! macOS: a per-user launchd agent at `~/Library/LaunchAgents/dev.openmoat.proxy.plist`.
+//! macOS: a per-user launchd agent at `~/Library/LaunchAgents/<label>.plist`
+//! (`dev.openmoat.proxy`, `dev.openmoat.approvals`).
 //!
 //! `launchctl bootstrap gui/<uid> <plist>` loads it, `launchctl kickstart`
 //! starts it, `launchctl print` returns its state, and `launchctl bootout`
@@ -17,19 +18,26 @@ use std::process::Command;
 
 use anyhow::{Context as _, Result, bail};
 
-use super::{Manager, State, plist};
+use super::{Job, Manager, State, plist};
 use crate::home::{Home, user_home, write_private};
 use crate::install::{SANDBOX_BACKUP, backup_path};
 
 pub const DISPLAY: &str = "launchd user agent";
 
-/// Build a macOS service manager rooted at this user's home.
-pub fn manager(_home: &Home) -> Result<Box<dyn Manager>> {
-    Ok(Box::new(LaunchdManager { home: user_home()? }))
+/// What launchd sets in the environment of each job it starts: the job's label.
+const SERVICE_NAME: &str = "XPC_SERVICE_NAME";
+
+/// Build a macOS service manager for `job`, rooted at this user's home.
+pub fn manager(_home: &Home, job: &'static Job) -> Result<Box<dyn Manager>> {
+    Ok(Box::new(LaunchdManager {
+        home: user_home()?,
+        job,
+    }))
 }
 
 struct LaunchdManager {
     home: PathBuf,
+    job: &'static Job,
 }
 
 impl LaunchdManager {
@@ -38,23 +46,19 @@ impl LaunchdManager {
     }
 
     fn plist_path(&self) -> PathBuf {
-        self.plist_dir().join(format!("{}.plist", plist::LABEL))
+        self.plist_dir().join(format!("{}.plist", self.job.label))
     }
-}
 
-fn log_dir() -> Result<PathBuf> {
-    Ok(Home::locate()?.root().join("logs"))
-}
-
-/// The gui domain target launchd uses for a user agent: `gui/<uid>/<label>`.
-/// A zero uid would mean "root at the login window", which is not what a
-/// user agent runs as; refuse rather than silently load into gui/0.
-fn target() -> Result<String> {
-    let uid = current_uid()?;
-    if uid == 0 {
-        bail!("`openmoat proxy install` is for a logged-in user, not root");
+    /// The gui domain target launchd uses for a user agent: `gui/<uid>/<label>`.
+    /// A zero uid would mean "root at the login window", which is not what a
+    /// user agent runs as; refuse rather than silently load into gui/0.
+    fn target(&self) -> Result<String> {
+        let uid = current_uid()?;
+        if uid == 0 {
+            bail!("`{}` is for a logged-in user, not root", self.job.install);
+        }
+        Ok(format!("gui/{uid}/{}", self.job.label))
     }
-    Ok(format!("gui/{uid}/{}", plist::LABEL))
 }
 
 fn gui_domain() -> Result<String> {
@@ -68,9 +72,10 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    Command::new("launchctl").args(args).output().with_context(
-        || "running launchctl; install launchd command-line tools or run `openmoat proxy` yourself",
-    )
+    Command::new("launchctl")
+        .args(args)
+        .output()
+        .context("running launchctl; install launchd command-line tools")
 }
 
 impl Manager for LaunchdManager {
@@ -79,12 +84,13 @@ impl Manager for LaunchdManager {
     }
 
     fn render(&self, binary: &Path, moat_home: &Path) -> Result<String> {
-        let logs = log_dir()?;
+        let (stdout_log, stderr_log) = super::log_paths(self.job)?;
         Ok(plist::render(&plist::Spec {
+            job: self.job,
             binary,
             moat_home,
-            stdout_log: &logs.join("proxy.out.log"),
-            stderr_log: &logs.join("proxy.err.log"),
+            stdout_log: &stdout_log,
+            stderr_log: &stderr_log,
         }))
     }
 
@@ -92,11 +98,27 @@ impl Manager for LaunchdManager {
         plist::environment
     }
 
+    fn job(&self) -> &'static Job {
+        self.job
+    }
+
+    /// launchd starts a user agent as a child of itself (pid 1) with the
+    /// job's label in `XPC_SERVICE_NAME`.
+    fn started_as_service(&self) -> Result<()> {
+        let parent = rustix::process::getppid();
+        let name = std::env::var_os(SERVICE_NAME);
+        if parent != Some(rustix::process::Pid::INIT)
+            || name.as_deref() != Some(OsStr::new(self.job.label))
+        {
+            bail!("launchd did not start this as `{}`", self.job.label);
+        }
+        Ok(())
+    }
+
     fn install(&self, binary: &Path, moat_home: &Path) -> Result<PathBuf> {
         let dir = self.plist_dir();
         fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-        let logs = log_dir()?;
-        fs::create_dir_all(&logs).with_context(|| format!("creating {}", logs.display()))?;
+        super::prepare_logs(self.job)?;
         let text = self.render(binary, moat_home)?;
         let path = self.plist_path();
         // Back up an existing plist once per `install`, so a hand-edited
@@ -112,7 +134,7 @@ impl Manager for LaunchdManager {
         // Unload-then-load is idempotent: launchd refuses a second bootstrap
         // for the same label. A failing `bootout` is fine when it was not
         // loaded.
-        let _ = launchctl(["bootout", &target()?])?;
+        let _ = launchctl(["bootout", &self.target()?])?;
         let out = launchctl(["bootstrap", &gui_domain()?, &path.to_string_lossy()])?;
         if !out.status.success() {
             bail!(
@@ -124,7 +146,7 @@ impl Manager for LaunchdManager {
                 path.display()
             );
         }
-        let _ = launchctl(["kickstart", "-k", &target()?])?;
+        let _ = launchctl(["kickstart", "-k", &self.target()?])?;
         Ok(path)
     }
 
@@ -134,7 +156,7 @@ impl Manager for LaunchdManager {
             return Ok(None);
         }
         if !super::skip_exec() {
-            let _ = launchctl(["bootout", &target()?]);
+            let _ = launchctl(["bootout", &self.target()?]);
         }
         fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
         Ok(Some(path))
@@ -150,7 +172,7 @@ impl Manager for LaunchdManager {
             // bootstrap, so launchd knows nothing of this label.
             return Ok(State::Stopped);
         }
-        let out = match launchctl(["print", &target()?]) {
+        let out = match launchctl(["print", &self.target()?]) {
             Ok(out) => out,
             Err(e) => {
                 return Ok(State::Unknown {
@@ -184,11 +206,12 @@ impl Manager for LaunchdManager {
         if !path.exists() || super::skip_exec() {
             return Ok(());
         }
-        let out = launchctl(["kickstart", "-k", &target()?])?;
+        let out = launchctl(["kickstart", "-k", &self.target()?])?;
         if !out.status.success() {
             bail!(
-                "launchctl kickstart refused: {}; the proxy may already be stopped",
-                String::from_utf8_lossy(&out.stderr).trim()
+                "launchctl kickstart refused: {}; {} may already be stopped",
+                String::from_utf8_lossy(&out.stderr).trim(),
+                self.job.noun
             );
         }
         Ok(())

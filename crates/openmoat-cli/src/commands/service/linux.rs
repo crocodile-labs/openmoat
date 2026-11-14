@@ -1,8 +1,9 @@
-//! Linux: a systemd user unit at `~/.config/systemd/user/moat-proxy.service`.
+//! Linux: a systemd user unit at `~/.config/systemd/user/<unit>`
+//! (`moat-proxy.service`, `openmoat-approvals.service`).
 //!
-//! `systemctl --user daemon-reload && systemctl --user enable --now moat-proxy`
+//! `systemctl --user daemon-reload && systemctl --user enable --now <unit>`
 //! loads it, `systemctl --user is-active` reports its state, and
-//! `systemctl --user disable --now moat-proxy && rm <unit>` undoes it. The
+//! `systemctl --user disable --now <unit> && rm <unit>` undoes it. The
 //! user bus is a hard requirement: `systemctl --user` without one (bare
 //! containers, some CI runners) fails fast with a clear hint, not silently.
 
@@ -13,19 +14,26 @@ use std::process::Command;
 
 use anyhow::{Context as _, Result, bail};
 
-use super::{Manager, State, unit};
+use super::{Job, Manager, State, unit};
 use crate::home::{Home, user_home, write_private};
 use crate::install::{SANDBOX_BACKUP, backup_path};
 
 pub const DISPLAY: &str = "systemd user unit";
 
-/// Build a Linux service manager rooted at this user's home.
-pub fn manager(_home: &Home) -> Result<Box<dyn Manager>> {
-    Ok(Box::new(SystemdManager { home: user_home()? }))
+/// What systemd sets in the environment of each service it starts.
+const INVOCATION_ID: &str = "INVOCATION_ID";
+
+/// Build a Linux service manager for `job`, rooted at this user's home.
+pub fn manager(_home: &Home, job: &'static Job) -> Result<Box<dyn Manager>> {
+    Ok(Box::new(SystemdManager {
+        home: user_home()?,
+        job,
+    }))
 }
 
 struct SystemdManager {
     home: PathBuf,
+    job: &'static Job,
 }
 
 impl SystemdManager {
@@ -34,7 +42,7 @@ impl SystemdManager {
     }
 
     fn unit_path(&self) -> PathBuf {
-        self.unit_dir().join(unit::NAME)
+        self.unit_dir().join(self.job.unit)
     }
 }
 
@@ -47,9 +55,7 @@ where
         .arg("--user")
         .args(args)
         .output()
-        .with_context(
-            || "running systemctl --user; install systemd or run `openmoat proxy` yourself",
-        )
+        .context("running systemctl --user; install systemd")
 }
 
 impl Manager for SystemdManager {
@@ -58,16 +64,40 @@ impl Manager for SystemdManager {
     }
 
     fn render(&self, binary: &Path, moat_home: &Path) -> Result<String> {
-        Ok(unit::render(&unit::Spec { binary, moat_home }))
+        let (stdout, stderr) = super::log_paths(self.job)?;
+        Ok(unit::render(&unit::Spec {
+            job: self.job,
+            binary,
+            moat_home,
+            logs: (&stdout, &stderr),
+        }))
     }
 
     fn environment(&self) -> fn(&str) -> Option<Vec<String>> {
         unit::environment
     }
 
+    fn job(&self) -> &'static Job {
+        self.job
+    }
+
+    /// systemd starts a service with `INVOCATION_ID` set, in a control group
+    /// named after its unit (`…/app.slice/<unit>`).
+    fn started_as_service(&self) -> Result<()> {
+        let group = fs::read_to_string("/proc/self/cgroup").unwrap_or_default();
+        let in_unit = group
+            .lines()
+            .any(|line| line.trim_end().rsplit('/').next() == Some(self.job.unit));
+        if std::env::var_os(INVOCATION_ID).is_none() || !in_unit {
+            bail!("systemd did not start this as `{}`", self.job.unit);
+        }
+        Ok(())
+    }
+
     fn install(&self, binary: &Path, moat_home: &Path) -> Result<PathBuf> {
         let dir = self.unit_dir();
         fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+        super::prepare_logs(self.job)?;
         let text = self.render(binary, moat_home)?;
         let path = self.unit_path();
         if path.exists() {
@@ -85,12 +115,13 @@ impl Manager for SystemdManager {
         if !reload.status.success() {
             bail!(
                 "systemctl --user daemon-reload refused: {}; the unit is at {} and \
-                 `systemctl --user enable --now moat-proxy` runs it by hand",
+                 `systemctl --user enable --now {}` runs it by hand",
                 String::from_utf8_lossy(&reload.stderr).trim(),
                 path.display(),
+                self.job.unit,
             );
         }
-        let start = systemctl(["enable", "--now", unit::NAME])?;
+        let start = systemctl(["enable", "--now", self.job.unit])?;
         if !start.status.success() {
             bail!(
                 "systemctl --user enable --now refused: {}; the unit is at {}",
@@ -109,7 +140,7 @@ impl Manager for SystemdManager {
         if !super::skip_exec() {
             // Best effort: a user bus that is gone leaves `--user disable` to fail,
             // and that is fine — we still remove the unit file.
-            let _ = systemctl(["disable", "--now", unit::NAME]);
+            let _ = systemctl(["disable", "--now", self.job.unit]);
         }
         fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
         if !super::skip_exec() {
@@ -128,7 +159,7 @@ impl Manager for SystemdManager {
             // bootstrap, so systemd knows nothing of this unit.
             return Ok(State::Stopped);
         }
-        let active = match systemctl(["is-active", unit::NAME]) {
+        let active = match systemctl(["is-active", self.job.unit]) {
             Ok(out) => out,
             Err(e) => {
                 return Ok(State::Unknown {
@@ -139,8 +170,8 @@ impl Manager for SystemdManager {
         let text = String::from_utf8_lossy(&active.stdout);
         match text.trim() {
             "active" | "activating" | "reloading" => Ok(State::Running),
-            "failed" => classify_failure(),
-            "inactive" | "deactivating" => classify_inactive(),
+            "failed" => classify_failure(self.job),
+            "inactive" | "deactivating" => classify_inactive(self.job),
             other => Ok(State::Unknown {
                 details: format!("systemctl is-active returned {other:?}"),
             }),
@@ -152,7 +183,7 @@ impl Manager for SystemdManager {
         if !path.exists() || super::skip_exec() {
             return Ok(());
         }
-        let out = systemctl(["restart", unit::NAME])?;
+        let out = systemctl(["restart", self.job.unit])?;
         if !out.status.success() {
             bail!(
                 "systemctl --user restart refused: {}",
@@ -165,8 +196,8 @@ impl Manager for SystemdManager {
 
 /// A `failed` unit: a lock-drift exit (code 64) means the user must look at
 /// `moat doctor`, not a crash loop. Everything else is treated as a crash loop.
-fn classify_failure() -> Result<State> {
-    let out = systemctl(["show", unit::NAME, "-p", "ExecMainStatus", "--value"])?;
+fn classify_failure(job: &Job) -> Result<State> {
+    let out = systemctl(["show", job.unit, "-p", "ExecMainStatus", "--value"])?;
     let text = String::from_utf8_lossy(&out.stdout);
     if text.trim() == "64" {
         return Ok(State::DriftBlocked);
@@ -177,8 +208,8 @@ fn classify_failure() -> Result<State> {
 /// An `inactive` unit: usually just stopped, but a one-shot exit 64 that
 /// systemd read as success (type=simple, treats clean exit as inactive) also
 /// counts as drift.
-fn classify_inactive() -> Result<State> {
-    let out = systemctl(["show", unit::NAME, "-p", "ExecMainStatus", "--value"])?;
+fn classify_inactive(job: &Job) -> Result<State> {
+    let out = systemctl(["show", job.unit, "-p", "ExecMainStatus", "--value"])?;
     let text = String::from_utf8_lossy(&out.stdout);
     if text.trim() == "64" {
         return Ok(State::DriftBlocked);

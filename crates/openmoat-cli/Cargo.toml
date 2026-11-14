@@ -82,6 +82,11 @@ tempfile.workspace = true
 rcgen.workspace = true
 rustls.workspace = true
 
+[target.'cfg(unix)'.dev-dependencies]
+# A pseudo-terminal for the test that a secret typed at the terminal is not
+# echoed (`terminal/secret/tests.rs`); the same rustix.
+rustix = { workspace = true, features = ["pty"] }
+
 # The workspace's lints, except `unsafe_code`: `deny` instead of `forbid`, so
 # `commands/run/inherited.rs` alone can `#[expect]` it for its `fcntl` and
 # `close_range` calls (ADR-088); `openmoat-core`'s architecture test keeps every

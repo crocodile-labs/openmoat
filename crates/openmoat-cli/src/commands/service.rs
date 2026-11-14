@@ -1,4 +1,5 @@
-//! User-level service installation for `moat proxy` (ADR-020, #272).
+//! User-level services: `openmoat proxy` (ADR-020, #272) and `openmoat
+//! approvals listen` (ADR-094), each described by a [`Job`].
 //!
 //! `moat proxy install` writes a launchd user agent (macOS) or a systemd user
 //! unit (Linux) that keeps `moat proxy` running under the current user, with
@@ -21,6 +22,9 @@
 // only by its own platform (`macos.rs`, `linux.rs`), so a cross-platform
 // build sees the other as unused; the `cfg` gating keeps the warnings away
 // without turning off `-D warnings`.
+mod job;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod lines;
 #[cfg(any(target_os = "macos", test))]
 pub mod plist;
 #[cfg(any(target_os = "macos", target_os = "linux", test))]
@@ -49,6 +53,8 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::home::Home;
+
+pub use job::{APPROVALS, Job, PROXY};
 
 /// Debug builds honour `MOAT_SERVICE_SKIP_EXEC=1`: the service file is still
 /// written and removed, but `launchctl` / `systemctl` are never invoked. End-to-end
@@ -94,22 +100,22 @@ pub enum State {
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 impl State {
-    /// A short line for `moat status` / `moat doctor`.
-    pub fn describe(&self, path: &std::path::Path) -> String {
+    /// A short line for `moat status` / `moat doctor` about `job`.
+    pub fn describe(&self, job: &Job, path: &std::path::Path) -> String {
         match self {
             Self::NotInstalled => {
-                "not installed; `openmoat proxy install` keeps the proxy running".to_owned()
+                format!(
+                    "not installed; `{}` keeps {} running",
+                    job.install, job.noun
+                )
             }
             Self::Stopped => format!("installed but stopped ({})", path.display()),
             Self::Running => format!("installed and running ({})", path.display()),
-            Self::DriftBlocked => format!(
-                "installed; the proxy exited because of policy-lock drift. Fix the drift \
-                 (`openmoat doctor`), then `openmoat proxy install` restarts it ({})",
-                path.display()
-            ),
+            Self::DriftBlocked => format!("installed; {} ({})", job.exit_64, path.display()),
             Self::Crashlooping => format!(
                 "installed; restart budget exhausted. Check the service log, then \
-                 `openmoat proxy install` to retry ({})",
+                 `{}` to retry ({})",
+                job.install,
                 path.display()
             ),
             Self::Unknown { details } => format!("installed; state unknown: {details}"),
@@ -139,6 +145,14 @@ pub trait Manager {
     /// ([`read_back::findings`]).
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn environment(&self) -> fn(&str) -> Option<Vec<String>>;
+    /// The job this manager installs.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn job(&self) -> &'static Job;
+    /// Refused unless this process was started by the service manager as the
+    /// job's service. A consistency check, not a boundary: a process of the
+    /// same user can imitate what it reads (ADR-094).
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn started_as_service(&self) -> Result<()>;
     /// What state the service is in now.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn state(&self) -> Result<State>;
@@ -147,11 +161,11 @@ pub trait Manager {
     fn restart(&self) -> Result<()>;
 }
 
-/// The platform's service manager, or an error wrapper on an unsupported OS
-/// (Windows is a stub). The log paths live under `MOAT_HOME/logs/` so a user
-/// can read them without `sudo` on macOS.
-pub fn manager(home: &Home) -> Result<Box<dyn Manager>> {
-    platform::manager(home)
+/// The platform's service manager for `job`, or an error wrapper on an
+/// unsupported OS (Windows is a stub). The log paths live under
+/// `MOAT_HOME/logs/` so a user can read them without `sudo` on macOS.
+pub fn manager(home: &Home, job: &'static Job) -> Result<Box<dyn Manager>> {
+    platform::manager(home, job)
 }
 
 /// Why the installed service file is not the one `moat proxy install` writes
@@ -179,7 +193,89 @@ pub fn read_back(
         text: &text,
         mode: mode(&path),
     };
-    read_back::findings(&expected, &installed, manager.environment())
+    read_back::findings(&expected, &installed, manager.environment(), manager.job())
+}
+
+/// Refused unless this process runs as `job`'s installed service: the file
+/// is there and reads back as exactly what its install command writes for
+/// the pinned binary and this state directory (owner-only, `MOAT_HOME` its
+/// only variable), and the service manager started this process from it.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub fn check_started(home: &Home, job: &'static Job) -> Result<()> {
+    use anyhow::bail;
+
+    let manager = manager(home, job)?;
+    let path = manager.file_path()?;
+    if !path.exists() {
+        bail!(
+            "no service is installed at {}; `{}` installs it, and a person runs \
+             `openmoat {}` in a terminal",
+            path.display(),
+            job.install,
+            job.terminal
+        );
+    }
+    let findings = lines::findings(home, manager.as_ref());
+    if !findings.is_empty() {
+        bail!(
+            "refusing to run from the service file {}: it {}; `{}` writes it again",
+            path.display(),
+            findings.join("; it "),
+            job.install
+        );
+    }
+    manager.started_as_service()
+}
+
+/// No user service here, so nothing runs as one.
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub fn check_started(_home: &Home, job: &'static Job) -> Result<()> {
+    anyhow::bail!(
+        "no user service on {}; run `openmoat {}` in a terminal",
+        std::env::consts::OS,
+        job.terminal
+    )
+}
+
+/// `job`'s log files, `MOAT_HOME/logs/<log>.out.log` and `<log>.err.log`.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn log_paths(job: &Job) -> Result<(PathBuf, PathBuf)> {
+    let logs = Home::locate()?.root().join("logs");
+    Ok((
+        logs.join(format!("{}.out.log", job.log)),
+        logs.join(format!("{}.err.log", job.log)),
+    ))
+}
+
+/// The log directory, and for a [`Job::private`] job its two log files made
+/// owner-only before the service manager opens them: launchd creates a
+/// missing one with its own umask (readable by others), and a log the
+/// listener writes names approvers and requests.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn prepare_logs(job: &Job) -> Result<()> {
+    use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+
+    use anyhow::Context as _;
+
+    let (stdout, stderr) = log_paths(job)?;
+    let Some(dir) = stdout.parent() else {
+        return Ok(());
+    };
+    std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+    if !job.private {
+        return Ok(());
+    }
+    for path in [&stdout, &stderr] {
+        std::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .mode(0o600)
+            .open(path)
+            .with_context(|| format!("creating {}", path.display()))?;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+            .with_context(|| format!("making {} owner-only", path.display()))?;
+    }
+    Ok(())
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -201,17 +297,22 @@ mod tests {
     #[test]
     fn state_describe_names_the_fix_for_each_variant() {
         let path = std::path::Path::new("/x/plist");
-        assert!(State::NotInstalled.describe(path).contains("not installed"));
-        assert!(State::Stopped.describe(path).contains("stopped"));
-        assert!(State::Running.describe(path).contains("running"));
-        assert!(State::DriftBlocked.describe(path).contains("drift"));
-        assert!(State::Crashlooping.describe(path).contains("restart"));
+        let describe = |state: State| state.describe(&PROXY, path);
+        assert!(describe(State::NotInstalled).contains("not installed"));
+        assert!(describe(State::Stopped).contains("stopped"));
+        assert!(describe(State::Running).contains("running"));
+        assert!(describe(State::DriftBlocked).contains("drift"));
+        assert!(describe(State::Crashlooping).contains("restart"));
         assert!(
-            State::Unknown {
+            describe(State::Unknown {
                 details: "no bus".into(),
-            }
-            .describe(path)
+            })
             .contains("no bus")
         );
+        // Each job names its own command and what it keeps running.
+        let listener = State::NotInstalled.describe(&APPROVALS, path);
+        assert!(listener.contains("`openmoat approvals install` keeps the listener"));
+        let stopped = State::DriftBlocked.describe(&APPROVALS, path);
+        assert!(stopped.contains("its log says why") && !stopped.contains("drift"));
     }
 }

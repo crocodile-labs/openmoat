@@ -1,7 +1,9 @@
 //! `moat doctor` and `moat status` read the installed service file back
 //! (#272): the service manager starts the proxy, the one process that enforces
 //! the network policy, exactly as that file says, so a change to it after
-//! `moat proxy install` changes the enforcer. An extra environment variable
+//! `moat proxy install` changes the enforcer. The approvals listener, which
+//! holds the channel's credential and the approval key, is read back the same
+//! way, and refuses to start from a file this check finds anything in (ADR-094). An extra environment variable
 //! (`DYLD_INSERT_LIBRARIES`, `LD_PRELOAD`, `HTTPS_PROXY`, a second
 //! `MOAT_HOME`) or a program run before it does that without touching the
 //! binary or the lock. Agent writes to the service directories already need
@@ -10,7 +12,9 @@
 //! Pure: the caller reads the file and its mode, so the checks are tested on
 //! tampered text without a real service directory.
 
-/// The environment variable `moat proxy install` writes, the only one.
+use super::Job;
+
+/// The environment variable a service file gets, the only one.
 pub const ALLOWED_ENV: &str = "MOAT_HOME";
 
 /// What the installed service file looks like: its bytes, and its Unix mode
@@ -29,6 +33,7 @@ pub fn findings(
     expected: &str,
     installed: &Installed<'_>,
     environment: fn(&str) -> Option<Vec<String>>,
+    job: &Job,
 ) -> Vec<String> {
     let mut found = Vec::new();
     match std::str::from_utf8(installed.text)
@@ -39,19 +44,19 @@ pub fn findings(
             let extra: Vec<String> = names.into_iter().filter(|n| n != ALLOWED_ENV).collect();
             if !extra.is_empty() {
                 found.push(format!(
-                    "sets environment the proxy is started with beyond `{ALLOWED_ENV}`: {}",
+                    "sets environment {} is started with beyond `{ALLOWED_ENV}`: {}",
+                    job.noun,
                     extra.join(", ")
                 ));
             }
         }
-        None => found.push("is not in the form `openmoat proxy install` writes".to_owned()),
+        None => found.push(format!("is not in the form `{}` writes", job.install)),
     }
     if installed.text != expected.as_bytes() && found.is_empty() {
-        found.push(
-            "differs from what `openmoat proxy install` writes for this binary and state \
-             directory"
-                .to_owned(),
-        );
+        found.push(format!(
+            "differs from what `{}` writes for this binary and state directory",
+            job.install
+        ));
     }
     if let Some(mode) = installed.mode.filter(|m| m & 0o077 != 0) {
         found.push(format!(
@@ -65,6 +70,15 @@ pub fn findings(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::service::PROXY;
+
+    fn findings(
+        expected: &str,
+        installed: &Installed<'_>,
+        environment: fn(&str) -> Option<Vec<String>>,
+    ) -> Vec<String> {
+        super::findings(expected, installed, environment, &PROXY)
+    }
 
     /// A stand-in format: one `NAME=value` per line.
     fn lines(text: &str) -> Option<Vec<String>> {

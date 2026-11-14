@@ -54,10 +54,13 @@ Telegram is the first channel. The design and its threat model are in
    openmoat approvals connect telegram
    ```
 
-   Paste the token when asked. OpenMoat checks it with Telegram, then stores it in
+   Paste the token when asked. It is not shown as you paste it, as with a password, and
+   OpenMoat never prints it back; Ctrl-C cancels. OpenMoat checks it with Telegram, then
+   stores it in
    `~/.moat/remote/telegram/credential`, readable only by you. It never goes in a policy
    file. To read it from a file instead, use `--credential-file FILE` and delete the
-   file afterwards.
+   file afterwards. A token piped into `connect` is refused, and on Windows, where the
+   terminal cannot hide it, `--credential-file` is the only way.
 3. Send `/start` to your bot from your own Telegram account.
 4. Start the listener in a terminal of your own, and leave it running:
 
@@ -82,7 +85,21 @@ Telegram is the first channel. The design and its threat model are in
    services is never the same approver. `allow 123456789` means the same on the
    connected channel.
 
-From now on, every call held for review is also sent to you while `listen` runs.
+6. Keep the listener running after you close the terminal (macOS and Linux). Stop the
+   `listen` you started in step 4 with Ctrl-C, then:
+
+   ```bash
+   openmoat approvals install
+   ```
+
+   It writes a launchd user agent (macOS, `~/Library/LaunchAgents/dev.openmoat.approvals.plist`)
+   or a systemd user unit (Linux, `~/.config/systemd/user/openmoat-approvals.service`) that
+   runs `openmoat approvals listen --service` at login and restarts it when it fails. Its
+   output goes to `~/.moat/logs/approvals.out.log` and `approvals.err.log`, readable only
+   by you. `openmoat approvals status` shows whether it runs; `openmoat approvals
+   uninstall` removes it.
+
+From now on, every call held for review is also sent to you while the listener runs.
 
 ## Commands
 
@@ -91,16 +108,23 @@ From now on, every call held for review is also sent to you while `listen` runs.
 | `openmoat approvals connect <channel> [--credential-file FILE] [--set KEY=VALUE] [--expires 5m]` | checks the credential with the channel, stores it, makes the approval key, keeps approvers you already allowed on that channel; `--set` gives a channel's other settings, never a secret (Telegram has none) | a person at a terminal |
 | `openmoat approvals allow <channel>:<user-id>` | lets that user approve (a bare user id means the connected channel) | a person at a terminal |
 | `openmoat approvals remove <channel>:<user-id>` | takes that back; answers they gave that are not used yet stop counting | a person at a terminal |
-| `openmoat approvals listen` | sends each new request within about a second and takes answers the moment you give them (it waits on Telegram's server for them), until Ctrl-C | a person at a terminal |
+| `openmoat approvals listen` | sends each new request within about a second and takes answers the moment you give them (it waits on Telegram's server for them), until Ctrl-C; refused while another listener (such as the service) runs | a person at a terminal |
+| `openmoat approvals install` | keeps `listen` running at login as a launchd user agent or systemd user unit, restarted when it fails, logging to `~/.moat/logs/approvals.*.log`; needs a connected channel; not on Windows | a person at a terminal |
+| `openmoat approvals uninstall` | stops and removes that service | a person at a terminal |
+| `openmoat approvals listen --service` | what the service runs: no terminal needed, refused unless the service manager started it from the unchanged service file with no variable that changes TLS trust or loads a library (`SSL_CERT_FILE`, `LD_PRELOAD`, `DYLD_*`, …) | the service manager |
 | `openmoat approvals wait <seconds>` | how long the hook waits for your answer while `listen` runs: 0 to 25 seconds, 20 when never set, 0 turns the wait off | a person at a terminal |
 | `openmoat approvals test` | sends a test message to every approver | a person at a terminal |
-| `openmoat approvals status [--format json]` | shows the channel and its account, the approvers, the expiry, the hook's wait and whether a listener runs, and how many requests wait; never the credential | anyone |
+| `openmoat approvals status [--format json]` | shows the channel and its account, the approvers, the expiry, the hook's wait and whether a listener runs, how many requests wait and the service's state; never the credential | anyone |
 | `openmoat approvals disconnect` | removes the credential, the settings and the waiting requests | a person at a terminal |
 
 "A person at a terminal" means the command refuses to run from a hook, a script or an
 agent: it needs a terminal, and no agent and no `openmoat run` may be among the programs
 that started it. OpenMoat's default policy also denies every `openmoat approvals` command
-an agent tries to run.
+an agent tries to run, `install` and `listen --service` included. The service's listener
+has no terminal, so it is checked differently: it still refuses an agent among the
+programs that started it, and it refuses to run unless launchd or systemd started it
+from exactly the file `install` wrote. ADR-094 says what those checks do and do not
+prove.
 
 ## What you see on your phone
 
@@ -150,11 +174,19 @@ reading any of it and writing anywhere under `~/.moat`.
 | `<channel>/settings.json` | the channel's account (the bot's name) and its other settings, signed |
 | `requests/`, `answers/`, `used/` | calls waiting, answers given, approvals used |
 | `refused/` | approvals used for a call refused after all (its audit row could not be written), for `listen` to tell the approver |
+| `listen.lock` | held by the one running listener |
+
+The service's log files are `~/.moat/logs/approvals.out.log` and `approvals.err.log`,
+owner-only. They name approvers, request codes and sessions, never the credential, and
+they grow until you delete them.
 
 ## Limits
 
-- **The listener must run.** Answers arrive only while `openmoat approvals listen` runs,
-  in a terminal of your own. When it is not running, requests expire unanswered.
+- **The listener must run.** Answers arrive only while `openmoat approvals listen` runs:
+  in a terminal of your own, or as the service `openmoat approvals install` writes (macOS
+  and Linux; on Windows only in a terminal). When it is not running, for example before
+  you log in, requests expire unanswered. While no channel is connected the service
+  waits and looks again every 30 seconds.
 - **The hook waits seconds, not minutes.** OpenMoat answers each hook call within 30
   seconds, because several agents run a call whose hook timed out, so the wait is at
   most 25 seconds and often less. After it, an agent that prompts (Claude Code, Cursor,

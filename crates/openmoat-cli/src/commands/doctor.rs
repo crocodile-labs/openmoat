@@ -53,6 +53,10 @@ fn service(report: &mut Report, home: &Home) {
     for (ok, text) in super::proxy::service_lines(home) {
         report.line(Area::Service, ok, text);
     }
+    // The approvals listener's service (`openmoat approvals install`, ADR-094).
+    for (ok, text) in super::approvals::service_lines(home) {
+        report.line(Area::Service, ok, text);
+    }
 }
 
 pub fn run(args: &DoctorArgs) -> Result<Code> {
