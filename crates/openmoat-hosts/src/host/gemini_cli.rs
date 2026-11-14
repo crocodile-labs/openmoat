@@ -347,7 +347,9 @@ pub(crate) fn render(decision: &Decision) -> String {
         return String::new();
     }
     let line = crate::reason_line(decision);
-    // OpenMoat's `review` is sent as the host's "ask" (`host_verdict`).
+    // OpenMoat's `review` is sent as the host's "ask" (`host_verdict`), which
+    // the hooks reference leaves out but the scheduler still turns into a
+    // forced confirmation at v0.68.0 (`scheduler/scheduler.ts`, HOST.md).
     let mut reply = serde_json::json!({ "decision": crate::wire::host_verdict(decision.verdict) });
     // `reason` goes to the model with a deny; `systemMessage` is shown to the
     // person, beside the confirmation for a `review`.

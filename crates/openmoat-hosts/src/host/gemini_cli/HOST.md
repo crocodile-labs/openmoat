@@ -52,7 +52,13 @@ The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 ## Reviews
 
 A `review`, sent as `"ask"`, makes Gemini CLI confirm the call with the person even where its own policy would
-not (YOLO and auto-edit included).
+not (YOLO and auto-edit included). The [hooks reference](https://geminicli.com/docs/hooks/reference/)
+lists only `allow` and `deny` (`block`), but the source still reads `"ask"` in 0.68.0:
+`HookDecision` includes it (`packages/core/src/hooks/types.ts`, `isAskDecision`),
+`evaluateBeforeToolHook` returns it (`scheduler/hook-utils.ts`), and the scheduler turns
+it into `PolicyDecision.ASK_USER` with a forced confirmation (`scheduler/scheduler.ts`,
+`_processToolCall`), all at tag `v0.68.0`. A hook that blocks still wins over one that
+asks (`hooks/hookAggregator.ts`). A `deny` (exit 2 too) blocks the call.
 
 ## Configuration and MCP files
 
