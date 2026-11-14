@@ -4,7 +4,13 @@ OpenCode 1 (`opencode-ai` on npm, 1.3.4 and later), through its `tool.execute.be
 plugin hook, checked against the source of OpenCode 1.19.4; and OpenCode 2
 (`@opencode/cli`, which installs `opencode` and `opencode2`), through its
 `execute.before` tool hook, checked against the source of OpenCode 2.2.0 (and 2.0.0,
-2.1.0 where they differ). OpenCode has no command hook: OpenMoat's one plugin
+2.1.0 where they differ). Release notes reviewed to 2.3.0 on 2026-11-14, with the promise
+adapter read at both tags: 2.3.0 exports `Tool` from `@opencode/plugin/effect` so an
+`execute.before` hook can reject a call with `Tool.Error`, and a plain throw from a promise
+plugin, OpenMoat's, is still wrapped as `Tool.Error` and rejects that call alone before it
+runs (`packages/plugin/src/promise/adapter.ts`, the same at v2.2.0 and v2.3.0); subagents
+always run in the background (2.3.0); a `bash` call runs as `shell` (2.2.5); the managed
+policies split into `mcp.use`, `skill.use` and `plugin.use` (2.2.3). OpenCode has no command hook: OpenMoat's one plugin
 ([`integration/openmoat.js`](integration/openmoat.js)) exports `{ id: "openmoat", server,
 setup }`; OpenCode 1 calls `server`, OpenCode 2 calls `setup`, and either runs
 `openmoat guard --host opencode` (ADR-040). Every fact here comes from

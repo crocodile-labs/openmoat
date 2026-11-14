@@ -20,6 +20,13 @@ exits 2, and then Codex gives the model OpenMoat's reason in place of the call's
 The call itself is not undone.
 
 Supported hook schema: Codex 0.160.1 through 0.166.0, checked at both endpoints.
+Changelog reviewed to 0.169.0 on 2026-11-14, not a schema check: 0.167 runs `PreToolUse`
+before direct Guardian review, so a deny (a review sent as one included) blocks a call
+Guardian or the approval policy would let through
+([#58368](https://github.com/openai/codex/pull/58368)); 0.169 needs explicit project trust
+for non-interactive runs and keeps project config and MCP off in untrusted directories
+([#60041](https://github.com/openai/codex/pull/60041)); 0.168 and 0.169 remove the legacy
+Seatbelt network and command wrappers; no `PreToolUse` payload or decision change listed.
 Codex ignores `args`: OpenMoat writes one POSIX shell-quoted `command`, plus
 `commandWindows` and `statusMessage: "OpenMoat"`. Both versions execute the string
 through `$SHELL -lc` (fallback `/bin/sh`), or `%COMSPEC% /C` (fallback `cmd.exe`).
