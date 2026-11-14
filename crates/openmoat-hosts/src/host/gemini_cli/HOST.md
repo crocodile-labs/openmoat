@@ -1,7 +1,12 @@
 # Gemini CLI (`gemini-cli`)
 
 Gemini CLI (`gemini`, npm `@google/gemini-cli`), through its `BeforeTool` command hook
-(and `AfterTool` for what a call returned), checked against the source of 0.65.0. Since 2026-06-18 Gemini CLI signs individual
+(and `AfterTool` for what a call returned), checked against the source of 0.65.0.
+Changelog reviewed to 0.68.0 on 2026-11-14, not a schema check: hook changes only in
+`gemini hooks migrate` (a migrated Claude Code hook's timeout in milliseconds, 0.67;
+`SubagentStop` and merged definitions, 0.68, #30111); no `BeforeTool` or `AfterTool`
+payload or decision change listed, and `"ask"` read again in the 0.68.0 source
+(Reviews, below). Since 2026-06-18 Gemini CLI signs individual
 accounts in only with an API key or Vertex AI; Google's own sign-in for them moved to the
 Antigravity CLI ([its own host](../antigravity_cli/HOST.md)). Every fact here comes from
 [`gemini_cli.rs`](../gemini_cli.rs) and [`doc.rs`](doc.rs); if they disagree, the code wins.

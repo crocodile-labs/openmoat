@@ -1,6 +1,11 @@
 # pi (`pi`)
 
 pi, the coding agent, through its `tool_call` extension event, checked against pi 1.3.0.
+Changelog reviewed to 1.5.2 on 2026-11-14, not a source check
+(<https://github.com/earendil-works/pi/blob/main/packages/coding-agent/CHANGELOG.md>): no
+`tool_call` change; tool argument validation moved to `@earendil-works/pi-schema` (1.5.0);
+a saved project distrust in `trust.json` beats auto-trust (1.5.0); `grep`'s `glob` is
+relative to its `path` (1.5.1); the OS `sandbox/` extension example is gone (1.5.0).
 pi has no command hook: OpenMoat's extension ([`integration/openmoat.js`](integration/openmoat.js))
 runs `moat guard --host pi`. Every fact here comes from [`pi.rs`](../pi.rs) and
 [`doc.rs`](doc.rs); if they disagree, the code wins.

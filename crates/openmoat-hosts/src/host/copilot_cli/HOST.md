@@ -1,7 +1,12 @@
 # GitHub Copilot CLI (`copilot-cli`)
 
 GitHub Copilot CLI (`copilot`, npm `@github/copilot`), through its `preToolUse` command
-hook in the camelCase format (and `postToolUse` for what a call returned), checked against `@github/copilot` 1.0.101. Every fact here
+hook in the camelCase format (and `postToolUse` for what a call returned), checked against `@github/copilot` 1.0.101.
+Changelog reviewed to 1.0.112 on 2026-11-14, not a source check
+(<https://github.com/github/copilot-cli/blob/main/changelog.md>): a `preToolUse` `ask` is
+confirmed for each of several parallel calls (1.0.108); hook edits apply from the next
+prompt without a restart (1.0.110); a repository's `.claude/settings.json` is among what it
+reads (1.0.108); no `preToolUse` payload or decision change listed. Every fact here
 comes from [`copilot_cli.rs`](../copilot_cli.rs) and [`doc.rs`](doc.rs); if they disagree,
 the code wins.
 

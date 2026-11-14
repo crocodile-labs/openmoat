@@ -2,7 +2,13 @@
 
 Hermes Agent (`hermes`, Nous Research, <https://github.com/NousResearch/hermes-agent>),
 through its `pre_tool_call` shell hook, checked against the source of v0.22.5
-(2026-10-23). Hermes releases several times a week; its hook protocol follows Claude
+(2026-10-23). Release notes reviewed to v0.23.1 on 2026-11-14, not a source check
+(<https://github.com/NousResearch/hermes-agent/releases/tag/v0.23.0>): browser automation
+runs on `browser_exec` only, the ten `browser_*` tools gone, so from v0.23.0 a browser call
+is an `UnknownTool` whose URLs are checked, not `browser_navigate`'s `Net`; an unattended
+gateway skips a shell hook its allowlist does not approve instead of waiting (`openmoat
+init` writes the approval, and `status` and `doctor` report a hook it does not approve);
+plugins can update themselves (opt-in); no `pre_tool_call` change listed. Hermes releases several times a week; its hook protocol follows Claude
 Code's and Cursor's (`decision`/`reason`, exit 2, `fail_closed`), and its own `approve`
 reply and the payload's `extra` keys are newer. Every fact here comes from
 [`hermes.rs`](../hermes.rs) and the files beside this one; if they disagree, the code

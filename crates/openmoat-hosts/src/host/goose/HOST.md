@@ -2,7 +2,10 @@
 
 goose, the open-source agent from Block (repository `aaif-goose/goose`, formerly
 `block/goose`), through the `PreToolUse` command hook of a plugin, checked against the
-source of v1.57.0. The CLI (`goose`) and the desktop app (which runs its agent as
+source of v1.57.0. Release notes reviewed to v1.59.0 on 2026-11-14, not a source check
+(<https://github.com/aaif-goose/goose/releases>; v1.59.1 had none yet): hook operations for
+the goose-agent kit (#13169, only its title read); no `PreToolUse`, `on_failure` or
+plugin-folder change listed. The CLI (`goose`) and the desktop app (which runs its agent as
 `goosed`) share the agent code, the plugin directories and the hooks. Every fact here
 comes from [`goose.rs`](../goose.rs) and [`doc.rs`](doc.rs); if they disagree, the code
 wins.
