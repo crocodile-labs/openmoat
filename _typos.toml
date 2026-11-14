@@ -58,6 +58,8 @@ containerization = "containerization"
 color = "color"
 # The MCP `initialize` request.
 initialize = "initialize"
+# The OpenAI Agents SDK's tool guardrail answer (`{ behavior: { type: "allow" } }`).
+behavior = "behavior"
 # Gemini CLI's `tracker_visualize` tool.
 visualize = "visualize"# git takes a prefix of a long option: `--strat` is `--strategy` (conformance fixtures).
 strat = "strat"

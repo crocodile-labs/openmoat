@@ -16,6 +16,30 @@
       "types": "./src/index.d.ts",
       "default": "./src/index.js"
     },
+    "./guard": {
+      "types": "./src/adapters/guard.d.ts",
+      "default": "./src/adapters/guard.js"
+    },
+    "./claude-agent-sdk": {
+      "types": "./src/adapters/claude-agent-sdk.d.ts",
+      "default": "./src/adapters/claude-agent-sdk.js"
+    },
+    "./openai-agents": {
+      "types": "./src/adapters/openai-agents.d.ts",
+      "default": "./src/adapters/openai-agents.js"
+    },
+    "./ai-sdk": {
+      "types": "./src/adapters/ai-sdk.d.ts",
+      "default": "./src/adapters/ai-sdk.js"
+    },
+    "./mastra": {
+      "types": "./src/adapters/mastra.d.ts",
+      "default": "./src/adapters/mastra.js"
+    },
+    "./langchain": {
+      "types": "./src/adapters/langchain.d.ts",
+      "default": "./src/adapters/langchain.js"
+    },
     "./openmoat.wasm": "./dist/openmoat.wasm"
   },
   "types": "./src/index.d.ts",

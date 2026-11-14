@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Read this when** you build your own agent product and want OpenMoat to decide, before each tool call runs, whether it may.
 
-**On this page:** [What it does](#what-it-does) · [Rust](#rust) · [JavaScript](#javascript) · [Handling a verdict](#handling-a-verdict) · [Actions](#actions) · [Context](#context) · [Facts](#facts) · [Sessions](#sessions) · [Repository policies](#repository-policies) · [Run what you decided](#run-what-you-decided) · [What stays with the CLI](#what-stays-with-the-cli) · [Versions](#versions) · [Building and testing](#building-and-testing)
+**On this page:** [What it does](#what-it-does) · [Rust](#rust) · [JavaScript](#javascript) · [Framework adapters](#framework-adapters) · [Claude Agent SDK apps and `openmoat init`](#claude-agent-sdk-apps-and-openmoat-init) · [Python](#python) · [Handling a verdict](#handling-a-verdict) · [Actions](#actions) · [Context](#context) · [Facts](#facts) · [Sessions](#sessions) · [Repository policies](#repository-policies) · [Run what you decided](#run-what-you-decided) · [What stays with the CLI](#what-stays-with-the-cli) · [Versions](#versions) · [Building and testing](#building-and-testing)
 
 ## What it does
 
@@ -83,6 +83,225 @@ fetch tools, is `sdk/js/examples/agent-loop.js`; its tests are
 scripts/ci/sdk-js.sh                        # build the module, run every JS test
 node sdk/js/examples/agent-loop.js          # after a build
 ```
+
+## Framework adapters
+
+If your agent runs on an agent framework, `@openmoat/sdk` hooks into the framework's own
+tool-call hook, so you add one line and keep the rest of your code. Install the one
+package (`npm install @openmoat/sdk`); each adapter is a subpath of it. The package does
+not import or depend on any framework, and its types match each framework's types
+structurally, so you need no peer dependency.
+
+| Framework | Import | One line | Checked against | A blocked call |
+|---|---|---|---|---|
+| Claude Agent SDK | `@openmoat/sdk/claude-agent-sdk` | `query({ prompt, options: { hooks: openmoatHooks() } })` | `@anthropic-ai/claude-agent-sdk` 0.3.325 | `PreToolUse` returns `permissionDecision: "deny"`; the reason is Claude's tool result |
+| OpenAI Agents SDK (JS) | `@openmoat/sdk/openai-agents` | `tools: withOpenMoat([...])`, or `inputGuardrails: [openmoatGuardrail()]` on one `tool()` or `toolInputGuardrails` on a local MCP server | `@openai/agents-core` 0.22.0 | `rejectContent`: the model gets the message as the call's output (`block: "throw"` ends the run) |
+| Vercel AI SDK | `@openmoat/sdk/ai-sdk` | `generateText({ model, tools: withOpenMoat(tools) })` | `ai` 7.0.173 | `execute` throws `OpenMoatBlockedError`; the SDK sends the model a `tool-error` |
+| Mastra | `@openmoat/sdk/mastra` | `new Agent({ ..., hooks: openmoatHooks() })` | `@mastra/core` 1.83.0 | `beforeToolCall` returns `{ proceed: false, output: { error } }`; `output` is the tool result |
+| LangChain.js v1 | `@openmoat/sdk/langchain` | `middleware: [createMiddleware(openmoatMiddleware())]`, last in the list | `langchain` 1.6.6 | the tool node gets a stand-in tool that returns the message, in the `ToolMessage` the model sees |
+
+"Checked against" means the adapter's types compile against that release's own type
+definitions (TypeScript 5.9, `strict`), and its tests drive the adapter the way that
+release's source calls the hook. No adapter test runs a framework or a model.
+
+### What every adapter does
+
+- **`deny`**: the tool does not run, and the model is told OpenMoat's reason and rule ids.
+  Nothing asks a person.
+- **`review`**: by default the call does not run, because nobody can approve it from
+  inside an unattended agent. Pass `review: async (call) => boolean` to ask a person; only
+  `true` lets the call run. With the Claude Agent SDK, `review: "ask"` returns
+  `permissionDecision: "ask"`, so your app's `canUseTool` answers it (never in the
+  `bypassPermissions` or `dontAsk` modes, where no person is asked: there it is denied).
+- **`defer`** (no rule matched): the call goes to the framework's own approval, if you set
+  one (`toolApproval` in the AI SDK, `requireApproval` in Mastra, `needsApproval` in the
+  OpenAI Agents SDK, Claude's permission modes and `canUseTool`). That keeps everyday calls
+  quiet. `defer: "review"` treats it as `review` instead, for a product with no approval
+  flow of its own (see [Handling a verdict](#handling-a-verdict)).
+- **`allow`**: the call runs. With the Claude Agent SDK the hook returns `{}`, so your own
+  permission settings still apply.
+- **Errors fail closed.** A module that does not load, a policy that does not compile, a
+  tool input without the field it needs, a reviewer that throws: the call does not run, and
+  the model is told OpenMoat could not decide it. The Claude matcher also sets
+  `onFailure: "block"` (Agent SDK 0.3.317 or later), so a callback that fails or times out
+  blocks the call.
+- **Time is recorded.** Every outcome carries `decideMs` (the engine) and `ms` (the whole
+  check, a reviewer's wait included); `onDecision(event)` receives each one, and
+  `guard.stats` holds the counts, the total and the slowest.
+- **The run gets the decided input.** The AI SDK and LangChain adapters run the tool with a
+  copy of the input that was decided, not the model's object.
+- **Sessions.** One session per adapter, so a secret read or untrusted content tightens
+  later calls ([Sessions](#sessions)). A call is recorded when it is let through, before
+  it runs: taint only tightens, so a call that then fails makes later calls stricter,
+  never looser. Share one session and its stats across adapters with
+  `guard: createGuard({...})` from `@openmoat/sdk/guard`.
+
+### Telling OpenMoat what your tools do
+
+The Claude Agent SDK's built-in tools are mapped with the field names `openmoat guard`
+reads for Claude Code (`Bash` → `shell`, `Read` → `fs_read`, `Write`/`Edit` → `fs_write`,
+`WebFetch` → `fetch`, `mcp__…` → `mcp_tool`, and so on). In the other frameworks every tool
+is yours, so OpenMoat cannot know what it does. Describe the ones that run commands, touch
+files or open connections:
+
+```js
+import { describe } from "@openmoat/sdk/guard";
+import { withOpenMoat } from "@openmoat/sdk/ai-sdk";
+
+const tools = withOpenMoat(
+  { runShell, readFile, fetchPage, summarise },
+  {
+    tools: {
+      runShell: describe.shell("command"),   // { command: "..." } → a shell action
+      readFile: describe.read("path"),
+      fetchPage: describe.fetch("url"),
+      // any other shape: (input) => ({ type: "fs_write", path: input.target })
+    },
+  },
+);
+```
+
+A tool you do not describe (`summarise`) is decided as an `unknown_tool` of that framework,
+and every string in its input that starts at a root, a drive or `~` is checked as a read,
+so `~/.ssh/id_ed25519` is denied whatever the tool is called. Under the default policy an
+unknown tool otherwise defers. An input nested deeper than 32 levels or holding more than
+1024 strings is not searched in full and needs review.
+
+### Options
+
+Every adapter takes the same options (types in `src/adapters/guard.d.ts`):
+
+| Option | Default | Meaning |
+|---|---|---|
+| `tools` | none | Tool name → `(input) => Action` |
+| `review` | none: a review does not run | A person's answer for one call; only `true` approves |
+| `defer` | `"allow"` | `"review"` treats `defer` as `review` |
+| `policy`, `repository` | the default policy | Policy YAML; a repository policy merged in |
+| `context` | this process: home, working directory as the project unless it is the home directory, an ancestor of it or a root | Needed outside Node |
+| `facts` | symlinks resolved on this disk | `false` outside Node |
+| `onDecision` | none | Each outcome with its timing; its errors are ignored |
+| `openmoat` | `load()` on the first call | A module you loaded yourself |
+| `guard` | a new one | Share one guard between adapters |
+
+The module loads and the policy compiles on the first tool call; `await guard.ready()`
+does it earlier and rejects if it fails.
+
+### Examples
+
+```js
+// Claude Agent SDK
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import { openmoatHooks } from "@openmoat/sdk/claude-agent-sdk";
+
+for await (const m of query({ prompt, options: { hooks: openmoatHooks() } })) { /* ... */ }
+```
+
+```js
+// OpenAI Agents SDK
+import { Agent, tool } from "@openai/agents";
+import { describe } from "@openmoat/sdk/guard";
+import { withOpenMoat } from "@openmoat/sdk/openai-agents";
+
+const agent = new Agent({
+  name: "ops",
+  tools: withOpenMoat([runShell, readFile], {
+    tools: { run_shell: describe.shell(), read_file: describe.read() },
+  }),
+});
+```
+
+```js
+// Mastra
+import { Agent } from "@mastra/core/agent";
+import { openmoatHooks } from "@openmoat/sdk/mastra";
+
+const agent = new Agent({ name, instructions, model, tools, hooks: openmoatHooks({ tools: { /* ... */ } }) });
+```
+
+```js
+// LangChain.js
+import { createAgent, createMiddleware } from "langchain";
+import { openmoatMiddleware } from "@openmoat/sdk/langchain";
+
+const agent = createAgent({ model, tools, middleware: [createMiddleware(openmoatMiddleware())] });
+```
+
+```js
+// A person approves reviews, every decision is logged with its time
+const hooks = openmoatHooks({
+  review: async ({ tool, decision }) => askOnCall(`${tool}: ${decision.reason}`),
+  onDecision: (e) => log.info({ tool: e.tool, verdict: e.verdict, rules: e.rules, ms: e.ms }),
+});
+```
+
+### What each adapter cannot see
+
+The adapter decides; the framework runs the tool. A call that does not go through the
+framework's tool hook is never seen:
+
+- **Claude Agent SDK**: none of its tools bypass `PreToolUse`. A tool your own MCP server
+  runs is seen as `mcp__…`, but what the server does inside is not.
+- **OpenAI Agents SDK**: tool input guardrails run only for function tools and local MCP
+  servers' tools. Hosted tools (web and file search, code interpreter, hosted MCP),
+  `ShellTool`, `ApplyPatchTool`, `LocalShellTool`, `ComputerTool` and handoffs are not
+  guarded; `withOpenMoat` leaves them as they are.
+- **Vercel AI SDK**: only tools with an `execute` are wrapped. Tools the client or the
+  provider runs are not. A tool whose `execute` is not an `async function*` but returns a
+  stream loses its preliminary results (it still runs only when allowed).
+- **Mastra**: hooks given to one `generate` or `stream` call replace the agent's matching
+  hooks for that call; pass `openmoatHooks()` there too.
+- **LangChain.js**: put the middleware last in `middleware`, so no other middleware changes
+  a call after OpenMoat decided it. A middleware's error ends the run unless the tool
+  node's `handleToolErrors` is `true`.
+
+For an operating-system boundary as well, run the agent under `openmoat run`
+([SANDBOX.md](SANDBOX.md)).
+
+## Claude Agent SDK apps and `openmoat init`
+
+A Claude Agent SDK app that leaves `settingSources` out loads the same settings files as
+Claude Code, hooks included, so on a machine where `openmoat init` set up Claude Code the
+app already runs OpenMoat's `PreToolUse` hook (`openmoat guard --host claude-code`, with the
+lock check and the audit log) without any code:
+
+- The TypeScript SDK's type for `settingSources` says: "When omitted, all sources are
+  loaded (matches CLI defaults). Pass `[]` to disable filesystem settings (SDK isolation
+  mode)." In 0.3.325 `query()` passes `--setting-sources` to Claude Code only when the
+  option is set (`sdk.mjs`), and resolves an unset option to `["user", "project",
+  "local"]`.
+- The docs: "When you omit `settingSources`, `query()` reads the same filesystem settings as
+  the Claude Code CLI: user, project, and local settings" and "Omitting `settingSources` is
+  equivalent to `["user", "project", "local"]`"
+  ([Use Claude Code features](https://code.claude.com/docs/en/agent-sdk/claude-code-features));
+  the SDK collects "shell command hooks from settings files when the corresponding
+  `settingSources` … entry is enabled, which it is for default `query()` options"
+  ([hooks](https://code.claude.com/docs/en/agent-sdk/hooks)). Python's `setting_sources`
+  is the same.
+- The default was briefly "no filesystem settings" in Agent SDK 0.1.0 and then reverted
+  ([migration guide](https://code.claude.com/docs/en/agent-sdk/migration-guide)); Python SDK
+  0.1.59 and earlier treated `setting_sources=[]` like leaving it out.
+
+So the hook runs when all of these hold, and not otherwise:
+
+| Condition | Why |
+|---|---|
+| `settingSources` is left out or includes `"user"` | `openmoat init` writes the hook into the user settings, `~/.claude/settings.json` |
+| The app's Claude Code process sees the same config directory | a `CLAUDE_CONFIG_DIR` in the process environment or the `env` option moves it; `openmoat init` must have been run for that directory |
+| The `openmoat` binary the hook names exists for that process | the hook runs the binary path `openmoat init` wrote; where it is missing (a container that shares the settings but not the binary), Claude Code 2.1.295 and later block the call, earlier versions run it |
+| The settings set neither `disableAllHooks` nor `allowManagedHooksOnly` | the first turns settings-file hooks off, the second all but the managed ones |
+
+`settingSources: []` turns it off, and so does a deployment with its own home or container
+without OpenMoat. Managed policy settings load whatever `settingSources` says, so an
+organisation that installs the hook there gets it in every SDK app on the machine. Where
+the CLI is not installed, use the in-process adapter above; both can run together (each is
+a `PreToolUse` hook, and a `deny` from either wins). Not checked here with a real app and
+model: this section follows the SDK's documentation and its 0.3.325 source.
+
+## Python
+
+There is no Python package yet. ADR-096 designs one (`openmoat` on PyPI, a native
+extension over the Rust SDK, adapters for Google ADK, CrewAI, PydanticAI, LangGraph and the
+OpenAI Agents SDK). Until then, run a Python agent under `openmoat run`.
 
 ## Handling a verdict
 
