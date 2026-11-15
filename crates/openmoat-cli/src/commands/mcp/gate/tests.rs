@@ -71,6 +71,7 @@ fn take(gateway: &Gateway, store: &Store) -> Option<(String, String)> {
         method: Method::Tool,
         name: "search",
         arguments: Some(&arguments),
+        metadata: None,
         request: Some("1"),
     };
     gateway
@@ -132,4 +133,71 @@ fn a_proxy_wrapped_before_it_named_its_agent_takes_any_agents_decision() {
     two_decisions(&store, [("codex", "x1"), ("claude-code", "c1")]);
     let any = gateway(None);
     assert_eq!(take(&any, &store), Some(("codex".into(), "x1".into())));
+}
+
+#[test]
+fn attributed_codex_calls_never_take_another_sessions_ticket() {
+    let store = Store::open_in_memory().unwrap();
+    let arguments = search_call();
+    let canonical = openmoat_hosts::mcp_call_arguments(Some(&arguments));
+    let digest = crate::integrity::sha256_hex(canonical.as_bytes());
+    for (id, thread, call_id, verdict) in [
+        (1, "thread-a", "call-a", "allow"),
+        (2, "thread-b", "call-b", "allow"),
+        (3, "thread-a", "needs-review", "review"),
+    ] {
+        store
+            .add_mcp_ticket(&NewTicket {
+                event: EventId(id),
+                host: "codex",
+                session_id: thread,
+                call_id: Some(call_id),
+                tool: "mcp__docs__search",
+                arguments_sha256: &digest,
+                verdict,
+            })
+            .unwrap();
+    }
+    let codex = gateway(Some(Host::Codex));
+    let take = |meta: serde_json::Value, arguments: &serde_json::Value| {
+        codex
+            .take_ticket(
+                &store,
+                &Call {
+                    method: Method::Tool,
+                    name: "search",
+                    arguments: Some(arguments),
+                    metadata: Some(&meta),
+                    request: Some("2"),
+                },
+            )
+            .unwrap()
+            .map(|ticket| ticket.event_id)
+    };
+    assert_eq!(
+        take(
+            json!({"threadId": "thread-a", "callId": "call-b"}),
+            &arguments
+        ),
+        None
+    );
+    assert_eq!(take(json!({"threadId": "thread-a"}), &arguments), None);
+    assert_eq!(
+        take(
+            json!({"threadId": "thread-a", "callId": "needs-review"}),
+            &arguments
+        ),
+        None
+    );
+    let call_b = json!({"threadId": "thread-b", "callId": "call-b"});
+    assert_eq!(take(call_b.clone(), &json!({"q": "changed"})), None);
+    assert_eq!(take(call_b.clone(), &arguments), Some(EventId(2)));
+    assert_eq!(take(call_b, &arguments), None);
+    assert_eq!(
+        take(
+            json!({"threadId": "thread-a", "callId": "call-a"}),
+            &arguments
+        ),
+        Some(EventId(1))
+    );
 }
