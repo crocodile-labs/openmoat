@@ -217,6 +217,26 @@ impl Gateway {
                 self.host.is_none_or(|own| own == host) && names_tool(host, &t.tool, server, tool)
             })
         };
+        if self.host == Some(Host::Codex)
+            && let Some(meta) = call.metadata
+            && (meta.get("threadId").is_some() || meta.get("callId").is_some())
+        {
+            let (Some(thread), Some(call_id)) = (
+                meta.get("threadId").and_then(Value::as_str),
+                meta.get("callId").and_then(Value::as_str),
+            ) else {
+                return Ok(None);
+            };
+            if thread.is_empty() || call_id.is_empty() {
+                return Ok(None);
+            }
+            return Ok(store.take_mcp_ticket(&digest, |ticket| {
+                ours(ticket)
+                    && ticket.session_id == thread
+                    && ticket.call_id.as_deref() == Some(call_id)
+                    && ticket.verdict == "allow"
+            })?);
+        }
         let last = self
             .served
             .lock()
