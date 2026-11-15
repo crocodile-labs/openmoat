@@ -184,7 +184,7 @@ fn init_writes_its_entries_once_and_status_and_doctor_name_it() {
         let hook = hook_file(&sb, host);
         let first = fs::read(&hook).unwrap_or_else(|e| panic!("{id}: {e}"));
 
-        let again = sb.moat(&["init", "--yes", "--verbose"]);
+        let again = sb.moat_as_person(&["init", "--yes", "--verbose"]);
         assert_eq!(again.status.code(), Some(OK), "{id}: {}", text(&again));
         let events: Vec<&str> = install.hooks.iter().map(|hook| hook.event).collect();
         let unchanged = format!("unchanged: {} →", events.join(", "));
