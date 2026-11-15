@@ -61,6 +61,9 @@ pub const PROTECTION_REQUIRED: &str = "protection-required";
 pub const PROJECT_SETTINGS: &str = "project-settings";
 /// The review of running code the session wrote.
 pub const SESSION_WRITTEN_CODE: &str = "session-written-code";
+/// A `defer` held for review because the agent runs in a mode that asks no
+/// person (`unattended: review`, ADR-100).
+pub const UNATTENDED: &str = "unattended";
 /// A settings file that changed on disk and may load into the running
 /// session (a host's `ConfigChange` hook).
 pub const CONFIG_CHANGE: &str = "config-change";
@@ -272,6 +275,7 @@ pub const BUILTIN_RULES: &[BuiltinRule] = &[
     worded(PROTECTION_REQUIRED, &words::PROTECTION_REQUIRED),
     worded(PROJECT_SETTINGS, &words::PROJECT_SETTINGS),
     worded(SESSION_WRITTEN_CODE, &words::SESSION_WRITTEN_CODE),
+    worded(UNATTENDED, &words::UNATTENDED),
     quiet(CONFIG_CHANGE),
     quiet(SESSION_START),
     quiet(SETTINGS_DRIFT),

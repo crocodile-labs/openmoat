@@ -39,6 +39,7 @@ mod post_tool_use;
 mod record;
 mod required;
 mod session_start;
+mod unattended;
 mod unseen;
 
 /// How far into [`GUARD_BUDGET_S`] the session's taint may be folded, leaving
@@ -240,6 +241,10 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
         Err(error) => (None, kernel_error(&error)),
     };
 
+    // In a mode that asks no person, `unattended: review` holds a defer (ADR-100).
+    if let Some(r) = &mut request {
+        unattended::apply(host, out.unattended, r, &mut decision);
+    }
     // Where the host would approve a `review` no person sees, it is a deny.
     if let Some(r) = &mut request
         && decision.verdict == Verdict::Review
@@ -371,6 +376,8 @@ struct Evaluated {
     /// The titles the person's policy gives the decision's rules, for the
     /// block message (ADR-059).
     titles: notice::Titles,
+    /// The person's policy's `unattended:` (ADR-100), set once it is loaded.
+    unattended: openmoat_core::Unattended,
 }
 
 /// Decide one hook payload, filling `out` as it goes. `started` is when the
@@ -444,6 +451,7 @@ fn evaluate(
     let ctx = context::eval_context(&home, Some(&cwd), None)?;
     let policy = crate::repo::effective_policy(&home, &ctx)?;
     out.known = secrets::known(&policy.secrets, &ctx.home)?;
+    out.unattended = policy.unattended();
     // An agent below the level the policy requires gets no decision but this
     // deny, on every call (ADR-064); nothing to read when none is required.
     let call = required::Call {

@@ -73,7 +73,7 @@ pub use pattern::literal_shell_pattern;
 pub use policy::{
     BrowserOpen, Defaults, McpSettings, OldNames, Policy, PolicyError, ProjectHookOff, ProjectTop,
     Require, RequiredBy, RequiredLevel, Requirement, RuleGroup, RunBoundary, SUPPORTED_VERSION,
-    SandboxSettings, TITLE_MAX_CHARS, WHY_MAX_CHARS, env_name_problem,
+    SandboxSettings, TITLE_MAX_CHARS, Unattended, WHY_MAX_CHARS, env_name_problem,
 };
 pub use programs::{MapResolver, NoResolver, ProgramResolver};
 pub use realpath::{MapPathResolver, PathResolver};
@@ -84,7 +84,7 @@ pub use secret::{
     Source as SecretSource, Tls as SecretTls,
 };
 pub use shell::cwd::leaves_unknown_directory;
-pub use shell::installs::near_miss_atoms as package_near_misses;
+pub use shell::installs::package_atoms;
 pub use shell::push::Push;
 pub use shell::replaced::replaced_files;
 pub use staging::{DEFAULT_OUTSIDE_FOLDERS, DEFAULT_OUTSIDE_READS, StagingSettings};

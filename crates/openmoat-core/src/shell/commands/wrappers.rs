@@ -48,7 +48,7 @@ pub(super) fn classify(
     let mut classify = || {
         // a launcher's own options are checked as any other program's are
         if launchers::is_launcher(program) {
-            options::classify(argv, program, ctx, sink, depth)?;
+            options::classify(argv, &[], program, ctx, sink, depth)?;
         }
         for run in &more {
             classify_wrapped(run, &[], ctx, sink, depth)?;
@@ -56,11 +56,6 @@ pub(super) fn classify(
         let Some(inner) = inner else {
             return Ok(());
         };
-        if program == "xargs" {
-            for run in xargs::runs(cmd, argv, inner)? {
-                classify_wrapped(&run, &[], ctx, sink, depth)?;
-            }
-        }
         // `inner` is the tail of the command's words: their substitutions
         // still feed a shell the wrapper runs (`env sh -c "$(curl URL)"`)
         let outer: Vec<Vec<String>> = cmd
@@ -68,6 +63,13 @@ pub(super) fn classify(
             .into_iter()
             .map(<[String]>::to_vec)
             .collect();
+        if program == "xargs" {
+            // each run starts with `inner`'s words, so their substitutions
+            // line up (`echo x | xargs sh -c "$(curl URL)"`)
+            for run in xargs::runs(cmd, argv, inner)? {
+                classify_wrapped(&run, &outer, ctx, sink, depth)?;
+            }
+        }
         classify_wrapped(inner, &outer, ctx, sink, depth)
     };
     Some(classify())
@@ -105,7 +107,7 @@ fn later(
             }
         }
     }
-    options::classify(argv, "at", ctx, sink, depth)
+    options::classify(argv, &[], "at", ctx, sink, depth)
 }
 
 /// `env [OPTION]… -S STRING [ARG]…` as the command line env runs:

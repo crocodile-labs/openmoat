@@ -25,7 +25,7 @@ use crate::sandbox::{self, Plan};
 
 mod ask;
 mod managed;
-mod mcp;
+pub(super) mod mcp;
 mod preview;
 mod summary;
 #[cfg(test)]

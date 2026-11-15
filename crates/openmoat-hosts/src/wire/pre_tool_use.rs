@@ -116,6 +116,12 @@ pub(crate) fn parse_writing(
         }
         _ => HookEvent::PreToolUse,
     };
+    // A permission mode in which a deferred call runs with nobody asked
+    // (`Reviews::unattended_modes`, ADR-100).
+    let unattended = p
+        .permission_mode
+        .as_deref()
+        .is_some_and(|mode| host.spec().reviews.unattended_modes.contains(&mode));
     let mcp_arguments = crate::wire::mcp_call::hook_arguments(action.as_ref(), &p.tool_input);
     Ok(HookRequest {
         host,
@@ -130,6 +136,7 @@ pub(crate) fn parse_writing(
         mcp_arguments,
         input: Some(crate::wire::canonical(&p.tool_input)),
         sandboxed: false,
+        unattended,
         event,
     })
 }

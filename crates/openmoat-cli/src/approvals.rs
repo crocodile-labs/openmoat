@@ -515,13 +515,13 @@ impl Overlay {
     /// Append an allow rule for one shell command, matched literally: glob
     /// characters in the command are not wildcards in the rule. Shell rules are
     /// prefixes, so extra arguments after the approved command are accepted.
-    /// An install of a name close to a popular package also gets its
-    /// `@package-near-miss` atom, which `package-near-miss` holds for review on its
-    /// own: approving the command answers that review too.
+    /// An install of a name close to a popular package, or a run of a
+    /// package that is not on the popular list (`npx x`), also gets its
+    /// `@package-near-miss` or `@package-run-unknown` atom, which a rule holds
+    /// for review on its own: approving the command answers that review too.
     pub fn allow_command(&mut self, command: &str) -> Result<&RuleGroup> {
         let mut patterns = Vec::new();
-        for line in
-            std::iter::once(command.to_owned()).chain(openmoat_core::package_near_misses(command))
+        for line in std::iter::once(command.to_owned()).chain(openmoat_core::package_atoms(command))
         {
             let pattern = openmoat_core::literal_shell_pattern(&line)
                 .with_context(|| format!("cannot approve `{line}`"))?;

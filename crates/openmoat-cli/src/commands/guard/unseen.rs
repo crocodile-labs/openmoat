@@ -19,17 +19,25 @@ use crate::install::HostConfig;
 
 /// Mark `request` as a call whose `review` no person would see, where `host`
 /// would approve it unseen.
+/// A host that approves its reviews unseen runs a deferred call unasked too,
+/// so the call is also [`HookRequest::unattended`] (ADR-100).
 pub(super) fn mark(host: Host, request: &mut HookRequest) {
     if request.event != HookEvent::PreToolUse {
         return;
     }
+    if holds(host) {
+        request.event = HookEvent::PreToolUseNoPrompt;
+        request.unattended = true;
+    }
+}
+
+/// Whether `host` would approve a call unseen, from what this process sees.
+pub(super) fn holds(host: Host) -> bool {
     let Some(unseen) = &host.spec().reviews.unseen else {
-        return;
+        return false;
     };
     let get = |name: &str| std::env::var(name).ok();
-    if approves(unseen, &get, &configs(host, unseen)) {
-        request.event = HookEvent::PreToolUseNoPrompt;
-    }
+    approves(unseen, &get, &configs(host, unseen))
 }
 
 /// `host`'s hook files parsed: where `init` set it up, and where this

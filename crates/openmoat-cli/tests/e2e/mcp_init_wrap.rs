@@ -12,9 +12,18 @@ use crate::common::{DENY, OK, Sandbox, output, stdout, text};
 
 const SERVERS: &str = r#"{"mcpServers": {"gh": {"command": "npx", "args": ["-y", "gh-server"]}}}"#;
 
-fn bare_with_servers() -> Sandbox {
-    let sb = Sandbox::bare(&[".claude"]);
+fn bare() -> Sandbox {
+    Sandbox::bare(&[".claude"])
+}
+
+/// The agent's user MCP file with [`SERVERS`] in it.
+fn add_servers(sb: &Sandbox) {
     std::fs::write(sb.home.join(".claude.json"), SERVERS).unwrap();
+}
+
+fn bare_with_servers() -> Sandbox {
+    let sb = bare();
+    add_servers(&sb);
     sb
 }
 
@@ -252,4 +261,30 @@ fn a_planted_definitions_tool_call_is_denied_and_an_accepted_one_passes() {
         json!([]),
         "nothing waits for acceptance"
     );
+}
+
+/// `openmoat mcp accept` of a server added after `init` offers to run it
+/// through OpenMoat, and Enter is yes (ADR-100); a no is remembered as at `init`.
+#[test]
+fn accepting_a_new_server_offers_to_wrap_it_and_enter_is_yes() {
+    for (answers, wraps) in [("y\n\n", true), ("y\nn\n", false)] {
+        let sb = bare();
+        let out = sb.moat(&["init", "--yes"]);
+        assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+        add_servers(&sb);
+        let accepted = output(
+            sb.command()
+                .args(["mcp", "accept"])
+                .env("MOAT_ASSUME_TTY", "1"),
+            Some(answers),
+        );
+        assert_eq!(accepted.status.code(), Some(OK), "{}", text(&accepted));
+        let said = text(&accepted);
+        assert!(
+            said.contains("Run them through OpenMoat? [Y/n/d]"),
+            "{said}"
+        );
+        assert_eq!(wrapped(&sb), wraps, "{answers:?}: {said}");
+        assert!(said.contains("✔ accepted 1 server definition"), "{said}");
+    }
 }

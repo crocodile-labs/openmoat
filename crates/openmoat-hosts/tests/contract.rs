@@ -418,3 +418,31 @@ fn defer_is_no_decision_for_every_pre_tool_use_host() {
         );
     }
 }
+
+/// A host that can report a mode in which nobody is asked (a permission mode
+/// the payload names, or what the guard reads, ADR-100) says why its review
+/// becomes a deny there: `unattended: review` answers such a call with no prompt.
+#[test]
+fn every_unattended_mode_has_a_no_prompt_reason() {
+    for host in Host::ALL {
+        let reviews = &host.spec().reviews;
+        if !reviews.unattended_modes.is_empty() || reviews.unseen.is_some() {
+            assert!(
+                reviews.on_no_prompt.is_some(),
+                "{host}: an unattended mode with no `on_no_prompt` reason"
+            );
+        }
+        for mode in reviews.unattended_modes {
+            assert!(
+                !mode.is_empty()
+                    && reviews
+                        .unattended_modes
+                        .iter()
+                        .filter(|m| *m == mode)
+                        .count()
+                        == 1,
+                "{host}: `{mode}` listed empty or twice"
+            );
+        }
+    }
+}

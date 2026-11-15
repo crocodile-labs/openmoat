@@ -2737,3 +2737,59 @@
 - id: benign-write-another-openmoat-scope-package
   action: { fs_write: "/p/node_modules/@openmoat/sdk/src/index.js" }
   expect: { verdict: allow, rules: [project-fs] }
+
+# Neighbours of the DNS exfiltration attacks: a lookup of a name the line shows
+# whole, or one held in a variable with no fixed domain, is decided as before
+- id: benign-dig-allowed-host
+  threat: T12
+  action: { shell: "dig +short github.com" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-dig-variable-name
+  threat: T12
+  action: { shell: "dig +short \"$DOMAIN\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-getent-passwd
+  threat: T12
+  action: { shell: "getent passwd me" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-getent-hosts-allowed
+  threat: T12
+  action: { shell: "getent hosts github.com" }
+  expect: { verdict: defer, rules: [default] }
+# Neighbours of the downloaded-code attacks: a local program found at run time,
+# inline code the line shows, and a `find -exec` with no substitution
+- id: benign-program-from-local-substitution
+  threat: T5
+  why: what `git rev-parse` prints names a local script; only a download or a decoder piped into a shell is `pipe-to-shell`
+  action: { shell: "$(git rev-parse --show-toplevel)/scripts/test.sh" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-python-c-inline-code
+  threat: T5
+  action: { shell: "python3 -c \"print(1 + 1)\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-find-exec-local-command
+  threat: T5
+  action: { shell: "find . -name '*.tmp' -exec sh -c 'echo {}' \\;" }
+  expect: { verdict: defer, rules: [default] }
+# Neighbours of the package-run reviews: a popular package defers as an install
+# does, and a runner told never to download fetches nothing
+- id: benign-npx-popular-package
+  threat: T5
+  action: { shell: "npx prettier --check ." }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-uvx-popular-package
+  threat: T5
+  action: { shell: "uvx ruff@0.6.9 check" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-pipx-run-popular-package
+  threat: T5
+  action: { shell: "pipx run black --check ." }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-npx-no-install-local-bin
+  threat: T5
+  action: { shell: "npx --no-install tsc --noEmit" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-pnpm-exec-local-bin
+  threat: T5
+  action: { shell: "pnpm exec helper-kit-cli" }
+  expect: { verdict: defer, rules: [default] }

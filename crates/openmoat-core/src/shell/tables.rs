@@ -332,6 +332,13 @@ pub const HOST_PROGRAMS: &[&str] = &[
     "dig",
     "nslookup",
     "host",
+    // more resolvers: a name they look up carries what it is built from to
+    // the domain's name server
+    "drill",
+    "kdig",
+    "delv",
+    "resolvectl",
+    "getent",
     // more clients that connect where their arguments say
     "openssl",
     "socat",

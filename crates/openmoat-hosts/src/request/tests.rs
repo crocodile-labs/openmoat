@@ -17,6 +17,7 @@ fn request(cwd: &str, action: Action) -> HookRequest {
         mcp_arguments: None,
         input: None,
         sandboxed: false,
+        unattended: false,
         event: HookEvent::PreToolUse,
     }
 }

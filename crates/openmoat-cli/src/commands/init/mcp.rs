@@ -84,18 +84,28 @@ pub(super) fn servers(
         Wrap::All { sandbox } => {
             super::super::mcp::wrap_servers(home, binary, hosts, &[], sandbox, false, out)?;
         }
-        Wrap::Ask => ask_and_wrap(home, binary, hosts, out)?,
+        Wrap::Ask => ask_and_wrap(home, binary, hosts, None, out)?,
         Wrap::Leave => {}
     }
     Ok(())
 }
 
-/// Show the stdio servers not yet wrapped and ask; wrap them on yes.
-fn ask_and_wrap(home: &Home, binary: &Path, hosts: &[Host], out: &mut Deferred) -> Result<()> {
+/// Show the stdio servers not yet wrapped (those named `only`, when given)
+/// and ask; wrap them on yes, which Enter is. `init` asks about every one,
+/// and `openmoat mcp accept` about the definitions a person just accepted as
+/// new (ADR-100). A server the person said no to is not asked about again.
+pub(in crate::commands) fn ask_and_wrap(
+    home: &Home,
+    binary: &Path,
+    hosts: &[Host],
+    only: Option<&[String]>,
+    out: &mut Deferred,
+) -> Result<()> {
     let declined = Recorded::load(home)?.mcp_wrap_declined;
     let mut edits = super::super::mcp::wrap_plan(home, binary, hosts, &[], None, out)?.edits;
     edits.retain(|(_, done)| {
         !declined.contains(&done.server.id)
+            && only.is_none_or(|names| names.contains(&done.server.name))
             && wrap::sandboxed(&done.server.entry, done.server.form).is_none()
     });
     super::super::mcp::drop_what_cannot_be_rewritten(&mut edits, out)?;

@@ -87,7 +87,7 @@ pub const ALLOWED_IN_SHARED_TESTS: &[(&str, usize)] = &[
     ("moatbench.rs", 9),
     ("packs.rs", 1),
     ("paths.rs", 12),
-    ("permission_mode.rs", 5),
+    ("permission_mode.rs", 2),
     ("policy_upgrade.rs", 4),
     ("project_settings_writes.rs", 21),
     ("protection.rs", 46),

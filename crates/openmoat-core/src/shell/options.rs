@@ -14,8 +14,12 @@ use super::{ClassifyError, ShellContext, Sink};
 /// `find` actions whose arguments, up to `;` or `+`, are a command to run.
 const FIND_EXEC: &[&str] = &["-exec", "-execdir", "-ok", "-okdir"];
 
+/// `outer` holds the command substitutions of each of `argv`'s words, as the
+/// shell that runs the command expands them (empty when unknown), so `find
+/// -exec sh -c "$(curl URL)" \;` still runs what curl prints.
 pub(super) fn classify(
     argv: &[String],
+    outer: &[&[String]],
     program: &str,
     ctx: &ShellContext<'_>,
     sink: &mut Sink,
@@ -53,7 +57,10 @@ pub(super) fn classify(
                 .position(|a| a == ";" || a == "+")
                 .unwrap_or(rest.len());
             if end > 0 {
-                classify_wrapped(&rest[..end], &[], ctx, sink, depth)?;
+                let substituted: Vec<Vec<String>> = (i..i + end)
+                    .map(|k| outer.get(k).map_or_else(Vec::new, |s| s.to_vec()))
+                    .collect();
+                classify_wrapped(&rest[..end], &substituted, ctx, sink, depth)?;
             }
             i += end + 1;
             continue;

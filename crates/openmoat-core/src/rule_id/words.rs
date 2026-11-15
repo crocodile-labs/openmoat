@@ -30,6 +30,16 @@ pub(super) const SESSION_WRITTEN_CODE: Words = Words {
     )),
 };
 
+pub(super) const UNATTENDED: Words = Words {
+    title: "a call the agent's own prompt would decide, in a mode where it asks no one",
+    why: "in that mode the agent runs such a call without a person seeing it, and your policy \
+          says `unattended: review`",
+    next: Some((
+        Verdict::Review,
+        "approve it only if you meant the agent to run it unattended",
+    )),
+};
+
 pub(super) const MCP_CROSS_SERVER: Words = Words {
     title: "passing one MCP server's output to another server's tool",
     why: "a tool result can carry instructions that send your data somewhere else",

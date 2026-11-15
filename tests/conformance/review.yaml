@@ -696,15 +696,16 @@
   expect: { verdict: defer, rules: [default] }
 
 # The neighbours of the #350 allows: what still needs review
-# npm exec downloads a package it cannot find, like npx
+# npm exec downloads a package it cannot find, like npx; since ADR-100 a name not
+# on the popular list needs review (`tsc` is not the TypeScript package)
 - id: review-npm-exec-like-npx
   threat: T5
   action: { shell: "npm exec tsc -- --noEmit" }
-  expect: { verdict: defer, rules: [default] }
+  expect: { verdict: review, rules: [package-run-unknown] }
 - id: review-npm-x-like-npx
   threat: T5
   action: { shell: "npm x cowsay" }
-  expect: { verdict: defer, rules: [default] }
+  expect: { verdict: review, rules: [package-run-unknown] }
 # a venv outside the project, emptied, upgraded from the network or inside .git
 - id: review-venv-outside-project
   threat: T4
@@ -2894,3 +2895,66 @@
   threat: T9
   action: { fs_write: "~/.cache/opencode/node_modules/helper-plugin/index.js" }
   expect: { verdict: review, rules: [runs-later] }
+# T5 a package fetched and run at once (ADR-100): a near miss of a popular name
+# is `package-near-miss`, any other name not on the popular list
+# `package-run-unknown`, pinned to a version or not
+- id: review-npx-unknown-package
+  threat: T5
+  action: { shell: "npx -y create-helper-kit@1.0.0 my-app" }
+  expect: { verdict: review, rules: [package-run-unknown] }
+- id: review-npx-near-miss-package
+  threat: T5
+  action: { shell: "npx lodahs" }
+  expect: { verdict: review, rules: [package-near-miss] }
+- id: review-npx-package-option
+  threat: T5
+  action: { shell: "npx --package=helper-kit-cli helper" }
+  expect: { verdict: review, rules: [package-run-unknown] }
+- id: review-bunx-unknown-package
+  threat: T5
+  action: { shell: "bunx helper-kit-cli init" }
+  expect: { verdict: review, rules: [package-run-unknown] }
+- id: review-npm-exec-unknown-package
+  threat: T5
+  action: { shell: "npm exec --yes -- helper-kit-cli init" }
+  expect: { verdict: review, rules: [package-run-unknown] }
+- id: review-pnpm-dlx-unknown-package
+  threat: T5
+  action: { shell: "pnpm dlx helper-kit-cli" }
+  expect: { verdict: review, rules: [package-run-unknown] }
+- id: review-yarn-dlx-unknown-package
+  threat: T5
+  action: { shell: "yarn dlx helper-kit-cli" }
+  expect: { verdict: review, rules: [package-run-unknown] }
+- id: review-bun-x-unknown-package
+  threat: T5
+  action: { shell: "bun x helper-kit-cli" }
+  expect: { verdict: review, rules: [package-run-unknown] }
+- id: review-uvx-unknown-package
+  threat: T5
+  action: { shell: "uvx helper-kit-cli@0.3.1 run" }
+  expect: { verdict: review, rules: [package-run-unknown] }
+- id: review-uvx-near-miss-package
+  threat: T5
+  action: { shell: "uvx reqeusts" }
+  expect: { verdict: review, rules: [package-near-miss] }
+- id: review-uvx-from-unknown-package
+  threat: T5
+  action: { shell: "uvx --from helper-kit-cli helper" }
+  expect: { verdict: review, rules: [package-run-unknown] }
+- id: review-uvx-with-unknown-package
+  threat: T5
+  action: { shell: "uvx --with helper-kit-plugin ruff check" }
+  expect: { verdict: review, rules: [package-run-unknown] }
+- id: review-uv-tool-run-unknown-package
+  threat: T5
+  action: { shell: "uv tool run helper-kit-cli" }
+  expect: { verdict: review, rules: [package-run-unknown] }
+- id: review-pipx-run-unknown-package
+  threat: T5
+  action: { shell: "pipx run helper-kit-cli" }
+  expect: { verdict: review, rules: [package-run-unknown] }
+- id: review-pipx-run-spec-unknown-package
+  threat: T5
+  action: { shell: "pipx run --spec helper-kit-cli==1.2 helper" }
+  expect: { verdict: review, rules: [package-run-unknown] }

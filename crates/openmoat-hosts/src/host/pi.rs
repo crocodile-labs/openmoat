@@ -340,6 +340,9 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         mcp_arguments,
         input: Some(crate::wire::canonical(&p.input)),
         sandboxed: false,
+        // print and JSON mode: no person runs the session, and pi asks
+        // nothing of its own, so a deferred call runs (ADR-100)
+        unattended: !p.has_ui,
         event,
     })
 }

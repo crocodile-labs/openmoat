@@ -1556,6 +1556,15 @@ review:
     title: installing a package whose name looks like a typo
     why: typo-squats and made-up names are how malicious packages get installed
     shell: ["@package-near-miss *"]
+  # `@package-run-unknown <ecosystem> <name>` atoms (ADR-100): `npx`, `bunx`, `npm exec`,
+  # `pnpm dlx`, `yarn dlx`, `bun x`, `uvx`, `uv tool run` or `pipx run` of a package that
+  # is not on the bundled list of popular packages: it is fetched and its code runs at
+  # once. A popular name defers, as an install does; `npx --no-install` fetches nothing
+  - id: package-run-unknown
+    reason: fetches a package that is not on the list of popular ones and runs its code at once; check that it is the one you meant
+    title: running a package that is not a well-known one
+    why: a made-up or squatted name runs whatever its author put in it, with your permissions
+    shell: ["@package-run-unknown *"]
   - id: docker-secrets
     reason: hands secrets, the SSH agent or the host to a build
     title: handing secrets or this machine to a container build

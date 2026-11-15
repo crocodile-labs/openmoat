@@ -44,6 +44,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         mcp_arguments: None,
         input: None,
         sandboxed: false,
+        unattended: false,
         event: HookEvent::SessionStart {
             source: p.source.unwrap_or_default(),
         },

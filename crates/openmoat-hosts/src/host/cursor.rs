@@ -337,6 +337,7 @@ fn parse_payload(host: Host, p: Payload, event: &str) -> Result<HookRequest, Hos
         mcp_arguments,
         input: Some(crate::wire::canonical(&p.tool_input)),
         sandboxed,
+        unattended: false,
         event: event_kind(event),
     };
     Ok(match session_dir {

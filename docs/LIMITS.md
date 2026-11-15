@@ -18,6 +18,12 @@ Each agent's gaps and the reasons are in
 
 - **A deferred call runs if your agent lets it.** In auto-approve modes
   (`--dangerously-skip-permissions`, Run Everything) only `deny` and `review` stop a call.
+  `unattended: review` in your policy holds those calls for review where the hook can see
+  the mode (Claude Code's `bypassPermissions` and `auto`, pi without a screen, Hermes Agent
+  in YOLO mode, Antigravity CLI's `always-proceed`; POLICY.md §5.4, ADR-100). It is off by
+  default. Cline's `--auto-approve`, OpenCode 2's `--auto`, Codex's approval policy
+  `never`, Gemini CLI's `--yolo` and GitHub Copilot CLI's `--allow-all-tools` are not
+  shown to the hook, so a deferred call still runs there; use `openmoat run`.
 - **Some agents cannot prompt.** Codex, OpenCode 1, goose, the Cline CLI (where the deny
   also ends Cline's run), Cursor's file tools, pi in print and JSON mode, and Hermes Agent
   in YOLO mode receive a `review` as a deny that says how to approve the call

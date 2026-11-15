@@ -67,12 +67,8 @@ pub(super) fn review_and_accept(
 ) -> Result<bool> {
     let lock = Lock::load(&home.lock_path())?;
     let cwd = std::env::current_dir().ok();
-    let found = mcp::review(
-        home,
-        &lock,
-        &mcp::set_up_hosts(home, binary),
-        cwd.as_deref(),
-    )?;
+    let hosts = mcp::set_up_hosts(home, binary);
+    let found = mcp::review(home, &lock, &hosts, cwd.as_deref())?;
     for (path, why) in &found.unreadable {
         writeln!(
             out,
@@ -142,6 +138,16 @@ pub(super) fn review_and_accept(
         "✔ accepted {} server definition(s) and {count} held tool(s), instructions, prompts or resources",
         changes.len()
     )?;
+    // A server just added starts unchecked each time the agent starts it:
+    // offer to run it through OpenMoat, Enter for yes (ADR-100).
+    let added: Vec<String> = changes
+        .iter()
+        .filter(|c| matches!(c.kind, mcp::pins::Kind::Added))
+        .map(|c| c.name.clone())
+        .collect();
+    if !added.is_empty() {
+        super::init::mcp::ask_and_wrap(home, binary, &hosts, Some(&added), out)?;
+    }
     Ok(true)
 }
 

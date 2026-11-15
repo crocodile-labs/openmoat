@@ -78,6 +78,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         // `bypassPermissions` skips its prompts and `dontAsk` denies whatever
         // would prompt.
         prompt_free_modes: &["bypassPermissions", "dontAsk"],
+        // The payload's `permission_mode` (hooks reference, "Common input
+        // fields"; `defaultMode` in the settings reference): `bypassPermissions`
+        // runs every call unasked and `auto` lets a classifier approve calls in
+        // place of the person (`settings::PROMPTING_MODES`); `dontAsk` refuses
+        // what it would ask about, so a deferred call does not run there.
+        // `acceptEdits` asks before every call but a file edit.
+        unattended_modes: &["bypassPermissions", "auto"],
         ..Reviews::BASE
     },
     resume_hint: Some("`claude --continue` resumes this one"),

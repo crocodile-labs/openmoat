@@ -381,6 +381,13 @@ pub struct Policy {
     /// default: nothing is required.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub require: Option<Require>,
+    /// What a `defer` becomes when the agent reports a mode in which it runs
+    /// calls with no person asked (ADR-100): `defer` (absent, the default)
+    /// leaves it to the agent, `review` holds it for a person. Only the
+    /// person's own policy holds it: a repository policy or a pack with the key
+    /// does not parse.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unattended: Option<Unattended>,
     /// The `require:` sections of the repository policy and the packs merged
     /// in ([`Policy::add_requirement`]), read with [`Self::require`] by
     /// [`Policy::required_for`], which takes the strictest: they raise a
@@ -529,6 +536,20 @@ pub enum BrowserOpen {
     Net,
 }
 
+/// `unattended:`: what a `defer` becomes in an agent mode that runs calls
+/// with no person asked (auto-approve, YOLO, headless; ADR-100).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Unattended {
+    /// The agent decides it, as everywhere else (ADR-025): in such a mode it
+    /// runs. The default.
+    #[default]
+    Defer,
+    /// OpenMoat holds it for review, and a review there is answered as a deny
+    /// that says how to approve it (or sent to the approvals channel).
+    Review,
+}
+
 /// The release age `moat run` requires of new package versions when the policy
 /// does not say (ADR-030).
 pub const DEFAULT_PACKAGE_MIN_RELEASE_AGE_DAYS: u16 = 7;
@@ -564,6 +585,13 @@ impl Policy {
             .as_ref()
             .map(|s| s.project_hook_off)
             .unwrap_or_default()
+    }
+
+    /// What a `defer` becomes in an agent mode that asks no person
+    /// (`unattended:`, ADR-100): `defer` unless the policy says `review`.
+    #[must_use]
+    pub fn unattended(&self) -> Unattended {
+        self.unattended.unwrap_or_default()
     }
 
     /// Whether `moat mcp proxy` pins a new server's tools without a person

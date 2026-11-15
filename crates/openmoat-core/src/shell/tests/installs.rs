@@ -172,3 +172,62 @@ fn popular_and_unknown_names_are_no_near_misses() {
         assert!(near_misses(cmd).is_empty(), "{cmd}: {:?}", near_misses(cmd));
     }
 }
+
+fn unknown_runs(cmd: &str) -> Vec<String> {
+    parsed(cmd)
+        .into_iter()
+        .filter_map(|a| match a {
+            AtomicAction::Shell { argv } if argv[0] == "@package-run-unknown" => {
+                Some(argv.join(" "))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// A runner that fetches a package and runs it at once names the package
+/// (ADR-100): its package option's value, else its first operand; a name
+/// that is not popular gets `@package-run-unknown`, a near miss its near-miss
+/// atom, and a popular one or a run told not to download none.
+#[test]
+fn package_runners_name_what_they_fetch() {
+    use Ecosystem::{Npm, Pypi};
+    installs("npx -y create-thing@2 app", Npm, &["create-thing"]);
+    installs("npx -p @scope/tool-x tool", Npm, &["@scope/tool-x"]);
+    installs("npm exec --package=tool-x -- tool", Npm, &["tool-x"]);
+    installs("pnpm dlx tool-x", Npm, &["tool-x"]);
+    installs("bun x tool-x", Npm, &["tool-x"]);
+    installs("uvx tool-x@0.3 run", Pypi, &["tool-x"]);
+    installs(
+        "uvx --from tool-x --with plug-y tool",
+        Pypi,
+        &["tool-x", "plug-y"],
+    );
+    installs("uv tool run tool-x", Pypi, &["tool-x"]);
+    installs("pipx run --spec tool-x==1 tool", Pypi, &["tool-x"]);
+    assert_eq!(
+        unknown_runs("npx helper-kit-cli"),
+        ["@package-run-unknown npm helper-kit-cli"]
+    );
+    assert_eq!(
+        unknown_runs("uvx helper-kit-cli"),
+        ["@package-run-unknown pypi helper-kit-cli"]
+    );
+    assert_eq!(near_misses("npx lodahs").len(), 1);
+    for cmd in [
+        "npx prettier --check .",
+        "uvx ruff check",
+        "pipx run black .",
+        "npx --no-install helper-kit-cli",
+        "uvx --offline helper-kit-cli",
+        "npx -c 'eslint .'",
+        "pnpm exec helper-kit-cli",
+        "npm install helper-kit-cli",
+    ] {
+        assert!(
+            unknown_runs(cmd).is_empty(),
+            "{cmd}: {:?}",
+            unknown_runs(cmd)
+        );
+    }
+}

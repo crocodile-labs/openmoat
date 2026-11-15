@@ -186,6 +186,22 @@ pub fn of_argument(program: &str, token: &str) -> Option<String> {
     of_word(address)
 }
 
+/// The fixed end of a host name the shell builds at run time, as an argument
+/// of a program that names hosts: `$(whoami).evil.com`, `${X}.evil.com`,
+/// `x-$(id -u).evil.com` all name a subdomain of `evil.com`, which is where
+/// the lookup goes and what a DNS query carries the built part to. `None`
+/// when nothing after the last expansion is a host (`$X`, `$X.json`).
+#[must_use]
+pub(crate) fn of_built_word(token: &str) -> Option<String> {
+    let cut = token.rfind(['$', ')', '}', '`'])?;
+    let mut tail = &token[cut + 1..];
+    if token.as_bytes().get(cut) == Some(&b'$') {
+        // `$NAME.evil.com`: the variable's name is not part of the host
+        tail = tail.trim_start_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+    }
+    of_word(tail.strip_prefix('.')?)
+}
+
 /// Host of a redirection target `/dev/tcp/HOST/PORT` or `/dev/udp/HOST/PORT`,
 /// which bash and ksh open as a network connection instead of a file. Only that
 /// exact spelling counts, as in bash: `/dev/../dev/tcp/…` is a path. A host the

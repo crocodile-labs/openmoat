@@ -176,6 +176,15 @@ pub fn near_miss(ecosystem: Ecosystem, name: &str) -> Option<&'static str> {
         .map(|(_, written)| *written)
 }
 
+/// Whether `name` is on the bundled list of `ecosystem`'s popular packages,
+/// compared as the registry compares names.
+#[must_use]
+pub fn is_popular(ecosystem: Ecosystem, name: &str) -> bool {
+    TOP[ecosystem.index()]
+        .known
+        .contains(&ecosystem.normalise(name))
+}
+
 fn without_separators(name: &str) -> String {
     name.chars()
         .filter(|c| !matches!(c, '-' | '_' | '.'))

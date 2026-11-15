@@ -51,6 +51,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         mcp_arguments: None,
         input: None,
         sandboxed: false,
+        unattended: false,
         event: HookEvent::ConfigChange {
             source: p.source,
             change_type: p.change_type,
