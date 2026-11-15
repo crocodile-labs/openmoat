@@ -72,7 +72,8 @@ fn doctor_reports_an_edited_event_with_exit_64() {
 #[test]
 fn audit_stats_counts_the_calls_of_the_window() {
     let host = openmoat_hosts::Host::ClaudeCode;
-    let sb = Sandbox::installed(&[".claude"]);
+    let dir = crate::hosts::dir_of(host);
+    let sb = Sandbox::installed(&[dir.as_str()]);
     guard_concurrently(&sb, 3);
     let project = sb.project();
     let (verdict, _) = sb.guard_bash("s2", &project, "cat ~/.ssh/id_rsa");
