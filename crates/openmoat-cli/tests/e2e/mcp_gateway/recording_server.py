@@ -25,7 +25,9 @@ Newline-delimited JSON-RPC 2.0 on stdin and stdout, as the MCP stdio transport
 sends it. Nothing touches the network.
 """
 import json
+import os
 import sys
+import time
 
 RECORD = sys.argv[1]
 MODE = sys.argv[2] if len(sys.argv) > 2 else "answer"
@@ -78,6 +80,14 @@ def answer(message):
 
 def main():
     global changed
+    if MODE == "stubborn":
+        # Keep the transport open when its reader disappears.
+        # The fixture also bounds its own life if the proxy under test fails.
+        with open(RECORD, "a", encoding="utf-8") as record:
+            record.write(json.dumps({"pid": os.getpid()}) + "\n")
+        sys.stdin.buffer.read()
+        time.sleep(15)
+        return
     for raw in sys.stdin.buffer:
         with open(RECORD, "ab") as record:
             record.write(raw)
