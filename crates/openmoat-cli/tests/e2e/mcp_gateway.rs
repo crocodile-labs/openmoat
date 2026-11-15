@@ -51,7 +51,7 @@ impl Gateway {
         // `openmoat mcp proxy` starts only a definition a person accepted
         // (ADR-049): one per mode, each starting the proxy as `docs`.
         for mode in [
-            "answer", "silent", "rug", "inject", "fail", "instruct", "sample",
+            "answer", "silent", "rug", "inject", "fail", "instruct", "sample", "stubborn",
         ] {
             let line = gateway.proxy_line(mode);
             let args: Vec<&str> = line.iter().map(String::as_str).collect();
@@ -189,6 +189,43 @@ fn answer(host: &str, id: u64) -> Value {
         .filter_map(|l| serde_json::from_str::<Value>(l).ok())
         .find(|m| m["id"] == id)
         .unwrap_or_else(|| panic!("no answer to {id}: {host}"))
+}
+
+#[test]
+fn closing_stdin_reaps_an_upstream_that_ignores_eof() {
+    let gateway = Gateway::new();
+    let mut proxy = Live::start(&gateway, "stubborn");
+    let ready = Instant::now() + Duration::from_secs(5);
+    let pid = loop {
+        if let Some(pid) = gateway
+            .received()
+            .first()
+            .and_then(|row| row["pid"].as_u64())
+        {
+            break pid;
+        }
+        assert!(Instant::now() < ready, "server never started");
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    drop(proxy.stdin.take());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Some(status) = proxy.child.try_wait().unwrap() {
+            assert!(!status.success(), "forced shutdown must not report success");
+            break;
+        }
+        if Instant::now() >= deadline {
+            let _ = proxy.child.kill();
+            let _ = proxy.child.wait();
+            panic!("upstream {pid} prevented the proxy from exiting after EOF");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let pid = rustix::process::Pid::from_raw(i32::try_from(pid).unwrap()).unwrap();
+    assert_eq!(
+        rustix::process::test_kill_process(pid),
+        Err(rustix::io::Errno::SRCH)
+    );
 }
 
 #[test]
