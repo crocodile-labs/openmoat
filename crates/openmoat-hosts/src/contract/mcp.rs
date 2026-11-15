@@ -223,6 +223,19 @@ impl McpNames for Prefixed {
     }
 }
 
+/// `mcp_<server>_<tool>`, one underscore on each side of the server's name
+/// (Antigravity CLI's eager tools, Crush's `tools/mcp-tools.go`): told only
+/// by the server's prefix, so the name can match too much only by holding
+/// back another server's tools while one is unaccepted.
+#[derive(Debug)]
+pub(crate) struct SinglePrefixed;
+
+impl McpNames for SinglePrefixed {
+    fn tool_of(&self, tool: &str, server: &str) -> bool {
+        tool.starts_with(&format!("mcp_{server}_"))
+    }
+}
+
 /// The servers in the object at `key` of `value`, their pointers under `at`.
 pub(crate) fn servers_at(value: &Value, key: &str, at: &str) -> Vec<McpServer> {
     value
@@ -261,4 +274,16 @@ pub(crate) fn spelled(name: &str, keep: impl Fn(char) -> bool, with: char) -> St
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{McpNames, SinglePrefixed};
+
+    #[test]
+    fn single_prefixed_names_are_told_by_the_server_prefix() {
+        assert!(SinglePrefixed.tool_of("mcp_github_issues", "github"));
+        assert!(!SinglePrefixed.tool_of("mcp_github_issues", "git"));
+        assert!(!SinglePrefixed.tool_of("view_file", "github"));
+    }
 }

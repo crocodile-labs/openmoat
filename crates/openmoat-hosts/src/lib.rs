@@ -566,7 +566,7 @@ mod tests {
             error.to_string(),
             "unknown host `nope`; supported: claude-code, codex, cursor, openclaw, \
              copilot-cli, pi, gemini-cli, opencode, hermes, cline, goose, antigravity-cli, \
-             qwen-code"
+             qwen-code, crush"
         );
     }
 }

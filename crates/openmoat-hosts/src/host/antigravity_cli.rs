@@ -47,7 +47,6 @@ mod doc;
 mod plugin;
 pub(crate) mod hook_file;
 mod location;
-mod mcp;
 mod project_settings;
 mod protect;
 mod settings;
@@ -142,7 +141,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_file: McpFile::BesideHookFile("mcp_config.json"),
         user_reader: &McpServersJson,
         project_files: &[(".agents/mcp_config.json", &McpServersJson)],
-        tool_names: &mcp::Names,
+        tool_names: &crate::contract::SinglePrefixed,
         auto_start: None,
     }),
     // `<workspace>/.agents/` holds a project's hooks, MCP servers and plugins.

@@ -1,0 +1,11 @@
+{
+  "event": "PreToolUse",
+  "hook_event_name": "PreToolUse",
+  "session_id": "313909e",
+  "cwd": "/p",
+  "tool_name": "todos",
+  "tool_input": {
+    "todos": [{"content": "write tests", "status": "pending"}]
+  },
+  "tool_use_id": "call_09"
+}

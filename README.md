@@ -180,6 +180,7 @@ sets up each:
 | goose | `PreToolUse` hook in OpenMoat's plugin, `~/.agents/plugins/openmoat/hooks/hooks.json`, with `on_failure: block` | hook only | `goose` |
 | Antigravity CLI | `PreToolUse` hook in `~/.gemini/config/hooks.json` | hook only | `antigravity-cli` |
 | Qwen Code | `PreToolUse` hook in `settings.json` (preview) | hook only | `qwen-code` |
+| Crush | `PreToolUse` hook in `crush.json` (preview) | hook only | `crush` |
 | Continue CLI | `cn` reads the Claude Code hook, but the released `cn` runs no hooks, and [Continue's repository](https://github.com/continuedev/continue) is no longer maintained | not checked yet; use `openmoat run` | none |
 <!-- /generated -->
 

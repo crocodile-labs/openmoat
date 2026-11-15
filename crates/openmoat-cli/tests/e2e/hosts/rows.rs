@@ -13,6 +13,7 @@ mod cline;
 mod codex;
 mod continue_cli;
 mod copilot_cli;
+mod crush;
 mod cursor;
 mod gemini_cli;
 mod goose;
@@ -173,6 +174,7 @@ pub fn rows() -> Vec<Row> {
         goose::row(),
         antigravity_cli::row(),
         qwen_code::row(),
+        crush::row(),
     ]
 }
 

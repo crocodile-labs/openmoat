@@ -203,6 +203,8 @@ deny:
       # Qwen Code: its Qwen OAuth sign-in (the file name Gemini CLI uses, not
       # verified)
       - "~/.qwen/oauth_creds.json"
+      # Crush: the data directory's `crush.json`, which can hold providers' API keys
+      - "~/.local/share/crush/crush.json"
     fs.write: *agent-credentials
     # the agents' commands that print a stored key or token: pi's, and OpenCode
     # 2's export of every stored credential
@@ -544,6 +546,13 @@ deny:
       - "**/.qwen"
       - "~/.qwen/settings.json"
       - "**/.qwen/settings.json"
+      # Crush: its global configuration, which holds OpenMoat's hook, the `crushrc`
+      # beside it, a Bash script it runs at start, and the data directory's
+      # `crush.json`, merged with them
+      - "~/.config/crush"
+      - "~/.config/crush/crush.json"
+      - "~/.config/crush/crushrc"
+      - "~/.local/share/crush/crush.json"
       - "**/.moat/**"
       # the binary every installed hook runs, by its name and by `moat`, the name it
       # had up to 0.7.0, which still runs it
@@ -753,6 +762,8 @@ deny:
       - "/Library/Application Support/QwenCode/**"
       - "/etc/qwen-code/**"
       - "C:/ProgramData/qwen-code/**"
+      # Crush
+      - "/etc/crush/**"
   # Windows: work handed to the Windows Subsystem for Linux. A command inside a
   # WSL distribution reads the distribution's own files (its `~/.ssh`, its shell
   # start-up files), which no Windows path in this policy names, and reaches the
@@ -897,8 +908,11 @@ allow:
       "!${project}/**/.cline/hooks",
       # Qwen Code
       "!${project}/**/.qwen/**",
+      # Crush
+      "!${project}/**/crush.json", "!${project}/**/.crush.json", "!${project}/**/crushrc",
+      "!${project}/**/.crushrc", "!${project}/**/.crush/**",
       # Agent Skills, loaded by Codex, Cursor, GitHub Copilot CLI, pi, Gemini CLI,
-      # OpenCode, goose, Antigravity CLI:
+      # OpenCode, goose, Antigravity CLI, Crush:
       "!${project}/**/.agents/skills/**", "!${project}/**/.agents", "!${project}/**/.agents/skills",
       # a virtual environment's interpreter and a dev container's host command
       "!${project}/**/.venv/bin/**", "!${project}/**/venv/bin/**", "!${project}/**/.venv/bin", "!${project}/**/venv/bin",
@@ -1446,8 +1460,11 @@ review:
       "**/.qwen/**",
       # Qwen Code: the person's extensions, whose hooks and MCP servers it starts
       "~/.qwen/extensions/**",
+      # Crush: a project's configuration, whose hooks and MCP servers it runs when it
+      # starts, and its `crushrc` scripts, which it runs as Bash with no prompt
+      "**/crush.json", "**/.crush.json", "**/crushrc", "**/.crushrc", "**/.crush/**",
       # Agent Skills, loaded by Codex, Cursor, GitHub Copilot CLI, pi, Gemini CLI,
-      # OpenCode, goose, Antigravity CLI:
+      # OpenCode, goose, Antigravity CLI, Crush:
       # the shared `.agents/skills` folder, whose skills these hosts load into their
       # later sessions (in the home too: `**/` matches it there)
       "**/.agents/skills/**",

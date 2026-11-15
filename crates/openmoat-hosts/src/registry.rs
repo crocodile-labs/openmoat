@@ -286,7 +286,8 @@ mod tests {
                 "cline",
                 "goose",
                 "antigravity-cli",
-                "qwen-code"
+                "qwen-code",
+                "crush"
             ]
         );
         let installs: Vec<Host> = Host::EVERY

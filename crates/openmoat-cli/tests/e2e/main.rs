@@ -28,6 +28,7 @@ mod codex;
 mod config_change;
 mod continue_cli;
 mod copilot_cli;
+mod crush;
 mod cursor;
 mod cursor_sandbox;
 mod deliver;

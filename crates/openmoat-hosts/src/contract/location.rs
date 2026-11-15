@@ -78,3 +78,68 @@ pub trait Locate: Sync {
         true
     }
 }
+
+/// A configuration directory under the XDG one: the directory variable
+/// [`Self::own`] names when it is set, else `<$XDG_CONFIG_HOME>/<app>`, else
+/// `~/<dir_name>` (Crush, Kilo Code). An empty value is unset. `XDG_CONFIG_HOME`
+/// is read by many programs, so a value of it says nothing about whether the
+/// host is installed ([`Locate::variables_are_the_hosts`]).
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct XdgDir {
+    /// The host's own variable, which names the directory itself.
+    pub own: &'static str,
+    /// `XDG_CONFIG_HOME` and [`Self::own`], in that order.
+    pub variables: &'static [&'static str; 2],
+    /// The directory's name under `XDG_CONFIG_HOME`.
+    pub app: &'static str,
+    /// The directory's path under the home directory by default.
+    pub dir_name: &'static str,
+    /// The hook file, relative to the directory.
+    pub file: &'static str,
+}
+
+impl XdgDir {
+    /// The XDG variable every such directory is under.
+    pub const BASE: &'static str = "XDG_CONFIG_HOME";
+}
+
+impl Locate for XdgDir {
+    fn variables(&self) -> &'static [&'static str] {
+        self.variables
+    }
+
+    fn moved(&self, get: &dyn Fn(&str) -> Option<String>) -> bool {
+        self.variables
+            .iter()
+            .any(|name| get(name).is_some_and(|v| !v.is_empty()))
+    }
+
+    fn resolve(
+        &self,
+        get: &dyn Fn(&str) -> Option<String>,
+        os_home: &Path,
+        absolute: &dyn Fn(&Path) -> io::Result<PathBuf>,
+    ) -> io::Result<Located> {
+        let set = |name: &str| get(name).filter(|v| !v.is_empty());
+        let dir = match (set(self.own), set(Self::BASE)) {
+            (Some(dir), _) => absolute(Path::new(&dir))?,
+            (None, Some(base)) => absolute(&Path::new(&base).join(self.app))?,
+            (None, None) => os_home.join(self.dir_name),
+        };
+        Ok(self.at(dir, None))
+    }
+
+    fn at(&self, dir: PathBuf, config: Option<PathBuf>) -> Located {
+        let config = config.unwrap_or_else(|| dir.join(self.file));
+        Located { dir, config }
+    }
+
+    fn default_for(&self, home: &Path) -> Located {
+        self.at(home.join(self.dir_name), None)
+    }
+
+    fn variables_are_the_hosts(&self) -> bool {
+        false
+    }
+}

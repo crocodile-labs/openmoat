@@ -23,6 +23,7 @@ None of these is listed in its channel yet: each is a preview until it is.
 | goose | none | none: goose has no registry for hook plugins, and `openmoat init` already writes OpenMoat as an Open Plugins folder | `openmoat init` | |
 | Antigravity CLI | [`antigravity-cli/`](antigravity-cli/) | Antigravity CLI plugins | `agy plugin install https://github.com/crocodile-labs/openmoat-antigravity` | [1](https://antigravity.google/docs/plugins.md) [2](https://antigravity.google/docs/build-plugins.md) [3](https://antigravity.google/docs/hooks.md) |
 | Qwen Code | none | none: Qwen Code's extensions (`qwen extensions install`) can carry hooks, but which manifest field holds them was not verified; `openmoat init` writes the hook into `settings.json` | `openmoat init` | |
+| Crush | none | none: Crush has no plugin channel: Agent Skills are its only extensions, and a skill carries no hook | `openmoat init` | |
 
 ## Publishing
 

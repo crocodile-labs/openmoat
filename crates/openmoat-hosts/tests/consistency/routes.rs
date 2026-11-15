@@ -77,6 +77,41 @@ pub(super) fn qwen_route(intent: &Intent) -> Result<(Value, Action), &'static st
     }
 }
 
+/// Crush `PreToolUse` (`crates/openmoat-hosts/src/host/crush/fixtures`).
+pub(super) fn crush(tool: &str, input: &Value) -> Value {
+    json!({
+        "event": "PreToolUse", "hook_event_name": "PreToolUse", "session_id": "crush-1",
+        "cwd": super::CWD, "tool_name": tool, "tool_input": input, "tool_use_id": "call_1",
+    })
+}
+
+/// [`super::payload`] for Crush.
+pub(super) fn crush_route(intent: &Intent) -> Result<(Value, Action), &'static str> {
+    match intent {
+        // On Windows Crush's shell was not checked, and is never classified.
+        Intent::Shell(_) if cfg!(windows) => Err("Crush's shell on Windows is not read"),
+        Intent::Shell(c) => Ok((
+            crush("bash", &json!({ "command": c, "description": "d" })),
+            Action::Shell { command: c.clone() },
+        )),
+        Intent::Read(p) => Ok((
+            crush("view", &json!({ "file_path": p })),
+            Action::FsRead { path: p.clone() },
+        )),
+        Intent::Write(p) => Ok((
+            crush(
+                "edit",
+                &json!({ "file_path": p, "old_string": "old", "new_string": "new" }),
+            ),
+            Action::FsWrite { path: p.clone() },
+        )),
+        Intent::Fetch(u) => Ok((
+            crush("fetch", &json!({ "url": u, "format": "text" })),
+            Action::Fetch { url: u.clone() },
+        )),
+    }
+}
+
 /// [`super::payload`] for the Cline CLI.
 pub(super) fn cline_route(intent: &Intent) -> Result<(Value, Action), &'static str> {
     match intent {

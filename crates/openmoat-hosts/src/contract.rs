@@ -44,12 +44,14 @@ pub use hook_off::{
     HookOff, Managed, ManagedHooks, ManagedShape, ProjectFile, ProjectOff, SessionOverride,
 };
 pub use hook_trust::HookTrust;
-pub use location::{Locate, Located, Location};
+pub use location::{Locate, Located, Location, XdgDir};
 pub use mcp::{
     AutoStart, BuiltinMcp, McpAutoStart, McpCommandForm, McpFile, McpNames, McpReader, McpServer,
     McpSpec, McpSyntax,
 };
-pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
+pub(crate) use mcp::{
+    McpServersJson, Prefixed, SinglePrefixed, escape, server, servers_at, spelled,
+};
 pub use plugin::{Marketplace, Meta, Plugin, PluginFile, PluginSpec, StandAside};
 pub use protect::{Helper, Paths, ProcessSpec, Protect, RunsLater};
 pub use relaxed::{KeyShape, RelaxedCheck, RelaxedKey};

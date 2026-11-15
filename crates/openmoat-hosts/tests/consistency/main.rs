@@ -32,7 +32,7 @@ use payloads::{
     antigravity_route, copilot, cursor, cursor_tool, gemini, goose_route, hermes, openclaw,
     opencode, opencode_path, pi, under_cwd,
 };
-use routes::{cline_route, opencode2_route, qwen_route};
+use routes::{cline_route, crush_route, opencode2_route, qwen_route};
 
 /// The part of a conformance fixture this suite reads. A fixture's session
 /// and context are applied alike for every route ([`setup::Setup`]); one with
@@ -111,9 +111,11 @@ enum Route {
     AntigravityCli,
     /// Qwen Code `PreToolUse`.
     QwenCode,
+    /// Crush `PreToolUse`.
+    Crush,
 }
 
-const ROUTES: [Route; 17] = [
+const ROUTES: [Route; 18] = [
     Route::ClaudeCode,
     Route::ClaudeCodeNoPrompt,
     Route::Codex,
@@ -131,6 +133,7 @@ const ROUTES: [Route; 17] = [
     Route::Goose,
     Route::AntigravityCli,
     Route::QwenCode,
+    Route::Crush,
 ];
 
 impl Route {
@@ -149,6 +152,7 @@ impl Route {
             Self::Goose => Host::Goose,
             Self::AntigravityCli => Host::AntigravityCli,
             Self::QwenCode => Host::QwenCode,
+            Self::Crush => Host::Crush,
         }
     }
 }
@@ -171,7 +175,8 @@ fn received(route: Route, expected: Verdict) -> Verdict {
             | Route::ClaudeCodeNoPrompt
             | Route::OpenCode
             | Route::Cline
-            | Route::Goose,
+            | Route::Goose
+            | Route::Crush,
             Verdict::Review,
         ) => Verdict::Deny,
         // Cursor does not enforce `"ask"` on `preToolUse` or `beforeReadFile`: it is
@@ -390,6 +395,7 @@ fn payload(route: Route, intent: &Intent) -> Result<(Value, Action), &'static st
         (Route::Goose, _) => goose_route(intent),
         (Route::AntigravityCli, _) => antigravity_route(intent),
         (Route::QwenCode, _) => qwen_route(intent),
+        (Route::Crush, _) => crush_route(intent),
         (Route::ClaudeCodeNoPrompt, _) => unreachable!("sends Claude Code's tools"),
     }
 }

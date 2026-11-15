@@ -41,4 +41,6 @@ crate::registry::hosts! {
     AntigravityCli => antigravity_cli,
     /// Alibaba's Qwen Code (`qwen`, `PreToolUse` hook in `~/.qwen/settings.json`).
     QwenCode => qwen_code,
+    /// Charm's Crush (`crush`, `PreToolUse` hook in its global `crush.json`).
+    Crush => crush,
 }

@@ -105,6 +105,7 @@ fn the_shared_skills_folder_is_one_fact_for_every_host_that_loads_it() {
         Host::OpenCode,
         Host::Goose,
         Host::AntigravityCli,
+        Host::Crush,
     ];
     want.sort_by_key(|h| h.display_name());
     // Claude Code (`.claude/skills`) and Cline (`.cline/skills`, `.clinerules/skills`,

@@ -1,0 +1,12 @@
+{
+  "event": "PreToolUse",
+  "hook_event_name": "PreToolUse",
+  "session_id": "313909e",
+  "cwd": "/p",
+  "tool_name": "bash",
+  "tool_input": {
+    "command": "cat ~/.ssh/id_rsa",
+    "description": "Show the key"
+  },
+  "tool_use_id": "call_01"
+}

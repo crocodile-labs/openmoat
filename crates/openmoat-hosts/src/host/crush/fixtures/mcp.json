@@ -1,0 +1,11 @@
+{
+  "event": "PreToolUse",
+  "hook_event_name": "PreToolUse",
+  "session_id": "313909e",
+  "cwd": "/p",
+  "tool_name": "mcp_files_read_file",
+  "tool_input": {
+    "path": "/Users/me/.ssh/id_rsa"
+  },
+  "tool_use_id": "call_08"
+}

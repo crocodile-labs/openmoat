@@ -402,6 +402,15 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | Qwen Code | MCP tool (`mcp__<server>__<tool>`) | server, tool and arguments | `McpTool` |
 | Qwen Code | `todo_write`, `ask_user_question`, `enter_plan_mode`, `exit_plan_mode`, `tool_search` | — | none: `ungoverned` |
 | Qwen Code | any other tool (`agent`, `skill`, `exec`, `notebook_edit`, `save_memory`, `monitor`, `enter_worktree`, a discovered tool) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
+| Crush | `bash` | `command`, after a `cd` to `working_dir`; left to Crush on Windows | `Shell`; `ForeignShell` on Windows |
+| Crush | `view`, `lsp_diagnostics`, `lsp_symbols` / `write`, `edit`, `multiedit`, `lsp_replace_symbol` | `file_path` (`write` `content`, the replacements of `edit` and `multiedit` for provenance) | `FsRead` / `FsWrite` |
+| Crush | `ls`, `glob`, `grep` | `path`, else `cwd`; for `glob` also the directory an absolute `pattern` names and where a relative one climbs to | `FsRead`, `ReadFiles` |
+| Crush | `fetch`, `web_fetch` / `web_search`, `sourcegraph` | `url` / `query` | `Fetch` / `WebSearch` |
+| Crush | `read_mcp_resource` | `uri`: a `file:` URI as its path; any other URI | `FsRead`; `UnknownTool` |
+| Crush | `agent`, `agentic_fetch` (subagents) | tool name and arguments; the subagent's own calls fire no hook | `UnknownTool`, `Unchecked`: needs review, a deny in Crush |
+| Crush | MCP tool (`mcp_<server>_<tool>`) | the name, told apart by its server prefix, and the arguments | `McpTool` of that name |
+| Crush | `todos`, `question`, `job_output`, `job_kill`, `crush_logs`, `crush_info`, `list_mcp_resources`, `agent_status` | — | none: `ungoverned` |
+| Crush | any other tool (`download`, `lsp_rename`, `lsp_references`, `lsp_definition`, `agent_dispatch`, a tool added later) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
 <!-- /generated -->
 
 OpenClaw has no command hook. OpenMoat's plugin (`crates/openmoat-hosts/src/host/openclaw/integration/openmoat.mjs`,
