@@ -398,9 +398,10 @@ fn every_verdict_reaches_the_host_as_it_must() {
     // whose PowerShell commands OpenMoat leaves to Cline), goose 4 (no read or fetch
     // tool; 3 on Windows, whose `cmd` OpenMoat leaves to goose), Antigravity CLI 6
     // (5 on Windows, whose shell OpenMoat does not classify), Qwen Code 6 (5 on
-    // Windows, whose PowerShell commands OpenMoat leaves to Qwen Code), Crush 6
-    // (5 on Windows, whose shell OpenMoat leaves to Crush)
-    assert_eq!(checked, 77 - 7 * usize::from(cfg!(windows)));
+    // Windows, whose PowerShell commands OpenMoat leaves to Qwen Code), Crush 5
+    // (no MCP call, whose `mcp_<server>_<tool>` name cannot be split back; 4 on
+    // Windows, whose shell OpenMoat leaves to Crush)
+    assert_eq!(checked, 76 - 7 * usize::from(cfg!(windows)));
 }
 
 /// ADR-025: `defer` writes nothing, so Claude Code, Codex and the Continue CLI
