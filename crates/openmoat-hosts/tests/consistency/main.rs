@@ -9,9 +9,6 @@
 //! fixture's, translated only where the docs say a host cannot receive it
 //! ([`received`]). Every rule the fixture names must be in the decision.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-
 use openmoat_core::{
     Action, CompiledPolicy, DEFAULT_POLICY, Decision, MapPathResolver, MapResolver, Policy, Verdict,
 };
@@ -22,12 +19,14 @@ use serde_json::{Value, json};
 
 mod after_call;
 mod attacks;
+mod fixture;
 mod mcp;
 mod payloads;
 mod routes;
 mod setup;
 mod unknown;
 
+use fixture::fixture;
 use payloads::{
     antigravity_route, copilot, cursor, cursor_tool, gemini, goose_route, hermes, openclaw,
     opencode, opencode_path, pi, under_cwd,
@@ -419,38 +418,6 @@ fn pre_tool_use(route: Route, tool: &str, input: &Value) -> Value {
             "tool_input": input, "tool_use_id": "toolu_1",
         }),
     }
-}
-
-fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-/// The conformance fixture `id`, which must be a plain intent.
-fn fixture(id: &str) -> (Intent, Expect, setup::Setup) {
-    let dir = repo_root().join("tests/conformance");
-    for name in ["attacks.yaml", "review.yaml", "benign.yaml"] {
-        let text = fs::read_to_string(dir.join(name)).expect("conformance file");
-        let fixtures: Vec<Fixture> = openmoat_core::yaml::from_str(&text).expect(name);
-        let Some(f) = fixtures.into_iter().find(|f| f.id == id) else {
-            continue;
-        };
-        let extras = [&f.repo, &f.links, &f.resolve];
-        assert!(
-            extras.iter().all(|e| e.is_none()),
-            "{id}: not a plain intent (repo, links or resolve)"
-        );
-        let setup = setup::Setup::read(id, f.session, f.context);
-        let a = f.action;
-        let intent = match (a.shell, a.fs_read, a.fs_write, a.fetch) {
-            (Some(c), None, None, None) => Intent::Shell(c),
-            (None, Some(p), None, None) => Intent::Read(p),
-            (None, None, Some(p), None) => Intent::Write(p),
-            (None, None, None, Some(u)) => Intent::Fetch(u),
-            _ => panic!("{id}: the action is not one shell, fs_read, fs_write or fetch"),
-        };
-        return (intent, f.expect, setup);
-    }
-    panic!("no conformance fixture `{id}`");
 }
 
 /// What the host receives for `payload`, decided as `moat guard` decides it
