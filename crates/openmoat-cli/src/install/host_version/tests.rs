@@ -45,14 +45,17 @@ fn versions_below_the_oldest_are_unsupported_and_others_name_their_hook() {
     assert!(hook("1.19.4").unwrap().contains("tool.execute.before"));
     assert!(hook("2.0.0").unwrap().contains("OpenCode 2"));
     assert!(hook("2.2.0").unwrap().contains("`execute.before`"));
-    // No other host names versions.
-    assert!(Host::ALL.iter().all(|h| {
-        *h == Host::OpenCode
-            || h.spec()
-                .install
-                .as_ref()
-                .is_none_or(|i| i.versions.is_none())
-    }));
+    // Every host with a version gate says why older versions are not set up.
+    for host in Host::ALL {
+        if let Some(gate) = host
+            .spec()
+            .install
+            .as_ref()
+            .and_then(|i| i.versions.as_ref())
+        {
+            assert_ne!(gate.older, "", "{host:?}");
+        }
+    }
 }
 
 #[test]
