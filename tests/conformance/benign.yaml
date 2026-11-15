@@ -2793,3 +2793,48 @@
   threat: T5
   action: { shell: "pnpm exec helper-kit-cli" }
   expect: { verdict: defer, rules: [default] }
+# Tools people commonly run with a package runner are on the bundled tool lists
+# (`data/top-packages/*-tools.txt`, ADR-102), so they defer as their install does
+- id: benign-npx-create-next-app
+  threat: T5
+  action: { shell: "npx create-next-app@latest my-app --ts" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-npx-shadcn-add
+  threat: T5
+  action: { shell: "npx shadcn@latest add button" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-npx-drizzle-kit
+  threat: T5
+  action: { shell: "npx drizzle-kit generate" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-npx-biome
+  threat: T5
+  action: { shell: "npx @biomejs/biome check ." }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-pnpm-dlx-create-vite
+  threat: T5
+  action: { shell: "pnpm dlx create-vite app --template react-ts" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-npx-changeset
+  threat: T5
+  action: { shell: "npx -p @changesets/cli changeset version" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-npx-aws-cdk
+  threat: T5
+  action: { shell: "npx aws-cdk synth" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-uvx-pyright
+  threat: T5
+  action: { shell: "uvx pyright src" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-uvx-ty-check
+  threat: T5
+  action: { shell: "uvx ty check" }
+  expect: { verdict: defer, rules: [default] }
+# A plain variable in an HTTP request's host is not taken for a connection: the
+# request defers as the URL written out does (ADR-102); a variable could hold
+# options too, so it is not called a fetch either
+- id: benign-curl-get-variable-bucket
+  threat: T12
+  action: { shell: "curl -s https://$BUCKET.s3.amazonaws.com/report.csv" }
+  expect: { verdict: defer, rules: [default] }

@@ -696,7 +696,7 @@
   expect: { verdict: defer, rules: [default] }
 
 # The neighbours of the #350 allows: what still needs review
-# npm exec downloads a package it cannot find, like npx; since ADR-100 a name not
+# npm exec downloads a package it cannot find, like npx; since ADR-102 a name not
 # on the popular list needs review (`tsc` is not the TypeScript package)
 - id: review-npm-exec-like-npx
   threat: T5
@@ -2895,7 +2895,7 @@
   threat: T9
   action: { fs_write: "~/.cache/opencode/node_modules/helper-plugin/index.js" }
   expect: { verdict: review, rules: [runs-later] }
-# T5 a package fetched and run at once (ADR-100): a near miss of a popular name
+# T5 a package fetched and run at once (ADR-102): a near miss of a popular name
 # is `package-near-miss`, any other name not on the popular list
 # `package-run-unknown`, pinned to a version or not
 - id: review-npx-unknown-package
@@ -2957,4 +2957,11 @@
 - id: review-pipx-run-spec-unknown-package
   threat: T5
   action: { shell: "pipx run --spec helper-kit-cli==1.2 helper" }
+  expect: { verdict: review, rules: [package-run-unknown] }
+# Without the project's files a program name that is not a package's (`tsc`,
+# `ng`) is a run of an unknown package; `openmoat guard` looks for the program
+# in the project's `node_modules/.bin` first (ADR-102, engine unit tests)
+- id: review-npx-program-without-the-project
+  threat: T5
+  action: { shell: "npx tsc --noEmit" }
   expect: { verdict: review, rules: [package-run-unknown] }

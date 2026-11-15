@@ -496,3 +496,43 @@ fn host_ids_round_trip() {
         Err(HostError::UnknownHost(_))
     ));
 }
+
+fn command_in_mode(mode: &str, command: &str) -> HookRequest {
+    let payload = serde_json::json!({
+        "hook_event_name": "PreToolUse",
+        "session_id": "s1",
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+        "permission_mode": mode,
+    });
+    Host::ClaudeCode
+        .parse_request(&payload.to_string())
+        .unwrap()
+}
+
+/// Which calls run unasked in each Claude Code mode (ADR-102): every one in
+/// `bypassPermissions` and `auto`, only file edits and the file commands in
+/// `acceptEdits`, none where Claude Code asks or refuses.
+#[test]
+fn claude_code_calls_that_run_unasked_are_unattended() {
+    for mode in ["bypassPermissions", "auto"] {
+        assert!(command_in_mode(mode, "npm install x").unattended, "{mode}");
+    }
+    for command in [
+        "mkdir out",
+        "rm -rf build",
+        "FOO=1 /bin/mv a b",
+        "sed -i s/a/b/ f",
+    ] {
+        assert!(
+            command_in_mode("acceptEdits", command).unattended,
+            "{command}"
+        );
+    }
+    assert!(!command_in_mode("acceptEdits", "npm install x").unattended);
+    for mode in ["default", "plan", "dontAsk"] {
+        assert!(!command_in_mode(mode, "rm -rf build").unattended, "{mode}");
+    }
+    // `auto` still puts a hook's `ask` to the person
+    assert_eq!(command_in_mode("auto", "ls").event, HookEvent::PreToolUse);
+}

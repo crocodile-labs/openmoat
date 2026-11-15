@@ -241,7 +241,7 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
         Err(error) => (None, kernel_error(&error)),
     };
 
-    // In a mode that asks no person, `unattended: review` holds a defer (ADR-100).
+    // In a mode that asks no person, `unattended: review` holds a defer (ADR-102).
     if let Some(r) = &mut request {
         unattended::apply(host, out.unattended, r, &mut decision);
     }
@@ -376,7 +376,7 @@ struct Evaluated {
     /// The titles the person's policy gives the decision's rules, for the
     /// block message (ADR-059).
     titles: notice::Titles,
-    /// The person's policy's `unattended:` (ADR-100), set once it is loaded.
+    /// The person's policy's `unattended:` (ADR-102), set once it is loaded.
     unattended: openmoat_core::Unattended,
 }
 

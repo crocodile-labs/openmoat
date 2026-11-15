@@ -139,11 +139,11 @@ pub(super) fn review_and_accept(
         changes.len()
     )?;
     // A server just added starts unchecked each time the agent starts it:
-    // offer to run it through OpenMoat, Enter for yes (ADR-100).
+    // offer to run it through OpenMoat, Enter for yes (ADR-102).
     let added: Vec<String> = changes
         .iter()
         .filter(|c| matches!(c.kind, mcp::pins::Kind::Added))
-        .map(|c| c.name.clone())
+        .map(|c| c.id.clone())
         .collect();
     if !added.is_empty() {
         super::init::mcp::ask_and_wrap(home, binary, &hosts, Some(&added), out)?;

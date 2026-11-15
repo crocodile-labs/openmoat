@@ -420,7 +420,7 @@ fn defer_is_no_decision_for_every_pre_tool_use_host() {
 }
 
 /// A host that can report a mode in which nobody is asked (a permission mode
-/// the payload names, or what the guard reads, ADR-100) says why its review
+/// the payload names, or what the guard reads, ADR-102) says why its review
 /// becomes a deny there: `unattended: review` answers such a call with no prompt.
 #[test]
 fn every_unattended_mode_has_a_no_prompt_reason() {

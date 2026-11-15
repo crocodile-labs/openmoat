@@ -38,9 +38,11 @@ HEADER = """\
 # Popular {what}, most-{how} first, one per line (ADR-030).
 #
 # Source: {source}, fetched on {date} by scripts/refresh-top-packages.py.
-# A name is "popular" here only for the near-miss check: an install of a name
-# that is not on this list but is one typo or a common trick away from one
-# that is, needs review (`package-near-miss`).
+# An install of a name that is not on this list but is one typo or a common
+# trick away from one that is, needs review (`package-near-miss`). For a
+# package runner (`npx`, `uvx`, `pipx run`) this list and <ecosystem>-tools.txt,
+# which this script does not touch, are an allowlist: a name on neither needs
+# review (`package-run-unknown`, ADR-102).
 """
 
 

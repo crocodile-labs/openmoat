@@ -1,9 +1,13 @@
-//! `unattended: review` (ADR-100): in a mode in which the agent runs a call
+//! `unattended: review` (ADR-102): in a mode in which the agent runs a call
 //! the hook defers with no person asked (Claude Code's `bypassPermissions`
 //! and `auto`, pi without a screen, Hermes Agent's YOLO mode, Antigravity
-//! CLI's `always-proceed`), a `defer` is held for review, and a review there
-//! is answered as a deny that says how to approve it, or sent to the
-//! approvals channel. Absent or `defer`, nothing here changes a decision.
+//! CLI's `always-proceed`; in `acceptEdits` a file edit and the file commands
+//! it approves), a `defer` is held for review. Whether that review reaches a
+//! person is the host's as always: a prompt where its hook can still ask
+//! (Claude Code's `auto` and `acceptEdits`), a deny that says how to approve
+//! it, or the approvals channel, where no one is asked (`bypassPermissions`,
+//! pi without a screen, an agent that approves reviews unseen). Absent or
+//! `defer`, nothing here changes a decision.
 
 use openmoat_core::rule_id::{UNATTENDED, UNGOVERNED};
 use openmoat_core::{Decision, Unattended, Verdict};
@@ -21,30 +25,29 @@ pub(super) fn apply(
             request.event,
             HookEvent::PreToolUse | HookEvent::PreToolUseNoPrompt
         )
-        || !matches!(decision.verdict, Verdict::Defer | Verdict::Review)
+        || decision.verdict != Verdict::Defer
         // a tool OpenMoat does not check is left to the host, as everywhere
         || decision.rules.iter().any(|rule| rule == UNGOVERNED)
     {
         return;
     }
     // What the payload does not say: settings and variables the host's spec
-    // names, read only when the answer can change something.
+    // names, read only when the answer can change something. A host that
+    // approves calls unseen approves the review too, so no one is asked.
     if !request.unattended && request.event == HookEvent::PreToolUse && super::unseen::holds(host) {
         request.unattended = true;
+        request.event = HookEvent::PreToolUseNoPrompt;
     }
     if !request.unattended {
         return;
     }
-    request.event = HookEvent::PreToolUseNoPrompt;
-    if decision.verdict == Verdict::Defer {
-        decision.verdict = Verdict::Review;
-        decision.rules.insert(0, UNATTENDED.to_owned());
-        decision.reasons.push(format!(
-            "{} runs such a call with no one asked in this mode, and the policy holds it for \
-             review (`unattended: review`)",
-            host.display_name()
-        ));
-    }
+    decision.verdict = Verdict::Review;
+    decision.rules.insert(0, UNATTENDED.to_owned());
+    decision.reasons.push(format!(
+        "{} runs such a call with no one asked in this mode, and the policy holds it for \
+         review (`unattended: review`)",
+        host.display_name()
+    ));
 }
 
 #[cfg(test)]
@@ -54,15 +57,46 @@ mod tests {
     use super::*;
 
     fn request(host: Host, unattended: bool) -> HookRequest {
+        in_mode(
+            host,
+            if unattended {
+                "bypassPermissions"
+            } else {
+                "default"
+            },
+        )
+    }
+
+    fn in_mode(host: Host, mode: &str) -> HookRequest {
         let payload = serde_json::json!({
             "session_id": "s",
             "cwd": "/p",
             "hook_event_name": "PreToolUse",
-            "permission_mode": if unattended { "bypassPermissions" } else { "default" },
+            "permission_mode": mode,
             "tool_name": "Bash",
             "tool_input": { "command": "npm install left-pad" },
         });
         host.parse_request(&payload.to_string()).unwrap()
+    }
+
+    /// In a mode whose hook still asks (Claude Code's `auto`), the review is
+    /// put to the person; where it cannot (`bypassPermissions`), it is a deny.
+    #[test]
+    fn the_review_reaches_a_person_where_the_mode_still_asks() {
+        let host = Host::ALL
+            .into_iter()
+            .find(|h| {
+                let reviews = &h.spec().reviews;
+                reviews.unattended_modes.contains(&"auto")
+                    && !reviews.prompt_free_modes.contains(&"auto")
+            })
+            .unwrap();
+        let mut req = in_mode(host, "auto");
+        let mut decision = defer();
+        apply(host, Unattended::Review, &mut req, &mut decision);
+        assert_eq!(decision.verdict, Verdict::Review);
+        assert_eq!(req.event, HookEvent::PreToolUse);
+        assert_eq!(host.answer(&req.event, &decision).verdict, Verdict::Review);
     }
 
     fn defer() -> Decision {

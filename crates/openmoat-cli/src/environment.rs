@@ -165,6 +165,14 @@ impl ProgramResolver for WithOwnBinary<'_> {
         self.snapshot.pinned(program)
     }
 
+    fn local_bin(&self, dirs: &[String], name: &str) -> bool {
+        crate::project_packages::local_bin(dirs, name)
+    }
+
+    fn declared(&self, dirs: &[String], ecosystem: openmoat_core::Ecosystem, name: &str) -> bool {
+        crate::project_packages::declared(dirs, ecosystem, name)
+    }
+
     fn own_binaries(&self) -> Vec<String> {
         let binary = Path::new(self.binary);
         std::iter::once(binary.to_path_buf())

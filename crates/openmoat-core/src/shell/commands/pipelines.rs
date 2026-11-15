@@ -38,6 +38,26 @@ pub(super) fn push_substituted_code<'w>(
     Ok(())
 }
 
+/// The canonical pipeline atoms of text the command runs from its own words'
+/// substitutions (`substituted`, aligned with `argv`): `$(curl URL)` as the
+/// program, here or in a shell's single-quoted string (`sh -c '$(curl
+/// URL)'`), runs the words curl prints as a command, so it gets `curl URL |
+/// sh`'s atoms; `python3 -c "$(curl URL)"` runs what curl prints as its code.
+pub(super) fn push_substituted_programs(
+    substituted: &[&[String]],
+    argv: &[String],
+    program: &str,
+    sink: &mut Sink,
+) -> Result<(), ClassifyError> {
+    push_substituted_code(substituted.first().copied(), "sh", sink)?;
+    if let Some(index) = crate::shell::tables::inline_flags(program)
+        .and_then(|flags| crate::shell::tokens::flag_payload_index(argv, flags))
+    {
+        push_substituted_code(substituted.get(index).copied(), program, sink)?;
+    }
+    Ok(())
+}
+
 /// `tokens` with `| <interpreter>` after every command list item that has a
 /// word: `a; b | c` → `a | sh; b | c | sh`.
 fn piped_into(tokens: Vec<Token>, interpreter: &str) -> Vec<Token> {

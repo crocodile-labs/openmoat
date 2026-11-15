@@ -67,6 +67,7 @@ pub use injection::{
     TokenKind as InjectedTokenKind,
 };
 pub use kind::{Kind, UnknownKind};
+pub use packages::Ecosystem;
 pub use patch::{Replayed as PatchReplayed, replay as patch_replay, writes as patch_writes};
 pub use paths::resolve as resolve_path;
 pub use pattern::literal_shell_pattern;

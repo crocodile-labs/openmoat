@@ -186,7 +186,7 @@ fn unknown_runs(cmd: &str) -> Vec<String> {
 }
 
 /// A runner that fetches a package and runs it at once names the package
-/// (ADR-100): its package option's value, else its first operand; a name
+/// (ADR-102): its package option's value, else its first operand; a name
 /// that is not popular gets `@package-run-unknown`, a near miss its near-miss
 /// atom, and a popular one or a run told not to download none.
 #[test]
@@ -207,6 +207,15 @@ fn package_runners_name_what_they_fetch() {
     installs("pipx run --spec tool-x==1 tool", Pypi, &["tool-x"]);
     assert_eq!(
         unknown_runs("npx helper-kit-cli"),
+        ["@package-run-unknown npm helper-kit-cli or-local-program"]
+    );
+    // a version or a package option names a package, not a local program
+    assert_eq!(
+        unknown_runs("npx helper-kit-cli@2"),
+        ["@package-run-unknown npm helper-kit-cli"]
+    );
+    assert_eq!(
+        unknown_runs("npx -p helper-kit-cli helper"),
         ["@package-run-unknown npm helper-kit-cli"]
     );
     assert_eq!(

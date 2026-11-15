@@ -30,6 +30,7 @@ mod os_version;
 mod packs;
 mod plugin_record;
 mod project;
+mod project_packages;
 mod project_settings;
 mod protection;
 mod provenance;

@@ -21,6 +21,7 @@ mod contents;
 mod context;
 mod egress;
 mod injection;
+mod packages;
 mod staging;
 mod taint;
 
@@ -379,6 +380,8 @@ impl CompiledPolicy<'_> {
         paths: &dyn PathResolver,
     ) -> Decision {
         let (atoms, unparsed) = self.all_atoms(action, paths);
+        // a runner's package the project installed or declared (ADR-102)
+        let atoms = packages::on_hand(atoms, &self.ctx, resolver);
         let pins = atoms.iter().filter_map(|atom| match atom {
             AtomicAction::Shell { argv } => {
                 programs::check(&argv[0], &self.policy.executables, resolver)

@@ -382,7 +382,7 @@ pub struct Policy {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub require: Option<Require>,
     /// What a `defer` becomes when the agent reports a mode in which it runs
-    /// calls with no person asked (ADR-100): `defer` (absent, the default)
+    /// calls with no person asked (ADR-102): `defer` (absent, the default)
     /// leaves it to the agent, `review` holds it for a person. Only the
     /// person's own policy holds it: a repository policy or a pack with the key
     /// does not parse.
@@ -537,7 +537,7 @@ pub enum BrowserOpen {
 }
 
 /// `unattended:`: what a `defer` becomes in an agent mode that runs calls
-/// with no person asked (auto-approve, YOLO, headless; ADR-100).
+/// with no person asked (auto-approve, YOLO, headless; ADR-102).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Unattended {
@@ -588,7 +588,7 @@ impl Policy {
     }
 
     /// What a `defer` becomes in an agent mode that asks no person
-    /// (`unattended:`, ADR-100): `defer` unless the policy says `review`.
+    /// (`unattended:`, ADR-102): `defer` unless the policy says `review`.
     #[must_use]
     pub fn unattended(&self) -> Unattended {
         self.unattended.unwrap_or_default()

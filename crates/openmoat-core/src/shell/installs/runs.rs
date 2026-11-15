@@ -124,10 +124,22 @@ fn runners(program: &str) -> &'static [Runner] {
     }
 }
 
+/// One package word a run fetches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Fetched<'a> {
+    /// As written (`ruff@0.5`, `@scope/x@1`), not cleaned.
+    pub(super) word: &'a str,
+    /// The run's first word, with no package option naming the package: it
+    /// may be a program the project installed (`npx tsc`), not a package.
+    pub(super) program_word: bool,
+}
+
 /// The registry and the package words `argv`, whose program's base name is
-/// `program`, fetches and runs, if it is such a run; the words are as written
-/// (`ruff@0.5`, `@scope/x@1`), not cleaned.
-pub(super) fn fetched<'a>(argv: &'a [String], program: &str) -> Option<(Ecosystem, Vec<&'a str>)> {
+/// `program`, fetches and runs, if it is such a run.
+pub(super) fn fetched<'a>(
+    argv: &'a [String],
+    program: &str,
+) -> Option<(Ecosystem, Vec<Fetched<'a>>)> {
     let operands = argv.get(1..)?;
     runners(program).iter().find_map(|runner| {
         let n = runner.subcommand.len();
@@ -145,7 +157,7 @@ pub(super) fn fetched<'a>(argv: &'a [String], program: &str) -> Option<(Ecosyste
 
 /// The package words of a run's arguments `rest`; `None` when the runner
 /// fetches nothing.
-fn packages<'a>(rest: &'a [String], runner: &Runner) -> Option<Vec<&'a str>> {
+fn packages<'a>(rest: &'a [String], runner: &Runner) -> Option<Vec<Fetched<'a>>> {
     let mut named = Vec::new();
     let mut extra = Vec::new();
     let mut first = None;
@@ -177,10 +189,18 @@ fn packages<'a>(rest: &'a [String], runner: &Runner) -> Option<Vec<&'a str>> {
             extra.extend(value);
         }
     }
+    let option = |word| Fetched {
+        word,
+        program_word: false,
+    };
     // With a package option the first word is one of its programs, not a package.
-    if named.is_empty() {
-        named.extend(first);
+    let mut fetched: Vec<Fetched<'a>> = named.into_iter().map(option).collect();
+    if fetched.is_empty() {
+        fetched.extend(first.map(|word| Fetched {
+            word,
+            program_word: true,
+        }));
     }
-    named.extend(extra);
-    Some(named)
+    fetched.extend(extra.into_iter().map(option));
+    Some(fetched)
 }

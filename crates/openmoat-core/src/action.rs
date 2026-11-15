@@ -343,7 +343,7 @@ impl AtomicAction {
                 [tag, ecosystem, name, popular] if tag == crate::shell::installs::NEAR_MISS => {
                     format!("{ecosystem} package \"{name}\" is not \"{popular}\"")
                 }
-                [tag, ecosystem, name] if tag == crate::shell::installs::UNKNOWN_RUN => {
+                [tag, ecosystem, name, ..] if tag == crate::shell::installs::UNKNOWN_RUN => {
                     format!("runs {ecosystem} package \"{name}\", which is not a popular one")
                 }
                 _ => format!("shell \"{}\"", argv.join(" ")),

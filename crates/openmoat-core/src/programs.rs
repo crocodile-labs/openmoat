@@ -9,6 +9,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::packages::Ecosystem;
 use crate::rule_id::EXECUTABLES as RULE;
 use crate::verdict::{Decision, Verdict};
 
@@ -32,6 +33,23 @@ pub trait ProgramResolver {
             .iter()
             .filter_map(|name| self.pinned(name))
             .collect()
+    }
+
+    /// Whether a package runner's word `name` names a program the project
+    /// installed: `node_modules/.bin/<name>` in one of `dirs` (the working
+    /// directory, then each parent up to the project root), which `npx` and
+    /// its kind run without fetching anything (ADR-102). Asked only for a word
+    /// that names no version and no package option. By default no.
+    fn local_bin(&self, _dirs: &[String], _name: &str) -> bool {
+        false
+    }
+
+    /// Whether the nearest manifest in `dirs` declares the package `name` of
+    /// `ecosystem` (`package.json` dependencies, `pyproject.toml` or
+    /// `uv.lock`): the project chose it, so a runner fetching it is no
+    /// unknown package (ADR-102). By default no.
+    fn declared(&self, _dirs: &[String], _ecosystem: Ecosystem, _name: &str) -> bool {
+        false
     }
 }
 

@@ -4,9 +4,11 @@
 # downloaded npm packages (direct dependencies and the transitive ones every
 # project pulls in). It was not generated from registry download data, so it
 # is an approximation; scripts/refresh-top-packages.py rebuilds it from
-# download counts. A name is "popular" here only for the near-miss check:
-# an install of a name that is not on this list but is one typo or a common
-# trick away from one that is, needs review (`package-near-miss`).
+# download counts. An install of a name that is not on this list (or
+# npm-tools.txt) but is one typo or a common trick away from one that is,
+# needs review (`package-near-miss`). For a package runner (`npx`, `pnpm dlx`,
+# `bunx`) the two lists are an allowlist: a name on neither needs review
+# (`package-run-unknown`, ADR-102).
 lodash
 chalk
 react

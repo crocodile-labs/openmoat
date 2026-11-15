@@ -62,7 +62,7 @@ pub const PROJECT_SETTINGS: &str = "project-settings";
 /// The review of running code the session wrote.
 pub const SESSION_WRITTEN_CODE: &str = "session-written-code";
 /// A `defer` held for review because the agent runs in a mode that asks no
-/// person (`unattended: review`, ADR-100).
+/// person (`unattended: review`, ADR-102).
 pub const UNATTENDED: &str = "unattended";
 /// A settings file that changed on disk and may load into the running
 /// session (a host's `ConfigChange` hook).

@@ -5,8 +5,10 @@
 # environments pull in). It was not generated from download data, so it is
 # an approximation; scripts/refresh-top-packages.py rebuilds it from download
 # counts. Names are compared as PyPI compares them (PEP 503: case and runs of
-# `-`, `_`, `.` do not matter). A name is "popular" here only for the
-# near-miss check (`package-near-miss`).
+# `-`, `_`, `.` do not matter). An install of a near miss of a name on this
+# list (or pypi-tools.txt) needs review (`package-near-miss`); for a package
+# runner (`uvx`, `uv tool run`, `pipx run`) the two lists are an allowlist: a
+# name on neither needs review (`package-run-unknown`, ADR-102).
 boto3
 botocore
 urllib3

@@ -1,11 +1,15 @@
 //! Package names, and whether one is a near miss of a popular package (ADR-030).
 //!
 //! Each registry has a bundled list of its most-installed names
-//! (`data/top-packages/<ecosystem>.txt`). Nothing is looked up online. A name
-//! that is not on its list but is one typo or a common trick away from a name
-//! that is (`reqeusts` for `requests`, `lodahs` for `lodash`, `python-redis`
-//! for `redis`) is a near miss: what a typo-squat or a package name an agent
-//! made up looks like. Every other name, unknown ones included, is normal.
+//! (`data/top-packages/<ecosystem>.txt`), and `npm` and `PyPI` one of the tools
+//! people run with a package runner (`<ecosystem>-tools.txt`, ADR-102).
+//! Nothing is looked up online. A name that is not on its lists but is one
+//! typo or a common trick away from a name that is (`reqeusts` for
+//! `requests`, `lodahs` for `lodash`, `python-redis` for `redis`) is a near
+//! miss: what a typo-squat or a package name an agent made up looks like. For
+//! an install every other name, unknown ones included, is normal; a runner
+//! that fetches and runs a name not on the lists needs review
+//! (`package-run-unknown`), so for runners the lists are an allowlist.
 
 use std::collections::HashSet;
 use std::sync::LazyLock;
@@ -52,13 +56,35 @@ impl Ecosystem {
         }
     }
 
-    fn list(self) -> &'static str {
+    /// The ecosystem whose [`Self::id`] is `id`.
+    #[must_use]
+    pub fn from_id(id: &str) -> Option<Self> {
+        [
+            Self::Npm,
+            Self::Pypi,
+            Self::Crates,
+            Self::Rubygems,
+            Self::Go,
+        ]
+        .into_iter()
+        .find(|e| e.id() == id)
+    }
+
+    /// The bundled lists: the most-installed names, then the tools commonly
+    /// run with a package runner (`*-tools.txt`, kept by hand, ADR-102).
+    fn lists(self) -> [&'static str; 2] {
         match self {
-            Self::Npm => include_str!("../data/top-packages/npm.txt"),
-            Self::Pypi => include_str!("../data/top-packages/pypi.txt"),
-            Self::Crates => include_str!("../data/top-packages/crates.txt"),
-            Self::Rubygems => include_str!("../data/top-packages/rubygems.txt"),
-            Self::Go => include_str!("../data/top-packages/go.txt"),
+            Self::Npm => [
+                include_str!("../data/top-packages/npm.txt"),
+                include_str!("../data/top-packages/npm-tools.txt"),
+            ],
+            Self::Pypi => [
+                include_str!("../data/top-packages/pypi.txt"),
+                include_str!("../data/top-packages/pypi-tools.txt"),
+            ],
+            Self::Crates => [include_str!("../data/top-packages/crates.txt"), ""],
+            Self::Rubygems => [include_str!("../data/top-packages/rubygems.txt"), ""],
+            Self::Go => [include_str!("../data/top-packages/go.txt"), ""],
         }
     }
 
@@ -120,8 +146,9 @@ struct Top {
 impl Top {
     fn load(ecosystem: Ecosystem) -> Self {
         let names: Vec<(String, &'static str)> = ecosystem
-            .list()
-            .lines()
+            .lists()
+            .into_iter()
+            .flat_map(str::lines)
             .map(str::trim)
             .filter(|l| !l.is_empty() && !l.starts_with('#'))
             .map(|l| (ecosystem.normalise(l), l))

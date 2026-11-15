@@ -34,6 +34,10 @@ pub(crate) const NEAR_MISS: &str = "@package-near-miss";
 /// not on the popular list.
 pub(crate) const UNKNOWN_RUN: &str = "@package-run-unknown";
 
+/// The last word of an [`UNKNOWN_RUN`] atom whose name may be a program the
+/// project installed rather than a package to fetch.
+pub(crate) const MAY_BE_LOCAL: &str = "or-local-program";
+
 /// At most this many names of one command are checked.
 const MAX_NAMES: usize = 64;
 
@@ -101,21 +105,28 @@ fn near_misses(argv: &[String], program: &str) -> Vec<Vec<String>> {
 
 /// The `@package-run-unknown <ecosystem> <name>` argv of each package `argv`
 /// fetches and runs at once whose name is neither popular nor a near miss of
-/// a popular one (that gives its near-miss atom).
+/// a popular one (that gives its near-miss atom). A word that may be a
+/// program the project installed (an npm runner's first word, with no
+/// version and no package option: `npx tsc`) ends in [`MAY_BE_LOCAL`], so
+/// the engine can ask whether the project has it (`engine/packages.rs`).
 fn unknown_runs(argv: &[String], program: &str) -> Vec<Vec<String>> {
     let Some((ecosystem, words)) = runs::fetched(argv, program) else {
         return Vec::new();
     };
     let mut atoms: Vec<Vec<String>> = Vec::new();
-    for name in words.into_iter().take(MAX_NAMES) {
-        let Some(name) = clean(ecosystem, name) else {
+    for fetched in words.into_iter().take(MAX_NAMES) {
+        let Some(name) = clean(ecosystem, fetched.word) else {
             continue;
         };
         if packages::is_popular(ecosystem, &name) || packages::near_miss(ecosystem, &name).is_some()
         {
             continue;
         }
-        let atom = vec![UNKNOWN_RUN.to_owned(), ecosystem.id().to_owned(), name];
+        let local = fetched.program_word && ecosystem == Ecosystem::Npm && fetched.word == name;
+        let mut atom = vec![UNKNOWN_RUN.to_owned(), ecosystem.id().to_owned(), name];
+        if local {
+            atom.push(MAY_BE_LOCAL.to_owned());
+        }
         if !atoms.contains(&atom) {
             atoms.push(atom);
         }
@@ -130,7 +141,7 @@ pub(crate) fn requested(argv: &[String], program: &str) -> Option<(Ecosystem, Ve
     if let Some((ecosystem, words)) = runs::fetched(argv, program) {
         let names = words
             .into_iter()
-            .filter_map(|w| clean(ecosystem, w))
+            .filter_map(|w| clean(ecosystem, w.word))
             .collect();
         return Some((ecosystem, names));
     }

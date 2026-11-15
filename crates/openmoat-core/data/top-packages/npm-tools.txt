@@ -1,0 +1,52 @@
+# npm packages commonly run as tools with a package runner (`npx`, `pnpm dlx`,
+# `yarn dlx`, `bunx`), kept by hand (ADR-102): scaffolders, linters, release and
+# database tools that are not among the most-installed dependencies.
+#
+# Together with npm.txt this is the list of names a runner may fetch and run
+# without review (`package-run-unknown`), and the names the near-miss check
+# compares with (`package-near-miss`). scripts/refresh-top-packages.py does not
+# touch this file. Add a name only for a widely used tool published under it;
+# a program name that is not its package's name (`tsc`, `ng`) does not belong
+# here: a project that installed the package has that program in
+# `node_modules/.bin`, which OpenMoat reads instead.
+@biomejs/biome
+@modelcontextprotocol/inspector
+@modelcontextprotocol/server-everything
+@modelcontextprotocol/server-filesystem
+@modelcontextprotocol/server-github
+@modelcontextprotocol/server-memory
+@react-native-community/cli
+@tailwindcss/cli
+@arethetypeswrong/cli
+@vercel/ncc
+create-astro
+create-expo-app
+create-next-app
+create-remix
+create-svelte
+create-t3-app
+create-vite
+degit
+depcheck
+dotenv-cli
+drizzle-kit
+eas-cli
+giget
+json-server
+knip
+license-checker
+madge
+mcp-remote
+npm-check-updates
+nuxi
+oxlint
+postcss-cli
+publint
+shadcn
+size-limit
+sort-package-json
+supabase
+syncpack
+taze
+verdaccio
+vite-node

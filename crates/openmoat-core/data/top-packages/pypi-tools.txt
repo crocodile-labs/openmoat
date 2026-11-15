@@ -1,0 +1,43 @@
+# PyPI projects commonly run as tools with a package runner (`uvx`, `uv tool
+# run`, `pipx run`), kept by hand (ADR-102): type checkers, linters, scaffolders
+# and MCP servers that are not among the most-downloaded projects.
+#
+# Together with pypi.txt this is the list of names a runner may fetch and run
+# without review (`package-run-unknown`), and the names the near-miss check
+# compares with (`package-near-miss`). scripts/refresh-top-packages.py does not
+# touch this file. Names are compared as PyPI compares them (PEP 503).
+ansible-lint
+autoflake
+bandit
+basedpyright
+briefcase
+cfn-lint
+checkov
+codespell
+cookiecutter
+copier
+datasette
+deptry
+detect-secrets
+docformatter
+interrogate
+llm
+marimo
+mcp-server-fetch
+mcp-server-git
+mcp-server-time
+pdoc
+pip-audit
+pip-licenses
+pipdeptree
+pyright
+pyupgrade
+rich-cli
+safety
+semgrep
+sphinx-autobuild
+sqlfluff
+sqlite-utils
+ty
+vulture
+yamllint

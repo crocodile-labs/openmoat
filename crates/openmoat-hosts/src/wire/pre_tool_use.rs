@@ -117,11 +117,15 @@ pub(crate) fn parse_writing(
         _ => HookEvent::PreToolUse,
     };
     // A permission mode in which a deferred call runs with nobody asked
-    // (`Reviews::unattended_modes`, ADR-100).
-    let unattended = p
-        .permission_mode
-        .as_deref()
-        .is_some_and(|mode| host.spec().reviews.unattended_modes.contains(&mode));
+    // (`Reviews::unattended_modes`, ADR-102).
+    let reviews = &host.spec().reviews;
+    let unattended = match p.permission_mode.as_deref() {
+        Some(mode) if reviews.unattended_modes.contains(&mode) => true,
+        Some(mode) if reviews.edit_modes.contains(&mode) => {
+            edited_unasked(action.as_ref(), reviews.edit_mode_commands)
+        }
+        _ => false,
+    };
     let mcp_arguments = crate::wire::mcp_call::hook_arguments(action.as_ref(), &p.tool_input);
     Ok(HookRequest {
         host,
@@ -139,6 +143,21 @@ pub(crate) fn parse_writing(
         unattended,
         event,
     })
+}
+
+/// Whether a mode that approves edits unasked (`Reviews::edit_modes`) runs
+/// `action` unasked: a file write, or a shell command whose first program,
+/// after any variable assignments, is one of `commands`.
+fn edited_unasked(action: Option<&Action>, commands: &[&str]) -> bool {
+    match action {
+        Some(Action::FsWrite { .. } | Action::Patch { .. }) => true,
+        Some(Action::Shell { command }) => command
+            .split_whitespace()
+            .find(|word| !word.contains('='))
+            .map(|word| word.rsplit('/').next().unwrap_or(word))
+            .is_some_and(|program| commands.contains(&program)),
+        _ => false,
+    }
 }
 
 /// The replacement an `Edit` input, or one entry of `MultiEdit`'s `edits`,

@@ -20,7 +20,7 @@ use crate::install::HostConfig;
 /// Mark `request` as a call whose `review` no person would see, where `host`
 /// would approve it unseen.
 /// A host that approves its reviews unseen runs a deferred call unasked too,
-/// so the call is also [`HookRequest::unattended`] (ADR-100).
+/// so the call is also [`HookRequest::unattended`] (ADR-102).
 pub(super) fn mark(host: Host, request: &mut HookRequest) {
     if request.event != HookEvent::PreToolUse {
         return;

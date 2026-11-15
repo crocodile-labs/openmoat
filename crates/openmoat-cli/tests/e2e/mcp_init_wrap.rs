@@ -264,7 +264,7 @@ fn a_planted_definitions_tool_call_is_denied_and_an_accepted_one_passes() {
 }
 
 /// `openmoat mcp accept` of a server added after `init` offers to run it
-/// through OpenMoat, and Enter is yes (ADR-100); a no is remembered as at `init`.
+/// through OpenMoat, and Enter is yes (ADR-102); a no is remembered as at `init`.
 #[test]
 fn accepting_a_new_server_offers_to_wrap_it_and_enter_is_yes() {
     for (answers, wraps) in [("y\n\n", true), ("y\nn\n", false)] {

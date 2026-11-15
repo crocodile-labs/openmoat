@@ -90,10 +90,11 @@ pub(super) fn servers(
     Ok(())
 }
 
-/// Show the stdio servers not yet wrapped (those named `only`, when given)
+/// Show the stdio servers not yet wrapped (those whose definition id is in
+/// `only`, when given: one agent's server, not another's of the same name)
 /// and ask; wrap them on yes, which Enter is. `init` asks about every one,
 /// and `openmoat mcp accept` about the definitions a person just accepted as
-/// new (ADR-100). A server the person said no to is not asked about again.
+/// new (ADR-102). A server the person said no to is not asked about again.
 pub(in crate::commands) fn ask_and_wrap(
     home: &Home,
     binary: &Path,
@@ -105,7 +106,7 @@ pub(in crate::commands) fn ask_and_wrap(
     let mut edits = super::super::mcp::wrap_plan(home, binary, hosts, &[], None, out)?.edits;
     edits.retain(|(_, done)| {
         !declined.contains(&done.server.id)
-            && only.is_none_or(|names| names.contains(&done.server.name))
+            && only.is_none_or(|ids| ids.contains(&done.server.id))
             && wrap::sandboxed(&done.server.entry, done.server.form).is_none()
     });
     super::super::mcp::drop_what_cannot_be_rewritten(&mut edits, out)?;

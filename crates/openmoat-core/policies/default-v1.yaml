@@ -1556,7 +1556,7 @@ review:
     title: installing a package whose name looks like a typo
     why: typo-squats and made-up names are how malicious packages get installed
     shell: ["@package-near-miss *"]
-  # `@package-run-unknown <ecosystem> <name>` atoms (ADR-100): `npx`, `bunx`, `npm exec`,
+  # `@package-run-unknown <ecosystem> <name>` atoms (ADR-102): `npx`, `bunx`, `npm exec`,
   # `pnpm dlx`, `yarn dlx`, `bun x`, `uvx`, `uv tool run` or `pipx run` of a package that
   # is not on the bundled list of popular packages: it is fetched and its code runs at
   # once. A popular name defers, as an install does; `npx --no-install` fetches nothing

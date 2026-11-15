@@ -68,28 +68,44 @@ fn unattended_review(sb: &Sandbox) {
     assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
 }
 
-/// `unattended: review` (ADR-100): in `bypassPermissions` and `auto`, where
+/// `unattended: review` (ADR-102): in `bypassPermissions` and `auto`, where
 /// Claude Code runs a deferred call with no one asked, the defer is held for
-/// review and reaches Claude Code as a deny that says how to approve it; in a
-/// mode that asks, it stays Claude Code's to decide.
+/// review. In `bypassPermissions` no one sees a prompt, so it reaches Claude
+/// Code as a deny that says how to approve it; in `auto` Claude Code puts a
+/// hook's `ask` to the person, so it is asked; in `acceptEdits` only a file
+/// edit or a file command is held, as an `ask`; in a mode that asks, the defer
+/// stays Claude Code's to decide.
 #[test]
 fn unattended_review_holds_a_defer_in_a_mode_that_asks_no_one() {
     let sb = installed();
     unattended_review(&sb);
     let command = "npm install left-pad";
-    for (session, mode) in [("u1", "bypassPermissions"), ("u2", "auto")] {
-        let out = guard(&sb, &bash(&sb, session, mode, command));
-        assert_eq!(out.status.code(), Some(DENY), "{mode}: {}", stderr(&out));
-        let d = hook_output(&out);
-        assert_eq!(d["permissionDecision"], "deny", "{mode}: {d}");
-        let reason = d["permissionDecisionReason"].as_str().unwrap();
-        assert!(reason.contains("openmoat allow --last"), "{mode}: {reason}");
-    }
-    // the person approves the last one; the call then runs
+    let out = guard(&sb, &bash(&sb, "u1", "bypassPermissions", command));
+    assert_eq!(out.status.code(), Some(DENY), "{}", stderr(&out));
+    let d = hook_output(&out);
+    assert_eq!(d["permissionDecision"], "deny", "{d}");
+    let reason = d["permissionDecisionReason"].as_str().unwrap();
+    assert!(reason.contains("openmoat allow --last"), "{reason}");
+    // the person approves it; the call then runs
     let allow = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", stderr(&allow));
+    let out = guard(&sb, &bash(&sb, "u1", "bypassPermissions", command));
+    assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
+
     let out = guard(&sb, &bash(&sb, "u2", "auto", command));
     assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
+    assert_eq!(hook_output(&out)["permissionDecision"], "ask");
+
+    // `acceptEdits`: a file command is held as an `ask`, other commands are not
+    let out = guard(
+        &sb,
+        &bash(&sb, "u4", "acceptEdits", "mkdir /opt/openmoat-e2e-dir"),
+    );
+    assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
+    assert_eq!(hook_output(&out)["permissionDecision"], "ask");
+    let out = guard(&sb, &bash(&sb, "u4", "acceptEdits", command));
+    assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
+    assert!(stdout(&out).trim().is_empty(), "{}", stdout(&out));
 
     // A mode that asks the person: the defer is Claude Code's, as before.
     let out = guard(&sb, &bash(&sb, "u3", "default", command));
