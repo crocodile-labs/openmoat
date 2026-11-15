@@ -297,6 +297,37 @@ fn the_near_top_fallback_masks_the_top_two_levels_only() {
     assert!(all.mounts.contains(&Mount::ReadOnly(deep)), "{all:?}");
 }
 
+/// In an empty project, a name nothing below may be written (`.qwen`) that the
+/// hook settings need as a folder (`.qwen/settings.json`) is planned as a
+/// read-only folder, not a hidden file the settings could not be made in; and
+/// every placeholder another lies below is a folder.
+#[test]
+fn a_denied_name_the_hook_settings_need_is_a_read_only_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    let real = std::fs::canonicalize(dir.path()).unwrap();
+    let project = real.to_string_lossy().into_owned();
+    let ir = session_ir(&project);
+    let masks = project_masks(&ir, std::slice::from_ref(&project)).unwrap();
+    for p in &masks.placeholders {
+        let holds = masks
+            .placeholders
+            .iter()
+            .any(|q| q.path.starts_with(&format!("{}/", p.path)));
+        assert!(!holds || p.dir, "{} holds another but is a file", p.path);
+    }
+    for mount in &masks.mounts {
+        if let Mount::Hide { path, .. } = mount {
+            assert!(
+                !masks
+                    .placeholders
+                    .iter()
+                    .any(|p| p.path.starts_with(&format!("{path}/"))),
+                "{path} is hidden but holds a placeholder"
+            );
+        }
+    }
+}
+
 /// In an empty project, every placeholder that another one lies below is a
 /// folder, and none is planned twice, whatever order the policy names a
 /// folder and the file in it (`.qwen`, then `.qwen/settings.json`).

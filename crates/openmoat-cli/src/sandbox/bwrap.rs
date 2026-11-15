@@ -230,18 +230,30 @@ fn project_view(
         depth,
     };
     masks.walk(real, false, 1)?;
+    let mut missing = hook_settings::plan(ir, real, &hook_settings::on_disk, &|p| {
+        masks.denied_below(p)
+    });
     let mut placeholders = Vec::new();
     for name in denied_names(ir) {
         let path = format!("{real}/{name}");
-        let missing = std::fs::symlink_metadata(&path).is_err();
-        if missing && (masks.denied(Kind::FsRead, &path) || masks.denied_below(&path)) {
-            placeholders.push(Placeholder::empty_file(path.clone()));
-            masks.mounts.push(Mount::Hide { path, dir: false });
+        let absent = std::fs::symlink_metadata(&path).is_err();
+        if !absent || !(masks.denied(Kind::FsRead, &path) || masks.denied_below(&path)) {
+            continue;
         }
+        // A folder the hook settings need (`.qwen` for `.qwen/settings.json`):
+        // made a folder, read-only since nothing below it may be written, not
+        // a hidden file the settings could not be made in.
+        if missing.placeholders.iter().any(|p| p.dir && p.path == path) {
+            for mount in &mut missing.mounts {
+                if *mount == Mount::ReadWrite(path.clone()) {
+                    *mount = Mount::ReadOnly(path.clone());
+                }
+            }
+            continue;
+        }
+        placeholders.push(Placeholder::empty_file(path.clone()));
+        masks.mounts.push(Mount::Hide { path, dir: false });
     }
-    let missing = hook_settings::plan(ir, real, &hook_settings::on_disk, &|p| {
-        masks.denied_below(p)
-    });
     placeholders.extend(missing.placeholders);
     masks.mounts.extend(missing.mounts);
     Ok((masks.mounts, placeholders))
