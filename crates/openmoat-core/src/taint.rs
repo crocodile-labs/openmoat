@@ -267,7 +267,11 @@ const PROTECTED_WRITES: &[&str] = &[
     "**/.qwen",
     "**/.qwen/**",
     // Crush: a project's configuration files, which add hooks and MCP servers, and
-    // its `crushrc` scripts
+    // its `crushrc` scripts; and its global configuration and data file, which
+    // `kernel-self` denies writing
+    "**/.config/crush",
+    "**/.config/crush/**",
+    "**/.local/share/crush/crush.json",
     "**/crush.json",
     "**/.crush.json",
     "**/crushrc",

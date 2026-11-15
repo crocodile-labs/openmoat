@@ -18,8 +18,12 @@ pub(super) const PROTECT: Protect = Protect {
     )],
     taint: &[Paths::new(
         "Crush: a project's configuration files, which add hooks and MCP servers, and\n\
-         its `crushrc` scripts",
+         its `crushrc` scripts; and its global configuration and data file, which\n\
+         `kernel-self` denies writing",
         &[
+            "**/.config/crush",
+            "**/.config/crush/**",
+            "**/.local/share/crush/crush.json",
             "**/crush.json",
             "**/.crush.json",
             "**/crushrc",

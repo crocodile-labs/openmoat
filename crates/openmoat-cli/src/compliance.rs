@@ -241,8 +241,9 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "packages",
         title: "Package installs",
-        does: "hold for review installing a package whose name is one typo away from a popular one",
-        covers: Covers::Rules(&["package-near-miss"]),
+        does: "hold for review installing a package whose name is one typo away from a popular one, \
+               and running a package the project neither installs nor declares",
+        covers: Covers::Rules(&["package-near-miss", "package-run-unknown"]),
         controls: &[&LLM03, &CC6_8, &A8_19],
     },
     Group {
