@@ -36,13 +36,18 @@ fn server_script() -> PathBuf {
 struct Gateway {
     sb: Sandbox,
     record: PathBuf,
+    host: Option<&'static str>,
 }
 
 impl Gateway {
     fn new() -> Self {
+        Self::for_host(None)
+    }
+
+    fn for_host(host: Option<&'static str>) -> Self {
         let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
         let record = sb.home.join("record.jsonl");
-        let gateway = Self { sb, record };
+        let gateway = Self { sb, record, host };
         // `openmoat mcp proxy` starts only a definition a person accepted
         // (ADR-049): one per mode, each starting the proxy as `docs`.
         for mode in [
@@ -70,9 +75,12 @@ impl Gateway {
     fn proxy_line(&self, mode: &str) -> Vec<String> {
         let script = server_script().to_string_lossy().into_owned();
         let record = self.record.to_string_lossy().into_owned();
-        ["--server", "docs", "--", "python3", &script, &record, mode]
-            .map(str::to_owned)
-            .to_vec()
+        let mut args = vec!["--server", "docs"];
+        if let Some(host) = self.host {
+            args.extend(["--host", host]);
+        }
+        args.extend(["--", "python3", &script, &record, mode]);
+        args.into_iter().map(str::to_owned).collect()
     }
 
     fn proxy(&self, mode: &str) -> std::process::Command {
@@ -181,6 +189,72 @@ fn answer(host: &str, id: u64) -> Value {
         .filter_map(|l| serde_json::from_str::<Value>(l).ok())
         .find(|m| m["id"] == id)
         .unwrap_or_else(|| panic!("no answer to {id}: {host}"))
+}
+
+#[test]
+fn attributed_codex_requests_reach_stdio_only_with_their_own_exact_ticket() {
+    let gw = Gateway::for_host(Some("codex"));
+    let policy_path = gw.sb.home.join(".moat/policy.yaml");
+    let policy = std::fs::read_to_string(&policy_path).unwrap();
+    assert!(policy.contains("\nallow:\n"));
+    std::fs::write(
+        &policy_path,
+        policy.replacen(
+            "\nallow:\n",
+            "\nallow:\n  - id: witness-search\n    mcp: [mcp__docs__search]\n",
+            1,
+        ),
+    )
+    .unwrap();
+    let accepted = gw.sb.moat_as_person(&["doctor", "--accept"]);
+    assert!(text(&accepted).contains("re-pinned"), "{}", text(&accepted));
+
+    let arguments = json!({"q": "same query"});
+    for session in ["thread-a", "thread-b"] {
+        let output = gw.sb.guard(
+            "codex",
+            &json!({
+                "session_id": session, "cwd": gw.sb.project(),
+                "hook_event_name": "PreToolUse", "tool_name": "mcp__docs__search",
+                "tool_use_id": "same-call", "tool_input": arguments,
+            })
+            .to_string(),
+        );
+        assert_eq!(output.status.code(), Some(OK), "{}", text(&output));
+    }
+    let request = |id: u64, thread: &str, call_id: &str, args: &Value| {
+        json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": {"name": "search", "arguments": args,
+                "_meta": {"threadId": thread, "callId": call_id}}
+        })
+        .to_string()
+    };
+    let response = gw.session(
+        "answer",
+        &[
+            request(1, "thread-unseen", "same-call", &arguments),
+            request(2, "thread-b", "wrong-call", &arguments),
+            request(3, "thread-b", "same-call", &json!({"q": "changed"})),
+            request(4, "thread-b", "same-call", &arguments),
+            request(5, "thread-b", "same-call", &arguments),
+            request(6, "thread-a", "same-call", &arguments),
+        ],
+    );
+    for id in [1, 2, 3, 5] {
+        assert_eq!(answer(&response, id)["error"]["code"], -32001);
+    }
+    for id in [4, 6] {
+        assert_eq!(
+            answer(&response, id)["result"]["content"][0]["text"],
+            "called search"
+        );
+    }
+    let calls = gw.calls();
+    assert_eq!(
+        calls.iter().map(|v| v["id"].as_u64()).collect::<Vec<_>>(),
+        [Some(4), Some(6)]
+    );
 }
 
 #[test]
