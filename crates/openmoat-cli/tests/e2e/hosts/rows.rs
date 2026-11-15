@@ -20,6 +20,7 @@ mod hermes;
 mod openclaw;
 mod opencode;
 mod pi;
+mod qwen_code;
 
 /// A hook payload `moat guard` reads, built in a sandbox.
 pub type Payload = fn(&Sandbox) -> String;
@@ -171,6 +172,7 @@ pub fn rows() -> Vec<Row> {
         cline::row(),
         goose::row(),
         antigravity_cli::row(),
+        qwen_code::row(),
     ]
 }
 

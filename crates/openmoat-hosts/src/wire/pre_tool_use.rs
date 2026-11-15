@@ -32,6 +32,22 @@ struct Payload {
     permission_mode: Option<String>,
 }
 
+/// Which of a host's tools write a file, by name: the tools whose `content`
+/// replaces the whole file, those with one `old_string` / `new_string`
+/// replacement, and those with a list of them in `edits` (ADR-048).
+pub(crate) struct Writes {
+    pub whole: &'static [&'static str],
+    pub edit: &'static [&'static str],
+    pub multi_edit: &'static [&'static str],
+}
+
+/// Claude Code's `Write`, `Edit` and `MultiEdit`.
+const CLAUDE_WRITES: Writes = Writes {
+    whole: &["Write"],
+    edit: &["Edit"],
+    multi_edit: &["MultiEdit"],
+};
+
 /// The payload, with the tools only this host has (Codex `view_image`,
 /// Claude Code's editor tools) mapped by `own` before the shared mapping:
 /// the action of one of them from its name, input and the payload's `cwd`,
@@ -41,31 +57,46 @@ pub(crate) fn parse_with(
     payload: &str,
     own: impl Fn(&str, &Value, Option<&str>) -> Option<Result<Action, HostError>>,
 ) -> Result<HookRequest, HostError> {
+    parse_writing(host, payload, own, &CLAUDE_WRITES)
+}
+
+/// [`parse_with`] for a host that sends this document with tool names of its
+/// own (Qwen Code, Crush): `own` maps every tool but the MCP tools
+/// (`mcp__…`) and the ungoverned ones, which it leaves to the shared mapping,
+/// and `writes` names its file-writing tools.
+pub(crate) fn parse_writing(
+    host: Host,
+    payload: &str,
+    own: impl Fn(&str, &Value, Option<&str>) -> Option<Result<Action, HostError>>,
+    writes: &Writes,
+) -> Result<HookRequest, HostError> {
     let p: Payload = serde_json::from_str(payload)?;
     let action = match own(&p.tool_name, &p.tool_input, p.cwd.as_deref()) {
         Some(action) => Some(action?),
         None => map_tool(&p.tool_name, &p.tool_input, p.cwd.as_deref())?,
     };
+    let tool = p.tool_name.as_str();
     // `Write` replaces the whole file with `content` (an empty file included).
-    let content = match p.tool_name.as_str() {
-        "Write" => p
-            .tool_input
+    let content = if writes.whole.contains(&tool) {
+        p.tool_input
             .get("content")
             .and_then(Value::as_str)
-            .map(str::to_owned),
-        _ => None,
+            .map(str::to_owned)
+    } else {
+        None
     };
     // `Edit` and `MultiEdit` change part of the file: the replacements, for the
     // guard to work out the content they leave (ADR-048).
-    let edits = match p.tool_name.as_str() {
-        "Edit" => replacement(&p.tool_input).into_iter().collect(),
-        "MultiEdit" => p
-            .tool_input
+    let edits = if writes.edit.contains(&tool) {
+        replacement(&p.tool_input).into_iter().collect()
+    } else if writes.multi_edit.contains(&tool) {
+        p.tool_input
             .get("edits")
             .and_then(Value::as_array)
             .map(|edits| edits.iter().filter_map(replacement).collect())
-            .unwrap_or_default(),
-        _ => Vec::new(),
+            .unwrap_or_default()
+    } else {
+        Vec::new()
     };
     // Codex `apply_patch`: the envelope, for the guard to replay.
     let patch = match p.tool_name.as_str() {

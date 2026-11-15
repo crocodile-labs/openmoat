@@ -1,0 +1,12 @@
+{
+  "session_id": "5f0c2d9e-1a7b-4c3e-9d21-6b8a0e4f7c11",
+  "transcript_path": "/Users/me/.qwen/projects/-p/chats/5f0c2d9e.jsonl",
+  "cwd": "/p",
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "default",
+  "tool_name": "read_file",
+  "tool_input": {
+    "absolute_path": "/Users/me/.aws/credentials"
+  },
+  "tool_use_id": "call_qwen_03"
+}

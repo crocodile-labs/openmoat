@@ -22,6 +22,7 @@ None of these is listed in its channel yet: each is a preview until it is.
 | Cline CLI | none | none: Cline's SDK plugins wait 3 s and ignore a failed hook unless they end the whole run (https://docs.cline.bot/sdk/plugins.md), weaker than the `PreToolUse` file `openmoat init` writes | `openmoat init` | |
 | goose | none | none: goose has no registry for hook plugins, and `openmoat init` already writes OpenMoat as an Open Plugins folder | `openmoat init` | |
 | Antigravity CLI | [`antigravity-cli/`](antigravity-cli/) | Antigravity CLI plugins | `agy plugin install https://github.com/crocodile-labs/openmoat-antigravity` | [1](https://antigravity.google/docs/plugins.md) [2](https://antigravity.google/docs/build-plugins.md) [3](https://antigravity.google/docs/hooks.md) |
+| Qwen Code | none | none: Qwen Code's extensions (`qwen extensions install`) can carry hooks, but which manifest field holds them was not verified; `openmoat init` writes the hook into `settings.json` | `openmoat init` | |
 
 ## Publishing
 

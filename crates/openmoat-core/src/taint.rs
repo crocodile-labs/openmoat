@@ -261,6 +261,11 @@ const PROTECTED_WRITES: &[&str] = &[
     "~/.gemini/config/**",
     "**/.agents/hooks.json",
     "**/.agents/mcp_config.json",
+    // Qwen Code: its settings, extensions and the memory file it loads into
+    // every session
+    "**/QWEN.md",
+    "**/.qwen",
+    "**/.qwen/**",
     // Agent Skills, loaded by Codex, Cursor, GitHub Copilot CLI, pi, Gemini CLI,
     // OpenCode, goose, Antigravity CLI:
     // the shared `.agents/skills` folder and the folder above it

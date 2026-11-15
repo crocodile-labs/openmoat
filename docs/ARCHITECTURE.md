@@ -394,6 +394,14 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | Antigravity CLI | MCP tool (`mcp_<server>_<tool>`) | tool name and arguments; the name cannot be split, and the hook payload's name is not documented | `McpTool` as written |
 | Antigravity CLI | `ask_question`, `list_permissions`, `ask_permission`, `manage_task` with `list`, `status` or `kill`, `manage_subagents` with `list`, `kill` or `kill_all` | — | none: `ungoverned` |
 | Antigravity CLI | `send_message` and any other tool (a `browser_*` tool, one the documentation does not list) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
+| Qwen Code | `run_shell_command` | `command`, after a `cd` to `directory`; PowerShell on Windows | `Shell`; `ForeignShell` on Windows |
+| Qwen Code | `read_file`, `list_directory` / `write_file`, `edit` | `file_path`, `path` / `file_path` (`write_file` `content`, `edit` `old_string` and `new_string` for provenance) | `FsRead` / `FsWrite` |
+| Qwen Code | `glob`, `grep_search` | `path`, else `cwd`; for `glob` also the directory an absolute `pattern` names and where a relative one climbs to | `FsRead`, `ReadFiles` |
+| Qwen Code | `web_fetch` / `web_search` | `url` / `query` (the key `web_search` takes was not verified: a call without it is refused) | `Fetch` / `WebSearch` |
+| Qwen Code | `read_mcp_resource` | `uri`: a `file:` URI as its path; any other URI | `FsRead`; `UnknownTool` |
+| Qwen Code | MCP tool (`mcp__<server>__<tool>`) | server, tool and arguments | `McpTool` |
+| Qwen Code | `todo_write`, `ask_user_question`, `enter_plan_mode`, `exit_plan_mode`, `tool_search` | — | none: `ungoverned` |
+| Qwen Code | any other tool (`agent`, `skill`, `exec`, `notebook_edit`, `save_memory`, `monitor`, `enter_worktree`, a discovered tool) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
 <!-- /generated -->
 
 OpenClaw has no command hook. OpenMoat's plugin (`crates/openmoat-hosts/src/host/openclaw/integration/openmoat.mjs`,

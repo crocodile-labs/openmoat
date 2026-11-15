@@ -12,12 +12,17 @@
 //! and prints something. A binary bash cannot find exits 127 with an error
 //! message, so it blocks; PowerShell exits 1 for a command it cannot find,
 //! which Gemini CLI treats as a warning, so the entry exits 2 itself then
-//! ([`POWERSHELL_TAIL`]), with PowerShell's message on stderr as the reason.
+//! ([`crate::wire::guard_command::POWERSHELL_TAIL`]), with PowerShell's
+//! message on stderr as the reason.
 
 use serde_json::{Value, json};
 
 use crate::HookSpec;
-use crate::wire::guard_command::{GuardCommand, split_guard};
+use crate::wire::guard_command::GuardCommand;
+/// `binary guard --host <id>` for bash, or for PowerShell, and the binary it
+/// runs; Gemini CLI reads the guard's JSON from stdout whatever the exit code,
+/// so an answer the guard printed stands.
+pub(super) use crate::wire::guard_command::{sh_binary as binary_of, shell_command as command_for};
 use crate::wire::hook_file::HookFile;
 
 /// Gemini CLI's `settings.json` entries.
@@ -26,11 +31,6 @@ pub(crate) struct Gemini;
 
 /// The entry's `name`: what Gemini CLI's `/hooks` panel lists.
 const NAME: &str = "openmoat";
-
-/// What follows the guard on PowerShell: exit 2 when the guard could not run
-/// or failed. Gemini CLI reads the guard's JSON from stdout whatever the exit
-/// code, so an answer the guard printed stands.
-const POWERSHELL_TAIL: &str = "; if (-not $?) { exit 2 }";
 
 impl HookFile for Gemini {
     fn entry(&self, spec: &HookSpec, id: &str, guard: &GuardCommand, _block: bool) -> Value {
@@ -62,37 +62,6 @@ impl HookFile for Gemini {
         let command = entry.pointer("/hooks/0/command").and_then(Value::as_str)?;
         binary_of(command, id)
     }
-}
-
-/// `binary guard --host <id>` for bash, or for PowerShell.
-fn command_for(guard: &GuardCommand, id: &str, powershell: bool) -> String {
-    let args = guard.shell_args(id);
-    if powershell {
-        let binary = guard.binary.replace('\'', "''");
-        format!("& '{binary}'{args}{POWERSHELL_TAIL}")
-    } else {
-        format!("'{}'{args}", guard.binary.replace('\'', r"'\''"))
-    }
-}
-
-/// The binary a command written by [`command_for`] runs, or `None` when the
-/// command is not OpenMoat's guard for `id`.
-fn binary_of(command: &str, id: &str) -> Option<String> {
-    let command = command.trim();
-    let command = command.strip_suffix(POWERSHELL_TAIL).unwrap_or(command);
-    let (quoted, _) = split_guard(command, id)?;
-    let (quoted, powershell) = match quoted.strip_prefix("& ") {
-        Some(rest) => (rest.trim(), true),
-        None => (quoted, false),
-    };
-    let Some(inner) = quoted.strip_prefix('\'').and_then(|q| q.strip_suffix('\'')) else {
-        return Some(quoted.trim_matches('"').to_owned());
-    };
-    Some(if powershell {
-        inner.replace("''", "'")
-    } else {
-        inner.replace(r"'\''", "'")
-    })
 }
 
 #[cfg(test)]

@@ -1,0 +1,16 @@
+{
+  "session_id": "5f0c2d9e-1a7b-4c3e-9d21-6b8a0e4f7c11",
+  "transcript_path": "/Users/me/.qwen/projects/-p/chats/5f0c2d9e.jsonl",
+  "cwd": "/p",
+  "hook_event_name": "PreToolUse",
+  "timestamp": "2026-11-14T10:00:03.000Z",
+  "permission_mode": "default",
+  "tool_name": "edit",
+  "tool_input": {
+    "file_path": "/p/src/main.rs",
+    "old_string": "fn old()",
+    "new_string": "fn new()",
+    "replace_all": false
+  },
+  "tool_use_id": "call_qwen_05"
+}

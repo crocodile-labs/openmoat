@@ -12,7 +12,9 @@
 use serde_json::{Value, json};
 
 use crate::HookSpec;
-use crate::wire::guard_command::{GuardCommand, split_guard};
+use crate::wire::guard_command::GuardCommand;
+/// `'binary' guard --host <id>`, quoted for `sh`, and the binary it runs.
+pub(super) use crate::wire::guard_command::{sh_binary as binary_of, sh_command as command_for};
 use crate::wire::hook_file::HookFile;
 
 /// goose's `hooks.json` entries.
@@ -56,22 +58,4 @@ impl HookFile for Goose {
     fn binary(&self, entry: &Value, id: &str) -> Option<String> {
         binary_of(entry.pointer("/hooks/0/command").and_then(Value::as_str)?, id)
     }
-}
-
-/// `'binary' guard --host <id>`, quoted for `sh`.
-pub(super) fn command_for(guard: &GuardCommand, id: &str) -> String {
-    let binary = guard.binary.replace('\'', r"'\''");
-    format!("'{binary}'{}", guard.shell_args(id))
-}
-
-/// The binary a command written by [`command_for`] runs, or `None` when the
-/// command is not OpenMoat's guard for `id`.
-pub(super) fn binary_of(command: &str, id: &str) -> Option<String> {
-    let (quoted, _) = split_guard(command, id)?;
-    Some(
-        match quoted.strip_prefix('\'').and_then(|q| q.strip_suffix('\'')) {
-            Some(inner) => inner.replace(r"'\''", "'"),
-            None => quoted.trim_matches('"').to_owned(),
-        },
-    )
 }

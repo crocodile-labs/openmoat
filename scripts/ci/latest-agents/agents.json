@@ -1,6 +1,6 @@
 {
   "_comment": "Generated from each host's spec (`weekly`, crates/openmoat-hosts/src/host/<module>/weekly.rs) by `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs`; do not edit. The agents the weekly latest-agent check installs (scripts/ci/latest-agents.sh), each run by the steps of its script (script). _env is what the job sets for every agent so none finds state outside the throwaway home ({HOME}, {ROOT} its root). binary is relative to the install directory ({platform} is node's process.platform-process.arch); for Claude Code and OpenCode the npm bin is a stub that only the postinstall replaces, so the platform package's own binary is used. dir is the directory the agent's first start makes. checked.version is the release the adapter was last checked against, and checked.source the file that says so; `check.py records` (in the quality gate) fails when that file no longer names the version. payload is the host's golden shell payload, with the JSON pointers of its command and of the verdict in the hook's reply. proves lists what a passing run asserts against the real agent (hook: a call decided by OpenMoat's hook and held; hook-failure: the hook-failure step's comparison; mcp: an MCP call decided by the hook), which docs/PROTECTION.md shows as evidence per runner; why says why a record proves no hook call; values are what a record's script reads.",
-  "_env": [["CLAUDE_CONFIG_DIR","{HOME}/.claude"],["CODEX_HOME","{HOME}/.codex"],["CODEX_SQLITE_HOME","{HOME}/.codex"],["CURSOR_CONFIG_DIR","{HOME}/.cursor"],["OPENCLAW_STATE_DIR","{HOME}/.openclaw"],["COPILOT_HOME","{HOME}/.copilot"],["COPILOT_CACHE_HOME","{ROOT}/copilot-cache"],["PI_CODING_AGENT_DIR","{HOME}/.pi/agent"],["GEMINI_CLI_HOME","{HOME}"],["HERMES_HOME","{HOME}/.hermes"],["CLINE_DIR","{HOME}/.cline"]],
+  "_env": [["CLAUDE_CONFIG_DIR","{HOME}/.claude"],["CODEX_HOME","{HOME}/.codex"],["CODEX_SQLITE_HOME","{HOME}/.codex"],["CURSOR_CONFIG_DIR","{HOME}/.cursor"],["OPENCLAW_STATE_DIR","{HOME}/.openclaw"],["COPILOT_HOME","{HOME}/.copilot"],["COPILOT_CACHE_HOME","{ROOT}/copilot-cache"],["PI_CODING_AGENT_DIR","{HOME}/.pi/agent"],["GEMINI_CLI_HOME","{HOME}"],["HERMES_HOME","{HOME}/.hermes"],["CLINE_DIR","{HOME}/.cline"],["QWEN_HOME","{HOME}/.qwen"]],
   "claude-code": {
     "host": "claude-code",
     "name": "Claude Code",
@@ -192,5 +192,20 @@
     "proves": ["hook","hook-failure"],
     "runners": ["ubuntu-latest","macos-15"],
     "values": {"model_provider":"gemini"}
+  },
+  "qwen-code": {
+    "host": "qwen-code",
+    "name": "Qwen Code",
+    "script": "scripts/ci/latest-agents/hosts/qwen-code.sh",
+    "install": "npm",
+    "package": "@qwen-code/qwen-code",
+    "binary": "node_modules/.bin/qwen",
+    "checked": {"source":"crates/openmoat-hosts/src/host/qwen_code/HOST.md","version":"0.27.3"},
+    "dir": "{QWEN_HOME}",
+    "config": [["{QWEN_HOME}/settings.json","json"]],
+    "payload": {"command":"/tool_input/command","fixture":"qwen_code/fixtures/run_shell_command.json","verdict":"/hookSpecificOutput/permissionDecision"},
+    "proves": [],
+    "why": "a preview host: the job installs Qwen Code and checks OpenMoat's hook file and replies, but no model turn is driven through a real `qwen` yet",
+    "runners": ["ubuntu-latest","macos-15"]
   }
 }

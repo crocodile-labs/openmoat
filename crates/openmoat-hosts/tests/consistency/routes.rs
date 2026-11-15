@@ -38,6 +38,45 @@ pub(super) fn opencode2_route(intent: &Intent) -> Result<(Value, Action), &'stat
     }
 }
 
+/// Qwen Code `PreToolUse` (`crates/openmoat-hosts/src/host/qwen_code/fixtures`).
+pub(super) fn qwen(tool: &str, input: &Value) -> Value {
+    json!({
+        "session_id": "qwen-1", "transcript_path": "/t.jsonl", "cwd": super::CWD,
+        "hook_event_name": "PreToolUse", "permission_mode": "default",
+        "tool_name": tool, "tool_input": input, "tool_use_id": "call_1",
+    })
+}
+
+/// [`super::payload`] for Qwen Code.
+pub(super) fn qwen_route(intent: &Intent) -> Result<(Value, Action), &'static str> {
+    match intent {
+        // On Windows the shell is taken to be PowerShell, never classified.
+        Intent::Shell(_) if cfg!(windows) => Err("Qwen Code's shell on Windows is not read"),
+        Intent::Shell(c) => Ok((
+            qwen(
+                "run_shell_command",
+                &json!({ "command": c, "is_background": false }),
+            ),
+            Action::Shell { command: c.clone() },
+        )),
+        Intent::Read(p) => Ok((
+            qwen("read_file", &json!({ "file_path": p })),
+            Action::FsRead { path: p.clone() },
+        )),
+        Intent::Write(p) => Ok((
+            qwen(
+                "edit",
+                &json!({ "file_path": p, "old_string": "old", "new_string": "new" }),
+            ),
+            Action::FsWrite { path: p.clone() },
+        )),
+        Intent::Fetch(u) => Ok((
+            qwen("web_fetch", &json!({ "url": u, "prompt": "summarise" })),
+            Action::Fetch { url: u.clone() },
+        )),
+    }
+}
+
 /// [`super::payload`] for the Cline CLI.
 pub(super) fn cline_route(intent: &Intent) -> Result<(Value, Action), &'static str> {
     match intent {

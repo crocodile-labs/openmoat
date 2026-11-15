@@ -39,4 +39,6 @@ crate::registry::hosts! {
     Goose => goose,
     /// Google's Antigravity CLI (`agy`, `PreToolUse` hook in `~/.gemini/config/hooks.json`).
     AntigravityCli => antigravity_cli,
+    /// Alibaba's Qwen Code (`qwen`, `PreToolUse` hook in `~/.qwen/settings.json`).
+    QwenCode => qwen_code,
 }

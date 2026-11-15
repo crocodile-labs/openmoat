@@ -223,7 +223,7 @@ fn relaxed_keys_change_nothing_that_runs_or_decides() {
 /// such key, and GitHub Copilot CLI blocks a failed `preToolUse` hook on its own.
 #[test]
 fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
-    let expected: [(Host, &str, &[&str]); 12] = [
+    let expected: [(Host, &str, &[&str]); 13] = [
         (Host::ClaudeCode, "Entries(Settings)", &["PreToolUse"]),
         (Host::Codex, "Entries(Codex)", &[]),
         (Host::Cursor, "Entries(Cursor)", &[]),
@@ -236,6 +236,7 @@ fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
         (Host::Cline, "Script(OwnedFile(Cline hook script))", &[]),
         (Host::Goose, "Entries(Goose)", &[]),
         (Host::AntigravityCli, "Entries(Named)", &[]),
+        (Host::QwenCode, "Entries(Qwen)", &[]),
     ];
     assert_eq!(expected.len(), Host::ALL.len());
     for (host, layout, blocking) in expected {
@@ -395,8 +396,9 @@ fn every_verdict_reaches_the_host_as_it_must() {
     // shell OpenMoat leaves to OpenCode), Hermes Agent 6, Cline 6 (5 on Windows,
     // whose PowerShell commands OpenMoat leaves to Cline), goose 4 (no read or fetch
     // tool; 3 on Windows, whose `cmd` OpenMoat leaves to goose), Antigravity CLI 6
-    // (5 on Windows, whose shell OpenMoat does not classify)
-    assert_eq!(checked, 65 - 5 * usize::from(cfg!(windows)));
+    // (5 on Windows, whose shell OpenMoat does not classify), Qwen Code 6 (5 on
+    // Windows, whose PowerShell commands OpenMoat leaves to Qwen Code)
+    assert_eq!(checked, 71 - 6 * usize::from(cfg!(windows)));
 }
 
 /// ADR-025: `defer` writes nothing, so Claude Code, Codex and the Continue CLI

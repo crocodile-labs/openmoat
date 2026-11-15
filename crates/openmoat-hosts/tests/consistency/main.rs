@@ -32,7 +32,7 @@ use payloads::{
     antigravity_route, copilot, cursor, cursor_tool, gemini, goose_route, hermes, openclaw,
     opencode, opencode_path, pi, under_cwd,
 };
-use routes::{cline_route, opencode2_route};
+use routes::{cline_route, opencode2_route, qwen_route};
 
 /// The part of a conformance fixture this suite reads. A fixture's session
 /// and context are applied alike for every route ([`setup::Setup`]); one with
@@ -109,9 +109,11 @@ enum Route {
     Goose,
     /// Antigravity CLI `PreToolUse`.
     AntigravityCli,
+    /// Qwen Code `PreToolUse`.
+    QwenCode,
 }
 
-const ROUTES: [Route; 16] = [
+const ROUTES: [Route; 17] = [
     Route::ClaudeCode,
     Route::ClaudeCodeNoPrompt,
     Route::Codex,
@@ -128,6 +130,7 @@ const ROUTES: [Route; 16] = [
     Route::Cline,
     Route::Goose,
     Route::AntigravityCli,
+    Route::QwenCode,
 ];
 
 impl Route {
@@ -145,6 +148,7 @@ impl Route {
             Self::Cline => Host::Cline,
             Self::Goose => Host::Goose,
             Self::AntigravityCli => Host::AntigravityCli,
+            Self::QwenCode => Host::QwenCode,
         }
     }
 }
@@ -385,6 +389,7 @@ fn payload(route: Route, intent: &Intent) -> Result<(Value, Action), &'static st
         (Route::Cline, _) => cline_route(intent),
         (Route::Goose, _) => goose_route(intent),
         (Route::AntigravityCli, _) => antigravity_route(intent),
+        (Route::QwenCode, _) => qwen_route(intent),
         (Route::ClaudeCodeNoPrompt, _) => unreachable!("sends Claude Code's tools"),
     }
 }

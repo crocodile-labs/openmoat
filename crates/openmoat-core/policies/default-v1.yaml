@@ -200,6 +200,9 @@ deny:
       # Antigravity CLI: the MCP OAuth tokens (`/docs/mcp`). The account's
       # sign-in is in the OS keyring (`/docs/install`), not a file
       - "~/.gemini/antigravity/mcp_oauth_tokens.json"
+      # Qwen Code: its Qwen OAuth sign-in (the file name Gemini CLI uses, not
+      # verified)
+      - "~/.qwen/oauth_creds.json"
     fs.write: *agent-credentials
     # the agents' commands that print a stored key or token: pi's, and OpenCode
     # 2's export of every stored credential
@@ -530,6 +533,12 @@ deny:
       - "~/.gemini/antigravity-cli/settings.json"
       - "**/.agents/hooks.json"
       - "**/.agents/mcp_config.json"
+      # Qwen Code: its directory, the settings that hold OpenMoat's hook and a
+      # project's, which are merged over them and can turn hooks off
+      - "~/.qwen"
+      - "**/.qwen"
+      - "~/.qwen/settings.json"
+      - "**/.qwen/settings.json"
       - "**/.moat/**"
       # the binary every installed hook runs, by its name and by `moat`, the name it
       # had up to 0.7.0, which still runs it
@@ -735,6 +744,10 @@ deny:
       - "/Library/Application Support/opencode/**"
       - "/etc/opencode/**"
       - "C:/ProgramData/opencode/**"
+      # Qwen Code
+      - "/Library/Application Support/QwenCode/**"
+      - "/etc/qwen-code/**"
+      - "C:/ProgramData/qwen-code/**"
   # Windows: work handed to the Windows Subsystem for Linux. A command inside a
   # WSL distribution reads the distribution's own files (its `~/.ssh`, its shell
   # start-up files), which no Windows path in this policy names, and reaches the
@@ -877,6 +890,8 @@ allow:
       "!${project}/**/.clinerules/hooks/**", "!${project}/**/.cline/hooks/**",
       "!${project}/**/.clinerules", "!${project}/**/.clinerules/hooks", "!${project}/**/.cline",
       "!${project}/**/.cline/hooks",
+      # Qwen Code
+      "!${project}/**/.qwen/**",
       # Agent Skills, loaded by Codex, Cursor, GitHub Copilot CLI, pi, Gemini CLI,
       # OpenCode, goose, Antigravity CLI:
       "!${project}/**/.agents/skills/**", "!${project}/**/.agents", "!${project}/**/.agents/skills",
@@ -1421,6 +1436,11 @@ review:
       # Cline: the folders above them (a rename away and back edits them); its rules
       # files in `.clinerules/` stay ordinary project writes
       "**/.clinerules", "**/.clinerules/hooks", "**/.cline", "**/.cline/hooks",
+      # Qwen Code: a project's settings, whose hooks and MCP servers it runs once
+      # approved, and its other configuration (commands, agents, skills)
+      "**/.qwen/**",
+      # Qwen Code: the person's extensions, whose hooks and MCP servers it starts
+      "~/.qwen/extensions/**",
       # Agent Skills, loaded by Codex, Cursor, GitHub Copilot CLI, pi, Gemini CLI,
       # OpenCode, goose, Antigravity CLI:
       # the shared `.agents/skills` folder, whose skills these hosts load into their

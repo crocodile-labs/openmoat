@@ -154,6 +154,52 @@ pub fn decode_home(word: &str) -> Option<String> {
     String::from_utf8(bytes).ok()
 }
 
+/// What follows the guard in a PowerShell hook command: exit 2 when the guard
+/// could not run or failed, for a host that reads PowerShell's exit 1 for a
+/// command it cannot find as a warning. The guard's JSON on stdout stands
+/// whatever the exit code.
+pub(crate) const POWERSHELL_TAIL: &str = "; if (-not $?) { exit 2 }";
+
+/// `'binary' guard --host <id>`, the binary quoted for a POSIX `sh -c`: the
+/// command of a host that runs a hook's `command` string with `sh` or `bash`
+/// (goose, Qwen Code, Crush's embedded POSIX shell).
+pub(crate) fn sh_command(guard: &GuardCommand, id: &str) -> String {
+    shell_command(guard, id, false)
+}
+
+/// [`sh_command`], or with `powershell` the same for PowerShell `-Command`,
+/// which runs a quoted path only after the call operator `&`, followed by
+/// [`POWERSHELL_TAIL`].
+pub(crate) fn shell_command(guard: &GuardCommand, id: &str, powershell: bool) -> String {
+    let args = guard.shell_args(id);
+    if powershell {
+        let binary = guard.binary.replace('\'', "''");
+        format!("& '{binary}'{args}{POWERSHELL_TAIL}")
+    } else {
+        format!("'{}'{args}", guard.binary.replace('\'', r"'\''"))
+    }
+}
+
+/// The binary a command written by [`shell_command`] runs, for `sh` or for
+/// PowerShell, or `None` when the command is not OpenMoat's guard for `id`.
+pub(crate) fn sh_binary(command: &str, id: &str) -> Option<String> {
+    let command = command.trim();
+    let command = command.strip_suffix(POWERSHELL_TAIL).unwrap_or(command);
+    let (quoted, _) = split_guard(command, id)?;
+    let (quoted, powershell) = match quoted.strip_prefix("& ") {
+        Some(rest) => (rest.trim(), true),
+        None => (quoted, false),
+    };
+    let Some(inner) = quoted.strip_prefix('\'').and_then(|q| q.strip_suffix('\'')) else {
+        return Some(quoted.trim_matches('"').to_owned());
+    };
+    Some(if powershell {
+        inner.replace("''", "'")
+    } else {
+        inner.replace(r"'\''", "'")
+    })
+}
+
 /// A shell-string command of OpenMoat's guard for host `id`, split: what
 /// comes before ` guard --host <id>` (the quoted binary, trimmed) and the
 /// state directory's word after `--home`, if any. For a host whose entries

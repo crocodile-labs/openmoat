@@ -32,6 +32,7 @@ fn unknown_tool(host: Host, tool: &str, input: &Value) -> (Value, bool) {
         Host::Cline => (cline(tool, input), true),
         Host::Goose => (goose(tool, input), true),
         Host::AntigravityCli => (antigravity(tool, input), true),
+        Host::QwenCode => (super::routes::qwen(tool, input), true),
         Host::Continue => panic!("the Continue CLI sends Claude Code's payload"),
     }
 }

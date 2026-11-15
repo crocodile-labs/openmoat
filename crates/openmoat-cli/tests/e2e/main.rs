@@ -77,6 +77,7 @@ mod proxy;
 mod proxy_ca;
 mod proxy_session;
 mod push;
+mod qwen_code;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod relay_token;
 mod remote_approvals;
