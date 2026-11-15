@@ -146,6 +146,13 @@ impl Scratch {
             std::fs::create_dir_all(&path)
                 .with_context(|| format!("creating {}", path.display()))?;
         }
+        // The Node project the scenarios work in has TypeScript installed, as
+        // their `node_modules/typescript` reads say: `npx tsc` runs its own
+        // program, which the package runners' check finds (ADR-102).
+        let bin = scratch.project.join("node_modules/.bin");
+        std::fs::create_dir_all(&bin).with_context(|| format!("creating {}", bin.display()))?;
+        std::fs::write(bin.join("tsc"), "")
+            .with_context(|| format!("creating {}", bin.join("tsc").display()))?;
         Ok(scratch)
     }
 
