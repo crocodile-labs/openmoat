@@ -4,7 +4,7 @@
 each tool call an agent's hook reports before it runs: it denies reads of your secrets and
 sends to hosts your policy does not list, and holds what outlives the session for your
 review. Where an OS sandbox applies (the agent's own, or `openmoat run`), it also confines
-the code an allowed call runs. Every decision is recorded, for twelve agents, with one
+the code an allowed call runs. Every decision is recorded, for fourteen agents, with one
 policy that stays on your machine. What it does not stop is in [Limits](#limits).
 
 <p align="center">
@@ -36,7 +36,7 @@ run a call when the hook fails, are in [Limits](#limits)):
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/overview-dark.svg">
-    <img src="docs/assets/overview-light.svg" width="880" alt="OpenMoat sits between your AI coding agents and your machine. Twelve agents send the tool calls their hooks report through OpenMoat. Its parts: a policy engine, OS sandboxes, an egress proxy, a secret broker, an MCP gateway, an audit trail, a merge check and a policy lock. It guards your files and secrets, shell and programs, network, MCP servers, and git, CI and editors.">
+    <img src="docs/assets/overview-light.svg" width="880" alt="OpenMoat sits between your AI coding agents and your machine. Fourteen agents send the tool calls their hooks report through OpenMoat. Its parts: a policy engine, OS sandboxes, an egress proxy, a secret broker, an MCP gateway, an audit trail, a merge check and a policy lock. It guards your files and secrets, shell and programs, network, MCP servers, and git, CI and editors.">
   </picture>
 </p>
 
@@ -161,7 +161,7 @@ and how to change it.
 
 ## Supported agents
 
-Twelve agents, one policy. `openmoat init` finds the ones installed and asks before it
+Fourteen agents, one policy. `openmoat init` finds the ones installed and asks before it
 sets up each:
 
 <!-- generated:hosts-agents -->
@@ -214,12 +214,12 @@ Everything OpenMoat does, by area. Each links to the page that explains it.
 | **Data leaving the machine** | Sending to a host the policy does not list is denied, and so are cloud metadata services, tokens sent to the wrong host, encoded data after a secret read and card numbers the call's own text shows (not one read from a file, encoded or split). | `default.net`, `cloud-metadata`, `token-egress`, `encoded-egress`, `card-egress` |
 | **Instructions planted in what the agent reads** | A command or write that uses a host, path or command a fetched page or tool result named waits for you, with the source named; also in another spelling of the same request. | `injected-input` |
 | **Code that runs later** | CI workflows, git hooks, login items, `PATH` folders, editor and package-manager configuration, virtual environments and dev containers wait for you; shell startup files and the agents' system-wide settings are denied. | `runs-later`, `git-internals`, `persistence`, `shell-rc`, `managed-settings` |
-| **Look-alike and fresh packages** | A name one typo away from a popular npm, PyPI, crates.io, RubyGems or Go package waits for you; inside `openmoat run`, npm and uv skip versions published in the last 7 days. | `package-near-miss` |
-| **Downloaded or hidden code** | Piping a download or a decoded payload into a shell is denied; without an OS sandbox, a script the session wrote waits for you before an interpreter runs it (a test runner, build tool or package script running that file does not wait). | `pipe-to-shell`, `session-written-code`, `opaque-code` |
+| **Look-alike and fresh packages** | A name one typo away from a popular npm, PyPI, crates.io, RubyGems or Go package waits for you; so does a package `npx`, `uvx`, `pipx run` and the like would fetch that the project neither installs nor declares; inside `openmoat run`, npm and uv skip versions published in the last 7 days. | `package-near-miss`, `package-run-unknown` |
+| **Downloaded or hidden code** | Piping a download or a decoded payload into a shell, or running one through `python3 -c "$(curl …)"`, `sh -c` or `xargs`, is denied; without an OS sandbox, a script the session wrote waits for you before an interpreter runs it (a test runner, build tool or package script running that file does not wait). | `pipe-to-shell`, `session-written-code`, `opaque-code` |
 | **Containers handed the host** | `--privileged`, host namespaces or the Docker socket mounted in wait for you. | `container-host` |
 | **MCP servers** | Calls are checked by the paths and URLs in their arguments; a new or changed server is held until you accept it; data from one server sent into another's writing tool waits for you. | `mcp-cross-server` |
 | **Destructive commands** | `git push --force`, `git reset --hard`, `rm -rf ~` are denied. | `destructive` |
-| **OpenMoat switched off** | An agent's call that edits the policy, approves its own block or uninstalls OpenMoat is denied; a changed policy or hook file blocks every call until you review it. Not stopped: a program running as you outside an OS sandbox, and project settings some agents load at start that turn hooks off (`openmoat status` warns). | `kernel-self`, `kernel-integrity` |
+| **OpenMoat switched off** | An agent's call that edits the policy, approves its own block or uninstalls OpenMoat is denied; a changed policy or hook file blocks every call until you review it. `openmoat run` refuses to start an agent whose project files would turn its hook off (Claude Code starts with its hooks kept on), and `openmoat init --managed` writes the hook where an administrator's hooks live, which a project cannot turn off. Not stopped: a program running as you outside an OS sandbox, and project settings an agent started outside `openmoat run` loads (`openmoat status` warns). | `kernel-self`, `kernel-integrity` |
 
 Every rule and how to change it: [docs/POLICY.md](docs/POLICY.md). After untrusted
 content or a secret read, the session itself is watched more closely
@@ -243,6 +243,11 @@ after a session read many files outside the project (recorded only,
 - **Tokens the agent never sees.** `openmoat secret add` gives the agent a placeholder; the
   proxy adds the real token for its one host
   ([docs/USAGE.md](docs/USAGE.md#keep-a-token-from-the-agent)).
+- **Runs nobody watches.** With `unattended: review` in your policy, a call the agent's own
+  prompt would decide waits for review when the agent runs with no one to ask
+  (Claude Code's `bypassPermissions` or `auto`, pi without a screen, an approvals-off
+  mode), and is denied with how to approve where the agent cannot ask
+  ([docs/POLICY.md](docs/POLICY.md)).
 
 ### MCP servers
 
@@ -261,9 +266,10 @@ after a session read many files outside the project (recorded only,
 - **`openmoat watch`** follows every agent's calls live; **`openmoat why --last`**
   explains a decision with the rule and where it is in your policy; `openmoat show`,
   `replay` and `report` read the log by event, session or time window.
-- **A hash-chained audit log**, local and with secrets redacted: `openmoat audit export`,
-  `verify` and `anchor` (record its head outside the log), and `audit report` across
-  several machines' exports.
+- **A keyed, hash-chained audit log**, local and with secrets redacted: each event carries
+  a MAC made with a key kept beside the log, so a rewrite by someone who cannot read the
+  key is caught. `openmoat audit export`, `verify` and `anchor` (record its head outside
+  the log), and `audit report` across several machines' exports.
 - **Which lines an agent wrote.** `openmoat provenance` maps your commits to the agent
   sessions that wrote each file and line, and whether they had read a web page or an MCP
   result first; `--write-notes` keeps it in git notes ([docs/PROVENANCE.md](docs/PROVENANCE.md)).
@@ -284,6 +290,9 @@ after a session read many files outside the project (recorded only,
   ([docs/POLICY.md](docs/POLICY.md#10-repository-policy)).
 - **Signed policy packs.** `openmoat policy trust-key` and `policy install` share a team's
   rules, signed with an SSH key.
+- **Hooks a project cannot turn off.** `openmoat init --managed` writes OpenMoat's hook
+  where Claude Code, Cursor and GitHub Copilot CLI read an administrator's hooks, or
+  prints the command that does when it needs root ([docs/INSTALL.md](docs/INSTALL.md)).
 - **Pull request check.** `openmoat policy check-diff` and the GitHub Action flag a change
   to CI, git hooks, agent settings, the policy or secret files before it merges, and,
   line by line and offline, look-alike dependencies, swapped lockfile hashes, workflows a
@@ -312,7 +321,14 @@ Every command, and what to do when OpenMoat gets in your way: [docs/USAGE.md](do
 ### Build on it
 
 - **SDKs.** The Rust crate `openmoat-sdk` and the npm package `@openmoat/sdk` give your
-  own agent the same decisions ([docs/SDK.md](docs/SDK.md)).
+  own agent the same decisions, with one-line wraps for the Claude Agent SDK, OpenAI
+  Agents, the AI SDK, Mastra and LangChain.js; a Claude Agent SDK app already runs the
+  hook `openmoat init` writes ([docs/SDK.md](docs/SDK.md)).
+- **Plugin packages** (preview). `plugins/` holds a package for each agent's own plugin
+  channel (Claude Code and Cursor marketplaces, a Gemini CLI extension, Copilot CLI,
+  npm for OpenCode and pi, ClawHub, Hermes Agent's Plugin Catalog, Antigravity CLI); each runs the
+  `openmoat` your policy lock pins and blocks when OpenMoat is not installed
+  ([docs/INSTALL.md](docs/INSTALL.md)).
 - **Measured.** `openmoat bench` runs the MoatBench attack scenarios against OpenMoat or
   any other hook ([docs/MOATBENCH.md](docs/MOATBENCH.md)); fuzz targets cover the shell
   parser, policy parsing, repository-policy merging, host payloads, the proxy, the MCP
@@ -416,7 +432,7 @@ The two attacks not stopped, `rm -rf .` and an MCP tool deleting a repository, a
 
 ## Status
 
-**Usable daily.** The latest release is `0.21.0`. The policy format and the commands can
+**Usable daily.** The latest release is `0.22.0`. The policy format and the commands can
 still change before 1.0; every such change has a CHANGELOG line. What comes next:
 [docs/ROADMAP.md](docs/ROADMAP.md).
 

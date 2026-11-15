@@ -337,8 +337,9 @@ deny:
       - "~/.moat/allowed_signers"
       - "~/.moat/mcp/**"
       # the key `openmoat proxy` checks session credentials with (ADR-044): who
-      # reads it can make one for any session, a clean one included
-      - "~/.moat/proxy.key"
+      # reads it can make one for any session, a clean one included; and the
+      # temporary file it is first written to (`proxy.key.<pid>.<nanos>.tmp`)
+      - "~/.moat/proxy.key*"
       # the proxy CA (ADR-043): with its key a process could sign for the hosts
       # `tls: terminate` names
       - "~/.moat/proxy-ca/**"
@@ -356,7 +357,7 @@ deny:
       - "**/.moat/audit.db*"
       - "**/.moat/audit.key*"
       - "**/.moat/policy.lock"
-      - "**/.moat/proxy.key"
+      - "**/.moat/proxy.key*"
       - "**/.moat/proxy-ca/**"
       - "**/.moat/remote/**"
     fs.write:

@@ -932,6 +932,15 @@
   context: { cwd: /p, project: /p, moved_dirs: { "~/.moat": /srv/moat } }
   action: { fs_read: "/srv/moat/proxy.key" }
   expect: { verdict: deny, rules: [kernel-self] }
+# The temporary file the proxy key is first written to, before it is linked in
+- id: T9-read-the-proxy-key-temporary-file
+  threat: T9
+  action: { fs_read: "~/.moat/proxy.key.4242.1731600000000000000.tmp" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-glob-the-proxy-key-temporary-file
+  threat: T9
+  action: { shell: "cat ~/.moat/proxy.key.*.tmp" }
+  expect: { verdict: deny, rules: [kernel-self] }
 # audit delivery's keys (ADR-081): with the webhook key an agent signs forged events,
 # with the collector's token it sends them
 - id: T9-cat-delivery-webhook-key

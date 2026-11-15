@@ -93,7 +93,7 @@ fn linux_adds_working_directory_rules_for_wildcard_denies() {
             "Read(./**/.moat/audit.db*)",
             "Read(./**/.moat/audit.key*)",
             "Read(./**/.moat/policy.lock)",
-            "Read(./**/.moat/proxy.key)",
+            "Read(./**/.moat/proxy.key*)",
             "Read(./**/.moat/proxy-ca)",
             "Read(./**/.moat/proxy-ca/**)",
             "Read(./**/.moat/remote)",

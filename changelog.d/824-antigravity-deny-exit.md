@@ -1,2 +1,0 @@
-### Security
-- Antigravity CLI: `openmoat init`'s hook now blocks a call with its deny on stdout and exit 0, as the agent's plugin package already did, instead of exit 2, which Antigravity's plugin guide says it ignores; a deny that cannot be written still exits 2. Each host's deny exit code is now one fact of its spec, read by `openmoat guard` and the host's package (ADR-100) ([#824](https://github.com/crocodile-labs/openmoat/pull/824)).
