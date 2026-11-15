@@ -56,7 +56,7 @@ fn init_creates_state_and_installs_claude_code_hook() {
         "{command}"
     );
 
-    let again = sb.moat(&["init", "--yes", "--verbose"]);
+    let again = sb.moat_as_person(&["init", "--yes", "--verbose"]);
     assert_eq!(again.status.code(), Some(0));
     assert!(
         stdout(&again)
