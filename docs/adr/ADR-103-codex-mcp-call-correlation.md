@@ -17,6 +17,10 @@ An incomplete or mismatched pair never enters ADR-069's legacy matching logic.
 Other hosts and Codex clients with neither field retain the existing entrypoint
 contract until a managed gateway supplies independently authenticated bindings.
 
+The guard writes an MCP ticket only after all other required audit writes
+succeed. If those writes fail, the guard can deny without leaving a ticket
+that independently authorizes dispatch.
+
 ## Consequences
 
 Two isolated Codex 0.169.0 sessions with a trusted native hook produced the
