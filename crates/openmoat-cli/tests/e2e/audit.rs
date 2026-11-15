@@ -126,7 +126,9 @@ fn audit_stats_counts_the_calls_of_the_window() {
 
     let bad = sb.moat(&["audit", "stats", "--since", "soon"]);
     assert_eq!(bad.status.code(), Some(USAGE), "{}", text(&bad));
-/// ADR-100: an edit whose hashes were recomputed, as by someone who can write
+}
+
+/// ADR-101: an edit whose hashes were recomputed, as by someone who can write
 /// the log but not read the audit key, still fails on the MACs.
 #[test]
 fn doctor_reports_a_rewrite_without_the_audit_key() {
@@ -153,7 +155,7 @@ fn doctor_reports_a_rewrite_without_the_audit_key() {
     );
 }
 
-/// ADR-100: without its key, a log that holds keyed events takes no more:
+/// ADR-101: without its key, a log that holds keyed events takes no more:
 /// the call is denied rather than recorded without a MAC, and no new key is made.
 #[test]
 fn a_deleted_audit_key_denies_every_call_and_doctor_says_why() {

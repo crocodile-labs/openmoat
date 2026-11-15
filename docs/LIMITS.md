@@ -132,7 +132,11 @@ Each agent's gaps and the reasons are in
   from an allowed command: the proxy checks the host, not what is sent inside HTTPS.
 - **A program that runs as you outside any sandbox** can change the policy and
   recompute the lock. Only the OS sandboxes stop that, so hook-only agents do not have
-  this protection.
+  this protection. The same goes for the audit log: such a program reads the audit key
+  (`~/.moat/audit.key`) as easily as it writes the log, so it can rewrite both; the key
+  stops only someone who can change the log but not read the key
+  ([ADR-101](adr/ADR-101-keyed-audit-chain.md)). On Windows the key file is guarded by
+  the state directory's access list, not by mode bits, as the other keys are.
 - **The check and the call are two moments.** OpenMoat decides on what the call names;
   a file or link that changes between the check and the command running, and hard
   links that already exist, are not seen. Inside `openmoat run` the OS sandbox still

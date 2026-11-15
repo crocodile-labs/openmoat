@@ -1532,7 +1532,7 @@ something OpenMoat claims to stop.
 - **The audit chain is tamper-evident, not tamper-proof.** The hash chain
   ([ARCHITECTURE.md](ARCHITECTURE.md) §7) makes an edit, a deletion or a reordering in the middle of the
   log visible to `openmoat doctor`. Since audit schema 12 each event also carries the
-  MAC of its hash under the audit key, `~/.moat/audit.key` (ADR-100), so someone who can
+  MAC of its hash under the audit key, `~/.moat/audit.key` (ADR-101), so someone who can
   write `~/.moat/audit.db` but cannot read the key (a copy of the file, a backup, a
   bundle, a process or sandbox granted the database and not the key) can no longer
   rewrite events and recompute the hashes after them: the MACs stop matching. That is
@@ -1546,8 +1546,12 @@ something OpenMoat claims to stop.
   that is the price of not writing events no key covers. Whoever can write the
   database can still delete the newest events and leave a valid shorter chain (an
   agent's `sqlite3 ~/.moat/audit.db …` is a write that `kernel-self` denies), and only
-  an anchor shows that; the key file records the newest event when it was made, so a
-  log cut below that point is refused, nothing later. Keeping
+  an anchor shows that; the key file records the newest event when it was made and its
+  hash, so a log cut below that point, or one whose events before the key were
+  rewritten after the keyed ones were dropped, fails and is refused, nothing later.
+  Whoever can delete the key and also set the schema back and drop the MAC column can
+  pass the log off as never upgraded, which only an anchor shows. On Windows the key
+  file is guarded by the state directory's access list, not mode bits. Keeping
   the head hash or count elsewhere on the same machine would need a second write on
   every `guard` call and could be rewritten by the same attacker, so it is not done.
   Anchoring the head off the machine is left to the person (ADR-031): `openmoat audit
@@ -1593,12 +1597,14 @@ something OpenMoat claims to stop.
   `openmoat audit verify` reports the export as not anchored, and `--require-anchor`
   makes that a failure for scripts. The anchor does not
   cover events after it. Anyone can recompute every hash of an export, so off the
-  machine whose audit key made its MACs (ADR-100) a verified export is evidence that
+  machine whose audit key made its MACs (ADR-101) a verified export is evidence that
   the lines are consistent, not that nobody rewrote them, and it is evidence about the
   log as it was at export time, no more. On that machine `openmoat audit verify` also
-  checks each line's MAC: a line rewritten by someone without the key fails, though a
-  line whose MAC and key id were removed before any line that verifies is read as a
-  line from before the key. Exported cells are the redacted store cells.
+  checks each line's MAC: a line rewritten by someone without the key fails, and so
+  does a line past the key's start without a MAC, or one naming another key after
+  lines this key verified. A file whose every line names another key's id is read as
+  another machine's log, and verify says that no line verified with this machine's
+  key. Exported cells are the redacted store cells.
   A secret shape that redaction learned after an event was recorded stays in that
   event.
 - **What the push check sees.** It looks for token formats with a vendor prefix and

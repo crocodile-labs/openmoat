@@ -57,7 +57,7 @@ fn export_carries_stored_cells_and_chain_links() {
         assert_eq!(event.hash.as_deref(), Some(line.hash.as_str()));
     }
     let line = serde_json::to_string(&exported[1]).unwrap();
-    // Each event has the audit key's MAC (ADR-100): a version 2 line.
+    // Each event has the audit key's MAC (ADR-101): a version 2 line.
     assert!(
         line.starts_with(r#"{"format":"moat-audit-export-v2","id":"2","#),
         "{line}"

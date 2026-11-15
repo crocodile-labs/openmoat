@@ -1,4 +1,4 @@
-//! The keyed chain (ADR-100): what a rewrite without the audit key leaves, the
+//! The keyed chain (ADR-101): what a rewrite without the audit key leaves, the
 //! upgrade from version 11, and a handle without the key failing closed.
 
 use openmoat_core::{Decision, Verdict};
@@ -88,7 +88,7 @@ fn a_removed_mac_and_another_key_are_detected() {
         .unwrap();
     let report = verify(&path, Some(key()));
     assert_eq!(report.broken.unwrap().kind, BreakKind::MacMissing);
-    let other = ChainKey::new([8; 32], EventId(0));
+    let other = ChainKey::new(&[8; 32], EventId(0), None);
     let report = verify(&path, Some(other));
     let expected = ChainBreak {
         id: EventId(1),
@@ -152,7 +152,7 @@ fn a_log_shorter_than_its_key_is_refused() {
     let (_dir, path) = keyed_log(1);
     let store = Store::open_existing(&path)
         .unwrap()
-        .with_chain_key(ChainKey::new([9; 32], EventId(5)));
+        .with_chain_key(ChainKey::new(&[9; 32], EventId(5), Some(&"0".repeat(64))));
     let refused = record(&store, "echo x").err().unwrap();
     assert!(
         matches!(
@@ -199,6 +199,9 @@ fn a_version_11_log_with_events_keeps_them_under_the_unkeyed_chain_and_keys_new_
     // the newest event, as the CLI does.
     let store = Store::open_existing(&path).unwrap();
     assert!(!store.has_keyed_events().unwrap());
+    assert!(store.upgraded_to_keyed(), "this open added the MAC column");
+    let (after, after_hash) = store.key_start().unwrap();
+    assert_eq!(after, EventId(2));
     let store = upgraded(store);
     record(&store, "echo new").unwrap();
     drop(store);
@@ -212,7 +215,7 @@ fn a_version_11_log_with_events_keeps_them_under_the_unkeyed_chain_and_keys_new_
         .unwrap();
     assert_eq!(mark, 2);
 
-    let with_key = ChainKey::new([9; 32], EventId(2));
+    let with_key = ChainKey::new(&[9; 32], after, after_hash.as_deref());
     let report = verify(&path, Some(with_key));
     assert_eq!((report.events, report.keyed, report.broken), (3, 1, None));
     assert_eq!(report.keyed_after, Some(EventId(2)));
@@ -245,7 +248,7 @@ fn an_export_is_checked_with_the_key_that_made_it_and_by_hashes_elsewhere() {
     let elsewhere = verify_export(&whole, None);
     assert_eq!(elsewhere.broken, None);
     assert_eq!((elsewhere.keyed, elsewhere.keyed_unchecked), (0, 3));
-    let other = ChainKey::new([8; 32], EventId(0));
+    let other = ChainKey::new(&[8; 32], EventId(0), None);
     let not_mine = verify_export_keyed(&whole, None, Some(&other));
     assert_eq!((not_mine.broken, not_mine.keyed_unchecked), (None, 3));
 

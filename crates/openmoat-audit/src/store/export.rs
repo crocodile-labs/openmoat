@@ -8,7 +8,7 @@
 //! nothing unredacted is ever stored, and an export adds nothing the store does
 //! not hold.
 //!
-//! An event with an audit-key MAC (ADR-100) is a version 2 line: it adds `mac`
+//! An event with an audit-key MAC (ADR-101) is a version 2 line: it adds `mac`
 //! and the id of the key that made it, never the key. Anyone can still check
 //! the hash chain; only the key's holder can check the MACs.
 
@@ -39,7 +39,7 @@ pub enum ExportFormat {
     #[serde(rename = "moat-audit-export-v1")]
     V1,
     /// V1 and the event's audit-key MAC with the key's id (`mac`, `key_id`,
-    /// ADR-100). The chain hash is the same; only the key's holder can check
+    /// ADR-101). The chain hash is the same; only the key's holder can check
     /// the MAC.
     #[serde(rename = "moat-audit-export-v2")]
     V2,

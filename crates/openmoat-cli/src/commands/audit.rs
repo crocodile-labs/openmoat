@@ -46,7 +46,7 @@ pub fn verify(args: &VerifyArgs) -> Result<Code> {
         std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
     let anchor = args.anchor.as_deref().map(str::trim);
     // This machine's audit key, when there is one it can use, checks the MACs
-    // of the lines it made (ADR-100); elsewhere the hash chain is checked alone.
+    // of the lines it made (ADR-101); elsewhere the hash chain is checked alone.
     let key = Home::locate()
         .ok()
         .and_then(|home| crate::audit_key::read(&home).ok().flatten());
@@ -114,6 +114,17 @@ fn verify_text(report: &ExportReport, require_anchor: bool) -> Result<()> {
             out,
             "✔ {} events carry this machine's audit-key MAC, and each matches",
             report.keyed
+        )?;
+    } else if report.key_given {
+        writeln!(
+            out,
+            "   0 lines verified with this machine's audit key: this export is not shown to be \
+             this machine's log as written"
+        )?;
+    } else {
+        writeln!(
+            out,
+            "   no audit key here: no MAC was checked, only the hash chain"
         )?;
     }
     if report.keyed_unchecked > 0 {

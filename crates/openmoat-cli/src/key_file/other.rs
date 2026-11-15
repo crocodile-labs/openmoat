@@ -6,7 +6,7 @@ use std::path::Path;
 
 use anyhow::{Result, bail};
 
-pub(super) fn check(path: &Path, file: &Metadata, _: Option<&Metadata>) -> Result<()> {
+pub(super) fn check(path: &Path, file: &Metadata, _: Option<&Metadata>, _: &str) -> Result<()> {
     if !file.is_file() {
         bail!(
             "{} is not a regular file, so it is not used as a key",

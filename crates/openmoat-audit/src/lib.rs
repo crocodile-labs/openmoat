@@ -14,7 +14,7 @@ mod key;
 mod query;
 mod redact;
 mod store;
-#[cfg(feature = "test-support")]
+#[cfg(any(test, feature = "test-support"))]
 pub mod testing;
 
 pub use key::{ChainKey, hmac_sha256};

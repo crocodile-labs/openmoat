@@ -92,7 +92,7 @@ mod tests {
         {
             let store = Store::open(&path)
                 .unwrap()
-                .with_chain_key(crate::ChainKey::new([9; 32], crate::EventId(0)));
+                .with_chain_key(crate::ChainKey::new(&[9; 32], crate::EventId(0), None));
             let decision = Decision::new(Verdict::Allow);
             store.record_at(&event("host-a", &decision), 100).unwrap();
         }

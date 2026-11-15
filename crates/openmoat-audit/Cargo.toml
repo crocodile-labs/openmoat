@@ -19,7 +19,7 @@ serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
 thiserror.workspace = true
-# The audit key (ADR-100) is zeroed when dropped, as the CLI's other keys are.
+# The audit key (ADR-101) is zeroed when dropped, as the CLI's other keys are.
 zeroize.workspace = true
 
 [features]

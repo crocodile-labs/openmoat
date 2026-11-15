@@ -56,8 +56,9 @@ fn run(scenario: &Scenario, sandboxed: bool) -> Vec<String> {
     let store = Store::open(&dir.path().join("audit.db"))
         .unwrap()
         .with_chain_key(openmoat_audit::ChainKey::new(
-            [1; 32],
+            &[1; 32],
             openmoat_audit::EventId(0),
+            None,
         ));
     let policy = Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
     let ctx = EvalContext {

@@ -24,7 +24,7 @@ fn setup() -> (tempfile::TempDir, String, Store) {
     let proj = crate::context::path_string(&dir.path().canonicalize().unwrap());
     let store = Store::open(&dir.path().join("audit.db"))
         .unwrap()
-        .with_chain_key(openmoat_audit::ChainKey::new([1; 32], EventId(0)));
+        .with_chain_key(openmoat_audit::ChainKey::new(&[1; 32], EventId(0), None));
     (dir, proj, store)
 }
 

@@ -276,7 +276,7 @@ impl Home {
         }
         let store = openmoat_audit::Store::open_read_only(&path)
             .with_context(|| format!("opening {}", path.display()))?;
-        // With the audit key when it can be used (ADR-100). Without it the log
+        // With the audit key when it can be used (ADR-101). Without it the log
         // still reads, and `verify_chain` stops at its first keyed event, so
         // nothing vouches for what the key would have checked;
         // `openmoat doctor` says why the key could not be used.
@@ -385,14 +385,20 @@ pub fn write_like(path: &Path, bytes: &[u8], like: &Path, keep: KeepMode) -> Res
 
 /// Write `bytes` to `path`, owner-only, unless `path` exists already: the file
 /// appears whole or not at all, and when two processes race the first one's
-/// stays. Whether this call wrote it.
+/// stays. Whether this call wrote it. The bytes are written first to
+/// `<name>.<pid>.<nanos>.tmp` beside `path`, so a deny of `<name>*` covers the
+/// temporary file too (the audit key, ADR-101).
 pub fn write_private_new(path: &Path, bytes: &[u8]) -> Result<bool> {
     let parent = path.parent().context("path has no parent")?;
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .context("path has no file name")?;
     create_private_dir(parent)?;
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_nanos());
-    let tmp = parent.join(format!(".new-{}-{nanos}.tmp", std::process::id()));
+    let tmp = parent.join(format!("{name}.{}.{nanos}.tmp", std::process::id()));
     let written = (|| {
         let mut file = private_file_options()
             .open(&tmp)
@@ -520,6 +526,16 @@ fn create_dir_here(path: &Path) -> Result<bool> {
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
         Err(e) => Err(e).with_context(|| format!("creating {}", path.display())),
     }
+}
+
+/// Move `from` to `to` in the state directory and leave it owner-only: a key
+/// kept rather than removed (the audit key a new log replaces, ADR-101).
+pub fn keep_private(from: &Path, to: &Path) -> Result<()> {
+    fs::rename(from, to)
+        .with_context(|| format!("moving {} to {}", from.display(), to.display()))?;
+    #[cfg(unix)]
+    restrict(to, 0o600)?;
+    Ok(())
 }
 
 /// Set Unix permission bits. Unix only: on Windows `ensure` gives the state

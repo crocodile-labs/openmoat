@@ -431,7 +431,7 @@ fn a_refusing_sink_is_paused_until_a_person_flushes() {
 
 /// Events recorded straight into the sandbox's log, `n` of them.
 fn seed(dir: &Path, n: usize) {
-    // With the log's own key, as every writer records (ADR-100).
+    // With the log's own key, as every writer records (ADR-101).
     let key = std::fs::read_to_string(dir.join("audit.key")).unwrap();
     let store = Store::open(&dir.join("audit.db"))
         .unwrap()

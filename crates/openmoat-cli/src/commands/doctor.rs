@@ -189,11 +189,25 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         Err(e) => report.line(Area::Audit, false, format!("audit log        {e:#}")),
     }
     // A key that is there but cannot be used: every write is refused, so say
-    // why (ADR-100). A mode others may read is `key_modes`' row.
+    // why (ADR-101). A mode others may read is `key_modes`' row.
     if let Err(e) = crate::audit_key::read(&home)
         && crate::key_file::problem(&crate::audit_key::path(&home)).is_none()
     {
         report.line(Area::Audit, false, format!("audit key        {e:#}"));
+    }
+    // No key over a log with events is a problem even where the database's
+    // own mark says nothing is keyed: whoever can write the database can move
+    // that mark.
+    if crate::audit_key::missing_over_events(&home) {
+        report.line(
+            Area::Audit,
+            false,
+            format!(
+                "audit key        none at {}, while the audit log holds events: nothing more is \
+                 recorded. Put the key back, or move the log aside and run `openmoat init`",
+                crate::audit_key::path(&home).display()
+            ),
+        );
     }
     if let Some(last) = crate::anchor::Last::load(&home) {
         let text = format!(
@@ -517,7 +531,7 @@ fn audit_line(report: &mut Report, chain: &ChainReport) {
             Place::OpenMoat,
         );
     }
-    // Events before the audit key (ADR-100) verify by their hashes only, which
+    // Events before the audit key (ADR-101) verify by their hashes only, which
     // whoever can write the file can recompute.
     let before_key = chain
         .events

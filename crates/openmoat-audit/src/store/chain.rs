@@ -9,7 +9,7 @@
 //! hash recorded outside the file (an anchor, `docs/THREAT_MODEL.md`).
 //!
 //! From schema version 12 each event also carries `mac`, the audit key's MAC
-//! of its hash (ADR-100, `key.rs`): recomputing the hashes after an edit then
+//! of its hash (ADR-101, `key.rs`): recomputing the hashes after an edit then
 //! needs the key too, or the MACs no longer match. Events written before the
 //! key existed (up to [`ChainKey::after`]) have none and verify by their hashes
 //! only. Deleting the newest events still leaves a valid chain; only an anchor
@@ -136,7 +136,7 @@ pub enum BreakKind {
     /// A cell does not have the type the schema gives it.
     Unreadable,
     /// The event has no audit-key MAC although it was written after the key
-    /// was made (ADR-100): it was rewritten, or its MAC removed.
+    /// was made (ADR-101): it was rewritten, or its MAC removed.
     MacMissing,
     /// The event's MAC is not the audit key's MAC of its hash: the log was
     /// rewritten by someone without the key, or the key was replaced.
@@ -145,6 +145,15 @@ pub enum BreakKind {
     /// start, and no audit key was given to check it: nothing after it can be
     /// vouched for.
     KeyUnavailable,
+    /// The log ends before the event the audit key was made after: events
+    /// were deleted.
+    Truncated,
+    /// The event the audit key was made after has another hash now: the
+    /// events before the key were rewritten.
+    KeyStartChanged,
+    /// An export line claims another audit key than the lines before it, or
+    /// does not verify with the key the lines before it verified with.
+    KeyMismatch,
 }
 
 impl BreakKind {
@@ -166,6 +175,17 @@ impl BreakKind {
             }
             Self::KeyUnavailable => {
                 "it is keyed, and the audit key needed to check it is missing or unreadable"
+            }
+            Self::Truncated => {
+                "the log ends before the event the audit key was made after (events were deleted)"
+            }
+            Self::KeyStartChanged => {
+                "it is the event the audit key was made after, and its hash changed since \
+                 (the events before the key were rewritten)"
+            }
+            Self::KeyMismatch => {
+                "it claims another audit key than the lines before it, or does not verify with \
+                 theirs (a forged line)"
             }
         }
     }
@@ -193,7 +213,7 @@ pub struct ChainReport {
     pub head: Option<String>,
     /// The first broken link, if any.
     pub broken: Option<ChainBreak>,
-    /// Events whose audit-key MAC was checked and matched (ADR-100), among
+    /// Events whose audit-key MAC was checked and matched (ADR-101), among
     /// `events`.
     #[serde(default)]
     pub keyed: u64,
@@ -357,7 +377,81 @@ impl Store {
                 break;
             }
         }
+        drop(rows);
+        // The events before the key are protected by the key's record of the
+        // event it was made after: still there, with the hash it had (ADR-101).
+        if report.broken.is_none()
+            && let Some(key) = self.chain_key()
+            && let Some(kind) = key_start(&self.conn, key)?.break_kind()
+        {
+            report.broken = Some(ChainBreak {
+                id: key.after(),
+                kind,
+            });
+        }
         Ok(report)
+    }
+}
+
+/// What became of the event an audit key was made after.
+pub(super) enum KeyStart {
+    /// It is there with the hash the key recorded (or the key starts at 0).
+    Holds,
+    /// It is gone: the log ends before it, or it was deleted.
+    Missing,
+    /// It has another hash.
+    Changed,
+}
+
+impl KeyStart {
+    fn break_kind(&self) -> Option<BreakKind> {
+        match self {
+            Self::Holds => None,
+            Self::Missing => Some(BreakKind::Truncated),
+            Self::Changed => Some(BreakKind::KeyStartChanged),
+        }
+    }
+}
+
+/// Look up the event `key` was made after.
+pub(super) fn key_start(
+    conn: &rusqlite::Connection,
+    key: &ChainKey,
+) -> Result<KeyStart, StoreError> {
+    let after = key.after().0;
+    if after == 0 {
+        return Ok(KeyStart::Holds);
+    }
+    let stored: Option<Option<String>> = conn
+        .query_row(
+            "SELECT hash FROM events WHERE id = ?1",
+            params![after],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(match stored {
+        None => KeyStart::Missing,
+        Some(hash) if hash.as_deref() == key.after_hash() => KeyStart::Holds,
+        Some(_) => KeyStart::Changed,
+    })
+}
+
+/// [`key_start`] for a writer: an error unless the start holds.
+pub(super) fn check_key_start(
+    conn: &rusqlite::Connection,
+    key: &ChainKey,
+) -> Result<(), StoreError> {
+    match key_start(conn, key)? {
+        KeyStart::Holds => Ok(()),
+        KeyStart::Missing => {
+            let newest: Option<i64> =
+                conn.query_row("SELECT MAX(id) FROM events", [], |r| r.get(0))?;
+            Err(StoreError::KeyAhead {
+                newest: super::EventId(newest.unwrap_or(0)),
+                after: key.after(),
+            })
+        }
+        KeyStart::Changed => Err(StoreError::KeyStartChanged { after: key.after() }),
     }
 }
 

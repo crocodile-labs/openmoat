@@ -41,7 +41,7 @@ pub fn truncate_after(path: &Path, id: i64) -> Result<(), StoreError> {
 }
 
 /// Make the log at `path` look as one written before the audit key existed
-/// (ADR-100): no event has a MAC, and version 12's mark is after the newest.
+/// (ADR-101): no event has a MAC, and version 12's mark is after the newest.
 ///
 /// # Errors
 ///
@@ -52,6 +52,25 @@ pub fn as_before_the_key(path: &Path) -> Result<(), StoreError> {
         "UPDATE events SET mac = NULL;
          UPDATE meta SET value = COALESCE((SELECT MAX(id) FROM events), 0)
              WHERE key = 'unkeyed_last_id';",
+    )
+    .map_err(StoreError::from)?;
+    Ok(())
+}
+
+/// Put the log at `path` back as schema version 11 left it: no MAC column, no
+/// mark of where keyed events start, no trigger. The next writable open
+/// upgrades it as it would a log an older build wrote.
+///
+/// # Errors
+///
+/// Returns [`StoreError`] if the database cannot be opened or written.
+pub fn as_before_version_12(path: &Path) -> Result<(), StoreError> {
+    let conn = rusqlite::Connection::open(path).map_err(StoreError::from)?;
+    conn.execute_batch(
+        "DROP TRIGGER IF EXISTS events_keyed;
+         ALTER TABLE events DROP COLUMN mac;
+         DELETE FROM meta WHERE key = 'unkeyed_last_id';
+         PRAGMA user_version = 11;",
     )
     .map_err(StoreError::from)?;
     Ok(())

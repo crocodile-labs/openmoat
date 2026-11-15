@@ -14,7 +14,12 @@ const FILE_OPEN: u32 = 0o077;
 /// Group and other write bits of its directory.
 const DIR_WRITABLE: u32 = 0o022;
 
-pub(super) fn check(path: &Path, file: &Metadata, dir: Option<&Metadata>) -> Result<()> {
+pub(super) fn check(
+    path: &Path,
+    file: &Metadata,
+    dir: Option<&Metadata>,
+    remake: &str,
+) -> Result<()> {
     if !file.is_file() {
         bail!(
             "{} is not a regular file, so it is not used as a key",
@@ -25,8 +30,7 @@ pub(super) fn check(path: &Path, file: &Metadata, dir: Option<&Metadata>) -> Res
     if mode & FILE_OPEN != 0 {
         bail!(
             "{} has mode {mode:03o}: other users may read this key, so it is not used. It may \
-             already be known: make a new one (remove the file; `openmoat proxy ca init` for the \
-             CA), or, if nobody else could read it, `chmod 600` it",
+             already be known: {remake}, or, if nobody else could read it, `chmod 600` it",
             path.display()
         );
     }

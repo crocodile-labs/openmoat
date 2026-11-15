@@ -536,7 +536,7 @@ live delivery ([DELIVERY.md](DELIVERY.md)).
 Each event carries a MAC made with the audit key, `~/.moat/audit.key`, which OpenMoat
 makes at `openmoat init` and keeps from agents: someone who can change the log but
 not read the key cannot rewrite events so that the log still checks out
-([ADR-100](adr/ADR-100-keyed-audit-chain.md)). Keep the key with the log: if it is
+([ADR-101](adr/ADR-101-keyed-audit-chain.md)). Keep the key with the log: if it is
 deleted, OpenMoat records nothing more, and every call is denied, until you put it
 back or move the log aside and run `openmoat init` to start a new one. Code running
 as you outside any sandbox can read the key too, so it does not stop that.

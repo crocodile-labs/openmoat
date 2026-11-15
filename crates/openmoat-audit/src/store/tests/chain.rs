@@ -237,7 +237,7 @@ fn a_version_1_database_is_migrated_without_vouching_for_old_rows() {
     assert!(
         Store::open(&path)
             .unwrap()
-            .with_chain_key(ChainKey::new([9; 32], EventId(2)))
+            .with_chain_key(ChainKey::new(&[9; 32], EventId(2), None))
             .verify_chain()
             .unwrap()
             .broken

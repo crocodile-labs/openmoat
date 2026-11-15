@@ -50,7 +50,7 @@ sent anywhere.
   ```
 
   On the reviewer's machine that checks the hash chain and the anchor; each event's
-  audit-key MAC ([ADR-100](adr/ADR-100-keyed-audit-chain.md)) can be checked only on
+  audit-key MAC ([ADR-101](adr/ADR-101-keyed-audit-chain.md)) can be checked only on
   the machine that holds the key, where the same command checks it too.
 
 - **The policy, lock and protections at the time of the report**: the policy file's

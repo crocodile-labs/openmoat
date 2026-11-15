@@ -330,15 +330,25 @@ fn state(
         }
     }
 
-    if !dry_run {
-        // The log and its key (ADR-100), so the first call is keyed.
-        crate::audit_key::open(home)?;
-    }
+    // The log and its key (ADR-101), so the first call is keyed.
+    let kept = if dry_run {
+        None
+    } else {
+        crate::audit_key::open(home)?
+    };
     writeln!(
         out,
         "{prefix} audit log        {}",
         home.audit_path().display()
     )?;
+    if let Some(kept) = kept {
+        writeln!(
+            out,
+            "  a new audit log starts with a new audit key; the previous key is kept as {} \
+             (it still checks a log you moved aside)",
+            kept.display()
+        )?;
+    }
 
     if dry_run {
         writeln!(

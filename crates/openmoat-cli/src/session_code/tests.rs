@@ -22,7 +22,7 @@ fn fixture() -> Fixture {
     let home = Home::at(dir.path().join("state"));
     let store = Store::open(&dir.path().join("audit.db"))
         .unwrap()
-        .with_chain_key(openmoat_audit::ChainKey::new([1; 32], EventId(0)));
+        .with_chain_key(openmoat_audit::ChainKey::new(&[1; 32], EventId(0), None));
     Fixture {
         _dir: dir,
         proj,

@@ -97,7 +97,7 @@ pub fn run(args: &TeamReportArgs) -> Result<Code> {
 fn read_export(file: &Path) -> Result<(Source, Vec<ExportedEvent>)> {
     let name = file.display();
     let text = std::fs::read_to_string(file).with_context(|| format!("reading {name}"))?;
-    // Lines this machine's audit key made have their MACs checked too (ADR-100).
+    // Lines this machine's audit key made have their MACs checked too (ADR-101).
     let key = crate::home::Home::locate()
         .ok()
         .and_then(|home| crate::audit_key::read(&home).ok().flatten());

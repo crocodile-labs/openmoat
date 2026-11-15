@@ -288,7 +288,7 @@ CREATE TABLE IF NOT EXISTS package_events (
 );
 ";
 
-/// Version 12: the audit key's MAC of each event (ADR-100, `key.rs`). Rows
+/// Version 12: the audit key's MAC of each event (ADR-101, `key.rs`). Rows
 /// already present get none: a MAC made now would vouch for whatever they hold
 /// today, as [`V2`] says of hashes. They keep verifying under the unkeyed chain,
 /// and `unkeyed_last_id` records where they end, for a reader without the key;
@@ -303,14 +303,17 @@ ALTER TABLE events ADD COLUMN mac TEXT;
 /// build that opened the log before the upgrade (a long-running `openmoat
 /// proxy` or `openmoat mcp proxy`) still holds its handle and would append
 /// events without one; refused, it fails closed as on any audit error, rather
-/// than leaving rows the next verification reports as rewritten.
+/// than leaving rows the next verification reports as rewritten. An insert
+/// that leaves the id to `SQLite` (`NEW.id` is then -1 before the insert) is
+/// refused too.
 const V12_MARK: &str = "
 INSERT OR REPLACE INTO meta (key, value)
     VALUES ('unkeyed_last_id', COALESCE((SELECT MAX(id) FROM events), 0));
 CREATE TRIGGER IF NOT EXISTS events_keyed BEFORE INSERT ON events
     WHEN NEW.mac IS NULL
-     AND NEW.id > COALESCE((SELECT value FROM meta WHERE key = 'unkeyed_last_id'), 0)
-    BEGIN SELECT RAISE(ABORT, 'an audit event needs the audit key''s MAC (ADR-100): restart this OpenMoat process'); END;
+     AND (NEW.id IS NULL OR NEW.id < 0
+          OR NEW.id > COALESCE((SELECT value FROM meta WHERE key = 'unkeyed_last_id'), 0))
+    BEGIN SELECT RAISE(ABORT, 'an audit event needs the audit key''s MAC (ADR-101): restart this OpenMoat process'); END;
 ";
 
 /// A `CHECK` of one table that a step widens: `from` becomes `to`, which
@@ -405,10 +408,14 @@ pub(super) fn too_new(found: i64) -> Result<(), StoreError> {
 /// Bring the database to [`SCHEMA_VERSION`]. Several `moat guard` processes may
 /// open an old database at once, so the version is re-read under the write lock
 /// and each step runs at most once.
-pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
+/// Returns whether this call added the audit key's MAC column, which only an
+/// upgrade from before version 12 does (a version set back by hand keeps the
+/// column).
+pub(super) fn migrate(conn: &Connection) -> Result<bool, StoreError> {
+    let mut added_mac = false;
     let found = version(conn)?;
     if found >= SCHEMA_VERSION {
-        return too_new(found);
+        return too_new(found).map(|()| false);
     }
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     let found = version(&tx)?;
@@ -417,7 +424,7 @@ pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
         // this one's version: what it wrote is read under the lock, so there is
         // nothing to recheck and no second pass.
         drop(tx);
-        return too_new(found);
+        return too_new(found).map(|()| false);
     }
     if found < 1 {
         tx.execute_batch(V1)?;
@@ -461,12 +468,13 @@ pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
     if found < KEYED_VERSION {
         if !has_column(&tx, "events", "mac")? {
             tx.execute_batch(V12)?;
+            added_mac = true;
         }
         tx.execute_batch(V12_MARK)?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;
-    Ok(())
+    Ok(added_mac)
 }
 
 /// The version-1 schema, for tests that open a database an older build wrote.

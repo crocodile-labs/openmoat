@@ -39,7 +39,7 @@ pub fn read(path: &Path) -> Result<Zeroizing<String>> {
         .map(std::fs::metadata)
         .transpose()
         .with_context(|| format!("reading the folder of {}", path.display()))?;
-    platform::check(path, &meta, dir.as_ref())?;
+    platform::check(path, &meta, dir.as_ref(), remake(path))?;
     let mut text = Zeroizing::new(String::new());
     file.read_to_string(&mut text)
         .with_context(|| format!("reading {}", path.display()))?;
@@ -51,7 +51,19 @@ pub fn read(path: &Path) -> Result<Zeroizing<String>> {
 pub fn problem(path: &Path) -> Option<String> {
     let meta = std::fs::metadata(path).ok()?;
     let dir = path.parent().and_then(|d| std::fs::metadata(d).ok());
-    platform::check(path, &meta, dir.as_ref())
+    platform::check(path, &meta, dir.as_ref(), remake(path))
         .err()
         .map(|e| format!("{e:#}"))
+}
+
+/// How to replace a key that may be known. The audit key is never removed
+/// alone: the events it keyed would no longer verify, and no writer makes a
+/// new one over them (ADR-101).
+fn remake(path: &Path) -> &'static str {
+    if path.file_name().and_then(|n| n.to_str()) == Some(crate::audit_key::KEY_FILE) {
+        "move the audit log aside as evidence and run `openmoat init`, which starts a new log \
+         with a new key (never remove the key alone)"
+    } else {
+        "make a new one (remove the file; `openmoat proxy ca init` for the CA)"
+    }
 }

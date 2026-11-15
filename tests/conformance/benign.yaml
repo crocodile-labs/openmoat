@@ -91,7 +91,7 @@
   threat: T9
   action: { fs_read: "~/.moat/policy.yaml" }
   expect: { verdict: defer, rules: [default] }
-# Only OpenMoat's own audit key is kept from the agent (ADR-100), not a project's
+# Only OpenMoat's own audit key is kept from the agent (ADR-101), not a project's
 # source file named after it
 - id: benign-read-project-audit-key-source
   threat: T9

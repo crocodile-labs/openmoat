@@ -86,13 +86,25 @@ fn version_7_log(path: &std::path::Path, schema: &str, rows: i64) -> Connection 
     conn
 }
 
+/// Insert a `review` row: without a MAC on version 7, which has no column for
+/// one; with one from version 12 on, whose trigger refuses a row without.
 fn insert_review(conn: &Connection) -> rusqlite::Result<usize> {
-    conn.execute(
-        "INSERT INTO events (ts_ms, host, session_id, tool, action, verdict, rules, reasons,
-                             latency_us)
-         VALUES (0, 'h', 's', 't', 'null', 'review', '[]', '[]', 1)",
-        [],
-    )
+    let keyed = conn.prepare("SELECT mac FROM events LIMIT 0").is_ok();
+    if keyed {
+        conn.execute(
+            "INSERT INTO events (ts_ms, host, session_id, tool, action, verdict, rules, reasons,
+                                 latency_us, mac)
+             VALUES (0, 'h', 's', 't', 'null', 'review', '[]', '[]', 1, 'm')",
+            [],
+        )
+    } else {
+        conn.execute(
+            "INSERT INTO events (ts_ms, host, session_id, tool, action, verdict, rules, reasons,
+                                 latency_us)
+             VALUES (0, 'h', 's', 't', 'null', 'review', '[]', '[]', 1)",
+            [],
+        )
+    }
 }
 
 #[test]
@@ -191,8 +203,8 @@ fn a_new_log_takes_every_verdict() {
             .conn
             .execute(
                 "INSERT INTO events (ts_ms, host, session_id, tool, action, verdict, rules,
-                                     reasons, latency_us)
-                 VALUES (0, 'h', 's', 't', 'null', ?1, '[]', '[]', 1)",
+                                     reasons, latency_us, mac)
+                 VALUES (0, 'h', 's', 't', 'null', ?1, '[]', '[]', 1, 'm')",
                 [verdict],
             )
             .unwrap();

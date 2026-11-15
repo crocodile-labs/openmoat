@@ -2,6 +2,7 @@ mod chain;
 mod export;
 mod injected_inputs;
 mod keyed;
+mod keyed_attacks;
 mod mcp_flow;
 mod mcp_tickets;
 mod migration_cost;
@@ -15,14 +16,14 @@ use super::*;
 /// The audit key file-backed tests record and verify with: fixed, for a log
 /// that was empty when it was made.
 pub(super) fn key() -> ChainKey {
-    ChainKey::new([9; 32], EventId(0))
+    ChainKey::new(&[9; 32], EventId(0), None)
 }
 
 /// `store` with [`key`] as a writer that finds no key on a log from before
 /// version 12 makes it: after the newest event (`audit_key.rs` in the CLI).
 pub(super) fn upgraded(store: Store) -> Store {
-    let after = store.latest_id().unwrap().unwrap_or(EventId(0));
-    store.with_chain_key(ChainKey::new([9; 32], after))
+    let (after, hash) = store.key_start().unwrap();
+    store.with_chain_key(ChainKey::new(&[9; 32], after, hash.as_deref()))
 }
 
 #[cfg(unix)]

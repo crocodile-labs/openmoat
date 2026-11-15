@@ -86,9 +86,9 @@ pub enum StoreError {
         reason: String,
     },
     /// An event was to be recorded on a handle without the audit key
-    /// (ADR-100). Nothing is written: an event without its MAC would read as
+    /// (ADR-101). Nothing is written: an event without its MAC would read as
     /// rewritten, so recording it unkeyed is refused, never done quietly.
-    #[error("the audit key was not given, so no event is recorded without its MAC (ADR-100)")]
+    #[error("the audit key was not given, so no event is recorded without its MAC (ADR-101)")]
     KeyMissing,
     /// The audit key file does not parse ([`ChainKey::parse`]); the reason
     /// never quotes the file.
@@ -98,11 +98,23 @@ pub enum StoreError {
     /// events were deleted since the key was made.
     #[error(
         "the audit log ends at event {newest}, but its key was made when it reached event {after}: \
-         events were deleted; keep the file as evidence"
+         events were deleted. Keep the file as evidence: move it aside and run `openmoat init` \
+         to start a new log"
     )]
     KeyAhead {
         /// The newest event in the log.
         newest: EventId,
+        /// Where the key says keyed events start after.
+        after: EventId,
+    },
+    /// Event `after` the key starts from is no longer the one it was made
+    /// after: the events before the key were rewritten.
+    #[error(
+        "event {after} of the audit log no longer has the hash it had when the audit key was \
+         made: the events before the key were rewritten. Keep the file as evidence: move it \
+         aside and run `openmoat init` to start a new log"
+    )]
+    KeyStartChanged {
         /// Where the key says keyed events start after.
         after: EventId,
     },
@@ -250,10 +262,12 @@ pub struct Store {
     /// Every event this handle records was decided for a package of the
     /// agent's own plugin channel ([`Store::from_package`]).
     from_package: bool,
-    /// The audit key (ADR-100): what this handle MACs the events it records
+    /// The audit key (ADR-101): what this handle MACs the events it records
     /// with, and checks the MACs with in [`Store::verify_chain`].
     /// Boxed, so a handle stays the size it was without one.
     key: Option<Box<ChainKey>>,
+    /// This handle upgraded the database from a version below 12 itself.
+    upgraded_to_keyed: bool,
 }
 
 impl Store {
@@ -298,6 +312,7 @@ impl Store {
             secrets: KnownSecrets::default(),
             from_package: false,
             key: None,
+            upgraded_to_keyed: false,
         })
     }
 
@@ -311,18 +326,19 @@ impl Store {
         conn.busy_timeout(std::time::Duration::from_millis(BUSY_TIMEOUT_MS))?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
-        schema::migrate(&conn)?;
+        let added_mac = schema::migrate(&conn)?;
         Ok(Self {
             conn,
             version: schema::SCHEMA_VERSION,
             secrets: KnownSecrets::default(),
             from_package: false,
             key: None,
+            upgraded_to_keyed: added_mac,
         })
     }
 
     /// This handle, recording with the audit key and checking its MACs
-    /// (ADR-100). Without one, [`Store::record`] refuses and
+    /// (ADR-101). Without one, [`Store::record`] refuses and
     /// [`Store::verify_chain`] stops at the first keyed event.
     #[must_use]
     pub fn with_chain_key(self, key: ChainKey) -> Self {
@@ -330,6 +346,33 @@ impl Store {
             key: Some(Box::new(key)),
             ..self
         }
+    }
+
+    /// Whether this handle's own open upgraded the database from a version
+    /// before keyed events (below 12), adding the MAC column: the one moment a
+    /// writer that is not a person's `openmoat init` may make the audit key for
+    /// a log with events. A version set back by hand keeps the column, so it
+    /// does not count.
+    #[must_use]
+    pub fn upgraded_to_keyed(&self) -> bool {
+        self.upgraded_to_keyed
+    }
+
+    /// Where a key made now starts: the newest event and its chain hash, or
+    /// `(EventId(0), None)` for an empty log.
+    pub fn key_start(&self) -> Result<(EventId, Option<String>), StoreError> {
+        let newest: Option<(i64, Option<String>)> = self
+            .conn
+            .query_row(
+                &format!(
+                    "SELECT id, {} FROM events ORDER BY id DESC LIMIT 1",
+                    if self.chained() { "hash" } else { "NULL" }
+                ),
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        Ok(newest.map_or((EventId(0), None), |(id, hash)| (EventId(id), hash)))
     }
 
     /// Whether the log holds events written after it was upgraded to keyed
@@ -346,6 +389,12 @@ impl Store {
             [],
             |r| r.get(0),
         )?)
+    }
+
+    /// Whether this database keys its events: schema version 12 or later.
+    #[must_use]
+    pub fn keys_events(&self) -> bool {
+        self.keyed()
     }
 
     /// The schema has the audit key's MAC column (version 12).
@@ -433,7 +482,7 @@ impl Store {
         let rules = serde_json::to_string(&event.decision.rules)?;
         let reasons = serde_json::to_string(&reasons)?;
         // Every event from version 12 on carries the key's MAC: without the
-        // key nothing is recorded (ADR-100).
+        // key nothing is recorded (ADR-101).
         let key = self.key.as_ref().ok_or(StoreError::KeyMissing)?;
         // Reading the newest hash and appending must be one step, or two
         // concurrent `guard` processes would link to the same event and fork
@@ -449,6 +498,9 @@ impl Store {
                 after: key.after(),
             });
         }
+        // Nor on top of events before the key that were rewritten (or dropped
+        // with every keyed one after them): the start must be as it was.
+        chain::check_key_start(&tx, key)?;
         let fields = chain::Fields {
             id,
             ts_ms,
