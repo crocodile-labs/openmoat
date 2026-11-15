@@ -112,7 +112,7 @@ fn a_version_8_database_is_migrated_to_mcp_flow() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("audit.db");
     let head = {
-        let store = Store::open(&path).unwrap();
+        let store = Store::open(&path).unwrap().with_chain_key(key());
         let d = decision(Verdict::Allow, "mcp", "ok");
         store
             .record(&sample(&d, &Action::mcp("mcp__gh__get_issue")))
@@ -133,7 +133,7 @@ fn a_version_8_database_is_migrated_to_mcp_flow() {
     old.add_mcp_flow("codex", "s1", "web", &hashes(&["aa"]))
         .unwrap();
     drop(old);
-    let store = Store::open_existing(&path).unwrap();
+    let store = Store::open_existing(&path).unwrap().with_chain_key(key());
     assert_eq!(store.verify_chain().unwrap().head, head);
     store
         .add_mcp_flow("codex", "s1", "web", &hashes(&["aa"]))

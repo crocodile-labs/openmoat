@@ -135,7 +135,7 @@ fn a_version_4_database_is_migrated_to_session_writes() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("audit.db");
     let head = {
-        let store = Store::open(&path).unwrap();
+        let store = Store::open(&path).unwrap().with_chain_key(key());
         event(&store, "a");
         store.verify_chain().unwrap().head
     };
@@ -150,7 +150,7 @@ fn a_version_4_database_is_migrated_to_session_writes() {
         .unwrap();
     drop(old);
 
-    let store = Store::open(&path).unwrap();
+    let store = Store::open(&path).unwrap().with_chain_key(key());
     let report = store.verify_chain().unwrap();
     assert_eq!((report.events, report.broken, report.head), (1, None, head));
     let e = event(&store, "a");
@@ -187,7 +187,7 @@ fn a_version_6_database_is_migrated_to_keep_the_state_before_a_write() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("audit.db");
     let head = {
-        let store = Store::open(&path).unwrap();
+        let store = Store::open(&path).unwrap().with_chain_key(key());
         let e = event(&store, "a");
         store
             .add_session_writes(e, "pi", "a", &[write("/p/x.py", Some("ab"))])
@@ -206,7 +206,7 @@ fn a_version_6_database_is_migrated_to_keep_the_state_before_a_write() {
     assert_eq!((found.sha256.as_deref(), found.before), (Some("ab"), None));
     drop(old);
 
-    let store = Store::open(&path).unwrap();
+    let store = Store::open(&path).unwrap().with_chain_key(key());
     let report = store.verify_chain().unwrap();
     assert_eq!((report.events, report.broken, report.head), (1, None, head));
     assert_eq!(wrote(&store, "pi", "a", "/p/x.py").unwrap().before, None);

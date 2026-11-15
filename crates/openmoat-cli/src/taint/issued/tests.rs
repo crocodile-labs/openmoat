@@ -17,13 +17,13 @@ fn home() -> (tempfile::TempDir, Home, String) {
         "version: 1\ndefaults: {{ \"*\": allow }}\nreview:\n  - {{ id: secrets-paths, fs.read: [\"{project}/secret.txt\"] }}\n"
     );
     std::fs::write(home.policy_path(), policy).unwrap();
-    Store::open(&home.audit_path()).unwrap();
+    crate::audit_key::open(&home).unwrap();
     (dir, home, project)
 }
 
 fn record(home: &Home, session: &str, row: (&str, Option<&Action>, &str, &str)) {
     let (tool, action, rule, cwd) = row;
-    let store = Store::open_existing(&home.audit_path()).unwrap();
+    let store = crate::audit_key::open_existing(home).unwrap();
     let decision = Decision::single(Verdict::Allow, rule, "test");
     store
         .record(&NewEvent {

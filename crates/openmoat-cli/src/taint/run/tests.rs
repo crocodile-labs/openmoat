@@ -21,7 +21,7 @@ fn home() -> (tempfile::TempDir, Home) {
     let dir = tempfile::tempdir().unwrap();
     let home = Home::at(dir.path().join("state"));
     std::fs::create_dir_all(home.root()).unwrap();
-    Store::open(&home.audit_path()).unwrap();
+    crate::audit_key::open(&home).unwrap();
     (dir, home)
 }
 
@@ -59,7 +59,7 @@ fn only_a_run_session_id_is_taken_from_the_environment() {
 #[test]
 fn a_session_is_linked_to_its_run_once() {
     let (_dir, home) = home();
-    let store = Store::open_existing(&home.audit_path()).unwrap();
+    let store = crate::audit_key::open_existing(&home).unwrap();
     link(&store, "run-1", Host::ClaudeCode, "s1").unwrap();
     link(&store, "run-1", Host::ClaudeCode, "s1").unwrap();
     let rows = store.session_after("run-1", EventId(0)).unwrap();
@@ -89,7 +89,7 @@ fn the_run_is_tainted_by_its_linked_sessions_only() {
     let (_dir, home) = home();
     let policy = Policy::parse(POLICY).unwrap();
     let compiled = CompiledPolicy::compile(&policy, &ctx()).unwrap();
-    let store = Store::open_existing(&home.audit_path()).unwrap();
+    let store = crate::audit_key::open_existing(&home).unwrap();
     let lookup = RunTaint::new(
         Home::at(home.root().to_path_buf()),
         "run-1",

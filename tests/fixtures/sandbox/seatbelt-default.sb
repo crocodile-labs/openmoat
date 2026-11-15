@@ -228,6 +228,7 @@
 ; deny kernel-self (fs.read)
 (deny file-read-data file-read-xattr file-link
   (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[mM][oO][aA][tT]/[aA][uU][dD][iI][tT]\\.[dD][bB][^/]*$")
+  (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[mM][oO][aA][tT]/[aA][uU][dD][iI][tT]\\.[kK][eE][yY]$")
   (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[mM][oO][aA][tT]/[pP][oO][lL][iI][cC][yY]\\.[lL][oO][cC][kK]$")
   (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[mM][oO][aA][tT]/[hH][oO][sS][tT][sS]\\.[jJ][sS][oO][nN]$")
   (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[mM][oO][aA][tT]/[aA][pP][pP][rR][oO][vV][aA][lL][sS]\\.[jJ][sS][oO][nN]$")
@@ -242,6 +243,7 @@
   (regex "^(.*/)?\\.[mM][oO][aA][tT]/[dD][eE][lL][iI][vV][eE][rR][yY](/.*)?$")
   (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[mM][oO][aA][tT]/[rR][eE][mM][oO][tT][eE](/.*)?$")
   (regex "^(.*/)?\\.[mM][oO][aA][tT]/[aA][uU][dD][iI][tT]\\.[dD][bB][^/]*$")
+  (regex "^(.*/)?\\.[mM][oO][aA][tT]/[aA][uU][dD][iI][tT]\\.[kK][eE][yY]$")
   (regex "^(.*/)?\\.[mM][oO][aA][tT]/[pP][oO][lL][iI][cC][yY]\\.[lL][oO][cC][kK]$")
   (regex "^(.*/)?\\.[mM][oO][aA][tT]/[pP][rR][oO][xX][yY]\\.[kK][eE][yY]$")
   (regex "^(.*/)?\\.[mM][oO][aA][tT]/[pP][rR][oO][xX][yY]-[cC][aA](/.*)?$")

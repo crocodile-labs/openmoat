@@ -533,8 +533,16 @@ Credentials are redacted before anything is stored. The log is a SQLite file in
 `~/.moat`; nothing leaves your machine unless you run `openmoat audit export` or turn on
 live delivery ([DELIVERY.md](DELIVERY.md)).
 
-Someone who can write that file can delete its newest events and leave a log that
-still checks out. To catch that later, record the log's head outside it now and then:
+Each event carries a MAC made with the audit key, `~/.moat/audit.key`, which OpenMoat
+makes at `openmoat init` and keeps from agents: someone who can change the log but
+not read the key cannot rewrite events so that the log still checks out
+([ADR-100](adr/ADR-100-keyed-audit-chain.md)). Keep the key with the log: if it is
+deleted, OpenMoat records nothing more, and every call is denied, until you put it
+back or move the log aside and run `openmoat init` to start a new one. Code running
+as you outside any sandbox can read the key too, so it does not stop that.
+
+Someone who can write that file can still delete its newest events and leave a log
+that checks out. To catch that later, record the log's head outside it now and then:
 
 ```bash
 openmoat audit anchor --git ~/notes          # a commit on refs/moat/anchors there; nothing is pushed
@@ -1094,7 +1102,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat serve [--listen 127.0.0.1:<port>]` | see `status`, `show`, `report` and `why` in a browser on this machine: 127.0.0.1 only, a link with a token made for this run, read-only; person-only ([In a browser](#in-a-browser)) |
 | `openmoat replay --since today` · `openmoat report --since 7d` | per-session timeline · summary, with the sends after collecting outside the project per session and per active hour (recorded only, [POLICY.md §4.5](POLICY.md#45-staging-data-sent-after-collection-recorded)) |
 | `openmoat audit export [--since …] [--host …] [--session …]` | write events to stdout as JSON Lines with their chain hashes, for `audit verify` and `audit report` |
-| `openmoat audit verify <file> [--anchor <hash>] [--require-anchor]` | check an export without the database; print its head hash; without `--anchor` the result says "not anchored", and `--require-anchor` fails it |
+| `openmoat audit verify <file> [--anchor <hash>] [--require-anchor]` | check an export without the database; print its head hash; without `--anchor` the result says "not anchored", and `--require-anchor` fails it; on the machine whose audit key made the lines, also check each line's MAC |
 | `openmoat audit anchor --git <repo>` · `--file <path>` | record the log's head outside it: a commit on `refs/moat/anchors` in that repository, or a line appended to that file; nothing is sent anywhere (terminal only) |
 | `openmoat audit verify --against <repo or file>` | check the log against every anchor recorded there; fails, naming the first anchor whose event is gone or changed |
 | `openmoat audit report <file>…` | one report over verified exports from several machines |

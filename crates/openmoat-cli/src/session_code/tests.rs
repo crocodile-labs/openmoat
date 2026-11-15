@@ -20,7 +20,9 @@ fn fixture() -> Fixture {
     let proj = crate::context::path_string(&dir.path().canonicalize().unwrap());
     std::fs::create_dir_all(dir.path().join("state")).unwrap();
     let home = Home::at(dir.path().join("state"));
-    let store = Store::open(&dir.path().join("audit.db")).unwrap();
+    let store = Store::open(&dir.path().join("audit.db"))
+        .unwrap()
+        .with_chain_key(openmoat_audit::ChainKey::new([1; 32], EventId(0)));
     Fixture {
         _dir: dir,
         proj,

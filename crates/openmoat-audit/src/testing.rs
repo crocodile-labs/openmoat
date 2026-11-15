@@ -39,3 +39,36 @@ pub fn truncate_after(path: &Path, id: i64) -> Result<(), StoreError> {
         .map_err(StoreError::from)?;
     Ok(())
 }
+
+/// Make the log at `path` look as one written before the audit key existed
+/// (ADR-100): no event has a MAC, and version 12's mark is after the newest.
+///
+/// # Errors
+///
+/// Returns [`StoreError`] if the database cannot be opened or written.
+pub fn as_before_the_key(path: &Path) -> Result<(), StoreError> {
+    let conn = rusqlite::Connection::open(path).map_err(StoreError::from)?;
+    conn.execute_batch(
+        "UPDATE events SET mac = NULL;
+         UPDATE meta SET value = COALESCE((SELECT MAX(id) FROM events), 0)
+             WHERE key = 'unkeyed_last_id';",
+    )
+    .map_err(StoreError::from)?;
+    Ok(())
+}
+
+/// Rewrite the verdict of event `id` and recompute its hash and the hashes
+/// of every event after it, as someone who can write `audit.db` but not read
+/// the audit key would: the hash chain verifies again, the MACs do not.
+///
+/// # Errors
+///
+/// Returns [`StoreError`] if the database cannot be opened or written.
+pub fn rewrite_without_key(path: &Path, id: i64, verdict: &str) -> Result<(), StoreError> {
+    let conn = rusqlite::Connection::open(path).map_err(StoreError::from)?;
+    conn.execute(
+        "UPDATE events SET verdict = ?1 WHERE id = ?2",
+        rusqlite::params![verdict, id],
+    )?;
+    crate::store::rehash_from(&conn, id)
+}

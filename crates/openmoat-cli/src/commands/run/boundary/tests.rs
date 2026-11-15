@@ -98,7 +98,7 @@ fn home() -> (tempfile::TempDir, Home) {
     let dir = tempfile::tempdir().unwrap();
     let home = Home::at(dir.path().join("state"));
     std::fs::create_dir_all(home.root()).unwrap();
-    drop(Store::open(&home.audit_path()).unwrap());
+    drop(crate::audit_key::open(&home).unwrap());
     (dir, home)
 }
 

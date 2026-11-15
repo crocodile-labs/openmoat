@@ -71,7 +71,7 @@ pub(super) fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
     hangs::enter(Phase::Record);
     let home = Home::locate()?;
     home.require_exists()?;
-    let store = Store::open_existing(&home.audit_path())?;
+    let store = crate::audit_key::open_existing(&home)?;
     if let Some(cache) = cache {
         hangs::enter(Phase::Cache);
         // Before `with_secrets`: the cache is keyed as the unmasked reader reads it.
@@ -141,7 +141,7 @@ pub(super) fn relay_outside(host: Host, request: Option<&HookRequest>) {
     );
     let note = |home: Home| -> Result<()> {
         let store =
-            Store::open_existing(&home.audit_path())?.from_package(super::entry::from_package());
+            crate::audit_key::open_existing(&home)?.from_package(super::entry::from_package());
         store.record(&NewEvent {
             host: host.id(),
             session_id: request.map_or("unknown", |r| r.session_id.as_str()),

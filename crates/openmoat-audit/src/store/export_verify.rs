@@ -6,11 +6,19 @@
 //! the file alone cannot tell the two apart. Nothing in the file shows that its
 //! newest events were dropped; comparing against a head hash recorded elsewhere
 //! (the anchor) does.
+//!
+//! Version 2 lines also carry the audit key's MAC (ADR-100). Without the key
+//! that made them, they are checked as version 1 lines and counted in
+//! [`ExportReport::keyed_unchecked`]: the hash chain then shows that no event
+//! was edited on its own, not that the file was not rewritten as a whole, since
+//! anyone can recompute the hashes. With the key, each MAC must match, and once
+//! a line's MAC has, every later line must carry one.
 
 use serde::{Deserialize, Serialize};
 
 use super::chain::{BreakKind, GENESIS};
-use super::{EventId, ExportedEvent};
+use super::{EventId, ExportFormat, ExportedEvent};
+use crate::ChainKey;
 
 /// The first line that fails [`verify_export`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,23 +66,46 @@ pub struct ExportReport {
     pub anchor: AnchorCheck,
     /// The first broken line, if any. Lines after it are not read.
     pub broken: Option<ExportBreak>,
+    /// Events whose audit-key MAC was checked with the key and matched.
+    #[serde(default)]
+    pub keyed: u64,
+    /// Events that carry a MAC no key given here made: checked by their hash
+    /// chain only.
+    #[serde(default)]
+    pub keyed_unchecked: u64,
 }
 
 /// Verify the text of an export, oldest line first, and stop at the first broken
 /// line. Blank lines are skipped. `anchor` is a head hash recorded earlier;
 /// [`ExportReport::anchor`] says whether a verified event carries it, and is
-/// [`AnchorCheck::NotAnchored`] without one.
+/// [`AnchorCheck::NotAnchored`] without one. No MAC is checked: see
+/// [`verify_export_keyed`].
 #[must_use]
 pub fn verify_export(text: &str, anchor: Option<&str>) -> ExportReport {
+    verify_export_keyed(text, anchor, None)
+}
+
+/// [`verify_export`], also checking the MAC of every line `key` made (its
+/// `key_id` is the key's [`ChainKey::id`]).
+#[must_use]
+pub fn verify_export_keyed(
+    text: &str,
+    anchor: Option<&str>,
+    key: Option<&ChainKey>,
+) -> ExportReport {
     let mut report = ExportReport::default();
     let mut anchor_found = false;
     let mut previous: Option<ExportedEvent> = None;
+    let key = key.map(|key| (key.id(), key));
     for (index, content) in text.lines().enumerate() {
         if content.trim().is_empty() {
             continue;
         }
         let line = index + 1;
-        let Ok(event) = serde_json::from_str::<ExportedEvent>(content) else {
+        let event = serde_json::from_str::<ExportedEvent>(content)
+            .ok()
+            .filter(well_formed);
+        let Some(event) = event else {
             report.broken = Some(ExportBreak {
                 line,
                 id: None,
@@ -82,7 +113,11 @@ pub fn verify_export(text: &str, anchor: Option<&str>) -> ExportReport {
             });
             break;
         };
-        if let Some(kind) = check(&event, previous.as_ref(), &mut report) {
+        let kind = check(&event, previous.as_ref(), &mut report).or_else(|| {
+            let key = key.as_ref().map(|(id, key)| (id.as_str(), *key));
+            check_mac(&event, key, &mut report)
+        });
+        if let Some(kind) = kind {
             report.broken = Some(ExportBreak {
                 line,
                 id: Some(event.id),
@@ -90,6 +125,9 @@ pub fn verify_export(text: &str, anchor: Option<&str>) -> ExportReport {
             });
             break;
         }
+        report.events += 1;
+        report.last_id = Some(event.id);
+        report.head = Some(event.hash.clone());
         anchor_found |= anchor == Some(event.hash.as_str());
         previous = Some(event);
     }
@@ -101,7 +139,15 @@ pub fn verify_export(text: &str, anchor: Option<&str>) -> ExportReport {
     report
 }
 
-/// Check one line against the line before it; record it in `report` when it holds.
+/// A version 2 line has a MAC and a key id, a version 1 line neither.
+fn well_formed(event: &ExportedEvent) -> bool {
+    match event.format {
+        ExportFormat::V1 => event.mac.is_none() && event.key_id.is_none(),
+        ExportFormat::V2 => event.mac.is_some(),
+    }
+}
+
+/// Check one line against the line before it.
 fn check(
     event: &ExportedEvent,
     previous: Option<&ExportedEvent>,
@@ -123,8 +169,24 @@ fn check(
         }
         Some(_) => report.gaps += 1,
     }
-    report.events += 1;
-    report.last_id = Some(event.id);
-    report.head = Some(event.hash.clone());
+    None
+}
+
+/// Check one line's MAC with `key` (its id, the key) when the key made it.
+fn check_mac(
+    event: &ExportedEvent,
+    key: Option<(&str, &ChainKey)>,
+    report: &mut ExportReport,
+) -> Option<BreakKind> {
+    let ours = key.filter(|(id, _)| event.key_id.as_deref() == Some(*id));
+    match (&event.mac, ours) {
+        (Some(mac), Some((_, key))) if key.verifies(&event.hash, mac) => report.keyed += 1,
+        (Some(_), Some(_)) => return Some(BreakKind::MacMismatch),
+        (Some(_), None) => report.keyed_unchecked += 1,
+        // Once a line verified with the key, a later line without a MAC had it
+        // removed: the key's log keys every event after its first.
+        (None, _) if report.keyed > 0 => return Some(BreakKind::MacMissing),
+        (None, _) => {}
+    }
     None
 }

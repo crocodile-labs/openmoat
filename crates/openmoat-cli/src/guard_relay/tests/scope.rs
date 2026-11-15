@@ -2,7 +2,7 @@
 //! own sessions. Every process in the sandbox holds the token, so a script
 //! could otherwise send calls under any host and any session.
 
-use openmoat_audit::{NewEvent, Store};
+use openmoat_audit::NewEvent;
 use openmoat_core::rule_id::{RUN_GUARD_HOST, RUN_GUARD_SESSION};
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::Host;
@@ -58,7 +58,7 @@ fn run_rules(home: &Home) -> Vec<String> {
 
 /// A row an earlier hook outside the run left for `host` in `session`.
 fn seen_outside(home: &Home, host: Host, session: &str) {
-    let store = Store::open_existing(&home.audit_path()).unwrap();
+    let store = crate::audit_key::open_existing(home).unwrap();
     let decision = Decision::single(Verdict::Allow, "dev-shell", "outside");
     store
         .record(&NewEvent {

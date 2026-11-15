@@ -49,6 +49,10 @@ sent anywhere.
   openmoat audit verify window.jsonl --anchor <the hash from the report>
   ```
 
+  On the reviewer's machine that checks the hash chain and the anchor; each event's
+  audit-key MAC ([ADR-100](adr/ADR-100-keyed-audit-chain.md)) can be checked only on
+  the machine that holds the key, where the same command checks it too.
+
 - **The policy, lock and protections at the time of the report**: the policy file's
   SHA-256 and whether it is the default policy this build ships; the lock's pinned files,
   any drift and when it was last pinned (flagged when that is after the window started);

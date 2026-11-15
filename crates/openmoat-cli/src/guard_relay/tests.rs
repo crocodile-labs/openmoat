@@ -10,7 +10,6 @@ use std::time::Instant;
 
 use openmoat_core::rule_id::RUN_GUARD_TOKEN;
 
-use openmoat_audit::Store;
 use openmoat_hosts::Host;
 use openmoat_proxy::coalesce::INTERVAL;
 
@@ -254,7 +253,7 @@ fn service_for(code: i32, agent: Option<Host>) -> (tempfile::TempDir, Home, Serv
     let dir = tempfile::tempdir().unwrap();
     let home = Home::at(dir.path().join("state"));
     std::fs::create_dir_all(home.root()).unwrap();
-    Store::open(&home.audit_path()).unwrap();
+    crate::audit_key::open(&home).unwrap();
     let moat = dir.path().join("moat");
     let script = format!(
         "#!/bin/sh\necho \"args=$*\"\necho \"run=$MOAT_RUN_SESSION socket=${{MOAT_GUARD_SOCKET-unset}}\"\n\

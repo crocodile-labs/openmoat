@@ -102,10 +102,14 @@ fn planted_secrets_never_reach_the_audit_log_or_an_export() {
     }
 
     let events = u64::try_from(calls.len() + requests.len()).unwrap();
-    let store = openmoat_audit::Store::open_read_only(&sb.home.join(".moat/audit.db")).unwrap();
+    let key = std::fs::read_to_string(sb.home.join(".moat/audit.key")).unwrap();
+    let store = openmoat_audit::Store::open_read_only(&sb.home.join(".moat/audit.db"))
+        .unwrap()
+        .with_chain_key(openmoat_audit::ChainKey::parse(&key).unwrap());
     let chain = store.verify_chain().unwrap();
     assert!(chain.broken.is_none(), "{:?}", chain.broken);
     assert_eq!(chain.events, events);
+    assert_eq!(chain.keyed, events);
     let exported = openmoat_audit::verify_export(&export, None);
     assert!(exported.broken.is_none(), "{:?}", exported.broken);
     assert_eq!(exported.events, events);

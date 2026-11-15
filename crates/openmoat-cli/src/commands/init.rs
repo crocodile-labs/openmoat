@@ -9,7 +9,6 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
-use openmoat_audit::Store;
 use openmoat_core::rule_id::KERNEL_INTEGRITY;
 use openmoat_core::{DEFAULT_POLICY, Policy};
 use openmoat_hosts::Host;
@@ -332,7 +331,8 @@ fn state(
     }
 
     if !dry_run {
-        Store::open(&home.audit_path())?;
+        // The log and its key (ADR-100), so the first call is keyed.
+        crate::audit_key::open(home)?;
     }
     writeln!(
         out,

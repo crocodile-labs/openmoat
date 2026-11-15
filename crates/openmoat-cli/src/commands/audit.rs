@@ -45,7 +45,12 @@ pub fn verify(args: &VerifyArgs) -> Result<Code> {
     let text =
         std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
     let anchor = args.anchor.as_deref().map(str::trim);
-    let report = openmoat_audit::verify_export(&text, anchor);
+    // This machine's audit key, when there is one it can use, checks the MACs
+    // of the lines it made (ADR-100); elsewhere the hash chain is checked alone.
+    let key = Home::locate()
+        .ok()
+        .and_then(|home| crate::audit_key::read(&home).ok().flatten());
+    let report = openmoat_audit::verify_export_keyed(&text, anchor, key.as_ref());
     match args.format {
         Format::Json => render::json(&report)?,
         Format::Text => verify_text(&report, args.require_anchor)?,
@@ -71,7 +76,7 @@ fn verify_text(report: &ExportReport, require_anchor: bool) -> Result<()> {
             .unwrap_or_default();
         let why = match broken.id {
             Some(_) => broken.kind.describe(),
-            None => "not a moat-audit-export-v1 event line",
+            None => "not a moat-audit-export-v1 or -v2 event line",
         };
         writeln!(out, "✗ line {}{event}: {why}", broken.line)?;
         writeln!(out, "   {} lines before it verified", report.events)?;
@@ -102,6 +107,22 @@ fn verify_text(report: &ExportReport, require_anchor: bool) -> Result<()> {
             out,
             "   {} gaps in ids: a filtered export, or events deleted from the log",
             report.gaps
+        )?;
+    }
+    if report.keyed > 0 {
+        writeln!(
+            out,
+            "✔ {} events carry this machine's audit-key MAC, and each matches",
+            report.keyed
+        )?;
+    }
+    if report.keyed_unchecked > 0 {
+        writeln!(
+            out,
+            "   {} events carry an audit-key MAC that was not checked: no key here made it. \
+             Their hash chain shows no event was edited on its own, not that the file was not \
+             rewritten as a whole; verify on the machine that wrote them",
+            report.keyed_unchecked
         )?;
     }
     writeln!(out, "head {head}")?;

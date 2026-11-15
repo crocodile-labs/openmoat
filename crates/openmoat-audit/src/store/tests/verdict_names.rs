@@ -43,8 +43,10 @@ fn put_back_version_7_with_an_ask_row(path: &std::path::Path, head: &str) {
              verdict TEXT NOT NULL CHECK (verdict IN ('allow','defer','ask','deny')),
              rules TEXT NOT NULL, reasons TEXT NOT NULL, latency_us INTEGER NOT NULL,
              prev_hash TEXT, hash TEXT);
-         INSERT INTO events SELECT * FROM events_new;
+         INSERT INTO events SELECT id, ts_ms, host, session_id, call_id, cwd, tool, action,
+             verdict, rules, reasons, latency_us, prev_hash, hash FROM events_new;
          DROP TABLE events_new;
+         DELETE FROM meta WHERE key = 'unkeyed_last_id';
          DROP TABLE mcp_tickets;
          CREATE TABLE mcp_tickets (
              id INTEGER PRIMARY KEY, event_id INTEGER NOT NULL, ts_ms INTEGER NOT NULL,
@@ -106,13 +108,13 @@ fn an_old_ask_row_reads_as_review_and_the_chain_still_verifies() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("audit.db");
     let head = {
-        let store = Store::open(&path).unwrap();
+        let store = Store::open(&path).unwrap().with_chain_key(key());
         record(&store, Verdict::Allow, "git status");
         store.verify_chain().unwrap().head.unwrap()
     };
     put_back_version_7_with_an_ask_row(&path, &head);
 
-    let store = Store::open(&path).unwrap();
+    let store = upgraded(Store::open(&path).unwrap());
     let report = store.verify_chain().unwrap();
     assert_eq!((report.events, report.broken), (2, None));
     assert_eq!(

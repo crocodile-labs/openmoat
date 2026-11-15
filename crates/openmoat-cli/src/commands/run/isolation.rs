@@ -10,7 +10,7 @@
 //! could not isolate. A row that cannot be written stops the run.
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_audit::{NewEvent, Store};
+use openmoat_audit::NewEvent;
 use openmoat_core::rule_id::{RUN_ISOLATION_UNAVAILABLE, RUN_NO_ISOLATE, RUN_PROJECT_TOP_OPEN};
 use openmoat_core::{Decision, Verdict};
 
@@ -215,7 +215,7 @@ pub(super) fn write_row(
     reason: String,
 ) -> Result<()> {
     let decision = Decision::single(verdict, rule, reason);
-    let store = Store::open_existing(&home.audit_path())
+    let store = crate::audit_key::open_existing(home)
         .context("opening the audit log to record the run's sandbox")?;
     store.record(&NewEvent {
         host: LINK_HOST,

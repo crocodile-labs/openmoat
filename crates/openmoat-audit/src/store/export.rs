@@ -7,13 +7,17 @@
 //! (key order, escapes) could change it. Every cell is already redacted, because
 //! nothing unredacted is ever stored, and an export adds nothing the store does
 //! not hold.
+//!
+//! An event with an audit-key MAC (ADR-100) is a version 2 line: it adds `mac`
+//! and the id of the key that made it, never the key. Anyone can still check
+//! the hash chain; only the key's holder can check the MACs.
 
 use openmoat_core::{Action, Verdict};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 
-use super::chain::{Fields, ROWS, Row, read_row};
+use super::chain::{Fields, Row, read_row};
 use super::{Event, EventId, Store, StoreError};
 
 /// Which events [`Store::export`] writes. Conditions combine with AND.
@@ -30,9 +34,15 @@ pub struct ExportFilter<'a> {
 /// Version of the export line format, the `format` field of every line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExportFormat {
-    /// Chain encoding v1 (`moat-audit-chain-v1`) over the fields below.
+    /// Chain encoding v1 (`moat-audit-chain-v1`) over the fields below, for an
+    /// event without an audit-key MAC.
     #[serde(rename = "moat-audit-export-v1")]
     V1,
+    /// V1 and the event's audit-key MAC with the key's id (`mac`, `key_id`,
+    /// ADR-100). The chain hash is the same; only the key's holder can check
+    /// the MAC.
+    #[serde(rename = "moat-audit-export-v2")]
+    V2,
 }
 
 /// One exported event. A field this struct does not name makes the line
@@ -70,13 +80,27 @@ pub struct ExportedEvent {
     pub prev_hash: String,
     /// This event's chain hash.
     pub hash: String,
+    /// The audit key's MAC of `hash` (format v2 only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mac: Option<String>,
+    /// The id of the audit key that made `mac` ([`crate::ChainKey::id`]);
+    /// `None` when the exporting handle held no key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_id: Option<String>,
 }
 
 impl ExportedEvent {
-    fn from_row(row: Row) -> Result<Self, StoreError> {
+    fn from_row(row: Row, key_id: Option<&str>) -> Result<Self, StoreError> {
         let [host, session_id, tool, action, verdict, rules, reasons] = row.cells;
+        let format = if row.mac.is_some() {
+            ExportFormat::V2
+        } else {
+            ExportFormat::V1
+        };
         Ok(Self {
-            format: ExportFormat::V1,
+            key_id: row.mac.as_ref().and(key_id.map(str::to_owned)),
+            mac: row.mac,
+            format,
             id: EventId(row.id),
             ts_ms: row.ts_ms,
             host,
@@ -158,14 +182,17 @@ impl Store {
             return Ok(Vec::new());
         }
         let mut stmt = self.conn.prepare(&format!(
-            "{ROWS} WHERE hash IS NOT NULL AND prev_hash IS NOT NULL AND ts_ms >= ?1
-             AND (?2 IS NULL OR host = ?2) AND (?3 IS NULL OR session_id = ?3) ORDER BY id"
+            "{} WHERE hash IS NOT NULL AND prev_hash IS NOT NULL AND ts_ms >= ?1
+             AND (?2 IS NULL OR host = ?2) AND (?3 IS NULL OR session_id = ?3) ORDER BY id",
+            self.rows()
         ))?;
         let rows = stmt.query_map(
             params![filter.since_ms, filter.host, filter.session_id],
             read_row,
         )?;
-        rows.map(|row| ExportedEvent::from_row(row?)).collect()
+        let key_id = self.chain_key().map(crate::ChainKey::id);
+        rows.map(|row| ExportedEvent::from_row(row?, key_id.as_deref()))
+            .collect()
     }
 
     /// At most `limit` chained events after `after`, oldest first, in export
@@ -180,11 +207,14 @@ impl Store {
         }
         let limit = i64::try_from(limit).unwrap_or(i64::MAX);
         let mut stmt = self.conn.prepare(&format!(
-            "{ROWS} WHERE hash IS NOT NULL AND prev_hash IS NOT NULL AND id > ?1
-             ORDER BY id LIMIT ?2"
+            "{} WHERE hash IS NOT NULL AND prev_hash IS NOT NULL AND id > ?1
+             ORDER BY id LIMIT ?2",
+            self.rows()
         ))?;
         let rows = stmt.query_map(params![after.0, limit], read_row)?;
-        rows.map(|row| ExportedEvent::from_row(row?)).collect()
+        let key_id = self.chain_key().map(crate::ChainKey::id);
+        rows.map(|row| ExportedEvent::from_row(row?, key_id.as_deref()))
+            .collect()
     }
 
     /// How many events have an id after `after` and at most `upto`.

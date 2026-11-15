@@ -53,7 +53,12 @@ fn run(scenario: &Scenario, sandboxed: bool) -> Vec<String> {
     let dir = tempfile::tempdir().unwrap();
     let proj = crate::context::path_string(&dir.path().canonicalize().unwrap()) + "/proj";
     let home = Home::at(dir.path().join("state"));
-    let store = Store::open(&dir.path().join("audit.db")).unwrap();
+    let store = Store::open(&dir.path().join("audit.db"))
+        .unwrap()
+        .with_chain_key(openmoat_audit::ChainKey::new(
+            [1; 32],
+            openmoat_audit::EventId(0),
+        ));
     let policy = Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
     let ctx = EvalContext {
         home: HOME.to_owned(),

@@ -297,8 +297,8 @@ fn parse_listing(text: &str) -> Result<Vec<Listed>> {
 /// the snapshot or restore itself stands.
 pub fn record(home: &Home, session: &str, tool: &str, rule: &str, reason: String) {
     let decision = openmoat_core::Decision::single(openmoat_core::Verdict::Allow, rule, reason);
-    let written = openmoat_audit::Store::open_existing(&home.audit_path()).and_then(|store| {
-        store.record(&openmoat_audit::NewEvent {
+    let written = crate::audit_key::open_existing(home).and_then(|store| {
+        Ok(store.record(&openmoat_audit::NewEvent {
             host: "openmoat",
             session_id: session,
             call_id: None,
@@ -307,9 +307,9 @@ pub fn record(home: &Home, session: &str, tool: &str, rule: &str, reason: String
             action: None,
             decision: &decision,
             latency_us: 0,
-        })
+        })?)
     });
     if let Err(error) = written {
-        eprintln!("openmoat: the audit log did not record the {tool}: {error}");
+        eprintln!("openmoat: the audit log did not record the {tool}: {error:#}");
     }
 }

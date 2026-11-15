@@ -313,7 +313,7 @@ impl Gateway {
 
     /// The audit log.
     fn store(&self) -> Result<Store> {
-        Store::open_existing(&self.home.audit_path()).context("audit log unavailable")
+        crate::audit_key::open_existing(&self.home).context("audit log unavailable")
     }
 
     /// Record `outcome`, masking the secrets its policy names as the hook's

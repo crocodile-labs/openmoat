@@ -324,6 +324,9 @@ deny:
     # moat's own commands read these as the person, outside any sandbox
     fs.read:
       - "~/.moat/audit.db*"
+      # the audit key (ADR-100): with it a process that can write the audit log
+      # rewrites it so that it still verifies
+      - "~/.moat/audit.key"
       - "~/.moat/policy.lock"
       - "~/.moat/hosts.json"
       - "~/.moat/approvals.json"
@@ -348,6 +351,7 @@ deny:
       # request, answer and approver list is signed with
       - "~/.moat/remote/**"
       - "**/.moat/audit.db*"
+      - "**/.moat/audit.key"
       - "**/.moat/policy.lock"
       - "**/.moat/proxy.key"
       - "**/.moat/proxy-ca/**"

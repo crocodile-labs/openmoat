@@ -394,10 +394,7 @@ impl Exit {
             writable: &writable,
         };
         let (broker, refresher) = secrets::broker(&user, &place)?;
-        let audit_path = home.audit_path();
-        let store = Store::open_existing(&audit_path)
-            .with_context(|| format!("opening {}", audit_path.display()))?
-            .with_secrets(refresher.known()?);
+        let store = crate::audit_key::open_existing(home)?.with_secrets(refresher.known()?);
         let masks = refresher.masks();
         let session = credential.as_ref().map_or_else(
             || format!("proxy-{}", crate::time::now_ms()),

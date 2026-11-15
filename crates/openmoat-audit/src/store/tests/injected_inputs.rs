@@ -121,7 +121,7 @@ fn migrated_from(version: i64, tables_removed: &str) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("audit.db");
     let head = {
-        let store = Store::open(&path).unwrap();
+        let store = Store::open(&path).unwrap().with_chain_key(key());
         let d = decision(Verdict::Allow, "dev-shell", "ok");
         let action = Action::Shell {
             command: "git status".into(),
@@ -145,7 +145,7 @@ fn migrated_from(version: i64, tables_removed: &str) {
     );
     drop(old);
 
-    let store = Store::open(&path).unwrap();
+    let store = Store::open(&path).unwrap().with_chain_key(key());
     let report = store.verify_chain().unwrap();
     assert_eq!((report.events, report.broken, report.head), (1, None, head));
     store

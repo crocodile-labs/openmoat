@@ -274,8 +274,16 @@ impl Home {
             ),
             _ => bail!("no audit log at {}; run `openmoat init`", path.display()),
         }
-        openmoat_audit::Store::open_read_only(&path)
-            .with_context(|| format!("opening {}", path.display()))
+        let store = openmoat_audit::Store::open_read_only(&path)
+            .with_context(|| format!("opening {}", path.display()))?;
+        // With the audit key when it can be used (ADR-100). Without it the log
+        // still reads, and `verify_chain` stops at its first keyed event, so
+        // nothing vouches for what the key would have checked;
+        // `openmoat doctor` says why the key could not be used.
+        Ok(match crate::audit_key::read(self) {
+            Ok(Some(key)) => store.with_chain_key(key),
+            Ok(None) | Err(_) => store,
+        })
     }
 
     /// Create empty approval files so the lock covers them from the first run.

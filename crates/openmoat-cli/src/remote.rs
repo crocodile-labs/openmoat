@@ -110,7 +110,7 @@ pub struct AuditRecords<'a> {
 
 impl Records for AuditRecords<'_> {
     fn record(&mut self, row: Row) -> Result<()> {
-        let store = openmoat_audit::Store::open_existing(&self.home.audit_path())?;
+        let store = crate::audit_key::open_existing(self.home)?;
         let decision = Decision::single(row.verdict, row.rule, openmoat_audit::redact(&row.reason));
         store.record(&NewEvent {
             host: &row.host,

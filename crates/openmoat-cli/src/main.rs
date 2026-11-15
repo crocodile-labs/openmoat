@@ -6,6 +6,7 @@
 
 mod anchor;
 mod approvals;
+mod audit_key;
 mod cli;
 mod commands;
 mod compliance;

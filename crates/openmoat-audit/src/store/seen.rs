@@ -90,7 +90,9 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("audit.db");
         {
-            let store = Store::open(&path).unwrap();
+            let store = Store::open(&path)
+                .unwrap()
+                .with_chain_key(crate::ChainKey::new([9; 32], crate::EventId(0)));
             let decision = Decision::new(Verdict::Allow);
             store.record_at(&event("host-a", &decision), 100).unwrap();
         }

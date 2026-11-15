@@ -65,8 +65,7 @@ pub fn run(
     budget: Duration,
 ) -> Result<Vec<SinkRun>> {
     let started = Instant::now();
-    let store = Store::open_existing(&home.audit_path())
-        .with_context(|| format!("opening {}", home.audit_path().display()))?;
+    let store = crate::audit_key::open_existing(home)?;
     let user_home = crate::home::user_home()?.to_string_lossy().into_owned();
     // Fail closed: without the policy's secrets the bodies cannot be masked.
     let policy = home.load_policy()?;

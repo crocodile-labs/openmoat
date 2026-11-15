@@ -11,6 +11,7 @@ fn every_file_that_decides_or_records_a_call_is_listed() {
         home.grants_path(),
         home.overlay_path(),
         home.audit_path(),
+        crate::audit_key::path(&home),
         crate::proxy_session::key_path(&home),
         crate::proxy_ca::key_path(&home),
     ] {

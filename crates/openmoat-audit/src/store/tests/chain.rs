@@ -221,7 +221,7 @@ fn a_version_1_database_is_migrated_without_vouching_for_old_rows() {
     assert_eq!((report.events, report.unchained), (2, 2));
     drop(old);
 
-    let store = Store::open(&path).unwrap();
+    let store = upgraded(Store::open(&path).unwrap());
     let id = record(&store, "git status");
     assert_eq!(id, EventId(3));
     let event = store.get(id).unwrap().unwrap();
@@ -237,6 +237,7 @@ fn a_version_1_database_is_migrated_without_vouching_for_old_rows() {
     assert!(
         Store::open(&path)
             .unwrap()
+            .with_chain_key(ChainKey::new([9; 32], EventId(2)))
             .verify_chain()
             .unwrap()
             .broken
@@ -255,7 +256,7 @@ fn concurrent_writers_build_one_chain() {
         .map(|t| {
             let path = path.clone();
             std::thread::spawn(move || {
-                let store = Store::open_existing(&path).unwrap();
+                let store = Store::open_existing(&path).unwrap().with_chain_key(key());
                 for i in 0..EACH {
                     record(&store, &format!("echo {t}-{i}"));
                 }
@@ -267,9 +268,11 @@ fn concurrent_writers_build_one_chain() {
     }
     let report = Store::open_read_only(&path)
         .unwrap()
+        .with_chain_key(key())
         .verify_chain()
         .unwrap();
     assert_eq!(report.events, (THREADS * EACH) as u64);
+    assert_eq!(report.keyed, report.events);
     assert_eq!(report.broken, None);
 }
 
@@ -280,7 +283,7 @@ fn a_version_2_database_is_migrated_with_its_chain_intact() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("audit.db");
     let head = {
-        let store = Store::open(&path).unwrap();
+        let store = Store::open(&path).unwrap().with_chain_key(key());
         record(&store, "git status");
         record(&store, "git log");
         store.verify_chain().unwrap().head
@@ -297,7 +300,8 @@ fn a_version_2_database_is_migrated_with_its_chain_intact() {
                  verdict TEXT NOT NULL CHECK (verdict IN ('allow','ask','deny')),
                  rules TEXT NOT NULL, reasons TEXT NOT NULL, latency_us INTEGER NOT NULL,
                  prev_hash TEXT, hash TEXT);
-             INSERT INTO events SELECT * FROM events_new;
+             INSERT INTO events SELECT id, ts_ms, host, session_id, call_id, cwd, tool, action,
+                 verdict, rules, reasons, latency_us, prev_hash, hash FROM events_new;
              DROP TABLE events_new;
              PRAGMA user_version = 2;",
         )
@@ -310,7 +314,7 @@ fn a_version_2_database_is_migrated_with_its_chain_intact() {
         assert!(refused.is_err(), "the version-2 check refuses `defer`");
     }
 
-    let store = Store::open(&path).unwrap();
+    let store = upgraded(Store::open(&path).unwrap());
     let report = store.verify_chain().unwrap();
     assert_eq!((report.events, report.broken, report.head), (2, None, head));
     let mut decision = Decision::new(Verdict::Defer);

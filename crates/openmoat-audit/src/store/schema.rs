@@ -5,7 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, 
 use super::StoreError;
 
 /// Schema version this build writes, kept in `PRAGMA user_version`.
-pub(super) const SCHEMA_VERSION: i64 = 11;
+pub(super) const SCHEMA_VERSION: i64 = 12;
 
 /// The first version with the hash chain ([`V2`]).
 pub(super) const CHAIN_VERSION: i64 = 2;
@@ -26,6 +26,8 @@ pub(super) const INJECTED_INPUTS_VERSION: i64 = 10;
 /// The first version that marks the events a package from an agent's own
 /// plugin channel decided ([`V11`]).
 pub(super) const PACKAGE_EVENTS_VERSION: i64 = 11;
+/// The first version whose events carry the audit key's MAC ([`V12`]).
+pub(super) const KEYED_VERSION: i64 = 12;
 
 /// Version 1: the events table.
 const V1: &str = "
@@ -286,6 +288,31 @@ CREATE TABLE IF NOT EXISTS package_events (
 );
 ";
 
+/// Version 12: the audit key's MAC of each event (ADR-100, `key.rs`). Rows
+/// already present get none: a MAC made now would vouch for whatever they hold
+/// today, as [`V2`] says of hashes. They keep verifying under the unkeyed chain,
+/// and `unkeyed_last_id` records where they end, for a reader without the key;
+/// the key file keeps its own copy, which is the one that counts. Adding a
+/// column copies no row. Added only when it is not there yet, as for [`V7`].
+const V12: &str = "
+ALTER TABLE events ADD COLUMN mac TEXT;
+";
+
+/// Version 12's mark of where the unkeyed events end, as [`V12`] says, and the
+/// trigger that refuses an event past it without a MAC. A process of an older
+/// build that opened the log before the upgrade (a long-running `openmoat
+/// proxy` or `openmoat mcp proxy`) still holds its handle and would append
+/// events without one; refused, it fails closed as on any audit error, rather
+/// than leaving rows the next verification reports as rewritten.
+const V12_MARK: &str = "
+INSERT OR REPLACE INTO meta (key, value)
+    VALUES ('unkeyed_last_id', COALESCE((SELECT MAX(id) FROM events), 0));
+CREATE TRIGGER IF NOT EXISTS events_keyed BEFORE INSERT ON events
+    WHEN NEW.mac IS NULL
+     AND NEW.id > COALESCE((SELECT value FROM meta WHERE key = 'unkeyed_last_id'), 0)
+    BEGIN SELECT RAISE(ABORT, 'an audit event needs the audit key''s MAC (ADR-100): restart this OpenMoat process'); END;
+";
+
 /// A `CHECK` of one table that a step widens: `from` becomes `to`, which
 /// accepts every value `from` accepts, and more.
 struct Widening {
@@ -430,6 +457,12 @@ pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
     }
     if found < PACKAGE_EVENTS_VERSION {
         tx.execute_batch(V11)?;
+    }
+    if found < KEYED_VERSION {
+        if !has_column(&tx, "events", "mac")? {
+            tx.execute_batch(V12)?;
+        }
+        tx.execute_batch(V12_MARK)?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;

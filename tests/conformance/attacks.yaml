@@ -873,6 +873,33 @@
   threat: T9
   action: { shell: "sqlite3 -readonly ~/.moat/audit.db 'select count(*) from events'" }
   expect: { verdict: deny, rules: [kernel-self] }
+# The audit key (ADR-100): with it, whoever can write the audit log rewrites it so
+# that it still verifies
+- id: T9-read-audit-key
+  threat: T9
+  action: { fs_read: "~/.moat/audit.key" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-cat-audit-key
+  threat: T9
+  action: { shell: "cat ~/.moat/audit.key" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-copy-audit-key-out
+  threat: T9
+  action: { shell: "cp ~/.moat/audit.key ./k" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-read-moved-audit-key
+  threat: T9
+  context: { cwd: /p, project: /p, moved_dirs: { "~/.moat": /srv/moat } }
+  action: { fs_read: "/srv/moat/audit.key" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-read-audit-key-of-another-state-dir
+  threat: T9
+  action: { shell: "cat /srv/agent/.moat/audit.key" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-replace-audit-key
+  threat: T9
+  action: { fs_write: "~/.moat/audit.key" }
+  expect: { verdict: deny, rules: [kernel-self] }
 # The proxy's session key (ADR-044): a credential made with it passes for any
 # session, so a session that read a secret could send as a clean one
 - id: T9-read-proxy-session-key

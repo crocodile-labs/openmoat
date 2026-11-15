@@ -1,10 +1,11 @@
 # openmoat-audit
 
-The append-only local audit log: one SQLite database in WAL mode with a busy timeout, safe for several concurrent `guard` processes; queries and export; `redact()`; the SHA-256 hash chain over events (`store/chain.rs`, encoding in docs/ARCHITECTURE.md §7) that `Store::verify_chain` and `openmoat doctor` check. Root rules: [AGENTS.md](../../AGENTS.md).
+The append-only local audit log: one SQLite database in WAL mode with a busy timeout, safe for several concurrent `guard` processes; queries and export; `redact()`; the SHA-256 hash chain over events (`store/chain.rs`, encoding in docs/ARCHITECTURE.md §7) and each event's audit-key MAC of its hash (`key.rs`, ADR-100) that `Store::verify_chain` and `openmoat doctor` check. Root rules: [AGENTS.md](../../AGENTS.md).
 
 ## Rules
 - No secrets in the log (invariant 6): every stored command and reason passes `redact()` first. Never log a secret, not even in an error.
 - Append-only: no update or delete of stored events; the chain must verify after every write path.
+- Every event is recorded with the audit key's MAC: `Store::record` refuses without the key (ADR-100), never writes an event without one. The key file's I/O is the CLI's (`audit_key.rs`); this crate only encodes, parses and computes.
 - A schema change bumps `SCHEMA_VERSION` in `store/schema.rs`, adds a migration step, keeps `Event` deserialisation backward compatible, and adds a test that opens a database written by the previous version.
 - Typed `thiserror` errors; no printing (`print_stdout`/`print_stderr` are denied in `lib.rs`); every public item has a doc comment.
 - Test-only tampering helpers stay behind the `test-support` feature.

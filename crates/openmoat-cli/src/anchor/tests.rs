@@ -22,6 +22,8 @@ fn intact() -> ChainReport {
         unchained: 0,
         head: Some("e".into()),
         broken: None,
+        keyed: 5,
+        keyed_after: Some(EventId(0)),
     }
 }
 

@@ -172,7 +172,7 @@ fn a_version_3_database_is_migrated_to_provenance() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("audit.db");
     let head = {
-        let store = Store::open(&path).unwrap();
+        let store = Store::open(&path).unwrap().with_chain_key(key());
         event(&store, "a");
         store.verify_chain().unwrap().head
     };
@@ -190,7 +190,7 @@ fn a_version_3_database_is_migrated_to_provenance() {
     assert_eq!(old.exposure("a", "claude-code").unwrap(), None);
     drop(old);
 
-    let store = Store::open(&path).unwrap();
+    let store = Store::open(&path).unwrap().with_chain_key(key());
     let report = store.verify_chain().unwrap();
     assert_eq!((report.events, report.broken, report.head), (1, None, head));
     let b = event(&store, "b");

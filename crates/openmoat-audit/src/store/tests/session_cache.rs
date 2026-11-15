@@ -155,7 +155,7 @@ fn a_session_keeps_a_bounded_number_of_rows() {
 fn a_cache_write_is_skipped_not_blocked_while_another_connection_writes() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("audit.db");
-    let store = Store::open(&path).unwrap();
+    let store = Store::open(&path).unwrap().with_chain_key(key());
     let cached = |upto, state: &str| Cached {
         digest: "d1".into(),
         upto: EventId(upto),

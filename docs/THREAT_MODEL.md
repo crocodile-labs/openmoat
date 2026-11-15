@@ -1531,11 +1531,23 @@ something OpenMoat claims to stop.
 
 - **The audit chain is tamper-evident, not tamper-proof.** The hash chain
   ([ARCHITECTURE.md](ARCHITECTURE.md) §7) makes an edit, a deletion or a reordering in the middle of the
-  log visible to `openmoat doctor`. It is unkeyed and lives in the file it protects, so
-  whoever can write `~/.moat/audit.db` (the user's account, or an allowed command
-  running as the user, see "Outside the sandboxes") can delete the newest events and leave a
-  valid shorter chain (an agent's `sqlite3 ~/.moat/audit.db …` is a write that
-  `kernel-self` denies), or rewrite events and recompute every hash after them. Keeping
+  log visible to `openmoat doctor`. Since audit schema 12 each event also carries the
+  MAC of its hash under the audit key, `~/.moat/audit.key` (ADR-100), so someone who can
+  write `~/.moat/audit.db` but cannot read the key (a copy of the file, a backup, a
+  bundle, a process or sandbox granted the database and not the key) can no longer
+  rewrite events and recompute the hashes after them: the MACs stop matching. That is
+  all the key adds. It is a file beside the log, owner-only and denied to agents by
+  `kernel-self` and the sandboxes, not a secret in hardware or the OS keychain, so code
+  running as the user outside any sandbox (the user's account, or an allowed command,
+  see "Outside the sandboxes") reads it as easily as it writes the log, and can rewrite
+  the log, MACs and all, or replace the key and the log together. Events written before
+  the key verify by their hashes only. A deleted key stops the log taking events (every
+  call is denied for an audit error) until a person puts it back or starts a new log;
+  that is the price of not writing events no key covers. Whoever can write the
+  database can still delete the newest events and leave a valid shorter chain (an
+  agent's `sqlite3 ~/.moat/audit.db …` is a write that `kernel-self` denies), and only
+  an anchor shows that; the key file records the newest event when it was made, so a
+  log cut below that point is refused, nothing later. Keeping
   the head hash or count elsewhere on the same machine would need a second write on
   every `guard` call and could be rewritten by the same attacker, so it is not done.
   Anchoring the head off the machine is left to the person (ADR-031): `openmoat audit
@@ -1547,8 +1559,8 @@ something OpenMoat claims to stop.
   attacker, and OpenMoat sends nothing anywhere itself. Events after the newest anchor
   are not covered, and nor are events written before audit schema 2. `openmoat audit
   verify --anchor` checks an export against a recorded head the same way.
-- **Reading OpenMoat's state.** `kernel-self` denies the agent reads of the audit log,
-  the lock, `hosts.json`, the approvals, the trust records and the MCP pins, and the host
+- **Reading OpenMoat's state.** `kernel-self` denies the agent reads of the audit log
+  and its key, the lock, `hosts.json`, the approvals, the trust records and the MCP pins, and the host
   sandboxes and `openmoat run` carry those denies. Landlock (`openmoat run` on Linux) only
   grants and cannot deny inside a granted tree, so there `openmoat run` refuses to start
   when a tree it grants (the project, a read root, a `--write` path,
@@ -1580,9 +1592,13 @@ something OpenMoat claims to stop.
   catches those: a recorded hash that the export must contain. Without `--anchor`,
   `openmoat audit verify` reports the export as not anchored, and `--require-anchor`
   makes that a failure for scripts. The anchor does not
-  cover events after it. Anyone who can write the database can recompute every hash
-  before exporting (the chain is unkeyed), so an export is evidence about the log
-  as it was at export time, no more. Exported cells are the redacted store cells.
+  cover events after it. Anyone can recompute every hash of an export, so off the
+  machine whose audit key made its MACs (ADR-100) a verified export is evidence that
+  the lines are consistent, not that nobody rewrote them, and it is evidence about the
+  log as it was at export time, no more. On that machine `openmoat audit verify` also
+  checks each line's MAC: a line rewritten by someone without the key fails, though a
+  line whose MAC and key id were removed before any line that verifies is read as a
+  line from before the key. Exported cells are the redacted store cells.
   A secret shape that redaction learned after an event was recorded stays in that
   event.
 - **What the push check sees.** It looks for token formats with a vendor prefix and

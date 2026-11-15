@@ -46,7 +46,7 @@ pub const ALLOWED_IN_SHARED_TESTS: &[(&str, usize)] = &[
     ("allow_files.rs", 13),
     ("anchor.rs", 4),
     ("approvals.rs", 9),
-    ("audit.rs", 3),
+    ("audit.rs", 2),
     ("binary_path.rs", 9),
     ("blocks.rs", 14),
     ("canary.rs", 1),

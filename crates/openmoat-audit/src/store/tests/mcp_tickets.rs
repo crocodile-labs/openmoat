@@ -122,7 +122,7 @@ fn a_version_5_database_is_migrated_to_mcp_decisions() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("audit.db");
     let head = {
-        let store = Store::open(&path).unwrap();
+        let store = Store::open(&path).unwrap().with_chain_key(key());
         event(&store, "a");
         store.verify_chain().unwrap().head
     };
@@ -134,7 +134,7 @@ fn a_version_5_database_is_migrated_to_mcp_decisions() {
     let old = Store::open_read_only(&path).unwrap();
     assert_eq!(old.take_mcp_ticket("aa", |_| true).unwrap(), None);
     drop(old);
-    let store = Store::open_existing(&path).unwrap();
+    let store = Store::open_existing(&path).unwrap().with_chain_key(key());
     assert_eq!(store.verify_chain().unwrap().head, head);
     add(&store, "a", "mcp__gh__get_issue", "aa");
     assert!(store.take_mcp_ticket("aa", |_| true).unwrap().is_some());

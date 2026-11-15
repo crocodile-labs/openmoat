@@ -3,6 +3,15 @@
 
 use crate::common::{OK, Sandbox, USAGE, bash_payload, json, stdout, text};
 
+/// The host every test here records through, and its config directory.
+const HOST: &str = "claude-code";
+const HOST_DIR: &str = ".claude";
+
+/// A sandbox with OpenMoat installed for [`HOST`].
+fn installed() -> Sandbox {
+    Sandbox::installed(&[HOST_DIR])
+}
+
 /// Run `count` `guard` calls at once, as parallel tool calls do.
 fn guard_concurrently(sb: &Sandbox, count: usize) {
     let project = sb.project();
@@ -10,7 +19,7 @@ fn guard_concurrently(sb: &Sandbox, count: usize) {
         let calls: Vec<_> = (0..count)
             .map(|i| {
                 let payload = bash_payload("s1", &project, &format!("echo {i}"));
-                scope.spawn(move || sb.guard("claude-code", &payload))
+                scope.spawn(move || sb.guard(HOST, &payload))
             })
             .collect();
         for call in calls {
@@ -22,7 +31,7 @@ fn guard_concurrently(sb: &Sandbox, count: usize) {
 
 #[test]
 fn concurrent_guards_build_one_chain_that_doctor_verifies() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = installed();
     guard_concurrently(&sb, 12);
     let doctor = sb.moat(&["doctor"]);
     assert_eq!(doctor.status.code(), Some(OK), "{}", text(&doctor));
@@ -44,7 +53,7 @@ fn concurrent_guards_build_one_chain_that_doctor_verifies() {
 
 #[test]
 fn doctor_reports_an_edited_event_with_exit_64() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = installed();
     guard_concurrently(&sb, 4);
     openmoat_audit::testing::tamper_with_event(
         &sb.home.join(".moat/audit.db"),
@@ -117,4 +126,56 @@ fn audit_stats_counts_the_calls_of_the_window() {
 
     let bad = sb.moat(&["audit", "stats", "--since", "soon"]);
     assert_eq!(bad.status.code(), Some(USAGE), "{}", text(&bad));
+/// ADR-100: an edit whose hashes were recomputed, as by someone who can write
+/// the log but not read the audit key, still fails on the MACs.
+#[test]
+fn doctor_reports_a_rewrite_without_the_audit_key() {
+    let sb = installed();
+    guard_concurrently(&sb, 4);
+    let db = sb.home.join(".moat/audit.db");
+    openmoat_audit::testing::rewrite_without_key(&db, 2, "deny").unwrap();
+    let doctor = sb.moat(&["doctor"]);
+    assert_eq!(doctor.status.code(), Some(USAGE), "{}", text(&doctor));
+    assert!(
+        stdout(&doctor).contains("hash chain broken at event 2: its audit-key MAC does not match"),
+        "{}",
+        text(&doctor)
+    );
+    let export = sb.moat(&["audit", "export"]);
+    let file = sb.home.join("export.jsonl");
+    std::fs::write(&file, stdout(&export)).unwrap();
+    let verified = sb.moat(&["audit", "verify", file.to_str().unwrap()]);
+    assert_eq!(verified.status.code(), Some(USAGE), "{}", text(&verified));
+    assert!(
+        stdout(&verified).contains("line 2 (event 2): its audit-key MAC does not match"),
+        "{}",
+        text(&verified)
+    );
+}
+
+/// ADR-100: without its key, a log that holds keyed events takes no more:
+/// the call is denied rather than recorded without a MAC, and no new key is made.
+#[test]
+fn a_deleted_audit_key_denies_every_call_and_doctor_says_why() {
+    let sb = installed();
+    guard_concurrently(&sb, 1);
+    let key = sb.home.join(".moat/audit.key");
+    std::fs::remove_file(&key).unwrap();
+    let payload = bash_payload("s1", &sb.project(), "echo after");
+    let out = sb.guard(HOST, &payload);
+    assert_eq!(
+        out.status.code(),
+        Some(crate::common::DENY),
+        "{}",
+        text(&out)
+    );
+    assert!(text(&out).contains("audit key"), "{}", text(&out));
+    assert!(!key.exists(), "no new key over keyed events");
+    let doctor = sb.moat(&["doctor"]);
+    assert_eq!(doctor.status.code(), Some(USAGE), "{}", text(&doctor));
+    assert!(
+        stdout(&doctor).contains("the audit key needed to check it is missing or unreadable"),
+        "{}",
+        text(&doctor)
+    );
 }

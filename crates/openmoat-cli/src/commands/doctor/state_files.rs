@@ -61,6 +61,7 @@ fn files(home: &Home) -> Vec<(&'static str, PathBuf, bool)> {
         ("packs", home.packs_path(), false),
         ("audit delivery", home.delivery_config_path(), false),
         ("audit log", home.audit_path(), false),
+        ("audit key", crate::audit_key::path(home), true),
         ("proxy key", crate::proxy_session::key_path(home), true),
         ("proxy CA key", crate::proxy_ca::key_path(home), true),
     ]

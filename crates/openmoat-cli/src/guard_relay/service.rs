@@ -303,7 +303,7 @@ impl Service {
     /// A deny row in the run's session: host [`LINK_HOST`], tool `guard`.
     fn record_row(&self, rule: &str, reason: String) -> Result<()> {
         let decision = Decision::single(Verdict::Deny, rule, reason);
-        let store = Store::open_existing(&self.home.audit_path())?;
+        let store = crate::audit_key::open_existing(&self.home)?;
         store.record(&NewEvent {
             host: LINK_HOST,
             session_id: &self.run,

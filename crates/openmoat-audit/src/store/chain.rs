@@ -3,10 +3,17 @@
 //! Each event stores `prev_hash` (the `hash` of the event before it) and `hash`,
 //! the lowercase hex SHA-256 of the event's canonical encoding (below). Editing,
 //! deleting or reordering an event in the middle of the log breaks a link that
-//! [`Store::verify_chain`] reports. The chain is unkeyed: someone who can write
-//! the file can recompute every hash after an edit, and deleting the newest
-//! events leaves a valid shorter chain. Detecting either needs the head hash
-//! recorded outside the file (`docs/THREAT_MODEL.md`).
+//! [`Store::verify_chain`] reports. The hash itself is unkeyed: someone who can
+//! write the file can recompute every hash after an edit, and deleting the
+//! newest events leaves a valid shorter chain. Detecting either needs the head
+//! hash recorded outside the file (an anchor, `docs/THREAT_MODEL.md`).
+//!
+//! From schema version 12 each event also carries `mac`, the audit key's MAC
+//! of its hash (ADR-100, `key.rs`): recomputing the hashes after an edit then
+//! needs the key too, or the MACs no longer match. Events written before the
+//! key existed (up to [`ChainKey::after`]) have none and verify by their hashes
+//! only. Deleting the newest events still leaves a valid chain; only an anchor
+//! shows that.
 //!
 //! # Canonical encoding, version 1
 //!
@@ -35,6 +42,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
 use super::{Store, StoreError};
+use crate::ChainKey;
 
 /// `prev_hash` of the first chained event: 64 zeros.
 pub const GENESIS: &str = "0000000000000000000000000000000000000000000000000000000000000000";
@@ -127,6 +135,16 @@ pub enum BreakKind {
     Unhashed,
     /// A cell does not have the type the schema gives it.
     Unreadable,
+    /// The event has no audit-key MAC although it was written after the key
+    /// was made (ADR-100): it was rewritten, or its MAC removed.
+    MacMissing,
+    /// The event's MAC is not the audit key's MAC of its hash: the log was
+    /// rewritten by someone without the key, or the key was replaced.
+    MacMismatch,
+    /// The event carries a MAC, or comes after the mark of where keyed events
+    /// start, and no audit key was given to check it: nothing after it can be
+    /// vouched for.
+    KeyUnavailable,
 }
 
 impl BreakKind {
@@ -140,6 +158,15 @@ impl BreakKind {
             }
             Self::Unhashed => "it has no hash although it was written after the chain started",
             Self::Unreadable => "a cell has the wrong type (edited)",
+            Self::MacMissing => {
+                "it has no audit-key MAC although it was written after the key was made (rewritten)"
+            }
+            Self::MacMismatch => {
+                "its audit-key MAC does not match (rewritten without the key, or the key was replaced)"
+            }
+            Self::KeyUnavailable => {
+                "it is keyed, and the audit key needed to check it is missing or unreadable"
+            }
         }
     }
 }
@@ -166,10 +193,59 @@ pub struct ChainReport {
     pub head: Option<String>,
     /// The first broken link, if any.
     pub broken: Option<ChainBreak>,
+    /// Events whose audit-key MAC was checked and matched (ADR-100), among
+    /// `events`.
+    #[serde(default)]
+    pub keyed: u64,
+    /// The last event written before the audit key existed: later events must
+    /// carry its MAC. `None` for a log without keyed events (below schema
+    /// version 12 and no key given).
+    #[serde(default)]
+    pub keyed_after: Option<super::EventId>,
 }
 
 /// Every stored cell of an event, in the order [`read_row`] expects.
-pub(super) const ROWS: &str = "SELECT id, ts_ms, host, session_id, call_id, cwd, tool, action, verdict, rules, reasons, latency_us, prev_hash, hash FROM events";
+const ROWS_KEYED: &str = "SELECT id, ts_ms, host, session_id, call_id, cwd, tool, action, verdict, rules, reasons, latency_us, prev_hash, hash, mac FROM events";
+/// [`ROWS_KEYED`] for a database below version 12, which has no `mac`.
+const ROWS_UNKEYED: &str = "SELECT id, ts_ms, host, session_id, call_id, cwd, tool, action, verdict, rules, reasons, latency_us, prev_hash, hash, NULL FROM events";
+
+impl Store {
+    /// The row query for this database's schema, for [`read_row`].
+    pub(super) fn rows(&self) -> &'static str {
+        if self.keyed() {
+            ROWS_KEYED
+        } else {
+            ROWS_UNKEYED
+        }
+    }
+
+    /// The audit key this handle holds, if any.
+    pub(super) fn chain_key(&self) -> Option<&ChainKey> {
+        self.key.as_deref()
+    }
+
+    /// Where keyed events start after: the key's own record, else the mark
+    /// version 12 left (for a reader without the key; 0 when it is gone, so
+    /// every event counts as keyed), else `None` below version 12.
+    fn keyed_after(&self) -> Result<Option<i64>, StoreError> {
+        if let Some(key) = &self.key {
+            return Ok(Some(key.after().0));
+        }
+        if !self.keyed() {
+            return Ok(None);
+        }
+        Ok(Some(
+            self.conn
+                .query_row(
+                    "SELECT value FROM meta WHERE key = 'unkeyed_last_id'",
+                    [],
+                    |r| r.get(0),
+                )
+                .optional()?
+                .unwrap_or(0),
+        ))
+    }
+}
 
 /// One event's cells exactly as stored.
 pub(super) struct Row {
@@ -182,6 +258,7 @@ pub(super) struct Row {
     pub latency_us: i64,
     pub prev_hash: Option<String>,
     pub hash: Option<String>,
+    pub mac: Option<String>,
 }
 
 pub(super) fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
@@ -202,6 +279,7 @@ pub(super) fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
         latency_us: row.get(11)?,
         prev_hash: row.get(12)?,
         hash: row.get(13)?,
+        mac: row.get(14)?,
     })
 }
 
@@ -229,18 +307,30 @@ impl Row {
 impl Store {
     /// Verify the whole chain, oldest event first, and stop at the first broken
     /// link. Events from before the chain existed are counted, not verified.
+    /// Events after [`ChainKey::after`] must also carry the audit key's MAC of
+    /// their hash; without the key on this handle, the first keyed event is a
+    /// break ([`BreakKind::KeyUnavailable`]): on this machine the key is
+    /// expected, and nothing after that event can be vouched for without it.
     pub fn verify_chain(&self) -> Result<ChainReport, StoreError> {
         let mut report = ChainReport {
             events: 0,
             unchained: 0,
             head: None,
             broken: None,
+            keyed: 0,
+            keyed_after: None,
         };
         if !self.chained() {
             report.events = self.count()?;
             report.unchained = report.events;
             return Ok(report);
         }
+        let keyed_after = self.keyed_after()?;
+        report.keyed_after = keyed_after.map(super::EventId);
+        let keying = Keying {
+            key: self.chain_key(),
+            after: keyed_after.unwrap_or(i64::MAX),
+        };
         let legacy_last_id: i64 = self
             .conn
             .query_row(
@@ -250,14 +340,14 @@ impl Store {
             )
             .optional()?
             .unwrap_or(0);
-        let mut stmt = self.conn.prepare(&format!("{ROWS} ORDER BY id"))?;
+        let mut stmt = self.conn.prepare(&format!("{} ORDER BY id", self.rows()))?;
         let mut rows = stmt.query([])?;
         while let Some(raw) = rows.next()? {
             report.events += 1;
             let id: i64 = raw.get(0)?;
             let kind = match read_row(raw) {
                 Err(_) => Some(BreakKind::Unreadable),
-                Ok(row) => check(&row, &mut report, legacy_last_id),
+                Ok(row) => check(&row, &mut report, legacy_last_id, &keying),
             };
             if let Some(kind) = kind {
                 report.broken = Some(ChainBreak {
@@ -324,7 +414,12 @@ impl Store {
 }
 
 /// Check one row against the chain so far; advance `report.head` when it holds.
-fn check(row: &Row, report: &mut ChainReport, legacy_last_id: i64) -> Option<BreakKind> {
+fn check(
+    row: &Row,
+    report: &mut ChainReport,
+    legacy_last_id: i64,
+    keying: &Keying<'_>,
+) -> Option<BreakKind> {
     let Some(hash) = &row.hash else {
         if report.head.is_none() && row.id <= legacy_last_id {
             report.unchained += 1;
@@ -339,8 +434,78 @@ fn check(row: &Row, report: &mut ChainReport, legacy_last_id: i64) -> Option<Bre
     if row.fields(expected_prev).hash() != *hash {
         return Some(BreakKind::Edited);
     }
+    match keying.check(row.id, hash, row.mac.as_deref()) {
+        Keyed::Break(kind) => return Some(kind),
+        Keyed::Verified => report.keyed += 1,
+        Keyed::Unkeyed => {}
+    }
     report.head = Some(hash.clone());
     None
+}
+
+/// What [`Keying::check`] found of one event's MAC.
+pub(super) enum Keyed {
+    /// The event is from before the key: its hash is all there is to check.
+    Unkeyed,
+    /// Its MAC is the key's MAC of its hash.
+    Verified,
+    /// It fails as this says.
+    Break(BreakKind),
+}
+
+/// The audit key, if given, and the last event written before it existed.
+pub(super) struct Keying<'a> {
+    pub key: Option<&'a ChainKey>,
+    /// Events after it must carry a MAC; `i64::MAX` when nothing is keyed.
+    pub after: i64,
+}
+
+impl Keying<'_> {
+    /// Check the MAC of event `id`, whose chain hash `hash` already verified.
+    /// An event that carries a MAC is keyed wherever it stands; one without
+    /// is keyed when it comes after [`Keying::after`].
+    pub(super) fn check(&self, id: i64, hash: &str, mac: Option<&str>) -> Keyed {
+        let keyed = mac.is_some() || id > self.after;
+        match (self.key, mac) {
+            _ if !keyed => Keyed::Unkeyed,
+            // Before the key, by the key's own record: a MAC there is ignored,
+            // as the event verifies by its hash alone.
+            (Some(key), _) if id <= key.after().0 => Keyed::Unkeyed,
+            (None, _) => Keyed::Break(BreakKind::KeyUnavailable),
+            (Some(_), None) => Keyed::Break(BreakKind::MacMissing),
+            (Some(key), Some(mac)) if key.verifies(hash, mac) => Keyed::Verified,
+            (Some(_), Some(_)) => Keyed::Break(BreakKind::MacMismatch),
+        }
+    }
+}
+
+/// Recompute `prev_hash` and `hash` of event `from` and of every event after
+/// it, leaving their MACs: what a rewrite by someone without the key leaves.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn rehash_from(conn: &rusqlite::Connection, from: i64) -> Result<(), StoreError> {
+    let mut prev: String = conn
+        .query_row(
+            "SELECT hash FROM events WHERE id < ?1 ORDER BY id DESC LIMIT 1",
+            params![from],
+            |r| r.get::<_, Option<String>>(0),
+        )
+        .optional()?
+        .flatten()
+        .unwrap_or_else(|| GENESIS.to_owned());
+    let rows: Vec<Row> = {
+        let mut stmt = conn.prepare(&format!("{ROWS_KEYED} WHERE id >= ?1 ORDER BY id"))?;
+        stmt.query_map(params![from], read_row)?
+            .collect::<Result<_, _>>()?
+    };
+    for row in rows {
+        let hash = row.fields(&prev).hash();
+        conn.execute(
+            "UPDATE events SET prev_hash = ?1, hash = ?2 WHERE id = ?3",
+            params![prev, hash, row.id],
+        )?;
+        prev = hash;
+    }
+    Ok(())
 }
 
 /// The `id` and `prev_hash` the next event gets: one past the newest row, linked

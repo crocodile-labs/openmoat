@@ -1,6 +1,7 @@
 mod chain;
 mod export;
 mod injected_inputs;
+mod keyed;
 mod mcp_flow;
 mod mcp_tickets;
 mod migration_cost;
@@ -11,13 +12,26 @@ mod verdict_names;
 
 use super::*;
 
+/// The audit key file-backed tests record and verify with: fixed, for a log
+/// that was empty when it was made.
+pub(super) fn key() -> ChainKey {
+    ChainKey::new([9; 32], EventId(0))
+}
+
+/// `store` with [`key`] as a writer that finds no key on a log from before
+/// version 12 makes it: after the newest event (`audit_key.rs` in the CLI).
+pub(super) fn upgraded(store: Store) -> Store {
+    let after = store.latest_id().unwrap().unwrap_or(EventId(0));
+    store.with_chain_key(ChainKey::new([9; 32], after))
+}
+
 #[cfg(unix)]
 #[test]
 fn database_and_wal_files_are_owner_only() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("audit.db");
-    let store = Store::open(&path).unwrap();
+    let store = Store::open(&path).unwrap().with_chain_key(key());
     let d = decision(Verdict::Allow, "dev-shell", "ok");
     let a = Action::Shell {
         command: "git status".into(),
@@ -41,7 +55,7 @@ fn database_and_wal_files_inherit_a_user_only_acl() {
     let profile = std::env::var_os("USERPROFILE").expect("USERPROFILE");
     let dir = tempfile::tempdir_in(profile).unwrap();
     let path = dir.path().join("audit.db");
-    let store = Store::open(&path).unwrap();
+    let store = Store::open(&path).unwrap().with_chain_key(key());
     let d = decision(Verdict::Allow, "dev-shell", "ok");
     let a = Action::Shell {
         command: "git status".into(),
@@ -322,7 +336,11 @@ fn file_store_round_trip_and_reopen() {
     let a = Action::Shell {
         command: "npm install x".into(),
     };
-    let id = Store::open(&path).unwrap().record(&sample(&d, &a)).unwrap();
+    let id = Store::open(&path)
+        .unwrap()
+        .with_chain_key(key())
+        .record(&sample(&d, &a))
+        .unwrap();
     let reopened = Store::open_read_only(&path).unwrap();
     assert_eq!(reopened.get(id).unwrap().unwrap().verdict, Verdict::Review);
 }

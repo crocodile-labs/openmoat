@@ -108,7 +108,7 @@ fn the_version_8_step_widens_in_place_and_copies_no_row() {
     assert!(insert_review(&other).is_err(), "version 7 refuses `review`");
 
     let started = Instant::now();
-    let store = Store::open_existing(&path).unwrap();
+    let store = upgraded(Store::open_existing(&path).unwrap());
     let took = started.elapsed();
 
     // The tables were not rebuilt: a rebuild puts them on new pages.

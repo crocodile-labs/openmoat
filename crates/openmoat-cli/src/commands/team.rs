@@ -97,7 +97,11 @@ pub fn run(args: &TeamReportArgs) -> Result<Code> {
 fn read_export(file: &Path) -> Result<(Source, Vec<ExportedEvent>)> {
     let name = file.display();
     let text = std::fs::read_to_string(file).with_context(|| format!("reading {name}"))?;
-    let check = openmoat_audit::verify_export(&text, None);
+    // Lines this machine's audit key made have their MACs checked too (ADR-100).
+    let key = crate::home::Home::locate()
+        .ok()
+        .and_then(|home| crate::audit_key::read(&home).ok().flatten());
+    let check = openmoat_audit::verify_export_keyed(&text, None, key.as_ref());
     if let Some(broken) = check.broken {
         bail!(
             "{name}: line {} does not verify ({}); run `openmoat audit verify` on it",

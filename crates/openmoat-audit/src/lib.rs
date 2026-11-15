@@ -10,12 +10,14 @@
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
 pub mod delivery;
+mod key;
 mod query;
 mod redact;
 mod store;
 #[cfg(feature = "test-support")]
 pub mod testing;
 
+pub use key::{ChainKey, hmac_sha256};
 pub use query::{SessionSummary, Summary};
 pub use redact::{KnownSecrets, MIN_SECRET_LEN, TOKEN_SHAPES, redact, redact_value, token_shape};
 pub use store::{
@@ -24,4 +26,5 @@ pub use store::{
     GENESIS, MAX_INJECTED_PER_SESSION, MCP_FLOW_MAX_AGE_MS, MCP_FLOW_SESSION_ROWS,
     MCP_TICKET_MAX_AGE_MS, NewEvent, NewInjected, NewProvenance, NewTicket, ProvenanceKind,
     RecordedWrite, RuleSeen, SessionWrite, Store, StoreError, Ticket, Written, verify_export,
+    verify_export_keyed,
 };

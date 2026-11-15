@@ -22,7 +22,9 @@ fn ctx(cwd: &str) -> EvalContext {
 fn setup() -> (tempfile::TempDir, String, Store) {
     let dir = tempfile::tempdir().unwrap();
     let proj = crate::context::path_string(&dir.path().canonicalize().unwrap());
-    let store = Store::open(&dir.path().join("audit.db")).unwrap();
+    let store = Store::open(&dir.path().join("audit.db"))
+        .unwrap()
+        .with_chain_key(openmoat_audit::ChainKey::new([1; 32], EventId(0)));
     (dir, proj, store)
 }
 
