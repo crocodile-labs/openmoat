@@ -41,7 +41,9 @@ fn export_writes_one_chained_redacted_line_per_event() {
     let sb = seeded();
     let lines = export(&sb, &[]);
     assert_eq!(lines.len(), 3);
-    assert_eq!(lines[0]["format"], "moat-audit-export-v1");
+    // Events recorded with the audit key export as v2, with their MAC (ADR-101).
+    assert_eq!(lines[0]["format"], "moat-audit-export-v2");
+    assert!(lines[0]["mac"].is_string(), "{}", lines[0]);
     assert_eq!(lines[0]["prev_hash"], openmoat_audit::GENESIS);
     for pair in lines.windows(2) {
         assert_eq!(pair[1]["prev_hash"], pair[0]["hash"]);

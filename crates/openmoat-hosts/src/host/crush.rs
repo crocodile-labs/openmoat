@@ -229,7 +229,11 @@ impl HostAdapter for Adapter {
                 "fetch".to_owned(),
                 json!({ "url": url, "format": "text" }),
             ),
-            Call::Mcp { server, tool, args } => (format!("mcp_{server}_{tool}"), args.clone()),
+            // `mcp_<server>_<tool>` cannot be split back into the server and
+            // the tool, so the policy's per-server MCP rules do not apply to
+            // Crush's MCP calls (HOST.md): the bench's MCP scenarios, written
+            // for them, are not Crush's to meet.
+            Call::Mcp { .. } => return None,
         };
         Some(bench::payload(&tool, &input, at))
     }

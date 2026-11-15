@@ -49,7 +49,11 @@ call OpenMoat defers then runs unasked. A deny from any hook wins over an allow.
 - `ls`, `glob`, `grep` (`FsRead`, `ReadFiles`), as Claude Code's `Glob` and `Grep`.
 - `fetch`, `web_fetch` (`Fetch`); `web_search`, `sourcegraph` (`WebSearch`).
 - `read_mcp_resource`; MCP tools `mcp_<server>_<tool>` (`McpTool` of that name, told
-  apart by the server prefix).
+  apart by the server prefix). The name cannot be split back into the server and the
+  tool (a server's name may hold `_`), so the policy's per-server MCP rules (such as
+  `safe-mcp`) do not apply: each MCP call is decided by what its arguments name, and
+  one naming an unlisted host is denied. MoatBench's MCP scenarios are not run for
+  Crush.
 - `agent` and `agentic_fetch`: subagents, whose own tool calls fire no hook. Starting
   one is an `UnknownTool` that needs review, a deny in Crush.
 - Ungoverned: `todos`, `question`, `job_output`, `job_kill`, `crush_logs`, `crush_info`,
