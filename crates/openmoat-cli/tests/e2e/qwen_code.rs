@@ -90,7 +90,9 @@ fn a_secret_read_is_denied_a_review_asks_and_a_defer_is_silent() {
 #[test]
 fn a_review_reaches_qwen_code_as_ask() {
     let sb = Sandbox::installed_with_review(&[&dir()]);
-    let file = sb.project().join("notes.txt");
+    // Outside the project, so no rule matches and the catch-all `review` applies
+    // (a write in the project is `project-fs`'s allow).
+    let file = sb.home.join("notes.txt");
     let (code, reply) = guard(
         &sb,
         &payload(

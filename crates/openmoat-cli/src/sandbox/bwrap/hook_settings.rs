@@ -81,7 +81,8 @@ pub fn plan(
     let mut out = Plan::default();
     'settings: for rest in protected(ir) {
         let path = format!("{real}/{rest}");
-        if found(&path) != Found::Missing {
+        // Already planned, as a folder above an earlier entry or as one itself.
+        if found(&path) != Found::Missing || out.placeholders.iter().any(|p| p.path == path) {
             continue;
         }
         let mut folders = Vec::new();
@@ -94,7 +95,12 @@ pub fn plan(
             }
         }
         for folder in folders {
-            if !out.placeholders.iter().any(|p| p.path == folder) {
+            // A folder named before the file in it (`.qwen`, then
+            // `.qwen/settings.json`) was planned as a file: it must be a folder.
+            if let Some(planned) = out.placeholders.iter_mut().find(|p| p.path == folder) {
+                planned.dir = true;
+                planned.contents = "";
+            } else {
                 out.mounts.push(Mount::ReadWrite(folder.clone()));
                 out.placeholders.push(Placeholder {
                     path: folder,

@@ -197,8 +197,9 @@ fn a_repository_policy_raises_the_required_level() {
     assert_eq!(code, Some(DENY), "{reply}");
     let reason = reply["reason"].to_string();
     assert!(reason.contains("kernel-error"), "{reason}");
-    // A reason is cut in its middle when long, and a temp path can be long.
-    assert!(reason.contains("agent OpenMoat knows"), "{reason}");
+    // A reason is cut in its middle when long (a temp path, the list of agent
+    // ids), so only its start is certain.
+    assert!(reason.contains("invalid repository policy"), "{reason}");
 }
 
 /// Attack: taking the requirement out of the policy is a change to a pinned

@@ -296,3 +296,23 @@ fn the_near_top_fallback_masks_the_top_two_levels_only() {
     let all = project_masks(&ir, std::slice::from_ref(&project)).unwrap();
     assert!(all.mounts.contains(&Mount::ReadOnly(deep)), "{all:?}");
 }
+
+/// In an empty project, every placeholder that another one lies below is a
+/// folder, and none is planned twice, whatever order the policy names a
+/// folder and the file in it (`.qwen`, then `.qwen/settings.json`).
+#[test]
+fn a_placeholder_holding_another_is_a_folder() {
+    use hook_settings::{Found, plan};
+
+    let ir = session_ir("/p");
+    let out = plan(&ir, "/p", &|_| Found::Missing, &|_| false);
+    for p in &out.placeholders {
+        let holds = out
+            .placeholders
+            .iter()
+            .any(|q| q.path.starts_with(&format!("{}/", p.path)));
+        assert!(!holds || p.dir, "{} holds another but is a file", p.path);
+        let times = out.placeholders.iter().filter(|q| q.path == p.path).count();
+        assert_eq!(times, 1, "{} planned {times} times", p.path);
+    }
+}
