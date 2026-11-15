@@ -98,6 +98,7 @@ pub fn run(cli: Cli) -> Result<Code> {
             AuditCommand::Verify(args) => audit::verify(&args),
             AuditCommand::Report(args) => team::run(&args),
             AuditCommand::Evidence(args) => audit::evidence(&args),
+            AuditCommand::Stats(args) => audit::stats(&args),
             AuditCommand::Anchor(args) => audit::anchor(&args),
             AuditCommand::Deliver { command } => match command {
                 DeliverCommand::Status(args) => audit::deliver::status(&args),

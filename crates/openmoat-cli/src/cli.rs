@@ -20,7 +20,7 @@ pub use approvals::{
 };
 pub use audit::{
     AnchorArgs, AuditCommand, DeliverCommand, DeliverFlushArgs, DeliverStatusArgs, DeliverTestArgs,
-    EvidenceArgs, ExportArgs, TeamReportArgs, VerifyArgs,
+    EvidenceArgs, ExportArgs, StatsArgs, TeamReportArgs, VerifyArgs,
 };
 pub use mcp::{McpAcceptArgs, McpCommand, McpProxyArgs, McpUnwrapArgs, McpWrapArgs};
 pub use policy::{

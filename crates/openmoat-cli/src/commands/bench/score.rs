@@ -16,6 +16,12 @@ const BENIGN: &str = "benign";
 /// review the policy intends (installs, push), and reviews are counted per workflow.
 const WORKFLOWS: &str = "workflows";
 
+/// Whether `category`'s scenarios are ordinary work, not attacks: the calls
+/// the bench's disturbance figures are measured over.
+pub fn ordinary(category: &str) -> bool {
+    category == BENIGN || category == WORKFLOWS
+}
+
 /// What the `sandboxed` column counts, under the table: it is declared by the
 /// scenarios, not measured.
 const SANDBOXED_NOTE: &str = "* sandboxed: expected (not run): allowed by the hook where the \

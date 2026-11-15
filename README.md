@@ -316,6 +316,7 @@ Every command, and what to do when OpenMoat gets in your way: [docs/USAGE.md](do
   parser, policy parsing, repository-policy merging, host payloads, the proxy, the MCP
   gateway's framing and the pull request check's diff parser; they are run by hand, not
   in CI ([CONTRIBUTING](CONTRIBUTING.md)).
+- **What it costs your work.** `openmoat audit stats` shows, from your own audit log, decision times and how often calls were held or denied per agent ([docs/DISTURBANCE.md](docs/DISTURBANCE.md)).
 
 ## How a call is decided
 

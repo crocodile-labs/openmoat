@@ -15,9 +15,11 @@ use crate::time;
 mod anchor;
 pub mod deliver;
 mod evidence;
+mod stats;
 
 pub use anchor::run as anchor;
 pub use evidence::run as evidence;
+pub use stats::run as stats;
 
 pub fn export(args: &ExportArgs) -> Result<Code> {
     let since_ms = time::parse_since(&args.since, time::now_ms())?;

@@ -65,6 +65,10 @@ struct Report<'a> {
     /// Host behaviour when the hook fails, from the documentation; not measured.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     hook_failure: Vec<HostFailure>,
+    /// Against OpenMoat: the disturbance figures (`openmoat audit stats`) of
+    /// the benign and workflow steps, read back from the throwaway audit log.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ordinary_work: Option<crate::disturbance::Disturbance>,
 }
 
 #[derive(Serialize)]
@@ -95,6 +99,7 @@ pub fn run(args: &BenchArgs) -> Result<Code> {
     let markers = matches!(target, Target::OpenMoat { .. });
     let mut card = Scorecard::default();
     let mut checked = Vec::new();
+    let mut ordinary = Vec::new();
     for (category, scenario) in &scenarios {
         if let Some(issue) = scenario.gap.as_ref().filter(|_| markers) {
             card.note_gap(&scenario.id, issue);
@@ -107,6 +112,9 @@ pub fn run(args: &BenchArgs) -> Result<Code> {
                     policy: result.policy.clone(),
                     hook: result.hook.clone(),
                 });
+                if score::ordinary(category) {
+                    ordinary.push(format!("{}@{}", scenario.id, host.id()));
+                }
                 card.add(category, &scenario.id, host.id(), result);
             }
         }
@@ -127,11 +135,16 @@ pub fn run(args: &BenchArgs) -> Result<Code> {
             })
             .collect(),
     };
+    let ordinary_work = match &target {
+        Target::OpenMoat { audit, .. } => Some(ordinary_work(audit, &ordinary)?),
+        Target::Hook(_) => None,
+    };
     let report = Report {
         target: args.hook.as_deref().unwrap_or("openmoat"),
         hosts: hosts.iter().map(|h| h.id()).collect(),
         scorecard: &card,
         hook_failure,
+        ordinary_work,
     };
     match args.format {
         BenchFormat::Json => render::json(&report)?,
@@ -159,6 +172,17 @@ fn install(scratch: &Scratch) -> Result<Target> {
         exe: exe.into_os_string(),
         audit,
     })
+}
+
+/// The disturbance figures of the `sessions` of ordinary work, from the
+/// throwaway audit log: the same figures `openmoat audit stats` gives.
+fn ordinary_work(audit: &Store, sessions: &[String]) -> Result<crate::disturbance::Disturbance> {
+    let mut events = Vec::new();
+    for session in sessions {
+        events.extend(audit.session(session)?);
+    }
+    events.sort_by_key(|e| e.id.0);
+    Ok(crate::disturbance::of(&events, &[]))
 }
 
 /// `--verbose`: what every hook run gets besides its payload.
@@ -384,6 +408,24 @@ fn print_text(report: &Report<'_>) -> Result<()> {
         report.hosts.join(", ")
     )?;
     write!(out, "{}", report.scorecard)?;
+    if let Some(work) = &report.ordinary_work {
+        let f = &work.overall;
+        let latency = f.latency.map_or_else(
+            || "no decision times".to_owned(),
+            |l| {
+                format!(
+                    "decision time p50 {} µs, p95 {} µs, p99 {} µs",
+                    l.p50, l.p95, l.p99
+                )
+            },
+        );
+        writeln!(
+            out,
+            "ordinary work (benign and workflows): {} calls, {latency} on this machine; \
+             {:.2} reviews and {:.2} denies per 100 calls (`openmoat audit stats` figures)",
+            f.calls, f.per_100_calls.review, f.per_100_calls.deny
+        )?;
+    }
     if !report.hook_failure.is_empty() {
         writeln!(
             out,

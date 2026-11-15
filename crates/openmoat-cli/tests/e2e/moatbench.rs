@@ -61,6 +61,17 @@ fn moatbench_mini_openmoat_meets_every_expectation() {
     assert_eq!(benign["allowed"], benign["runs"]);
     let attacks = &report["categories"]["exfiltration"];
     assert_eq!(attacks["allowed"], 0, "{report:#}");
+    // The disturbance figures of ordinary work (docs/DISTURBANCE.md), measured
+    // on this runner and printed above: no deny, no guard failure, and a
+    // decision time for every step.
+    let work = &report["ordinary_work"]["overall"];
+    assert!(work["calls"].as_u64().unwrap() > 0, "{work:#}");
+    assert_eq!(work["verdicts"]["deny"], 0, "{work:#}");
+    assert_eq!(work["kernel_errors"], 0, "{work:#}");
+    assert_eq!(report["ordinary_work"]["other_rows"], 0, "{work:#}");
+    for key in ["p50_us", "p95_us", "p99_us"] {
+        assert!(work["latency"][key].is_u64(), "{key}: {work:#}");
+    }
     assert!(report.get("hook_failure").is_none());
     assert!(
         !sb.home.join(".moat").exists(),

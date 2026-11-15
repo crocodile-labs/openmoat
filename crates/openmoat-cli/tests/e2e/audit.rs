@@ -65,3 +65,55 @@ fn doctor_reports_an_edited_event_with_exit_64() {
     guard_concurrently(&sb, 1);
     assert_eq!(sb.moat(&["doctor"]).status.code(), Some(USAGE));
 }
+
+/// `openmoat audit stats` over the calls just made: counted per agent, with
+/// decision times and the agent's spec facts; an empty window says so; a bad
+/// window is a usage error.
+#[test]
+fn audit_stats_counts_the_calls_of_the_window() {
+    let host = openmoat_hosts::Host::ClaudeCode;
+    let sb = Sandbox::installed(&[".claude"]);
+    guard_concurrently(&sb, 3);
+    let project = sb.project();
+    let (verdict, _) = sb.guard_bash("s2", &project, "cat ~/.ssh/id_rsa");
+    assert_eq!(verdict, "deny");
+
+    let out = sb.moat(&["audit", "stats", "--format", "json"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let stats = json(&out);
+    assert_eq!(stats["format"], "openmoat-stats-v1");
+    let agent = &stats["agents"][0];
+    assert_eq!(agent["host"], host.id());
+    assert_eq!(agent["calls"], 4);
+    assert_eq!(agent["verdicts"]["deny"], 1);
+    assert_eq!(agent["per_100_calls"]["deny"], 25.0);
+    assert!(agent["latency"]["p99_us"].is_u64(), "{agent:#}");
+    assert!(agent["hook_failure"]["fails"].is_string(), "{agent:#}");
+    assert_eq!(stats["overall"]["calls"], 4);
+
+    let shown = sb.moat(&["audit", "stats"]);
+    assert_eq!(shown.status.code(), Some(OK), "{}", text(&shown));
+    assert!(
+        stdout(&shown).contains(host.display_name()),
+        "{}",
+        text(&shown)
+    );
+
+    let future = sb.moat(&[
+        "audit",
+        "stats",
+        "--since",
+        "2999-01-01",
+        "--until",
+        "3000-01-01",
+    ]);
+    assert_eq!(future.status.code(), Some(OK), "{}", text(&future));
+    assert!(
+        stdout(&future).contains("no agent calls"),
+        "{}",
+        text(&future)
+    );
+
+    let bad = sb.moat(&["audit", "stats", "--since", "soon"]);
+    assert_eq!(bad.status.code(), Some(USAGE), "{}", text(&bad));
+}

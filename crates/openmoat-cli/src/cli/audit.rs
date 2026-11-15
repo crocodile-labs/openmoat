@@ -22,6 +22,12 @@ pub enum AuditCommand {
     /// verdict, sample events (stored redacted), the audit chain, and the policy, lock
     /// and protections in force now. Evidence, not a certification.
     Evidence(EvidenceArgs),
+    /// How much OpenMoat got in the way over a window, per agent and over all:
+    /// calls checked, p50/p95/p99 decision time, allow/defer/review/deny counts
+    /// and per 100 calls, calls held and later allowed, the guard's own failures,
+    /// and what each agent does when the hook fails. Reads this machine's audit
+    /// log only; nothing leaves the machine.
+    Stats(StatsArgs),
     /// Record the log's current head (event, hash, time) outside the log: as a commit
     /// on `refs/moat/anchors` in a git repository you name, or as a line appended to a
     /// file. Nothing is sent anywhere; push the ref yourself. Refused unless run from an
@@ -111,6 +117,25 @@ pub struct EvidenceArgs {
     pub samples: u8,
 
     /// Output format: text is Markdown.
+    #[arg(long, value_enum, default_value_t = Format::Text)]
+    pub format: Format,
+}
+
+#[derive(Debug, Args)]
+pub struct StatsArgs {
+    /// Window start: all, today, yesterday, 12h, 7d, 2w or YYYY-MM-DD (UTC).
+    #[arg(long, default_value = "7d")]
+    pub since: String,
+
+    /// Window end, not included, in the same forms; default now.
+    #[arg(long)]
+    pub until: Option<String>,
+
+    /// Only this agent.
+    #[arg(long, value_parser = parse_host())]
+    pub host: Option<Host>,
+
+    /// Output format.
     #[arg(long, value_enum, default_value_t = Format::Text)]
     pub format: Format,
 }

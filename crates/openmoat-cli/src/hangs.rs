@@ -204,6 +204,37 @@ pub fn since(path: &Path, since_ms: i64) -> Option<Hangs> {
     })
 }
 
+/// How many hangs each agent had from `since_ms` up to, not including,
+/// `until_ms`, in the order commands list agents; empty when there are none
+/// or the file cannot be read. A line naming no agent this build knows is
+/// left out.
+pub fn per_host(path: &Path, since_ms: i64, until_ms: i64) -> Vec<(Host, u64)> {
+    let Some(text) = fs::symlink_metadata(path)
+        .ok()
+        .filter(fs::Metadata::is_file)
+        .and_then(|_| fs::read_to_string(path).ok())
+    else {
+        return Vec::new();
+    };
+    let mut counts: HashMap<Host, u64> = HashMap::new();
+    for line in text.lines() {
+        let mut fields = line.split(' ');
+        let Some(ms) = fields.next().and_then(|ms| ms.parse::<i64>().ok()) else {
+            continue;
+        };
+        let Some(host) = fields.next().and_then(|id| id.parse::<Host>().ok()) else {
+            continue;
+        };
+        if (since_ms..until_ms).contains(&ms) {
+            *counts.entry(host).or_default() += 1;
+        }
+    }
+    Host::EVERY
+        .into_iter()
+        .filter_map(|h| Some((h, *counts.get(&h)?)))
+        .collect()
+}
+
 /// The time and phase of one line; a line without a phase (an older build's)
 /// or with one this build does not know has none.
 fn parse(line: &str) -> Option<(i64, Option<Phase>)> {
@@ -265,6 +296,32 @@ mod tests {
         assert_eq!((all.count, all.newest_ms, all.common_phase), (2, 300, None));
         assert_eq!(since(&path, 200).unwrap().count, 1);
         assert_eq!(since(&path, 301), None);
+    }
+
+    /// `openmoat audit stats` counts each agent's hangs inside its window,
+    /// in the order agents are listed; an unknown agent or a bad line is left out.
+    #[test]
+    fn hangs_are_counted_per_agent_in_a_window() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("guard-hangs.log");
+        assert_eq!(per_host(&path, 0, i64::MAX), Vec::new());
+        let (a, b) = (Host::ALL[0], Host::ALL[1]);
+        for line in [
+            format!("100 {} record 30001\n", b.id()),
+            format!("200 {}\n", a.id()),
+            format!("300 {} lock 30002\n", b.id()),
+            "250 no-such-agent\n".to_owned(),
+            "garbage\n".to_owned(),
+        ] {
+            append(&path, &line).unwrap();
+        }
+        assert_eq!(per_host(&path, 0, i64::MAX), [(a, 1), (b, 2)]);
+        assert_eq!(
+            per_host(&path, 150, 300),
+            [(a, 1)],
+            "the end is not included"
+        );
+        assert_eq!(per_host(dir.path(), 0, i64::MAX), Vec::new());
     }
 
     #[test]

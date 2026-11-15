@@ -40,6 +40,7 @@ protect) are on [openmoat.dev/docs](https://openmoat.dev/docs/).
 | [EVIDENCE.md](EVIDENCE.md) | What the OS layer stops in an allowed project script, per OS (generated; do not edit) |
 | [COVERAGE.md](COVERAGE.md) | The conformance fixtures per threat class (generated; do not edit) |
 | [MOATBENCH.md](MOATBENCH.md) | The attack and everyday scenarios per agent, and the scorecard |
+| [DISTURBANCE.md](DISTURBANCE.md) | What OpenMoat costs your work: `openmoat audit stats` (decision times, holds and denies per 100 calls, the guard's own failures, per agent) and the same figures `openmoat bench` measures in CI |
 | [ROADMAP.md](ROADMAP.md) | What exists, what comes next and what is not planned; the live order is issue [#562](https://github.com/crocodile-labs/openmoat/issues/562) |
 
 ## Contribute
