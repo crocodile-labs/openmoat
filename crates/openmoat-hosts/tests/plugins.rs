@@ -313,7 +313,7 @@ fn without_openmoat_every_hook_package_blocks_and_names_the_install_command() {
 
 /// The exit code `host`'s guard script blocks with.
 fn deny_exit(host: Host) -> i32 {
-    spec(host).unwrap().deny_exit
+    host.spec().deny_exit
 }
 
 /// A policy lock in `home` naming `binary`, as `openmoat init` writes it

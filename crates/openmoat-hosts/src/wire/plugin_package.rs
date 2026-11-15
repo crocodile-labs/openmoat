@@ -86,7 +86,7 @@ const NO_ANSWER: &str =
 /// call, exiting with the host's block code (`deny_exit`), when there is no
 /// program to run or it exits without an answer.
 pub(crate) fn guard_script(host: Host) -> String {
-    let deny_exit = crate::plugin::spec(host).map_or(2, |spec| spec.deny_exit);
+    let deny_exit = host.spec().deny_exit;
     let dirs: Vec<String> = INSTALL_DIRS
         .iter()
         .map(|dir| match dir.strip_prefix("$HOME") {

@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use openmoat_hosts::Host;
 
-use crate::common::{DENY, Sandbox, USAGE, fixture, json, stderr, text};
+use crate::common::{Sandbox, USAGE, deny_exit, fixture, json, stderr, text};
 use crate::hosts::rows::{Row, rows};
 use crate::hosts::{assert_reason, dir_of, guard, verdict};
 
@@ -30,7 +30,7 @@ fn assert_denied(row: &Row, out: &Output, what: &str) {
     let name = row.id;
     assert_eq!(
         out.status.code(),
-        Some(DENY),
+        Some(deny_exit(name)),
         "{name} {what}: {}",
         text(out)
     );
@@ -78,7 +78,12 @@ fn an_unknown_tool_naming_a_secret_is_denied_where_openmoat_sees_it() {
         let out = guard(&row, &sb, &(row.unknown_tool)().to_string());
         if row.checks_unknown_tools {
             let name = row.id;
-            assert_eq!(out.status.code(), Some(2), "{name}: {}", text(&out));
+            assert_eq!(
+                out.status.code(),
+                Some(deny_exit(name)),
+                "{name}: {}",
+                text(&out)
+            );
             assert_eq!(verdict(&row, &out), "deny", "{name}: {}", text(&out));
             assert!(
                 text(&out).contains("secrets-paths"),

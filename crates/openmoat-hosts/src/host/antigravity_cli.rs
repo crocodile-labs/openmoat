@@ -85,7 +85,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          the weekly real-agent run of 2026-11-12 observed on Linux and macOS (the \
          documentation does not say); what a timed-out hook or output that is not its JSON \
          does is not documented, so OpenMoat assumes the call runs then (the guard itself \
-         answers a deny and exits 2 on every error it can catch)",
+         answers a deny on stdout, with exit 0, on every error it can catch)",
     // The hooks page states a 30 s default timeout and `enabled: false`, and
     // says nothing of what a failed or timed-out hook does to the call. The
     // weekly `latest agents` run 43254846914 (2026-11-12) made the hook binary
@@ -175,6 +175,16 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     weekly: weekly::WEEKLY,
     hook_off: hook_off::HOOK_OFF,
     plugin: crate::contract::Plugin::Package(&plugin::SPEC),
+    // An open fact. The hooks page documents one block, `decision: "deny"` on
+    // stdout, and no exit code; the build-plugins guide says a hook must "exit
+    // with code `0` and write a JSON response object to `stdout`" and that "any
+    // non-zero exit code is logged as a hook execution error and ignored
+    // (failing open)". The weekly run 43254846914 (2026-11-12) saw the opposite
+    // of that for a failing hook: exit 1 with no output, and a missing binary,
+    // blocked the call. Exit 0 with the deny on stdout blocks under both
+    // readings; exit 2 blocks only under the observed one. A deny the guard
+    // could not write still exits 2, the one signal left (`HOST.md`).
+    deny_exit: 0,
     ..HostSpec::BASE
 };
 

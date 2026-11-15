@@ -34,8 +34,6 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     ],
     // No output from a `BeforeTool` hook is no decision.
     stand_aside: StandAside::NoDecision,
-    // Exit 2 is a "System Block" (the hooks page).
-    deny_exit: 2,
     // Extensions load from `<home>/.gemini/extensions`, each in a folder named
     // as the extension (the extension reference).
     installed: Paths::new(

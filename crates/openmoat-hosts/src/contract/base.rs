@@ -44,6 +44,7 @@ impl HostSpec {
         run_env: &[],
         weekly: super::Weekly::BASE,
         plugin: super::Plugin::None { why: "" },
+        deny_exit: 2,
     };
 }
 

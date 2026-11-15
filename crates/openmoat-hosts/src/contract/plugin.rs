@@ -45,11 +45,6 @@ pub struct PluginSpec {
     /// What the guard answers when `openmoat init`'s own hook decides the
     /// call in this host.
     pub stand_aside: StandAside,
-    /// The exit code a hook-command package's guard script blocks a call
-    /// with: 2 where the host reads exit 2 as a block, 0 (with the deny on
-    /// stdout) where it ignores every non-zero exit; unused by the other
-    /// packages.
-    pub deny_exit: i32,
     /// Where the host keeps OpenMoat's package once installed, under the home
     /// directory: only OpenMoat's own folder, never every plugin's. The
     /// default policy's `kernel-self` denies an agent writing there, from its

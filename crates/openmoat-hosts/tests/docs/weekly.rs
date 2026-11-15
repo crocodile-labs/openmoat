@@ -136,6 +136,10 @@ fn record(spec: &HostSpec, run: &WeeklyRun) -> Vec<(&'static str, Value)> {
         if payload.allow_is_silent {
             doc["allow_is_silent"] = json!(true);
         }
+        // The guard's exit on the denied payload, where it is not 2.
+        if spec.deny_exit != 2 {
+            doc["deny_exit"] = json!(spec.deny_exit);
+        }
         fields.push(("payload", doc));
     }
     let proves: Vec<&str> = run.proves.iter().map(|p| p.name()).collect();

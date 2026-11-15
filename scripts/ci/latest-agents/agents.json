@@ -188,7 +188,7 @@
     "checked": {"note":"built from the documentation, which states no version; the first run of this job gives the first real payload","source":"crates/openmoat-hosts/src/host/antigravity_cli/HOST.md","version":null},
     "dir": "{HOME}/.gemini/antigravity-cli",
     "config": [["{HOME}/.gemini/config/hooks.json","json"]],
-    "payload": {"command":"/toolCall/args/CommandLine","fixture":"antigravity_cli/fixtures/run_command.json","verdict":"/decision"},
+    "payload": {"command":"/toolCall/args/CommandLine","deny_exit":0,"fixture":"antigravity_cli/fixtures/run_command.json","verdict":"/decision"},
     "proves": ["hook","hook-failure"],
     "runners": ["ubuntu-latest","macos-15"],
     "values": {"model_provider":"gemini"}

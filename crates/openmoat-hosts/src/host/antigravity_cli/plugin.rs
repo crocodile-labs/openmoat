@@ -36,11 +36,6 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     // `allow` defers to the next hook or the default policy, the answer the
     // guard gives a `defer`.
     stand_aside: StandAside::NoDecision,
-    // A hook must "exit with code `0` and write a JSON response object to
-    // `stdout`"; "any non-zero exit code is logged as a hook execution error
-    // and ignored (failing open)" (the build-plugins guide), so the deny goes
-    // on stdout with exit 0.
-    deny_exit: 0,
     // `~/.gemini/config/plugins/<plugin_name>/` (the plugins page), all of
     // which `kernel-self` already names from this host's own paths.
     installed: Paths::new("", &[]),

@@ -46,6 +46,9 @@ fn every_spec_is_complete() {
             "{host:?}"
         );
         assert_eq!(spec.speaks.is_some(), spec.install.is_none(), "{host:?}");
+        // A deny exits 2 (invariant 5), or 0 with the deny on stdout for a
+        // host that may ignore a non-zero exit; nothing else.
+        assert!(matches!(spec.deny_exit, 0 | 2), "{host:?}");
         if let Some(install) = &spec.install {
             assert!(install.dir_name.starts_with('.'), "{host:?}");
             assert!(!install.dir_variable.is_empty(), "{host:?}");

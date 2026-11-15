@@ -21,6 +21,16 @@ pub const OK: i32 = 0;
 pub const FAILED: i32 = 1;
 /// Verdict `deny`; also every error in `moat guard`.
 pub const DENY: i32 = 2;
+
+/// The exit code of a deny `moat guard` wrote for the host with id `id`: its
+/// spec's `deny_exit` ([`DENY`], or 0 for a host that reads the deny from its
+/// output, ADR-100).
+pub fn deny_exit(id: &str) -> i32 {
+    openmoat_hosts::Host::EVERY
+        .into_iter()
+        .find(|h| h.id() == id)
+        .map_or(DENY, |h| h.spec().deny_exit)
+}
 /// Verdict `review` that `moat policy check` could not resolve.
 pub const REVIEW: i32 = 3;
 /// Usage or configuration error from a command a person ran.

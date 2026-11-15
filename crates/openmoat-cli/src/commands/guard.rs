@@ -186,9 +186,20 @@ fn answer_once(host: Host, answer: &Answer<'_>, decision: &Decision) -> Option<C
                 "{}",
                 render::clean_lines(&openmoat_hosts::reason_line(decision))
             );
-            Code::Deny
+            deny_code(host)
         }
     })
+}
+
+/// The exit code of a deny whose response was written: 2, or 0 for a host
+/// that reads the deny from its output and may ignore a non-zero exit
+/// ([`openmoat_hosts::HostSpec::deny_exit`]).
+fn deny_code(host: Host) -> Code {
+    if host.spec().deny_exit == 0 {
+        Code::Ok
+    } else {
+        Code::Deny
+    }
 }
 
 /// `by_run`: `openmoat run` relayed the call from inside its sandbox

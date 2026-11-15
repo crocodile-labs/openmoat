@@ -38,9 +38,6 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     // Every hook of every source runs and any `deny` blocks; no output is no
     // decision.
     stand_aside: StandAside::NoDecision,
-    // "2: ... For `preToolUse` and `permissionRequest`, it is a deny, even if
-    // stdout reports `allow`" (the hooks configuration reference, exit codes).
-    deny_exit: 2,
     // `~/.copilot/installed-plugins/MARKETPLACE/PLUGIN-NAME` from a
     // marketplace, `~/.copilot/installed-plugins/_direct/SOURCE-ID/` from a
     // repository (the plugin reference); the source id's form is not

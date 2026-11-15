@@ -38,9 +38,6 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     // source" (<https://cursor.com/docs/agent/hooks>), so `allow` leaves
     // `openmoat init`'s answer as it is.
     stand_aside: StandAside::Allow,
-    // Exit 2 blocks the action, "equivalent to returning `permission:
-    // \"deny\"`" (the hooks page, exit codes).
-    deny_exit: 2,
     // Cursor names only `~/.cursor/plugins/local` for a plugin on disk (the
     // plugins page); a Marketplace install's folder is not documented, so
     // every folder named `openmoat` below `~/.cursor/plugins` is covered.

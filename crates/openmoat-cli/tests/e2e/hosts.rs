@@ -12,7 +12,7 @@ use std::process::Output;
 use openmoat_hosts::{Host, HostSpec, InstallSpec, Location};
 use serde_json::Value;
 
-use crate::common::{DENY, OK, Sandbox, output, squash, stdout, text};
+use crate::common::{OK, Sandbox, output, squash, stdout, text};
 
 pub mod rows;
 mod settings;
@@ -215,7 +215,8 @@ fn an_edited_hook_file_denies_every_call() {
         assert_ne!(after, before, "{}: the edit changed nothing", row.id);
         fs::write(&hook, after).unwrap();
         let out = guard(&row, &sb, &(edit.call)(&sb));
-        assert_eq!(out.status.code(), Some(DENY), "{}: {}", row.id, text(&out));
+        let deny = host.spec().deny_exit;
+        assert_eq!(out.status.code(), Some(deny), "{}: {}", row.id, text(&out));
         assert_eq!(verdict(&row, &out), "deny", "{}: {}", row.id, text(&out));
         assert_reason(&row, &out, "kernel-integrity", "edited hook file");
     }

@@ -74,7 +74,7 @@ mod launch {
     use openmoat_hosts::{Host, RunFacts, RunWrite};
 
     use super::{dir_of, hook_only};
-    use crate::common::{DENY, Sandbox, USAGE, fixture, output, stderr, stdout, text};
+    use crate::common::{Sandbox, USAGE, deny_exit, fixture, output, stderr, stdout, text};
     use crate::hosts::row;
     use crate::run::confined::ran;
     use crate::run::{installed_with_secret, netns_required};
@@ -199,7 +199,8 @@ mod launch {
         assert!(!shown.contains("kernel-error"), "{host}: {shown}");
         assert!(!shown.contains("did not decide"), "{host}: {shown}");
         if row.secret_read.is_some() {
-            assert!(said.contains(&format!("hook={DENY}")), "{host}: {shown}");
+            let deny = deny_exit(host.id());
+            assert!(said.contains(&format!("hook={deny}")), "{host}: {shown}");
             assert!(shown.contains("secrets-paths"), "{host}: {shown}");
         }
         let audit = text(&sb.moat(&["show", "--recent", "20", "--format", "json"]));

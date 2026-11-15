@@ -42,7 +42,6 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     ],
     // A handler that returns nothing makes no decision; a block is final.
     stand_aside: StandAside::NoDecision,
-    deny_exit: 2,
     // `openclaw plugins install` puts a plugin "into the active OpenClaw
     // workspace" (the ClawHub page) without naming the folder; the package's
     // folder is covered below the state directory and in any npm folder.

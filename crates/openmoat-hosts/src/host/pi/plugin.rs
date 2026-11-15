@@ -28,7 +28,6 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     ],
     // A handler that returns nothing does not block; the first block wins.
     stand_aside: StandAside::NoDecision,
-    deny_exit: 2,
     // npm packages are "installed under the Pi npm directory", which the
     // packages page does not locate, and the install is recorded in the
     // settings file `kernel-self` already names; the package's folder is

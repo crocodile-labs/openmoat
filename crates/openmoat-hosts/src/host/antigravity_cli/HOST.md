@@ -41,6 +41,21 @@ defines as deferring to the next hook or the default policy); a `review` answers
 Allow" cannot answer it. `auto_approve`, `ask`, `deny_unless_prior_grant` and `overwrite`
 are never sent.
 
+A deny exits 0 with its `decision` on stdout (the spec's `deny_exit`, ADR-100). This is
+an open fact, and the two sources disagree:
+
+- the [hooks page](https://antigravity.google/docs/hooks?tab=cli) documents one block,
+  `decision: "deny"`, and names no exit code; the
+  [build-plugins guide](https://antigravity.google/docs/build-plugins.md) says a hook must
+  "exit with code `0` and write a JSON response object to `stdout`" and that "any
+  non-zero exit code is logged as a hook execution error and ignored (failing open)";
+- the weekly run 43254846914 (2026-11-12) saw a real `agy` block a call whose hook
+  exited 1 with no output, and one whose hook binary was missing.
+
+Exit 0 with the deny on stdout blocks under both readings; exit 2, which `openmoat init`'s
+hook gave before, blocks only under the observed one. A deny the guard could not write
+still exits 2, the one signal left. The weekly job's denied payload checks exit 0.
+
 ## Tools OpenMoat sees
 
 - `run_command` (`Shell`; `CommandLine` after a `cd` to `Cwd`; needs review with a
@@ -96,7 +111,7 @@ hook binary gone, and a stand-in that exits 1 with nothing printed. In run 43254
 runs the call. A hook that times out is not tried there (waiting out the limit would
 outlast the job), and output that is not its JSON is not tried either: OpenMoat assumes
 the call runs in both cases, and `openmoat doctor` names the timeout. Every error `openmoat guard`
-can catch answers a `deny` and exits 2 first. The timeout is written at 600 s so the
+can catch answers a `deny` on stdout first, with exit 0 (see "Answers"). The timeout is written at 600 s so the
 guard's own 30 s budget always answers before the host's documented 30 s default would.
 
 ## Real runs

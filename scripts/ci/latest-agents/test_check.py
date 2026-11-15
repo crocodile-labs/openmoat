@@ -280,6 +280,21 @@ class Data(unittest.TestCase):
         self.assertEqual(self.run_cmd("proves", "a", "hook-failure")[0], 0)
         self.assertEqual(self.run_cmd("proves", "b", "hook-failure")[0], 1)
 
+    def test_a_deny_exits_as_the_record_says_and_2_by_default(self):
+        deny = '{"decision": "deny", "reason": "moat: deny [secrets-paths]"}'
+        check.records = lambda: {
+            "two": {"payload": {"verdict": "/decision"}},
+            "zero": {"payload": {"verdict": "/decision", "deny_exit": 0}},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            reply = Path(tmp) / "reply.json"
+            reply.write_text(deny, encoding="utf-8")
+            self.assertEqual(self.run_cmd("reply", "two", "deny", "2", str(reply))[0], 0)
+            self.assertEqual(self.run_cmd("reply", "zero", "deny", "0", str(reply))[0], 0)
+            for agent, code in (("two", "0"), ("zero", "2")):
+                with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                    self.run_cmd("reply", agent, "deny", code, str(reply))
+
     def test_every_variable_is_one_line_with_only_the_shells_placeholders(self):
         check.records = self.records
         code, printed = self.run_cmd("env")

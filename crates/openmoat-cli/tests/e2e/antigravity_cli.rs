@@ -11,7 +11,11 @@ use std::path::PathBuf;
 
 use serde_json::{Value, json};
 
-use crate::common::{DENY, OK, Sandbox, fixture, json as parse, text};
+use crate::common::{OK, Sandbox, fixture, json as parse, text};
+
+/// The guard's exit with a deny on stdout: 0, as the documented block is the
+/// `decision` and a non-zero exit may be ignored (the spec's `deny_exit`).
+const DENY: i32 = OK;
 
 /// The directory that tells OpenMoat the CLI is installed.
 pub(crate) const DIR: &str = ".gemini/antigravity-cli";

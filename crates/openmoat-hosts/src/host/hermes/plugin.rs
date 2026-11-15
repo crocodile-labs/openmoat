@@ -39,7 +39,6 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     ],
     // No answer from the callback lets the call run; a block vetoes it.
     stand_aside: StandAside::NoDecision,
-    deny_exit: 2,
     // Plugins live in the home's `plugins/`, all of which `kernel-self`
     // already names from this host's own paths.
     installed: Paths::new("", &[]),

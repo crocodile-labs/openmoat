@@ -41,8 +41,6 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     // Claude Code runs every matching hook; a deny wins over ask and allow,
     // and no output is no opinion.
     stand_aside: StandAside::NoDecision,
-    // Exit 2 blocks the call ("Exit code 2 behavior", the hooks reference).
-    deny_exit: 2,
     // The plugins root keeps a marketplace plugin's copy in
     // `cache/<marketplace>/<plugin>/<version>/` and a GitHub marketplace's
     // clone in `marketplaces/<name>/` (the plugin loading reference, "Find

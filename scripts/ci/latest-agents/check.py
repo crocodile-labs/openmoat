@@ -332,7 +332,9 @@ def cmd_reply(agent, which, code, path):
     # Codex rejects a bare `permissionDecision: allow`, so its allow is no output.
     if which == "allow" and reply is None and record(agent)["payload"].get("allow_is_silent"):
         got = "allow"
-    want_code = 2 if which == "deny" else 0
+    # A host that may ignore a hook's non-zero exit gets its deny with exit 0
+    # (the spec's `deny_exit`, in the record only where it is not 2).
+    want_code = record(agent)["payload"].get("deny_exit", 2) if which == "deny" else 0
     if int(code) != want_code or got != which:
         fail(f"{agent}: the {which} payload got exit {code} and verdict {got!r}, "
              f"expected exit {want_code} and {which!r}: {text[:300]}")

@@ -31,7 +31,6 @@ pub(super) static SPEC: PluginSpec = PluginSpec {
     ],
     // A hook that neither throws nor rejects lets the call run.
     stand_aside: StandAside::NoDecision,
-    deny_exit: 2,
     // OpenCode installs a listed npm plugin and caches it (the plugins page)
     // without naming the folder; the package's folder is covered wherever an
     // npm folder holds it. The `plugins` lists are in the configuration files

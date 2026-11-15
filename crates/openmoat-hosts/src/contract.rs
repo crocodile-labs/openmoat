@@ -237,6 +237,13 @@ pub struct HostSpec {
     /// The package the host's own plugin channel installs OpenMoat from, or
     /// why it has none (ADR-099); `plugins/` is generated from it.
     pub plugin: Plugin,
+    /// The exit code `openmoat guard` and the guard script of the host's
+    /// package ([`PluginSpec`]) give a call they block, once its deny is on
+    /// stdout: 2 where the host reads exit 2 as a block (invariant 5), 0 where
+    /// the host documents the deny in its output as the block and a non-zero
+    /// exit as a hook error it may ignore. A deny the guard could not write
+    /// still exits 2.
+    pub deny_exit: i32,
 }
 
 /// Where a host finds hook files for OpenMoat's event besides OpenMoat's own

@@ -6,7 +6,7 @@ use openmoat_core::Verdict;
 use openmoat_hosts::Host;
 
 use super::{assert_reason, dir_of, guard, row, verdict};
-use crate::common::{DENY, OK, Sandbox, stdout, text};
+use crate::common::{OK, Sandbox, stdout, text};
 
 // protection: payloads antigravity-cli,cline,copilot-cli,cursor,gemini-cli,goose,hermes,openclaw,opencode,pi every
 #[test]
@@ -18,7 +18,8 @@ fn a_secret_read_is_denied_in_the_hosts_format() {
         };
         let sb = Sandbox::installed(&[&dir_of(host)]);
         let out = guard(&row, &sb, &read(&sb));
-        assert_eq!(out.status.code(), Some(DENY), "{}: {}", row.id, text(&out));
+        let deny = host.spec().deny_exit;
+        assert_eq!(out.status.code(), Some(deny), "{}: {}", row.id, text(&out));
         assert_eq!(verdict(&row, &out), "deny", "{}: {}", row.id, text(&out));
         assert_reason(&row, &out, "secrets-paths", "secret read");
         // ADR-059: the block message, headed by the rule's title, with the
@@ -79,7 +80,8 @@ fn arguments_that_cannot_be_checked_are_denied() {
         };
         let sb = Sandbox::installed(&[&dir_of(host)]);
         let out = guard(&row, &sb, &payload(&sb));
-        assert_eq!(out.status.code(), Some(DENY), "{}: {}", row.id, text(&out));
+        let deny = host.spec().deny_exit;
+        assert_eq!(out.status.code(), Some(deny), "{}: {}", row.id, text(&out));
         assert_eq!(verdict(&row, &out), "deny", "{}: {}", row.id, text(&out));
         if let Some(says) = says {
             assert_reason(&row, &out, says, "malformed arguments");
@@ -101,7 +103,8 @@ fn a_review_reaches_the_host_as_its_spec_says() {
             assert_eq!(out.status.code(), Some(OK), "{}: {}", row.id, text(&out));
             assert_eq!(verdict(&row, &out), "ask", "{}: {}", row.id, text(&out));
         } else {
-            assert_eq!(out.status.code(), Some(DENY), "{}: {}", row.id, text(&out));
+            let deny = host.spec().deny_exit;
+            assert_eq!(out.status.code(), Some(deny), "{}: {}", row.id, text(&out));
             assert_eq!(verdict(&row, &out), "deny", "{}: {}", row.id, text(&out));
             assert_reason(&row, &out, "openmoat allow --last", "review");
         }
