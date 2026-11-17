@@ -53,6 +53,23 @@ fn default_policy_matches_the_golden_profile() {
     assert_golden("codex-default.toml", &render(&generated(DEFAULT_POLICY)));
 }
 
+/// Codex on Linux lists every directory below a deny glob's literal prefix
+/// and starts no session when one is unreadable: `/run/user/<uid>/systemd`
+/// holds a root-only `inaccessible` folder, so no glob under `/run` may reach
+/// the profile (the weekly run of 2026-11-16: "failed to enumerate unreadable
+/// glob paths under /run/user").
+#[test]
+fn no_deny_glob_under_run_reaches_the_profile() {
+    let out = render(&generated(DEFAULT_POLICY));
+    let under_run: Vec<&str> = out
+        .lines()
+        .filter(|l| l.starts_with("\"/run") && l.contains('*'))
+        .collect();
+    assert!(under_run.is_empty(), "{under_run:?}");
+    // The other system globs stay: `/dev` can be listed.
+    assert!(out.contains("\"/dev/sd*\" = \"deny\""), "{out}");
+}
+
 #[test]
 fn reads_are_granted_exactly_and_secrets_win() {
     let out = generated(DEFAULT_POLICY);

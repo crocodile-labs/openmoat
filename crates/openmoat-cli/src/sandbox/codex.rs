@@ -439,6 +439,19 @@ impl Filesystem {
         };
         let tree = pattern.ends_with("/**");
         let key = |p: &str| literal_tree(p).unwrap_or(p).to_owned();
+        // A glob under `/run` (`/run/user/*/systemd/*/*moat-*`): Codex on Linux
+        // lists every directory below its literal prefix before each command
+        // and starts no session when one is unreadable, and the runtime
+        // directories hold root-only ones (`/run/user/<uid>/systemd/inaccessible`),
+        // so it is left out and reported with the other directories outside
+        // the home; the hook still denies the agent's own calls there.
+        if let Spot::Absolute(path) = spot(pattern) {
+            let target = key(path);
+            if has_glob(&target) && (target == "/run" || target.starts_with("/run/")) {
+                push_unique(&mut self.outside_home, pattern.to_owned());
+                return;
+            }
+        }
         let targets: Vec<(bool, String)> = match spot(pattern) {
             Spot::Project("" | "**") => vec![(true, ".".into())],
             Spot::Project(rest) => vec![(true, key(rest))],
