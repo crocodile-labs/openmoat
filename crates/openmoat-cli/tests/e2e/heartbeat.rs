@@ -10,6 +10,8 @@ use std::time::{Duration, SystemTime};
 use serde_json::{Value, json};
 
 use crate::common::{DENY, OK, Sandbox, json as parse, stderr, stdout, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 const AGENT_DIR: &str = ".pi/agent";
 
@@ -51,9 +53,17 @@ fn session(sb: &Sandbox) {
 fn a_fresh_init_is_not_loaded_yet_and_a_report_makes_it_loaded() {
     let sb = Sandbox::installed(&[AGENT_DIR]);
     let doc = status(&sb);
-    assert_eq!(find(&doc["plugins"], "pi")["state"], "not-yet", "{doc}");
+    assert_eq!(
+        find(&doc["plugins"], Host::Pi.id())["state"],
+        "not-yet",
+        "{doc}"
+    );
     // A note, not a problem: the agent has not run since.
-    assert_eq!(find(&doc["agents"], "pi")["level"], "hook-only", "{doc}");
+    assert_eq!(
+        find(&doc["agents"], Host::Pi.id())["level"],
+        "hook-only",
+        "{doc}"
+    );
     let shown = text(&sb.moat(&["status"]));
     let shown = crate::common::squash(&shown);
     assert!(
@@ -61,16 +71,20 @@ fn a_fresh_init_is_not_loaded_yet_and_a_report_makes_it_loaded() {
         "{shown}"
     );
 
-    let out = heartbeat(&sb, "pi");
+    let out = heartbeat(&sb, Host::Pi.id());
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert_eq!(stdout(&out), "", "a report prints nothing");
     let record = fs::read_to_string(sb.home.join(".moat/loaded/pi.json")).unwrap();
     let record: Value = serde_json::from_str(&record).unwrap();
-    assert_eq!(record["host"], "pi");
+    assert_eq!(record["host"], Host::Pi.id());
     assert!(record["reported_ms"].is_i64(), "{record}");
 
     let doc = status(&sb);
-    assert_eq!(find(&doc["plugins"], "pi")["state"], "reported", "{doc}");
+    assert_eq!(
+        find(&doc["plugins"], Host::Pi.id())["state"],
+        "reported",
+        "{doc}"
+    );
     let checks = parse(&sb.moat(&["doctor", "--format", "json"]));
     assert!(
         checks["checks"]
@@ -92,8 +106,12 @@ fn a_session_written_without_a_report_is_not_protected_until_one_comes() {
     session(&sb);
 
     let doc = status(&sb);
-    assert_eq!(find(&doc["plugins"], "pi")["state"], "missing", "{doc}");
-    let agent = find(&doc["agents"], "pi");
+    assert_eq!(
+        find(&doc["plugins"], Host::Pi.id())["state"],
+        "missing",
+        "{doc}"
+    );
+    let agent = find(&doc["agents"], Host::Pi.id());
     assert_eq!(agent["level"], "not-protected", "{doc}");
     assert!(
         agent["reason"]
@@ -110,17 +128,25 @@ fn a_session_written_without_a_report_is_not_protected_until_one_comes() {
             .unwrap()
             .iter()
             .any(|row| row["status"] == "warning"
-                && row["name"] == "pi"
+                && row["name"] == Host::Pi.id()
                 && row["detail"]
                     .as_str()
                     .is_some_and(|d| d.contains("may run unchecked"))),
         "{checks}"
     );
 
-    assert_eq!(heartbeat(&sb, "pi").status.code(), Some(OK));
+    assert_eq!(heartbeat(&sb, Host::Pi.id()).status.code(), Some(OK));
     let doc = status(&sb);
-    assert_eq!(find(&doc["plugins"], "pi")["state"], "reported", "{doc}");
-    assert_eq!(find(&doc["agents"], "pi")["level"], "hook-only", "{doc}");
+    assert_eq!(
+        find(&doc["plugins"], Host::Pi.id())["state"],
+        "reported",
+        "{doc}"
+    );
+    assert_eq!(
+        find(&doc["agents"], Host::Pi.id())["level"],
+        "hook-only",
+        "{doc}"
+    );
 }
 
 /// A call the guard decided for the host came through the plugin: proof it
@@ -131,16 +157,20 @@ fn a_call_the_guard_decided_counts_as_loaded() {
     age(&sb.home.join(AGENT_DIR).join("extensions/openmoat.js"));
     session(&sb);
     let read = json!({ "path": sb.project().join("README.md") });
-    let out = sb.guard("pi", &crate::pi::payload(&sb, "read", &read));
+    let out = sb.guard(Host::Pi.id(), &crate::pi::payload(&sb, "read", &read));
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let doc = status(&sb);
-    assert_eq!(find(&doc["plugins"], "pi")["state"], "reported", "{doc}");
+    assert_eq!(
+        find(&doc["plugins"], Host::Pi.id())["state"],
+        "reported",
+        "{doc}"
+    );
 }
 
 #[test]
 fn a_report_is_refused_for_a_hook_command_host_and_before_init() {
-    let sb = Sandbox::installed(&[".codex"]);
-    let out = heartbeat(&sb, "codex");
+    let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
+    let out = heartbeat(&sb, Host::Codex.id());
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
     assert!(
         stderr(&out).contains("runs a hook command"),
@@ -150,7 +180,7 @@ fn a_report_is_refused_for_a_hook_command_host_and_before_init() {
     assert_eq!(stdout(&out), "");
 
     let bare = Sandbox::bare(&[AGENT_DIR]);
-    let out = heartbeat(&bare, "pi");
+    let out = heartbeat(&bare, Host::Pi.id());
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
     assert!(!bare.home.join(".moat").exists(), "no state directory made");
 }

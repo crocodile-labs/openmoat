@@ -6,6 +6,8 @@ use std::fs;
 use serde_json::Value;
 
 use crate::common::{OK, Sandbox, json, output, squash, stdout, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 /// The `agents` entry of `moat status --format json` for `host`.
 fn agent(sb: &Sandbox, host: &str) -> Value {
@@ -20,7 +22,11 @@ fn agent(sb: &Sandbox, host: &str) -> Value {
 #[cfg(not(windows))] // #327: no Claude Code sandbox on native Windows
 #[test]
 fn each_agent_reports_its_level_and_gaps() {
-    let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);
+    let sb = Sandbox::installed(&[
+        &dir_of(Host::ClaudeCode),
+        &dir_of(Host::Codex),
+        &dir_of(Host::Cursor),
+    ]);
     let status = squash(&stdout(&sb.moat(&["status"])));
     // `!` instead of `✔` where something else names the agent: an advisory
     // for the version on the search path, Linux's TIOCSTI warning for Codex.
@@ -50,7 +56,7 @@ fn each_agent_reports_its_level_and_gaps() {
         assert!(verbose.contains(line), "{line:?} in {verbose}");
     }
 
-    let claude = agent(&sb, "claude-code");
+    let claude = agent(&sb, Host::ClaudeCode.id());
     assert_eq!(claude["level"], "hook-and-os-sandbox", "{claude}");
     assert_eq!(claude["reason"], Value::Null, "{claude}");
     assert_eq!(claude["name"], "Claude Code");
@@ -59,7 +65,7 @@ fn each_agent_reports_its_level_and_gaps() {
         gaps.contains("MCP servers") && !gaps.contains("WebSearch"),
         "{gaps}"
     );
-    let cursor = agent(&sb, "cursor");
+    let cursor = agent(&sb, Host::Cursor.id());
     assert_eq!(cursor["level"], "hook-and-os-sandbox", "{cursor}");
 
     let home = text(&output(&mut sb.command(), Some("")));
@@ -73,14 +79,14 @@ fn each_agent_reports_its_level_and_gaps() {
 
 #[test]
 fn a_drifted_sandbox_is_hook_only_and_says_which() {
-    let sb = Sandbox::installed(&[".codex"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
     let path = sb.home.join(".codex/config.toml");
     let weakened = fs::read_to_string(&path).unwrap().replace(
         "default_permissions = \"moat\"",
         "default_permissions = \":workspace\"",
     );
     fs::write(&path, weakened).unwrap();
-    let codex = agent(&sb, "codex");
+    let codex = agent(&sb, Host::Codex.id());
     assert_eq!(codex["level"], "hook-only", "{codex}");
     let reason = codex["reason"].as_str().unwrap();
     assert!(
@@ -100,12 +106,12 @@ fn a_drifted_sandbox_is_hook_only_and_says_which() {
 
 #[test]
 fn a_missing_hook_is_not_protected_and_absent_agents_keep_their_line() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     fs::write(sb.home.join(".claude/settings.json"), "{}").unwrap();
-    let claude = agent(&sb, "claude-code");
+    let claude = agent(&sb, Host::ClaudeCode.id());
     assert_eq!(claude["level"], "not-protected", "{claude}");
     assert_eq!(claude["reason"], "hook missing", "{claude}");
-    assert_eq!(agent(&sb, "codex")["level"], "not-found");
+    assert_eq!(agent(&sb, Host::Codex.id())["level"], "not-found");
 
     let status = squash(&stdout(&sb.moat(&["status"])));
     assert!(
@@ -155,7 +161,10 @@ fn an_older_claude_code_gets_no_on_failure_until_it_is_updated() {
     assert!(handler().get("onFailure").is_none(), "{}", handler());
     let doctor = stdout(&old(&["doctor"]));
     assert!(doctor.contains("no `onFailure: \"block\"`"), "{doctor}");
-    assert_eq!(agent(&sb, "claude-code")["reason"], "hook out of date");
+    assert_eq!(
+        agent(&sb, Host::ClaudeCode.id())["reason"],
+        "hook out of date"
+    );
 
     let out = sb.moat(&["init", "--yes"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
@@ -232,8 +241,8 @@ fn the_vs_code_extensions_claude_code_gets_on_failure() {
 #[cfg(windows)]
 #[test]
 fn claude_code_on_native_windows_is_hook_only() {
-    let sb = Sandbox::installed(&[".claude"]);
-    let claude = agent(&sb, "claude-code");
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
+    let claude = agent(&sb, Host::ClaudeCode.id());
     assert_eq!(claude["level"], "hook-only", "{claude}");
     assert!(
         claude["reason"]
@@ -268,7 +277,7 @@ fn in_order(out: &str, parts: &[&str]) {
 
 #[test]
 fn status_and_doctor_print_their_sections_in_order() {
-    let sb = Sandbox::installed(&[".codex"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
     let status = squash(&stdout(&sb.moat(&["status"])));
     // `status` names the agents found (here Codex) one per line, the agents
     // with no folder on one line, then OpenMoat's own state.
@@ -335,7 +344,7 @@ fn status_and_doctor_print_their_sections_in_order() {
 
 #[test]
 fn status_and_doctor_report_a_missing_lock_and_audit_log() {
-    let sb = Sandbox::installed(&[".codex"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
     fs::remove_file(sb.home.join(".moat/policy.lock")).unwrap();
     fs::remove_file(sb.home.join(".moat/audit.db")).unwrap();
     let out = sb.moat(&["status"]);
@@ -371,7 +380,7 @@ fn status_and_doctor_report_a_missing_lock_and_audit_log() {
 /// the same exit code; nothing else on stdout.
 #[test]
 fn doctor_prints_its_checks_as_one_json_document() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let out = sb.moat(&["doctor", "--format", "json"]);
     let doc = json(&out);
     let checks = doc["checks"].as_array().expect("checks");
@@ -406,7 +415,7 @@ fn doctor_prints_its_checks_as_one_json_document() {
 /// menu bar app that show them.
 #[test]
 fn status_json_reports_a_waiting_update_and_lock_drift() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let out = sb.moat(&["status", "--format", "json"]);
     let doc = json(&out);
     assert!(doc["policy_update"].is_null(), "{}", text(&out));

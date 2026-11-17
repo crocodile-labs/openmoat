@@ -13,6 +13,7 @@ use serde_json::json;
 
 use crate::common::{OK, Sandbox, output, stdout, text};
 use crate::proxy::brokered;
+use openmoat_hosts::Host;
 
 /// The brokered value: random, mixed case, no known format. Generated for the
 /// test; no real secret is used.
@@ -68,7 +69,7 @@ fn planted_secrets_never_reach_the_audit_log_or_an_export() {
         });
         let mut guard = sb.command();
         guard
-            .args(["guard", "--host", "claude-code"])
+            .args(["guard", "--host", Host::ClaudeCode.id()])
             .env(ENV, UNKNOWN);
         output(&mut guard, Some(&payload.to_string()));
     }

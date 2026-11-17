@@ -248,9 +248,9 @@ fn clines_two_copies_of_a_call_count_once_against_the_limit() {
         doc["preToolUse"] = json!({ "toolName": "editor", "parameters": input });
         doc.to_string()
     };
-    let out = sb.guard("cline", &with_copies(600_000));
+    let out = sb.guard(openmoat_hosts::Host::Cline.id(), &with_copies(600_000));
     assert_eq!(out.status.code(), Some(OK), "{}", stdout(&out));
-    let out = sb.guard("cline", &with_copies(1_100_000));
+    let out = sb.guard(openmoat_hosts::Host::Cline.id(), &with_copies(1_100_000));
     assert_eq!(out.status.code(), Some(DENY));
     assert!(stdout(&out).contains("smaller parts"), "{}", stdout(&out));
 }
@@ -274,7 +274,7 @@ fn status_names_clines_limits_and_its_other_hooks() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|a| a["host"] == "cline")
+        .find(|a| a["host"] == openmoat_hosts::Host::Cline.id())
         .unwrap()
         .clone();
     assert!(

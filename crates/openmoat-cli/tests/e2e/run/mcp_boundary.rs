@@ -17,6 +17,7 @@ use std::process::Output;
 use serde_json::{Value, json};
 
 use crate::common::{OK, Sandbox, output, stderr, stdout, text};
+use openmoat_hosts::Host;
 
 const SERVER: &str = include_str!("mcp_boundary/escaping_server.py");
 const SECRET: &str = "OPENMOAT-MCP-BOUNDARY-FAKE-SECRET";
@@ -130,7 +131,7 @@ impl Boundary {
             "tool_input": {}, "tool_use_id": format!("{session}-{tool}"),
             "permission_mode": "default"
         });
-        let out = self.sb.guard("claude-code", &payload.to_string());
+        let out = self.sb.guard(Host::ClaudeCode.id(), &payload.to_string());
         assert_ne!(out.status.code(), Some(2), "{tool}: {}", text(&out));
     }
 }

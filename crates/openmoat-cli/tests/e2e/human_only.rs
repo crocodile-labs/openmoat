@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::common::{OK, Sandbox, output, stderr};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 /// A shell script named `name` in the sandbox's home that runs its arguments
 /// as a command and stays their parent (`ps` shows `/bin/sh <dir>/<name> …`,
@@ -24,7 +26,7 @@ fn stand_in(home: &Path, name: &str) -> PathBuf {
 // coverage: ASI09
 #[test]
 fn a_human_only_command_started_by_an_agent_is_refused() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let agent = stand_in(&sb.home, "claude");
     let moat = env!("CARGO_BIN_EXE_openmoat");
     for args in [

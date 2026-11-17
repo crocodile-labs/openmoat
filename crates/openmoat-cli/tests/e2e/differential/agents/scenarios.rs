@@ -14,8 +14,10 @@ use serde_json::{Value, json};
 
 use super::{Agent, Home, call, decided_verdict, has_rule, reasons, session};
 use crate::common::{Sandbox, text};
+use crate::hosts::dir_of;
 use crate::push::{commit, fake_token, repo};
 use crate::taint::decide;
+use openmoat_hosts::Host;
 
 /// What a command that ran printed (see the module comment).
 const RAN: &str = "moat-ran";
@@ -217,14 +219,14 @@ fn real_claude_file_provenance_taints_the_next_session() {
 /// expects. A `Write` that is not denied is put on disk, as the agent would.
 #[test]
 fn the_scenario_calls_get_these_verdicts_from_the_hook() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let project = repo(&sb);
     let last = |id: &str, calls: &Value| -> (String, String) {
         let mut decided = (String::new(), String::new());
         for c in calls.as_array().unwrap() {
             let payload =
                 crate::taint::call(id, &project, c["name"].as_str().unwrap(), &c["input"]);
-            decided = decide(&sb, "claude-code", &payload);
+            decided = decide(&sb, Host::ClaudeCode.id(), &payload);
             if c["name"] == "Write" && decided.0 != "deny" && decided.0 != "ask" {
                 let path = c["input"]["file_path"].as_str().unwrap();
                 std::fs::write(path, c["input"]["content"].as_str().unwrap()).unwrap();

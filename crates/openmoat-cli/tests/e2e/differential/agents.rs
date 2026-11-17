@@ -21,6 +21,7 @@ use serde_json::Value;
 
 use super::claude::{FakeApi, PERL, claude_binary, python};
 use crate::common::{OK, Sandbox, json, output, skip_without_host_binary, text};
+use openmoat_hosts::Host;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod in_run;
@@ -165,7 +166,7 @@ impl Home {
             .as_array()
             .into_iter()
             .flatten()
-            .filter(|row| row["host"] == "claude-code")
+            .filter(|row| row["host"] == Host::ClaudeCode.id())
             .cloned()
             .collect()
     }

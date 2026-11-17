@@ -5,6 +5,8 @@
 use serde_json::Value;
 
 use crate::common::{Sandbox, fixture, hook_output as decision, stderr, stdout};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 /// The parsed `~/.claude/settings.json`.
 fn settings(sb: &Sandbox) -> Value {
@@ -17,14 +19,20 @@ fn settings(sb: &Sandbox) -> Value {
 /// that names another one rather than reading that directory's policy.
 #[test]
 fn the_hooks_state_directory_wins_and_another_moat_home_is_refused() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let payload = fixture("claude-code/read.json");
-    let homed = sb.guard_homed("claude-code", &payload);
+    let homed = sb.guard_homed(Host::ClaudeCode.id(), &payload);
     assert_eq!(homed.status.code(), Some(0), "{}", stderr(&homed));
 
     // The same directory in the variable is fine.
     let word = sb.home_word();
-    let args = ["guard", "--host", "claude-code", "--home", word.as_str()];
+    let args = [
+        "guard",
+        "--host",
+        Host::ClaudeCode.id(),
+        "--home",
+        word.as_str(),
+    ];
     let same = crate::common::output(
         sb.command()
             .args(args)
@@ -55,7 +63,13 @@ fn the_hooks_state_directory_wins_and_another_moat_home_is_refused() {
 
     // A word `init` never writes is refused too.
     let bad = sb.moat_stdin(
-        &["guard", "--host", "claude-code", "--home", "relative/.moat"],
+        &[
+            "guard",
+            "--host",
+            Host::ClaudeCode.id(),
+            "--home",
+            "relative/.moat",
+        ],
         &payload,
     );
     assert_eq!(bad.status.code(), Some(2), "{}", stderr(&bad));
@@ -65,7 +79,7 @@ fn the_hooks_state_directory_wins_and_another_moat_home_is_refused() {
 /// and `doctor` say it is out of date until `init` rewrites it.
 #[test]
 fn a_hook_without_the_state_directory_is_flagged_until_init() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let path = sb.home.join(".claude/settings.json");
     let mut root = settings(&sb);
     for entries in root["hooks"].as_object_mut().unwrap().values_mut() {
@@ -82,7 +96,7 @@ fn a_hook_without_the_state_directory_is_flagged_until_init() {
         "{}",
         stdout(&accepted)
     );
-    let decided = sb.guard("claude-code", &fixture("claude-code/read.json"));
+    let decided = sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/read.json"));
     assert_eq!(decided.status.code(), Some(0), "{}", stderr(&decided));
     for command in ["status", "doctor"] {
         let out = sb.moat(&[command]);

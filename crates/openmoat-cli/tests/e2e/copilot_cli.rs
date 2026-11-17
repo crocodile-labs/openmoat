@@ -9,6 +9,7 @@ use std::path::Path;
 use serde_json::{Value, json};
 
 use crate::common::{DENY, Sandbox, text};
+use openmoat_hosts::Host;
 
 fn sandbox() -> Sandbox {
     Sandbox::installed(&[".copilot"])
@@ -28,7 +29,7 @@ pub(crate) fn payload(cwd: &Path, tool: &str, args: &Value) -> String {
 }
 
 fn guard(sb: &Sandbox, payload: &str) -> (Option<i32>, String) {
-    let out = sb.guard("copilot-cli", payload);
+    let out = sb.guard(Host::CopilotCli.id(), payload);
     (
         out.status.code(),
         String::from_utf8_lossy(&out.stdout).into_owned(),
@@ -48,7 +49,7 @@ fn init_writes_one_hook_entry_for_every_tool() {
         let entry = &entries[0];
         assert!(entry.get("matcher").is_none(), "every tool: {entry}");
         assert_eq!(entry["timeoutSec"], timeout);
-        let args = format!("{} --event {event}", sb.hook_args("copilot-cli"));
+        let args = format!("{} --event {event}", sb.hook_args(Host::CopilotCli.id()));
         for shell in ["bash", "powershell"] {
             assert!(entry[shell].as_str().unwrap().ends_with(&args), "{entry}");
         }
@@ -57,7 +58,7 @@ fn init_writes_one_hook_entry_for_every_tool() {
 
 /// `guard` as the entry for `event` runs it.
 fn guard_as(sb: &Sandbox, event: Option<&str>, payload: &str) -> std::process::Output {
-    let mut args = vec!["guard", "--host", "copilot-cli"];
+    let mut args = vec!["guard", "--host", Host::CopilotCli.id()];
     args.extend(event.iter().flat_map(|event| ["--event", *event]));
     sb.moat_stdin(&args, payload)
 }

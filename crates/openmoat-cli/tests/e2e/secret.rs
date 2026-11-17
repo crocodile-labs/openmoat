@@ -5,6 +5,8 @@ use std::fs;
 use std::process::Output;
 
 use crate::common::{OK, Sandbox, USAGE, output, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 fn add(sb: &Sandbox, args: &[&str], answer: &str) -> Output {
     let mut cmd = sb.command();
@@ -20,7 +22,7 @@ fn policy(sb: &Sandbox) -> String {
 
 #[test]
 fn secret_add_without_a_terminal_is_refused() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let out = sb.moat(&["secret", "add", "gh"]);
     assert_eq!(out.status.code(), Some(USAGE));
     assert!(text(&out).contains("must be run by a person in a terminal"));
@@ -28,7 +30,7 @@ fn secret_add_without_a_terminal_is_refused() {
 
 #[test]
 fn secret_add_gh_shows_the_change_and_applies_only_on_yes() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let before = policy(&sb);
 
     let out = add(&sb, &["gh"], "n\n");
@@ -66,7 +68,7 @@ fn secret_add_gh_shows_the_change_and_applies_only_on_yes() {
 
 #[test]
 fn secret_add_needs_a_host_for_any_other_id() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let out = add(&sb, &["api", "--env", "API_KEY"], "y\n");
     assert_ne!(out.status.code(), Some(OK));
     assert!(text(&out).contains("give --host"), "{}", text(&out));

@@ -4,6 +4,8 @@
 use serde_json::json;
 
 use crate::common::{OK, REVIEW, Sandbox, USAGE, output, text, verdict};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 /// What `moat init` wrote from 0.1.1 to 0.3.0, before it recorded a base.
 const V0_3_0: &str = include_str!("../../src/upgrade/default-v0.3.0.yaml");
@@ -21,7 +23,7 @@ fn policy(sb: &Sandbox) -> String {
 /// A home set up by a release before this one: `policy`, no recorded base,
 /// re-pinned and the sandbox synced by a person.
 fn older_home(policy: &str) -> Sandbox {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     std::fs::write(sb.home.join(".moat/policy.yaml"), policy).unwrap();
     std::fs::remove_file(sb.home.join(".moat/policy.base.yaml")).unwrap();
     sb.moat_as_person(&["doctor", "--accept"]);
@@ -42,7 +44,7 @@ fn web_search(sb: &Sandbox) -> String {
         "session_id": "s1", "cwd": proj.to_string_lossy(), "hook_event_name": "PreToolUse",
         "tool_name": "WebSearch", "tool_input": {"query": "serde rename_all"}, "tool_use_id": "t1"
     });
-    verdict(&sb.guard("claude-code", &payload.to_string()))
+    verdict(&sb.guard(Host::ClaudeCode.id(), &payload.to_string()))
 }
 
 /// Exit code of `moat policy check` for writing a `.git` below the project root.
@@ -64,7 +66,7 @@ fn nested_git_write(sb: &Sandbox) -> Option<i32> {
 
 #[test]
 fn a_new_policy_records_its_base_and_has_nothing_to_upgrade() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let base = std::fs::read_to_string(sb.home.join(".moat/policy.base.yaml")).unwrap();
     assert_eq!(base, DEFAULT);
     let out = sb.moat(&["policy", "upgrade", "--dry-run"]);
@@ -375,7 +377,7 @@ fn old_dir_rule(spellings: &[String]) -> String {
 /// `doctor` says so, and `policy upgrade` turns it into a grant that follows the policy.
 #[test]
 fn an_old_dir_grant_is_brought_up_to_date() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let shared = sb.home.join("work/shared");
     std::fs::create_dir_all(&shared).unwrap();
     let written = shared.to_string_lossy().replace('\\', "/");

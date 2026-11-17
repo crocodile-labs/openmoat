@@ -11,6 +11,8 @@ use std::fs;
 use serde_json::{Value, json};
 
 use crate::common::{DENY, OK, Sandbox, fixture, json as parse, stdout, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 /// A settings file as Gemini CLI writes it, two-space indented.
 pub(crate) const ORIGINAL: &str = "{\n  \"ui\": { \"theme\": \"GitHub\" },\n  \"general\": {}\n}\n";
@@ -32,7 +34,7 @@ pub(crate) fn payload(sb: &Sandbox, tool: &str, input: &Value) -> String {
 
 /// The exit code and the reply; `Value::Null` when the hook printed nothing.
 fn guard(sb: &Sandbox, payload: &str) -> (Option<i32>, Value) {
-    let out = sb.guard("gemini-cli", payload);
+    let out = sb.guard(Host::GeminiCli.id(), payload);
     let reply = if stdout(&out).trim().is_empty() {
         Value::Null
     } else {
@@ -77,7 +79,7 @@ fn a_secret_upload_is_denied() {
     if cfg!(windows) {
         return;
     }
-    let sb = Sandbox::installed(&[".gemini"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
     let (code, reply) = guard(&sb, &fixture("gemini-cli/run_shell_command.json"));
     assert_eq!(code, Some(DENY), "{reply}");
     assert_eq!(reply["decision"], "deny");
@@ -95,7 +97,7 @@ fn dir_path_never_makes_a_directory_the_project() {
     if cfg!(windows) {
         return;
     }
-    let sb = Sandbox::installed(&[".gemini"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
     fs::create_dir_all(sb.home.join("Library/LaunchAgents")).unwrap();
     let write = json!({
         "session_id": "gem-1", "transcript_path": "", "cwd": sb.home.to_string_lossy(),
@@ -114,7 +116,7 @@ fn dir_path_never_makes_a_directory_the_project() {
 
 #[test]
 fn allow_review_and_no_decision_reach_gemini_as_its_own_shapes() {
-    let sb = Sandbox::installed(&[".gemini"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
     let file = sb.project().join("src/main.rs");
     let write = payload(
         &sb,
@@ -194,7 +196,7 @@ fn a_new_model_or_theme_alone_leaves_calls_decided_and_is_reported() {
         ("ui", |s| s["ui"] = json!({ "theme": "Dracula" })),
     ];
     for (key, change) in changes {
-        let sb = Sandbox::installed(&[".gemini"]);
+        let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
         edit_settings(&sb, change);
         assert_eq!(
             write_project_file(&sb),
@@ -254,7 +256,7 @@ fn any_other_settings_change_denies_every_call() {
         }),
     ];
     for (what, change) in changes {
-        let sb = Sandbox::installed(&[".gemini"]);
+        let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
         edit_settings(&sb, change);
         assert_frozen(&sb, what);
     }
@@ -274,7 +276,7 @@ fn an_excluded_tool_enabled_again_denies_every_call() {
 
 #[test]
 fn settings_that_no_longer_parse_deny_every_call() {
-    let sb = Sandbox::installed(&[".gemini"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
     fs::write(settings(&sb), r#"{"model": {"name": "#).unwrap();
     assert_frozen(&sb, "broken file");
 }
@@ -288,7 +290,7 @@ fn status_in(sb: &Sandbox, cwd: &std::path::Path) -> (Value, Value) {
         .as_array()
         .unwrap()
         .iter()
-        .find(|a| a["host"] == "gemini-cli")
+        .find(|a| a["host"] == Host::GeminiCli.id())
         .unwrap()
         .clone();
     (agent, doc)
@@ -298,7 +300,7 @@ fn status_in(sb: &Sandbox, cwd: &std::path::Path) -> (Value, Value) {
 /// what in it turns OpenMoat off or adds a hook.
 #[test]
 fn a_project_settings_file_that_disables_openmoat_is_warned_about() {
-    let sb = Sandbox::installed(&[".gemini"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
     let project = sb.project();
     let (agent, doc) = status_in(&sb, &project);
     assert_eq!(agent["level"], "hook-only", "{agent}");
@@ -321,7 +323,7 @@ fn a_project_settings_file_that_disables_openmoat_is_warned_about() {
 /// settings file that cannot be read leaves the search needing review.
 #[test]
 fn a_workspace_search_is_decided_over_the_directories_the_settings_name() {
-    let sb = Sandbox::installed(&[".gemini"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
     let project = sb.project();
     let searches = [
         ("grep_search", json!({ "pattern": "fn main" })),

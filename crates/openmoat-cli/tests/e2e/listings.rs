@@ -4,6 +4,8 @@
 use std::process::Output;
 
 use crate::common::{OK, Sandbox, json, output, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 fn add_secret(sb: &Sandbox, args: &[&str]) -> Output {
     let mut cmd = sb.command();
@@ -55,7 +57,7 @@ fn allowed_lists_rules_grants_and_trust_without_a_terminal() {
 
 #[test]
 fn secret_list_names_where_a_value_comes_from_never_the_value() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let none = json(&sb.moat(&["secret", "list", "--format", "json"]));
     assert_eq!(none["secrets"], serde_json::json!([]));
 

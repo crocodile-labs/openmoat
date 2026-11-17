@@ -8,11 +8,13 @@ use std::path::PathBuf;
 use serde_json::{Value, json};
 
 use crate::common::{OK, Sandbox, USAGE, fixture, json, text, verdict_and_reason};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 const SESSION: &str = "7c1e4b2a";
 
 fn sandbox() -> Sandbox {
-    Sandbox::installed(&[".claude"])
+    Sandbox::installed(&[&dir_of(Host::ClaudeCode)])
 }
 
 fn settings_path(sb: &Sandbox) -> PathBuf {
@@ -29,7 +31,7 @@ fn edit_settings(sb: &Sandbox, change: impl FnOnce(&mut Value)) {
 
 /// The verdict and reason for the golden `Read src/lib.rs` payload.
 fn read_src(sb: &Sandbox) -> (String, String) {
-    verdict_and_reason(&sb.guard("claude-code", &fixture("claude-code/read.json")))
+    verdict_and_reason(&sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/read.json")))
 }
 
 fn read_ssh_key(sb: &Sandbox) -> (String, String) {
@@ -222,7 +224,7 @@ fn a_config_change_of_only_relaxed_settings_loads() {
         "hook_event_name": "ConfigChange", "source": "user_settings",
         "change_type": "modified", "file_path": settings_path(&sb).to_string_lossy(),
     });
-    let out = sb.guard("claude-code", &payload.to_string());
+    let out = sb.guard(Host::ClaudeCode.id(), &payload.to_string());
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert_eq!(json(&out), json!({}), "{}", text(&out));
     let shown = sb.moat(&["show", "--recent", "1", "--format", "json"]);

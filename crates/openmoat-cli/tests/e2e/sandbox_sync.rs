@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use serde_json::Value;
 
 use crate::common::{DENY, OK, Sandbox, USAGE, fixture, stdout, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 fn claude_settings(sb: &Sandbox) -> PathBuf {
     sb.home.join(".claude/settings.json")
@@ -138,7 +140,7 @@ fn a_tampered_sandbox_block_denies_every_call_and_sync_refuses_over_it() {
     claude["sandbox"]["excludedCommands"] = serde_json::json!(["curl"]);
     fs::write(claude_settings(&sb), claude.to_string()).unwrap();
 
-    let out = sb.guard("claude-code", &fixture("claude-code/read.json"));
+    let out = sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/read.json"));
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
     assert!(text(&out).contains("kernel-integrity"), "{}", text(&out));
 
@@ -163,7 +165,7 @@ fn codex_may_edit_its_own_keys_but_not_the_moat_profile() {
     let trusted =
         fs::read_to_string(&path).unwrap() + "\n[projects.\"/w\"]\ntrust_level = \"trusted\"\n";
     fs::write(&path, trusted).unwrap();
-    let out = sb.guard("codex", &codex_shell("ls"));
+    let out = sb.guard(Host::Codex.id(), &codex_shell("ls"));
     // Codex's allow is no output (it rejects a bare `permissionDecision: allow`).
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(stdout(&out).is_empty(), "{}", text(&out));
@@ -173,7 +175,7 @@ fn codex_may_edit_its_own_keys_but_not_the_moat_profile() {
         "default_permissions = \":workspace\"",
     );
     fs::write(&path, weakened).unwrap();
-    let out = sb.guard("codex", &codex_shell("ls"));
+    let out = sb.guard(Host::Codex.id(), &codex_shell("ls"));
     assert_eq!(out.status.code(), Some(DENY));
     assert!(text(&out).contains("kernel-integrity"), "{}", text(&out));
 
@@ -215,7 +217,7 @@ fn native_windows_leaves_out_the_claude_code_sandbox() {
     let permissions = claude["permissions"].as_object().unwrap();
     assert_eq!(permissions.keys().collect::<Vec<_>>(), ["deny"], "{claude}");
     assert!(claude["hooks"]["PreToolUse"].is_array(), "{claude}");
-    let read = sb.guard("claude-code", &fixture("claude-code/read.json"));
+    let read = sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/read.json"));
     assert_eq!(crate::common::verdict(&read), "allow", "{}", text(&read));
     let codex = fs::read_to_string(codex_config(&sb)).unwrap();
     assert!(codex.contains("default_permissions = \"moat\""), "{codex}");
@@ -299,7 +301,7 @@ fn sync_leaves_agents_init_left_out_untouched() {
     let sb = Sandbox::bare(&[".claude", ".codex", ".cursor"]);
     let mine = "# my settings\nmodel = \"o3\"\n";
     fs::write(codex_config(&sb), mine).unwrap();
-    let init = sb.moat(&["init", "--hosts", "claude-code", "--yes"]);
+    let init = sb.moat(&["init", "--hosts", Host::ClaudeCode.id(), "--yes"]);
     assert_eq!(init.status.code(), Some(OK), "{}", text(&init));
     assert_eq!(fs::read_to_string(codex_config(&sb)).unwrap(), mine);
 
@@ -369,7 +371,11 @@ fn agent_files(sb: &Sandbox) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
 /// them and pins none of their files, though their folders are all there.
 #[test]
 fn sync_after_a_full_uninstall_writes_no_agent() {
-    let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);
+    let sb = Sandbox::installed(&[
+        &dir_of(Host::ClaudeCode),
+        &dir_of(Host::Codex),
+        &dir_of(Host::Cursor),
+    ]);
     let uninstall = sb.moat_as_person(&["uninstall"]);
     assert_eq!(uninstall.status.code(), Some(OK), "{}", text(&uninstall));
     let before = agent_files(&sb);

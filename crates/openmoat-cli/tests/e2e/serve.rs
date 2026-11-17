@@ -9,6 +9,8 @@ use std::process::{Child, ChildStdout, Stdio};
 use serde_json::Value;
 
 use crate::common::{OK, Sandbox, USAGE, json, stderr};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 /// A running `openmoat serve`, killed on drop.
 struct Running {
@@ -87,7 +89,7 @@ impl Running {
 
 #[test]
 fn serve_answers_only_with_the_token_and_shows_what_the_commands_print() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     sb.guard_bash("serve-1", &sb.project(), "cat ~/.ssh/id_rsa");
     sb.guard_bash("serve-1", &sb.project(), "ls");
     let server = start(&sb);
@@ -163,7 +165,7 @@ fn serve_answers_only_with_the_token_and_shows_what_the_commands_print() {
 
 #[test]
 fn serve_refuses_any_address_but_loopback_and_a_missing_terminal() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     for listen in ["0.0.0.0:0", "[::]:0", "127.0.0.2:0"] {
         let mut cmd = sb.command();
         cmd.args(["serve", "--listen", listen])

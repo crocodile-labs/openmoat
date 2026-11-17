@@ -4,13 +4,15 @@
 use serde_json::Value;
 
 use crate::common::{DENY, OK, Sandbox, fixture as host_fixture, json, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 fn sandbox() -> Sandbox {
-    Sandbox::installed(&[".cursor"])
+    Sandbox::installed(&[&dir_of(Host::Cursor)])
 }
 
 fn guard(sb: &Sandbox, payload: &str) -> (Option<i32>, Value) {
-    let out = sb.guard("cursor", payload);
+    let out = sb.guard(Host::Cursor.id(), payload);
     (out.status.code(), json(&out))
 }
 
@@ -41,7 +43,7 @@ fn init_installs_fail_closed_hooks_for_every_cursor_event() {
             entries[0]["command"]
                 .as_str()
                 .unwrap()
-                .ends_with(&sb.hook_args("cursor")),
+                .ends_with(&sb.hook_args(Host::Cursor.id())),
             "{event}"
         );
     }
@@ -345,7 +347,7 @@ fn tab_reads_of_a_secret_are_denied_and_others_allowed() {
             "file_path": path.to_string_lossy(), "content": "x"
         })
         .to_string();
-        let out = sb.guard("cursor", &payload);
+        let out = sb.guard(Host::Cursor.id(), &payload);
         (
             out.status.code(),
             crate::common::stdout(&out).trim().to_owned(),
@@ -370,7 +372,7 @@ fn tab_reads_of_a_secret_are_denied_and_others_allowed() {
 /// rather than read as a search of the project.
 #[test]
 fn claude_codes_hook_run_by_cursor_reads_cursors_input() {
-    let sb = Sandbox::installed(&[".claude", ".cursor"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode), &dir_of(Host::Cursor)]);
     let payload = serde_json::json!({
         "conversation_id": "c", "hook_event_name": "preToolUse", "cursor_version": "3.29.0",
         "workspace_roots": [sb.home.to_string_lossy()], "cwd": sb.home.to_string_lossy(),
@@ -378,7 +380,7 @@ fn claude_codes_hook_run_by_cursor_reads_cursors_input() {
         "tool_input": {"file_path": sb.home.join(".aws/credentials").to_string_lossy(), "pattern": "k"}
     })
     .to_string();
-    let out = sb.guard("claude-code", &payload);
+    let out = sb.guard(Host::ClaudeCode.id(), &payload);
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
     let doc = json(&out);
     assert_eq!(

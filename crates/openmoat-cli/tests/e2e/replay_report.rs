@@ -5,6 +5,7 @@ use std::process::Stdio;
 use serde_json::Value;
 
 use crate::common::{OK, Sandbox, USAGE, bash_payload, stdout, text};
+use openmoat_hosts::Host;
 
 /// An installed sandbox with two sessions of recorded decisions.
 fn seeded() -> Sandbox {
@@ -16,7 +17,10 @@ fn seeded() -> Sandbox {
         ("alpha", "cat ~/.ssh/id_rsa"),
         ("beta", "cargo test"),
     ] {
-        sb.guard("claude-code", &bash_payload(session, &project, command));
+        sb.guard(
+            Host::ClaudeCode.id(),
+            &bash_payload(session, &project, command),
+        );
     }
     sb
 }
@@ -54,7 +58,7 @@ fn replay_filters_by_session_host_and_window() {
     assert_eq!(json[0]["session_id"], "alpha");
     assert_eq!(json[0]["events"].as_array().unwrap().len(), 3);
 
-    let none = text(&sb.moat(&["replay", "--host", "cursor"]));
+    let none = text(&sb.moat(&["replay", "--host", Host::Cursor.id()]));
     assert!(none.contains("no sessions"), "{none}");
 
     let missing = sb.moat(&["replay", "--session", "nope"]);
@@ -76,7 +80,7 @@ fn report_summarises_the_window() {
         "{t}"
     );
     assert!(t.contains("secrets-paths") && t.contains("default"), "{t}");
-    assert!(t.contains("claude-code"), "{t}");
+    assert!(t.contains(Host::ClaudeCode.id()), "{t}");
 
     let json: Value = serde_json::from_slice(
         &sb.moat(&["report", "--format", "json", "--since", "today"])
@@ -85,9 +89,9 @@ fn report_summarises_the_window() {
     .unwrap();
     assert_eq!(json["total"], 4);
     assert_eq!(json["sessions"], 2);
-    assert_eq!(json["by_host"]["claude-code"], 4);
+    assert_eq!(json["by_host"][Host::ClaudeCode.id()], 4);
 
-    let empty = text(&sb.moat(&["report", "--host", "codex"]));
+    let empty = text(&sb.moat(&["report", "--host", Host::Codex.id()]));
     assert!(empty.contains("0 decisions"), "{empty}");
 }
 
@@ -96,7 +100,10 @@ fn show_aligns_columns_and_stops_quietly_when_the_reader_does() {
     let sb = seeded();
     let table = stdout(&sb.moat(&["show"]));
     let lines: Vec<&str> = table.lines().collect();
-    let host_column = |line: &str| line.find("claude-code").or_else(|| line.find("host"));
+    let host_column = |line: &str| {
+        line.find(Host::ClaudeCode.id())
+            .or_else(|| line.find("host"))
+    };
     assert!(lines.len() > 1, "{table}");
     assert!(
         lines

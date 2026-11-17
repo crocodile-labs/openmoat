@@ -10,6 +10,7 @@ use std::fs;
 use serde_json::{Value, json};
 
 use crate::common::{DENY, OK, Sandbox, json as parse, output, stdout, text};
+use openmoat_hosts::Host;
 
 fn sandbox() -> Sandbox {
     Sandbox::installed(&[".openclaw"])
@@ -32,7 +33,7 @@ pub(crate) fn payload(sb: &Sandbox, tool: &str, params: &Value) -> String {
 
 /// The exit code and the reply; `Value::Null` when the hook printed nothing.
 fn guard(sb: &Sandbox, payload: &str) -> (Option<i32>, Value) {
-    let out = sb.guard("openclaw", payload);
+    let out = sb.guard(Host::OpenClaw.id(), payload);
     let reply = if stdout(&out).trim().is_empty() {
         Value::Null
     } else {
@@ -122,7 +123,7 @@ fn openclaw_config_path_is_followed_and_protected() {
     fs::write(&config, "{ gateway: { port: 18789 } }\n").unwrap();
     let out = output(
         sb.command()
-            .args(["init", "--yes", "--hosts", "openclaw"])
+            .args(["init", "--yes", "--hosts", Host::OpenClaw.id()])
             .env("OPENCLAW_CONFIG_PATH", "~/etc/main.json5"),
         None,
     );
@@ -154,7 +155,7 @@ fn a_configuration_with_comments_is_not_rewritten() {
     let config = sb.home.join(".openclaw/openclaw.json");
     let original = "// my gateway\n{ gateway: { port: 18789 } }\n";
     fs::write(&config, original).unwrap();
-    let out = sb.moat(&["init", "--yes", "--hosts", "openclaw"]);
+    let out = sb.moat(&["init", "--yes", "--hosts", Host::OpenClaw.id()]);
     assert!(text(&out).contains("comments"), "{}", text(&out));
     assert_eq!(fs::read_to_string(&config).unwrap(), original);
     assert!(!sb.home.join(".openclaw/openmoat").exists());

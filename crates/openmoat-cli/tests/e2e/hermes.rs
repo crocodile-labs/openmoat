@@ -63,7 +63,7 @@ pub(crate) fn payload(sb: &Sandbox, tool: &str, input: &Value) -> String {
 
 /// The exit code and the reply; `Value::Null` when the hook printed nothing.
 fn guard(sb: &Sandbox, payload: &str) -> (Option<i32>, Value) {
-    reply(&sb.guard("hermes", payload))
+    reply(&sb.guard(Host::Hermes.id(), payload))
 }
 
 fn reply(out: &std::process::Output) -> (Option<i32>, Value) {
@@ -110,7 +110,10 @@ fn init_adds_one_fail_closed_entry_and_approves_it() {
     assert_eq!(entries[0]["timeout"], json!(60));
     assert!(entries[0].get("matcher").is_none());
     let command = entries[0]["command"].as_str().unwrap().to_owned();
-    assert!(command.ends_with(&sb.hook_args("hermes")), "{command}");
+    assert!(
+        command.ends_with(&sb.hook_args(Host::Hermes.id())),
+        "{command}"
+    );
     let approvals: Value =
         serde_json::from_str(&fs::read_to_string(allowlist(&sb)).unwrap()).unwrap();
     let approved = &approvals["approvals"][0];
@@ -193,7 +196,7 @@ fn a_review_in_yolo_mode_is_a_deny() {
     let outside = sb.home.join("notes").join("todo.txt");
     let call = payload(&sb, "read_file", &json!({ "path": outside }));
     let mut cmd = sb.command();
-    cmd.args(["guard", "--host", "hermes"])
+    cmd.args(["guard", "--host", Host::Hermes.id()])
         .env("HERMES_YOLO_MODE", "1");
     let (code, doc) = reply(&output(&mut cmd, Some(&call)));
     assert_eq!(code, Some(DENY), "{doc}");
@@ -308,7 +311,7 @@ fn hermes_saving_its_model_is_not_drift_but_a_hook_change_is() {
 fn an_inline_hooks_is_refused_with_the_entry_to_add() {
     let original = "hooks: {post_tool_call: [{command: log.sh}]}\n";
     let sb = bare(Some(original));
-    let out = sb.moat(&["init", "--yes", "--hosts", "hermes"]);
+    let out = sb.moat(&["init", "--yes", "--hosts", Host::Hermes.id()]);
     assert_ne!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(text(&out).contains("guard --host hermes"), "{}", text(&out));
     assert_eq!(fs::read_to_string(config(&sb)).unwrap(), original);

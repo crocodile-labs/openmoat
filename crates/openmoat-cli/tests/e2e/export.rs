@@ -6,12 +6,14 @@ use std::process::Output;
 use serde_json::Value;
 
 use crate::common::{OK, Sandbox, USAGE, bash_payload, json, stdout, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 const TOKEN: &str = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
 
 /// An installed sandbox with three decisions in two sessions, one naming a token.
 fn seeded() -> Sandbox {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     for (session, command) in [
         ("alpha", "git status --short".to_owned()),
@@ -21,7 +23,10 @@ fn seeded() -> Sandbox {
         ),
         ("beta", "cargo test".to_owned()),
     ] {
-        sb.guard("claude-code", &bash_payload(session, &project, &command));
+        sb.guard(
+            Host::ClaudeCode.id(),
+            &bash_payload(session, &project, &command),
+        );
     }
     sb
 }
@@ -59,9 +64,12 @@ fn export_filters_by_session_host_and_window() {
     let beta = export(&sb, &["--session", "beta"]);
     assert_eq!(beta.len(), 1);
     assert_eq!(beta[0]["session_id"], "beta");
-    assert_eq!(export(&sb, &["--host", "cursor"]), Vec::<Value>::new());
     assert_eq!(
-        export(&sb, &["--since", "today", "--host", "claude-code"]).len(),
+        export(&sb, &["--host", Host::Cursor.id()]),
+        Vec::<Value>::new()
+    );
+    assert_eq!(
+        export(&sb, &["--since", "today", "--host", Host::ClaudeCode.id()]).len(),
         3
     );
     let bad = sb.moat(&["audit", "export", "--since", "soon"]);
@@ -215,7 +223,7 @@ fn evidence_maps_the_window_to_controls_without_secrets() {
     let sb = seeded();
     let project = sb.project();
     sb.guard(
-        "claude-code",
+        Host::ClaudeCode.id(),
         &bash_payload("alpha", &project, "cat ~/.ssh/id_rsa"),
     );
     let report = json(&sb.moat(&["audit", "evidence", "--format", "json"]));

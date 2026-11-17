@@ -40,7 +40,7 @@ pub(crate) fn payload(sb: &Sandbox, tool: &str, input: &Value) -> String {
 
 /// The exit code and the reply; `Value::Null` when the hook printed nothing.
 fn guard(sb: &Sandbox, payload: &str) -> (Option<i32>, Value) {
-    let out = sb.guard("qwen-code", payload);
+    let out = sb.guard(Host::QwenCode.id(), payload);
     let reply = serde_json::from_str(stdout(&out).trim()).unwrap_or(Value::Null);
     (out.status.code(), reply)
 }

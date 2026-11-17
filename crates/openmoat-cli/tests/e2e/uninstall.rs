@@ -4,6 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::common::{DENY, OK, Sandbox, USAGE, output, squash, stdout, text};
+use openmoat_hosts::Host;
 
 /// `moat init` as a person at a terminal answering `answers`.
 fn init_answering(sb: &Sandbox, answers: &str) -> std::process::Output {
@@ -212,7 +213,7 @@ fn init_shows_the_full_diff_on_d_and_asks_again() {
 #[test]
 fn init_hosts_leaves_other_agents_untouched() {
     let sb = Sandbox::bare(&[".claude", ".codex"]);
-    let out = sb.moat(&["init", "--hosts", "claude-code"]);
+    let out = sb.moat(&["init", "--hosts", Host::ClaudeCode.id()]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(sb.home.join(".claude/settings.json").is_file());
     assert!(
@@ -281,7 +282,7 @@ fn uninstall_keeps_changes_made_since_init() {
     doc["model"] = "opus".into();
     fs::write(&settings, doc.to_string()).unwrap();
 
-    let out = sb.moat_as_person(&["uninstall", "--hosts", "claude-code"]);
+    let out = sb.moat_as_person(&["uninstall", "--hosts", Host::ClaudeCode.id()]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(stdout(&out).contains("backup kept"), "{}", text(&out));
     let left: serde_json::Value =
@@ -298,7 +299,13 @@ fn a_users_file_at_a_backup_name_is_never_taken_or_deleted() {
     let mine = sb.home.join(".claude/settings.json.moat-backup");
     fs::write(&settings, "{\"theme\": \"dark\"}\n").unwrap();
     fs::write(&mine, "my own notes\n").unwrap();
-    let out = sb.moat(&["init", "--yes", "--hosts", "claude-code", "--verbose"]);
+    let out = sb.moat(&[
+        "init",
+        "--yes",
+        "--hosts",
+        Host::ClaudeCode.id(),
+        "--verbose",
+    ]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(
         !stdout(&out).contains("settings.json.moat-backup"),
@@ -306,7 +313,7 @@ fn a_users_file_at_a_backup_name_is_never_taken_or_deleted() {
         text(&out)
     );
 
-    let out = sb.moat_as_person(&["uninstall", "--hosts", "claude-code"]);
+    let out = sb.moat_as_person(&["uninstall", "--hosts", Host::ClaudeCode.id()]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert_eq!(fs::read_to_string(&mine).unwrap(), "my own notes\n");
     let left: serde_json::Value =
@@ -338,7 +345,7 @@ fn commands_follow_the_recorded_config_dir() {
     fs::create_dir_all(&custom).unwrap();
     let out = output(
         sb.command()
-            .args(["init", "--hosts", "claude-code"])
+            .args(["init", "--hosts", Host::ClaudeCode.id()])
             .env("CLAUDE_CONFIG_DIR", &custom),
         None,
     );
@@ -376,7 +383,7 @@ fn kernel_self_covers_the_recorded_and_the_env_config_dir() {
     fs::create_dir_all(&recorded).unwrap();
     let out = output(
         sb.command()
-            .args(["init", "--hosts", "claude-code"])
+            .args(["init", "--hosts", Host::ClaudeCode.id()])
             .env("CLAUDE_CONFIG_DIR", &recorded),
         None,
     );
@@ -425,7 +432,7 @@ fn uninstall_takes_only_the_deny_rules_init_added() {
     // A change since init keeps the file from being restored: the rules are stripped.
     doc["model"] = "opus".into();
     fs::write(&settings, doc.to_string()).unwrap();
-    let out = sb.moat_as_person(&["uninstall", "--hosts", "claude-code"]);
+    let out = sb.moat_as_person(&["uninstall", "--hosts", Host::ClaudeCode.id()]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let left: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();

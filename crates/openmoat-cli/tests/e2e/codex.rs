@@ -3,10 +3,12 @@
 use std::path::Path;
 
 use crate::common::{DENY, OK, Sandbox, fixture, hook_output, output, stderr, stdout};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 #[test]
 fn bare_openmoat_denies_hook_input_but_keeps_the_home_screen() {
-    let sb = Sandbox::installed(&[".codex"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
     let out = sb.moat_stdin(&[], &shell("miswired", "cat ~/.ssh/id_rsa"));
     assert_eq!(out.status.code(), Some(DENY));
     assert!(stderr(&out).contains("without `guard --host <agent>`; denying"));
@@ -17,7 +19,7 @@ fn bare_openmoat_denies_hook_input_but_keeps_the_home_screen() {
 
 #[test]
 fn status_and_doctor_only_warn_about_codex_trust_without_granting_it() {
-    let sb = Sandbox::installed(&[".codex"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
     let config = sb.home.join(".codex/config.toml");
     let before = std::fs::read(&config).unwrap();
     for command in ["status", "doctor"] {
@@ -67,7 +69,7 @@ fn status_and_doctor_only_warn_about_codex_trust_without_granting_it() {
     // The advisory mirror of Codex's internal hash is never an enforcement
     // input: valid guard calls and person-authorised commands still work.
     assert_eq!(
-        sb.guard("codex", &shell("untrusted-allow", "ls -la"))
+        sb.guard(Host::Codex.id(), &shell("untrusted-allow", "ls -la"))
             .status
             .code(),
         Some(OK)
@@ -83,7 +85,7 @@ fn status_and_doctor_only_warn_about_codex_trust_without_granting_it() {
 fn codex_windows_command_forwards_stdin_and_preserves_guard_exit_codes() {
     use std::os::windows::process::CommandExt as _;
 
-    let sb = Sandbox::installed(&[".codex"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
     let path = sb.home.join(".codex/hooks.json");
     let root: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
@@ -116,7 +118,7 @@ fn codex_windows_command_forwards_stdin_and_preserves_guard_exit_codes() {
     let missing = sb.home.join("Missing Moat's %PATH% tools/openmoat.exe");
     let entry = spec.hook_file.entries().unwrap().entry(
         &spec.hooks[0],
-        "codex",
+        Host::Codex.id(),
         &openmoat_hosts::GuardCommand::new(missing.to_string_lossy()),
         false,
     );
@@ -139,8 +141,11 @@ fn codex_windows_command_forwards_stdin_and_preserves_guard_exit_codes() {
 
 #[test]
 fn codex_166_ssh_key_attack_is_denied_and_audited() {
-    let sb = Sandbox::installed(&[".codex"]);
-    let out = sb.guard("codex", &shell("codex-166-attack", "cat ~/.ssh/id_rsa"));
+    let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
+    let out = sb.guard(
+        Host::Codex.id(),
+        &shell("codex-166-attack", "cat ~/.ssh/id_rsa"),
+    );
     assert_eq!(out.status.code(), Some(DENY), "{}", stderr(&out));
     assert_eq!(hook_output(&out)["permissionDecision"], "deny");
     let audit = sb.moat(&["audit", "export"]);
@@ -210,12 +215,12 @@ fn legacy_codex_hook_is_reported_and_migrated_by_each_upgrade_path() {
         vec!["policy", "upgrade", "--yes"],
         vec!["sandbox", "sync"],
     ] {
-        let sb = Sandbox::installed(&[".codex"]);
+        let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
         let path = sb.home.join(".codex/hooks.json");
         let mut doc: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         let hook = &mut doc["hooks"]["PreToolUse"][0]["hooks"][0];
-        *hook = serde_json::json!({"type":"command", "command":env!("CARGO_BIN_EXE_openmoat"), "args":["guard","--host","codex"], "timeout":600});
+        *hook = serde_json::json!({"type":"command", "command":env!("CARGO_BIN_EXE_openmoat"), "args":["guard","--host",Host::Codex.id()], "timeout":600});
         std::fs::write(&path, doc.to_string()).unwrap();
         // Model an intact lock written by the old release, rather than drift.
         let accepted = sb.moat_as_person(&["doctor", "--accept"]);
@@ -245,11 +250,11 @@ fn legacy_codex_hook_is_reported_and_migrated_by_each_upgrade_path() {
             hook["command"]
                 .as_str()
                 .unwrap()
-                .ends_with(&sb.hook_args("codex"))
+                .ends_with(&sb.hook_args(Host::Codex.id()))
         );
         assert_eq!(hook["statusMessage"], "OpenMoat");
         assert!(path.with_extension("json.moat-backup").exists());
-        let denied = sb.guard("codex", &shell("migrated", "cat ~/.ssh/id_rsa"));
+        let denied = sb.guard(Host::Codex.id(), &shell("migrated", "cat ~/.ssh/id_rsa"));
         assert_eq!(denied.status.code(), Some(DENY));
         assert!(!stderr(&denied).contains("kernel-integrity"));
         for command in ["status", "doctor"] {
@@ -287,7 +292,7 @@ fn a_review_blocks_codex_until_a_person_approves_it() {
 
     // still a `review` under ADR-025: a pager is a program git runs later
     let command = "git config core.pager less";
-    let out = sb.guard("codex", &shell("codex-s1", command));
+    let out = sb.guard(Host::Codex.id(), &shell("codex-s1", command));
     assert_eq!(out.status.code(), Some(DENY), "{}", stderr(&out));
     let d = hook_output(&out);
     assert_eq!(d["permissionDecision"], "deny", "{d}");
@@ -297,7 +302,7 @@ fn a_review_blocks_codex_until_a_person_approves_it() {
 
     let allow = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", stderr(&allow));
-    let out = sb.guard("codex", &shell("codex-s1", command));
+    let out = sb.guard(Host::Codex.id(), &shell("codex-s1", command));
     assert_eq!(out.status.code(), Some(OK), "approved for the session");
     // Codex's allow is no output (it rejects a bare `permissionDecision: allow`).
     assert!(stdout(&out).is_empty(), "{}", stdout(&out));
@@ -308,13 +313,13 @@ fn a_review_blocks_codex_until_a_person_approves_it() {
         "hook_event_name": "PreToolUse", "tool_name": "Bash",
         "tool_input": { "command": command }, "tool_use_id": "t1"
     });
-    let out = sb.guard("claude-code", &claude.to_string());
+    let out = sb.guard(Host::ClaudeCode.id(), &claude.to_string());
     assert_eq!(out.status.code(), Some(OK));
     assert_eq!(hook_output(&out)["permissionDecision"], "ask");
 
     // A call no rule matches is left to Codex's own approval policy (ADR-025):
     // no output, exit 0, and never the blocking deny a `review` becomes.
-    let out = sb.guard("codex", &shell("codex-s2", "npm install left-pad"));
+    let out = sb.guard(Host::Codex.id(), &shell("codex-s2", "npm install left-pad"));
     assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
     assert!(stdout(&out).trim().is_empty(), "{}", stdout(&out));
 }
@@ -335,7 +340,7 @@ fn codex_call(
     output(
         sb.command()
             .current_dir(session)
-            .args(["guard", "--host", "codex"]),
+            .args(["guard", "--host", Host::Codex.id()]),
         Some(&payload),
     )
 }
@@ -345,7 +350,7 @@ fn codex_call(
 /// persistence write; the same work inside the project is not held.
 #[test]
 fn a_codex_workdir_never_decides_the_project() {
-    let sb = Sandbox::installed(&[".codex"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
     let proj = sb.project();
     let agents = sb.home.join("Library/LaunchAgents");
     std::fs::create_dir_all(&agents).unwrap();
@@ -373,7 +378,7 @@ fn a_codex_workdir_never_decides_the_project() {
 /// `view_image` are checked as the files they read.
 #[test]
 fn codex_holds_input_it_cannot_see_and_checks_its_own_read_tools() {
-    let sb = Sandbox::installed(&[".codex"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
     let proj = sb.project();
     let held = codex_call(&sb, &proj, &proj, "Bash", r#"{"command":"bash -i"}"#);
     assert_eq!(held.status.code(), Some(DENY));
@@ -412,8 +417,11 @@ fn codex_holds_input_it_cannot_see_and_checks_its_own_read_tools() {
 /// which Codex reads as a deny, never as an approval.
 #[test]
 fn a_codex_permission_request_is_refused_never_approved() {
-    let sb = Sandbox::installed(&[".codex"]);
-    let out = sb.guard("codex", &fixture("codex/permission-request-shell.json"));
+    let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
+    let out = sb.guard(
+        Host::Codex.id(),
+        &fixture("codex/permission-request-shell.json"),
+    );
     assert_eq!(out.status.code(), Some(DENY), "{}", stderr(&out));
     assert!(stderr(&out).contains("moat: deny"), "{}", stderr(&out));
 }

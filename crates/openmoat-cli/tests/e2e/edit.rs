@@ -1,10 +1,12 @@
 //! `moat edit`, end to end, with a script standing in for the person's editor.
 
 use crate::common::{Sandbox, USAGE, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 #[test]
 fn edit_without_a_terminal_is_refused() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let out = sb.moat(&["edit"]);
     assert_eq!(out.status.code(), Some(USAGE));
     assert!(text(&out).contains("must be run by a person in a terminal"));
@@ -43,7 +45,7 @@ mod with_editor {
 
     #[test]
     fn edit_shows_the_diff_and_applies_only_on_yes() {
-        let sb = Sandbox::installed(&[".claude"]);
+        let sb = Sandbox::installed(&[&crate::hosts::dir_of(openmoat_hosts::Host::ClaudeCode)]);
         let before = policy(&sb);
 
         let out = edit(&sb, APPEND, "n\n");
@@ -75,7 +77,7 @@ mod with_editor {
 
     #[test]
     fn edit_with_no_changes_does_nothing() {
-        let sb = Sandbox::installed(&[".claude"]);
+        let sb = Sandbox::installed(&[&crate::hosts::dir_of(openmoat_hosts::Host::ClaudeCode)]);
         let lock = std::fs::read(sb.home.join(".moat/policy.lock")).unwrap();
         let out = edit(&sb, "true", "");
         assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
@@ -88,7 +90,7 @@ mod with_editor {
 
     #[test]
     fn edit_never_writes_a_policy_that_does_not_lint() {
-        let sb = Sandbox::installed(&[".claude"]);
+        let sb = Sandbox::installed(&[&crate::hosts::dir_of(openmoat_hosts::Host::ClaudeCode)]);
         let before = policy(&sb);
         let out = edit(
             &sb,
@@ -107,7 +109,7 @@ mod with_editor {
 
     #[test]
     fn edit_refuses_over_a_drifted_lock() {
-        let sb = Sandbox::installed(&[".claude"]);
+        let sb = Sandbox::installed(&[&crate::hosts::dir_of(openmoat_hosts::Host::ClaudeCode)]);
         let path = sb.home.join(".moat/policy.yaml");
         let tampered = policy(&sb) + "\n# tampered\n";
         std::fs::write(&path, &tampered).unwrap();

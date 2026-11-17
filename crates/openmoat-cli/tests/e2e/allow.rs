@@ -5,6 +5,7 @@
 //! would type; `guard` runs without it, exactly as a hook does.
 
 use crate::common::{DENY, OK, REVIEW, Sandbox, USAGE, text};
+use openmoat_hosts::Host;
 
 /// The hook's verdict and reason for one Bash call in the sandbox's project.
 fn guard(sb: &Sandbox, session: &str, command: &str) -> (String, String) {
@@ -53,7 +54,7 @@ fn no_session_grant_for_a_call_without_a_session_id() {
         "allow",
         INSTALL,
         "--host",
-        "claude-code",
+        Host::ClaudeCode.id(),
         "--session",
         "unknown",
     ];
@@ -95,7 +96,14 @@ fn allow_last_says_what_it_approves_and_asks_first() {
 fn allow_explicit_session_grant() {
     let sb = Sandbox::installed_with_review(&[".claude"]);
     let project = sb.project().to_string_lossy().into_owned();
-    let args = ["allow", INSTALL, "--host", "claude-code", "--session", "s9"];
+    let args = [
+        "allow",
+        INSTALL,
+        "--host",
+        Host::ClaudeCode.id(),
+        "--session",
+        "s9",
+    ];
     // From the home directory, without --project: the grant is for the home
     // directory, not the project the agent works in.
     let out = sb.moat_as_person(&args);
@@ -277,7 +285,14 @@ fn allow_always_refuses_over_a_tampered_policy() {
 
 #[test]
 fn session_grant_refuses_over_a_drifted_lock() {
-    let args = ["allow", INSTALL, "--host", "claude-code", "--session", "s1"];
+    let args = [
+        "allow",
+        INSTALL,
+        "--host",
+        Host::ClaudeCode.id(),
+        "--session",
+        "s1",
+    ];
     assert_allow_refuses_after_tampering(".claude/settings.json", &args);
     assert_allow_refuses_after_tampering(".moat/policy.yaml", &args);
 }

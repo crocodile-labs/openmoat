@@ -8,7 +8,9 @@ use std::process::Command;
 use serde_json::json;
 
 use crate::common::{Sandbox, bash_payload, output, verdict_and_reason};
+use crate::hosts::dir_of;
 use crate::taint::{call, decide};
+use openmoat_hosts::Host;
 
 /// A fake GitHub token of the right shape, built at run time so this source
 /// holds no token-shaped text.
@@ -80,7 +82,7 @@ fn unchecked_decision(sb: &Sandbox) -> String {
 
 #[test]
 fn a_token_in_the_newest_commit_denies_the_push() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let work = repo(&sb);
     commit(
         &work,
@@ -100,7 +102,7 @@ fn a_token_in_the_newest_commit_denies_the_push() {
 
 #[test]
 fn a_token_in_an_older_commit_of_the_push_denies_it() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let work = repo(&sb);
     commit(&work, "k.txt", &format!("{}\n", fake_token()), "add");
     commit(&work, "k.txt", "gone\n", "remove");
@@ -112,7 +114,7 @@ fn a_token_in_an_older_commit_of_the_push_denies_it() {
 
 #[test]
 fn a_tainted_session_pushing_a_workflow_change_needs_review() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let work = repo(&sb);
     commit(&work, ".github/workflows/ci.yml", "on: push\n", "ci");
     // a clean session: the policy decides, the push check stays quiet
@@ -121,7 +123,11 @@ fn a_tainted_session_pushing_a_workflow_change_needs_review() {
     assert!(!reason.contains("push-"), "{reason}");
 
     let fetch = json!({"url": "https://crates.io/crates/serde", "prompt": "summarise"});
-    let (verdict, _) = decide(&sb, "claude-code", &call("s1", &work, "WebFetch", &fetch));
+    let (verdict, _) = decide(
+        &sb,
+        Host::ClaudeCode.id(),
+        &call("s1", &work, "WebFetch", &fetch),
+    );
     assert_eq!(verdict, "allow");
     let (verdict, reason) = push(&sb, &work, "git push");
     assert_eq!(verdict, "ask", "{reason}");
@@ -131,7 +137,7 @@ fn a_tainted_session_pushing_a_workflow_change_needs_review() {
 
 #[test]
 fn a_normal_push_keeps_its_verdict() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let work = repo(&sb);
     commit(&work, "src/lib.rs", "pub fn f() {}\n", "code");
     let (verdict, reason) = push(&sb, &work, "git push");
@@ -141,7 +147,7 @@ fn a_normal_push_keeps_its_verdict() {
 
 #[test]
 fn without_an_upstream_the_default_branch_is_the_base() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let work = repo(&sb);
     // a token already on origin's main is not this push's
     commit(&work, "old.txt", &format!("{}\n", fake_token()), "old");
@@ -158,12 +164,12 @@ fn without_an_upstream_the_default_branch_is_the_base() {
 
 #[test]
 fn a_push_not_checked_in_time_or_too_large_needs_review() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let work = repo(&sb);
     commit(&work, "src/lib.rs", "pub fn f() {}\n", "code");
     // Debug builds read the check's time budget from the environment.
     let mut cmd = sb.command();
-    cmd.args(["guard", "--host", "claude-code"])
+    cmd.args(["guard", "--host", Host::ClaudeCode.id()])
         .env("MOAT_TEST_PUSH_BUDGET_MS", "0");
     let out = output(&mut cmd, Some(&bash_payload("s1", &work, "git push")));
     let (verdict, reason) = verdict_and_reason(&out);

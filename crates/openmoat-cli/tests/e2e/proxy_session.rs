@@ -18,7 +18,9 @@ use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 
 use crate::common::{DENY, OK, Sandbox, json as json_of, stderr, stdout, text};
+use crate::hosts::dir_of;
 use crate::taint::call;
+use openmoat_hosts::Host;
 
 /// A session id as Claude Code makes them.
 const SESSION_A: &str = "5f0c2d1e-0a4b-4c3d-9e8f-7a6b5c4d3e2f";
@@ -27,7 +29,7 @@ const SESSION_B: &str = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 /// An installed home with Claude Code, its sandbox sending traffic to
 /// `openmoat proxy` on a free port, and a project.
 fn setup() -> (Sandbox, u16, PathBuf) {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let port = sb.use_free_proxy_port();
     let project = sb.project();
     (sb, port, project)
@@ -46,7 +48,7 @@ fn session_start(session: &str, cwd: &Path) -> String {
 /// `CLAUDE_ENV_FILE`.
 fn start(sb: &Sandbox, session: &str, cwd: &Path, env_file: Option<&Path>) -> std::process::Output {
     let mut cmd = sb.command();
-    cmd.args(["guard", "--host", "claude-code"]);
+    cmd.args(["guard", "--host", Host::ClaudeCode.id()]);
     if let Some(file) = env_file {
         cmd.env("CLAUDE_ENV_FILE", file);
     }
@@ -345,7 +347,10 @@ fn a_session_that_read_a_secret_cannot_send_through_the_proxy() {
     let (user_a, password_a) = userinfo(&issued_url(&sb, SESSION_A, &project));
     let (user_b, password_b) = userinfo(&issued_url(&sb, SESSION_B, &project));
     let read = json!({"file_path": project.join("creds/token").to_string_lossy()});
-    let out = sb.guard("claude-code", &call(SESSION_A, &project, "Read", &read));
+    let out = sb.guard(
+        Host::ClaudeCode.id(),
+        &call(SESSION_A, &project, "Read", &read),
+    );
     assert!(stdout(&out).contains("\"ask\""), "{}", text(&out));
 
     let _proxy = sb.start_proxy();
@@ -390,7 +395,7 @@ fn a_session_start_without_an_env_file_says_so_and_without_a_port_does_nothing()
     assert_eq!(stdout(&out), "");
     assert!(stderr(&out).contains("CLAUDE_ENV_FILE"), "{}", text(&out));
 
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     let env_file = sb.home.join("env.sh");
     let out = start(&sb, SESSION_A, &project, Some(&env_file));
@@ -404,7 +409,7 @@ fn a_session_start_without_an_env_file_says_so_and_without_a_port_does_nothing()
 /// what each host sandbox's traffic carries.
 #[test]
 fn init_installs_the_entry_and_doctor_and_status_name_each_host() {
-    let sb = Sandbox::installed(&[".claude", ".codex"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode), &dir_of(Host::Codex)]);
     let settings: Value = serde_json::from_str(
         &std::fs::read_to_string(sb.home.join(".claude/settings.json")).unwrap(),
     )
@@ -416,7 +421,13 @@ fn init_installs_the_entry_and_doctor_and_status_name_each_host() {
     );
     assert_eq!(
         entry["hooks"][0]["args"],
-        json!(["guard", "--host", "claude-code", "--home", sb.home_word()]),
+        json!([
+            "guard",
+            "--host",
+            Host::ClaudeCode.id(),
+            "--home",
+            sb.home_word()
+        ]),
         "{entry}"
     );
     sb.use_free_proxy_port();

@@ -3,11 +3,12 @@
 use serde_json::Value;
 
 use crate::common::{OK, Sandbox, USAGE, bash_payload, hook_output, text};
+use openmoat_hosts::Host;
 
 /// The hook decision for one Bash call in the sandbox's project.
 fn decide(sb: &Sandbox, session: &str, command: &str) -> Value {
     hook_output(&sb.guard(
-        "claude-code",
+        Host::ClaudeCode.id(),
         &bash_payload(session, &sb.project(), command),
     ))
 }
@@ -34,7 +35,7 @@ fn write_grant(sb: &Sandbox, command: &str, granted_at_ms: Option<i64>) {
     let project = std::fs::canonicalize(sb.project()).unwrap();
     let project = project.to_string_lossy();
     let project = project.strip_prefix(r"\\?\").unwrap_or(&project);
-    let mut grant = serde_json::json!({"host": "claude-code", "session_id": "s1",
+    let mut grant = serde_json::json!({"host": Host::ClaudeCode.id(), "session_id": "s1",
         "action": {"shell": {"command": command}},
         "project": project.replace('\\', "/")});
     if let Some(at) = granted_at_ms {
@@ -101,7 +102,7 @@ fn session_grants_expire_and_are_pruned_on_write() {
             "allow",
             "ls -la",
             "--host",
-            "claude-code",
+            Host::ClaudeCode.id(),
             "--session",
             "s2",
         ]),
@@ -240,7 +241,7 @@ fn a_command_grant_from_an_earlier_release_stops_applying_and_status_names_it() 
     let sb = Sandbox::installed_with_review(&[".claude"]);
     let command = "npm install left-pad-pro";
     // As an earlier release wrote it: no project.
-    let grant = serde_json::json!({"host": "claude-code", "session_id": "s1",
+    let grant = serde_json::json!({"host": Host::ClaudeCode.id(), "session_id": "s1",
         "action": {"shell": {"command": command}}, "granted_at_ms": now_ms()});
     let file = serde_json::json!({"version": 2, "entries": [grant]});
     write_state(&sb, "approvals.json", &file.to_string());

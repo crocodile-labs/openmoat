@@ -11,6 +11,8 @@ use std::fs;
 use serde_json::{Value, json};
 
 use crate::common::{DENY, OK, Sandbox, USAGE, fixture, json as parse, output, stdout, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 const SANDBOX_REQUIRED: &str = "require:\n  protection: hook-and-os-sandbox\n";
 
@@ -41,7 +43,7 @@ fn write_in_project(sb: &Sandbox) -> String {
 
 /// The exit code and Gemini CLI's reply; `Value::Null` when it printed nothing.
 fn gemini(sb: &Sandbox, payload: &str) -> (Option<i32>, Value) {
-    let out = sb.guard("gemini-cli", payload);
+    let out = sb.guard(Host::GeminiCli.id(), payload);
     let reply = if stdout(&out).trim().is_empty() {
         Value::Null
     } else {
@@ -75,7 +77,7 @@ fn assert_required_deny(code: Option<i32>, reply: &Value, by: &str) {
 
 #[test]
 fn below_the_required_level_every_call_is_denied_and_status_says_why() {
-    let sb = Sandbox::installed(&[".gemini"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
     let write = write_in_project(&sb);
     assert_eq!(gemini(&sb, &write).1, json!({ "decision": "allow" }));
     require(&sb, SANDBOX_REQUIRED);
@@ -90,7 +92,7 @@ fn below_the_required_level_every_call_is_denied_and_status_says_why() {
         "{reply}"
     );
 
-    let shown = required(&sb, "gemini-cli");
+    let shown = required(&sb, Host::GeminiCli.id());
     assert_eq!(shown["level"], "hook-and-os-sandbox", "{shown}");
     assert_eq!(shown["by"], "your policy", "{shown}");
     assert_eq!(shown["met"], false, "{shown}");
@@ -118,7 +120,7 @@ fn below_the_required_level_every_call_is_denied_and_status_says_why() {
 
 #[test]
 fn at_the_required_level_a_call_gets_its_usual_decision() {
-    let sb = Sandbox::installed(&[".gemini"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
     let write = write_in_project(&sb);
     // The hook alone meets `hook-only`; an agent's own level takes the place
     // of `protection` for it.
@@ -130,7 +132,7 @@ fn at_the_required_level_a_call_gets_its_usual_decision() {
         gemini(&sb, &write),
         (Some(OK), json!({ "decision": "allow" }))
     );
-    let shown = required(&sb, "gemini-cli");
+    let shown = required(&sb, Host::GeminiCli.id());
     assert_eq!(shown["level"], "hook-only", "{shown}");
     assert_eq!(shown["met"], true, "{shown}");
     let out = sb.moat(&["status"]);
@@ -154,18 +156,18 @@ fn at_the_required_level_a_call_gets_its_usual_decision() {
 #[cfg(not(windows))] // #327: no Claude Code sandbox on native Windows
 #[test]
 fn an_agent_in_its_own_sandbox_meets_the_sandbox_level() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     require(&sb, SANDBOX_REQUIRED);
     let (verdict, reason) = sb.guard_bash("s1", &sb.project(), "git status --short");
     assert_eq!(verdict, "allow", "{reason}");
-    assert_eq!(required(&sb, "claude-code")["met"], true);
+    assert_eq!(required(&sb, Host::ClaudeCode.id())["met"], true);
 }
 
 /// Attack: a repository policy that tries to lower the level the user requires,
 /// for every agent or for this one, changes nothing, trusted or not.
 #[test]
 fn a_repository_policy_cannot_lower_the_required_level() {
-    let sb = Sandbox::installed(&[".gemini"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
     require(&sb, SANDBOX_REQUIRED);
     let project = sb.project();
     fs::create_dir_all(project.join(".moat")).unwrap();
@@ -183,7 +185,7 @@ fn a_repository_policy_cannot_lower_the_required_level() {
 /// A repository policy can raise the level, and needs no trust to.
 #[test]
 fn a_repository_policy_raises_the_required_level() {
-    let sb = Sandbox::installed(&[".gemini"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
     let project = sb.project();
     fs::create_dir_all(project.join(".moat")).unwrap();
     let raise = format!("version: 1\n{SANDBOX_REQUIRED}");
@@ -206,7 +208,7 @@ fn a_repository_policy_raises_the_required_level() {
 /// file, so every call is denied (`kernel-integrity`) until a person re-pins.
 #[test]
 fn removing_the_requirement_without_a_person_is_caught_by_the_lock() {
-    let sb = Sandbox::installed(&[".gemini"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
     require(&sb, SANDBOX_REQUIRED);
     let path = sb.home.join(".moat/policy.yaml");
     let policy = fs::read_to_string(&path).unwrap();

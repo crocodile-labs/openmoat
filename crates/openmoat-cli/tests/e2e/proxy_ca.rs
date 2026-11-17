@@ -5,6 +5,8 @@
 use std::fs;
 
 use crate::common::{OK, Sandbox, USAGE, output, text, verdict_and_reason};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 fn as_person(sb: &Sandbox, args: &[&str], answers: &str) -> std::process::Output {
     let mut cmd = sb.command();
@@ -25,7 +27,7 @@ fn ca_file(name: &str) -> String {
 
 #[test]
 fn ca_init_is_for_a_person_with_a_terminated_secret() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let out = sb.moat(&["proxy", "ca", "init"]);
     assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
     assert!(
@@ -45,7 +47,7 @@ fn ca_init_is_for_a_person_with_a_terminated_secret() {
 
 #[test]
 fn allow_rules_need_tls_termination_on_the_command_line() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let out = as_person(
         &sb,
         &["secret", "add", "gh", "--allow", "GET /repos/**"],
@@ -56,7 +58,7 @@ fn allow_rules_need_tls_termination_on_the_command_line() {
 
 #[test]
 fn a_terminated_secret_gets_a_pinned_ca_that_covers_its_host() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let args = [
         "secret",
         "add",
@@ -145,7 +147,7 @@ fn a_terminated_secret_gets_a_pinned_ca_that_covers_its_host() {
 
 #[test]
 fn the_agent_cannot_read_the_ca() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     for file in ["key.pem", "ca.pem"] {
         let path = sb.home.join(".moat/proxy-ca").join(file);
         let read = serde_json::json!({
@@ -155,7 +157,7 @@ fn the_agent_cannot_read_the_ca() {
             "tool_use_id": "t1"
         })
         .to_string();
-        let (verdict, reason) = verdict_and_reason(&sb.guard("claude-code", &read));
+        let (verdict, reason) = verdict_and_reason(&sb.guard(Host::ClaudeCode.id(), &read));
         assert_eq!(verdict, "deny", "{file}: {reason}");
         assert!(reason.contains("kernel-self"), "{reason}");
         // On Windows the shell behind `Bash` may be PowerShell or `cmd`, and a
@@ -176,7 +178,7 @@ fn the_agent_cannot_read_the_ca() {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
 fn run_refuses_a_terminated_secret_without_a_ca() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let out = as_person(&sb, &["secret", "add", "gh", "--tls-terminate"], "y\nn\n");
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let mut cmd = sb.command();

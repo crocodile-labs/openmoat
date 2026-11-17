@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use crate::common::{OK, Sandbox, USAGE, stdout, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 const PACK: &str = "version: 1\n\
     deny:\n  - id: no-deploy\n    shell: ['make deploy*']\n\
@@ -46,7 +48,7 @@ fn sign(key: &Path, namespace: &str, file: &Path) {
 
 /// An installed sandbox that trusts `alice`'s key; `None` without ssh-keygen.
 fn trusting_alice() -> Option<(Sandbox, PathBuf)> {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let keys = sb.home.join("keys");
     std::fs::create_dir_all(&keys).unwrap();
     let alice = keypair(&keys, "alice")?;

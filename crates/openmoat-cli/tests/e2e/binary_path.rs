@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use serde_json::json;
 
 use crate::common::{OK, Sandbox, USAGE, output, text, verdict_and_reason};
+use openmoat_hosts::Host;
 
 /// A copy of the built binary at `path`.
 fn install_copy(path: &Path) {
@@ -45,7 +46,7 @@ fn a_binary_under_another_name_is_protected_by_its_recorded_path() {
     let real = |p: &Path| fs::canonicalize(p).unwrap();
     let dir: PathBuf = real(target.parent().unwrap());
     for path in [link.clone(), real(&target), dir.clone()] {
-        let out = sb.guard("claude-code", &write_payload(&project, &path));
+        let out = sb.guard(Host::ClaudeCode.id(), &write_payload(&project, &path));
         let (verdict, reason) = verdict_and_reason(&out);
         assert!(
             verdict == "deny" && reason.contains("kernel-self"),

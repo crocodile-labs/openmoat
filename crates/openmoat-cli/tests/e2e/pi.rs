@@ -10,6 +10,7 @@ use std::fs;
 use serde_json::{Value, json};
 
 use crate::common::{DENY, OK, Sandbox, json as parse, output, stdout, text};
+use openmoat_hosts::Host;
 
 const AGENT_DIR: &str = ".pi/agent";
 
@@ -35,7 +36,7 @@ pub(crate) fn payload(sb: &Sandbox, tool: &str, input: &Value) -> String {
 
 /// The exit code and the reply; `Value::Null` when the hook printed nothing.
 fn guard(sb: &Sandbox, payload: &str) -> (Option<i32>, Value) {
-    let out = sb.guard("pi", payload);
+    let out = sb.guard(Host::Pi.id(), payload);
     let reply = if stdout(&out).trim().is_empty() {
         Value::Null
     } else {
@@ -102,7 +103,7 @@ fn a_moved_agent_directory_is_followed_and_protected() {
     fs::create_dir_all(&moved).unwrap();
     let out = output(
         sb.command()
-            .args(["init", "--yes", "--hosts", "pi"])
+            .args(["init", "--yes", "--hosts", Host::Pi.id()])
             .env("PI_CODING_AGENT_DIR", &moved),
         None,
     );
@@ -139,7 +140,7 @@ fn agent_status(sb: &Sandbox, cwd: &std::path::Path, host: &str) -> (Value, Valu
 fn project_settings_that_turn_the_extension_off_are_reported() {
     let sb = sandbox();
     let project = sb.project();
-    let (agent, _) = agent_status(&sb, &project, "pi");
+    let (agent, _) = agent_status(&sb, &project, Host::Pi.id());
     assert_eq!(agent["level"], "hook-only", "{agent}");
 
     fs::create_dir_all(project.join(".pi/extensions")).unwrap();
@@ -153,7 +154,7 @@ fn project_settings_that_turn_the_extension_off_are_reported() {
         "export default () => {}",
     )
     .unwrap();
-    let (_, doc) = agent_status(&sb, &project, "pi");
+    let (_, doc) = agent_status(&sb, &project, Host::Pi.id());
     let warnings = doc["project_settings"].to_string();
     assert!(
         warnings.contains("`!*.js` turns OpenMoat's extension off"),

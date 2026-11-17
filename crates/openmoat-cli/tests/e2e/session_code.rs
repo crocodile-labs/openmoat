@@ -7,7 +7,9 @@
 use serde_json::{Value, json};
 
 use crate::common::{DENY, OK, Sandbox, json as parse, stdout, text};
+use crate::hosts::dir_of;
 use crate::taint::{call, decide};
+use openmoat_hosts::Host;
 
 /// A Gemini CLI `BeforeTool` payload for `tool` with `input` in `session`.
 fn gemini(sb: &Sandbox, session: &str, tool: &str, input: &Value) -> String {
@@ -36,7 +38,11 @@ fn gemini_write(sb: &Sandbox, session: &str, file: &str) {
     let path = sb.project().join(file);
     let content = "import os\nprint(open(os.path.expanduser('~/.s' + 'sh/id_rsa')).read())\n";
     let input = json!({ "file_path": path.to_string_lossy(), "content": content });
-    let (code, reply) = reply(sb, "gemini-cli", &gemini(sb, session, "write_file", &input));
+    let (code, reply) = reply(
+        sb,
+        Host::GeminiCli.id(),
+        &gemini(sb, session, "write_file", &input),
+    );
     assert_eq!(code, Some(OK), "{reply}");
     std::fs::write(path, content).unwrap();
 }
@@ -45,7 +51,7 @@ fn gemini_run(sb: &Sandbox, session: &str, command: &str) -> (Option<i32>, Value
     let input = json!({ "command": command });
     reply(
         sb,
-        "gemini-cli",
+        Host::GeminiCli.id(),
         &gemini(sb, session, "run_shell_command", &input),
     )
 }
@@ -60,7 +66,7 @@ fn a_script_a_hook_only_session_wrote_needs_review_and_a_session_grant_answers_i
     if cfg!(windows) {
         return;
     }
-    let sb = Sandbox::installed(&[".gemini"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
     gemini_write(&sb, "g1", "x.py");
     for command in ["python3 x.py", "python x.py", "env python3 -u x.py"] {
         let (code, reply) = gemini_run(&sb, "g1", command);
@@ -103,7 +109,7 @@ fn a_script_written_through_the_shell_needs_review_too() {
     if cfg!(windows) {
         return;
     }
-    let sb = Sandbox::installed(&[".gemini"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::GeminiCli)]);
     let (code, reply) = gemini_run(&sb, "g1", "echo 'echo hi' > x.sh");
     assert_eq!(code, Some(OK), "{reply}");
     std::fs::write(sb.project().join("x.sh"), "echo hi\n").unwrap();
@@ -142,11 +148,11 @@ fn opencode_cannot_prompt_so_it_is_a_deny_that_says_how_to_approve() {
         "write",
         &json!({ "filePath": path.to_string_lossy(), "content": "console.log(1)\n" }),
     );
-    let (code, written) = reply(&sb, "opencode", &write);
+    let (code, written) = reply(&sb, Host::OpenCode.id(), &write);
     assert_eq!(code, Some(OK), "{written}");
     std::fs::write(&path, "console.log(1)\n").unwrap();
     let run = crate::opencode::payload(&sb, "bash", &json!({ "command": "node x.js" }));
-    let (code, denied) = reply(&sb, "opencode", &run);
+    let (code, denied) = reply(&sb, Host::OpenCode.id(), &run);
     assert_eq!(code, Some(DENY), "{denied}");
     let shown = denied.to_string();
     assert!(
@@ -157,15 +163,19 @@ fn opencode_cannot_prompt_so_it_is_a_deny_that_says_how_to_approve() {
 
 #[test]
 fn claude_code_with_its_sandbox_in_place_keeps_the_verdict() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let proj = sb.project();
     let path = proj.join("x.py");
     let input = json!({ "file_path": path.to_string_lossy(), "content": "print(1)\n" });
-    let (verdict, reason) = decide(&sb, "claude-code", &call("c1", &proj, "Write", &input));
+    let (verdict, reason) = decide(
+        &sb,
+        Host::ClaudeCode.id(),
+        &call("c1", &proj, "Write", &input),
+    );
     assert_eq!(verdict, "allow", "{reason}");
     std::fs::write(&path, "print(1)\n").unwrap();
     let run = json!({ "command": "python3 x.py" });
-    let (verdict, reason) = decide(&sb, "claude-code", &call("c1", &proj, "Bash", &run));
+    let (verdict, reason) = decide(&sb, Host::ClaudeCode.id(), &call("c1", &proj, "Bash", &run));
     if cfg!(windows) {
         // native Windows: Claude Code has no sandbox there, the hook is the only check
         assert_eq!(verdict, "ask", "{reason}");

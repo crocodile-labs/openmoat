@@ -13,6 +13,7 @@ use std::process::Command;
 
 use super::{Fixtures, Project, Scenario, Verdict, scenarios};
 use crate::common::{skip_without_host_binary, text};
+use openmoat_hosts::Host;
 
 /// The codex binary, or `None` to skip the layer.
 fn binary() -> Option<PathBuf> {
@@ -125,7 +126,7 @@ fn codex_layer_agrees_with_every_scenario() {
     let mut mismatches = Vec::new();
     for s in &scenarios() {
         let got = fx.codex_verdict(&codex, port, s);
-        if let Some(gap) = s.gap_at("codex") {
+        if let Some(gap) = s.gap_at(Host::Codex.id()) {
             let _ = writeln!(
                 matrix,
                 "  {:<30} codex={} GAP(#{}: {})",

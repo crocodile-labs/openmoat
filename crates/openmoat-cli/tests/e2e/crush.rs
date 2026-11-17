@@ -39,7 +39,7 @@ pub(crate) fn payload(sb: &Sandbox, tool: &str, input: &Value) -> String {
 
 /// The exit code and the reply; `Value::Null` when the hook printed nothing.
 fn guard(sb: &Sandbox, payload: &str) -> (Option<i32>, Value) {
-    let out = sb.guard("crush", payload);
+    let out = sb.guard(Host::Crush.id(), payload);
     let reply = serde_json::from_str(stdout(&out).trim()).unwrap_or(Value::Null);
     (out.status.code(), reply)
 }
@@ -63,7 +63,7 @@ fn init_adds_one_flat_entry_beside_the_persons_and_is_idempotent() {
         ours["command"]
             .as_str()
             .unwrap()
-            .ends_with(&sb.hook_args("crush")),
+            .ends_with(&sb.hook_args(Host::Crush.id())),
         "{root}"
     );
     let again = sb.moat(&["init", "--yes"]);

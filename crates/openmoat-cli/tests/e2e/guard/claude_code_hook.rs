@@ -2,6 +2,7 @@
 //! `init` sets so a file the person `@`-mentions is read through the hook.
 
 use crate::common::{Sandbox, fixture, stderr, stdout};
+use openmoat_hosts::Host;
 
 /// Grok Build and the Devin CLI run Claude Code's hook with their own tool
 /// names: a secret read through one is denied with exit 2, which both read as
@@ -11,7 +12,10 @@ fn another_agents_call_through_claude_codes_hook_is_checked() {
     let sb = Sandbox::bare(&[".claude"]);
     sb.moat(&["init", "--yes"]);
     for name in ["grok-shell", "devin-exec"] {
-        let out = sb.guard("claude-code", &fixture(&format!("claude-code/{name}.json")));
+        let out = sb.guard(
+            Host::ClaudeCode.id(),
+            &fixture(&format!("claude-code/{name}.json")),
+        );
         assert_eq!(out.status.code(), Some(2), "{name}: {}", stderr(&out));
         assert!(
             stderr(&out).contains("secrets-paths"),
@@ -19,7 +23,10 @@ fn another_agents_call_through_claude_codes_hook_is_checked() {
             stderr(&out)
         );
     }
-    let out = sb.guard("claude-code", &fixture("claude-code/devin-read.json"));
+    let out = sb.guard(
+        Host::ClaudeCode.id(),
+        &fixture("claude-code/devin-read.json"),
+    );
     assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
     let shown = sb.moat(&["show", "--recent", "3"]);
     assert!(

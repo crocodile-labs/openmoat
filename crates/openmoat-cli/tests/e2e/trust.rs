@@ -4,12 +4,14 @@
 use std::path::{Path, PathBuf};
 
 use crate::common::{OK, Sandbox, USAGE, output, stdout, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 const DEPLOY: &str = "version: 1\nallow:\n  - id: deploy\n    shell: ['make deploy']\n";
 
 /// An installed sandbox whose project allows `make deploy` in its repository policy.
 fn repo() -> (Sandbox, PathBuf) {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     write_policy(&project, DEPLOY);
     (sb, project)

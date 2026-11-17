@@ -5,6 +5,8 @@
 use std::process::Output;
 
 use crate::common::{Sandbox, bash_payload, output};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 /// Writes "fake" to the clipboard, then sets the window title.
 const ESCAPES: &str = "\x1b]52;c;ZmFrZQ==\x07\x1b]0;title\x07";
@@ -26,11 +28,14 @@ fn assert_clean(what: &str, out: &Output) {
 
 #[test]
 fn logged_escapes_are_shown_as_question_marks() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let review = format!("npm install left-pad{ESCAPES}");
     let deny = format!("cat ~/.ssh/id_rsa{ESCAPES}");
     for command in [&review, &deny] {
-        let guard = sb.guard("claude-code", &bash_payload("s1", &sb.project(), command));
+        let guard = sb.guard(
+            Host::ClaudeCode.id(),
+            &bash_payload("s1", &sb.project(), command),
+        );
         assert_clean("openmoat guard", &guard);
     }
 

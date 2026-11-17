@@ -5,16 +5,18 @@ use std::path::PathBuf;
 use serde_json::Value;
 
 use crate::common::{DENY, OK, Sandbox, USAGE, fixture, hook_output, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 mod binary;
 
 fn sandbox() -> Sandbox {
-    Sandbox::installed(&[".claude"])
+    Sandbox::installed(&[&dir_of(Host::ClaudeCode)])
 }
 
 /// `guard` on the golden `Read src/lib.rs` payload, with the exit code folded in.
 fn guard_read_src(sb: &Sandbox) -> Value {
-    let out = sb.guard("claude-code", &fixture("claude-code/read.json"));
+    let out = sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/read.json"));
     let mut d = hook_output(&out);
     d["exit"] = Value::from(out.status.code().unwrap_or(-1));
     d
@@ -239,13 +241,16 @@ fn doctor_and_accept_name_the_keys_that_changed() {
 fn ungoverned_tool_is_denied_while_the_lock_shows_drift() {
     let sb = sandbox();
     let ungoverned = fixture("claude-code/skill.json");
-    assert_eq!(sb.guard("claude-code", &ungoverned).status.code(), Some(OK));
+    assert_eq!(
+        sb.guard(Host::ClaudeCode.id(), &ungoverned).status.code(),
+        Some(OK)
+    );
 
     let mut policy = std::fs::read_to_string(policy_path(&sb)).unwrap();
     policy.push_str("\n# tampered by an agent\n");
     std::fs::write(policy_path(&sb), policy).unwrap();
 
-    let out = sb.guard("claude-code", &ungoverned);
+    let out = sb.guard(Host::ClaudeCode.id(), &ungoverned);
     assert_eq!(out.status.code(), Some(DENY));
     let reason = hook_output(&out)["permissionDecisionReason"].to_string();
     assert!(reason.contains("kernel-integrity"), "{reason}");
@@ -313,12 +318,12 @@ fn planted_binary_earlier_on_the_search_path_is_denied() {
     .to_string();
     let decision = |out| hook_output(&out);
     assert_eq!(
-        decision(run(&["guard", "--host", "claude-code"], &payload))["permissionDecision"],
+        decision(run(&["guard", "--host", Host::ClaudeCode.id()], &payload))["permissionDecision"],
         "allow"
     );
 
     script(&early.join("git"));
-    let d = decision(run(&["guard", "--host", "claude-code"], &payload));
+    let d = decision(run(&["guard", "--host", Host::ClaudeCode.id()], &payload));
     assert_eq!(d["permissionDecision"], "deny");
     let reason = d["permissionDecisionReason"].as_str().unwrap();
     assert!(reason.contains("executables"), "{reason}");

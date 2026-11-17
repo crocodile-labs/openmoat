@@ -14,13 +14,14 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use crate::common::{Sandbox, output, skip_without_host_binary, text};
+use openmoat_hosts::Host;
 
 fn codex_binary() -> Option<PathBuf> {
     if let Some(explicit) = std::env::var_os("MOAT_CODEX_BIN").filter(|v| !v.is_empty()) {
         return Some(PathBuf::from(explicit));
     }
     std::env::split_paths(&std::env::var_os("PATH")?)
-        .map(|dir| dir.join("codex"))
+        .map(|dir| dir.join(Host::Codex.id()))
         .find(|p| p.is_file())
 }
 
@@ -127,7 +128,7 @@ fn codex_from_the_standalone_installer_starts_commands() {
     install("0.160.1");
     let bin = sb.home.join(".local/bin");
     fs::create_dir_all(&bin).unwrap();
-    let installed = bin.join("codex");
+    let installed = bin.join(Host::Codex.id());
     symlink(standalone.join("current/bin/codex"), &installed).unwrap();
     let state = ["auth.json", "state_5.sqlite"].map(|name| sb.home.join(".codex").join(name));
     for file in &state {

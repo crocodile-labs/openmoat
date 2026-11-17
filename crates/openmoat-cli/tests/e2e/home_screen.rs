@@ -3,6 +3,7 @@
 use std::fs;
 
 use crate::common::{OK, Sandbox, USAGE, bash_payload, hook_output, output, text};
+use openmoat_hosts::Host;
 
 const INSTALL: &str = "npm install left-pad";
 
@@ -14,7 +15,7 @@ fn home_as_person(sb: &Sandbox, answers: &str) -> String {
 
 fn verdict(sb: &Sandbox, session: &str) -> String {
     let payload = bash_payload(session, &sb.project(), INSTALL);
-    crate::common::verdict(&sb.guard("claude-code", &payload))
+    crate::common::verdict(&sb.guard(Host::ClaudeCode.id(), &payload))
 }
 
 fn edit_policy(sb: &Sandbox) {
@@ -111,7 +112,7 @@ fn review_allowed_always_shows_what_the_rule_matches() {
         "tool_use_id": "t1"
     })
     .to_string();
-    sb.guard("claude-code", &payload);
+    sb.guard(Host::ClaudeCode.id(), &payload);
     let shown = home_as_person(&sb, "a\n");
     assert!(
         shown.contains("will allow: read exactly ")
@@ -156,7 +157,8 @@ fn file_review_is_shown_and_allowed_once() {
         "tool_input": {"file_path": notes.to_string_lossy()}, "tool_use_id": "t1"
     })
     .to_string();
-    let read = || hook_output(&sb.guard("claude-code", &payload))["permissionDecision"].clone();
+    let read =
+        || hook_output(&sb.guard(Host::ClaudeCode.id(), &payload))["permissionDecision"].clone();
     assert_eq!(read(), "ask");
     let shown = home_as_person(&sb, "o\n");
     assert!(

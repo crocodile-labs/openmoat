@@ -7,11 +7,13 @@ use std::process::Output;
 use serde_json::Value;
 
 use crate::common::{DENY, OK, Sandbox, bash_payload, fixture, hook_output, output, stderr, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 /// Run the Claude Code hook as `cn` does: with `CONTINUE_PROJECT_DIR` set.
 fn guard_under_cn(sb: &Sandbox, payload: &str) -> Output {
     let mut cmd = sb.command();
-    cmd.args(["guard", "--host", "claude-code"])
+    cmd.args(["guard", "--host", Host::ClaudeCode.id()])
         .env("CONTINUE_PROJECT_DIR", &sb.home);
     output(&mut cmd, Some(payload))
 }
@@ -37,7 +39,7 @@ fn assert_blocked_review(out: &Output) {
 /// the host as `continue` and keeps the `review`, so `moat allow --last` grants it.
 #[test]
 fn a_review_blocks_cn_until_a_person_approves_it() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let cn = fixture("continue/pretooluse-bash.json");
     let session = "3f2a9c1e-7b4d-4e8a-9f0b-2c6d8e1a5b7f";
 
@@ -54,10 +56,10 @@ fn a_review_blocks_cn_until_a_person_approves_it() {
 
     // Claude Code can prompt, so it still receives the review itself, as its `"ask"`.
     let claude = bash_payload("s-claude", &sb.home, "git config core.pager less");
-    let out = sb.guard("claude-code", &claude);
+    let out = sb.guard(Host::ClaudeCode.id(), &claude);
     assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
     assert_eq!(hook_output(&out)["permissionDecision"], "ask");
-    assert_eq!(recorded(&sb, "s-claude")[0]["host"], "claude-code");
+    assert_eq!(recorded(&sb, "s-claude")[0]["host"], Host::ClaudeCode.id());
 }
 
 /// `moat doctor` and `moat status` with `PATH` set to `bin` and the extra
@@ -78,7 +80,7 @@ fn checks(sb: &Sandbox, bin: &Path, env: &[(&str, &Path)]) -> [Output; 2] {
 /// their exit code, and say nothing when it is not.
 #[test]
 fn doctor_and_status_warn_when_the_continue_cli_is_present() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let bin = sb.home.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
     let warning = "the released Continue CLI does not run hooks";
@@ -114,7 +116,7 @@ fn doctor_and_status_warn_when_the_continue_cli_is_present() {
 fn doctor_and_status_warn_when_cn_is_on_the_path() {
     use std::os::unix::fs::PermissionsExt as _;
 
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let bin = sb.home.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
     let cn = bin.join("cn");
@@ -133,8 +135,11 @@ fn doctor_and_status_warn_when_cn_is_on_the_path() {
 /// without the variable, or the variable with a Claude Code-shaped payload.
 #[test]
 fn either_sign_of_cn_turns_a_review_into_a_deny() {
-    let sb = Sandbox::installed(&[".claude"]);
-    assert_blocked_review(&sb.guard("claude-code", &fixture("continue/pretooluse-bash.json")));
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
+    assert_blocked_review(&sb.guard(
+        Host::ClaudeCode.id(),
+        &fixture("continue/pretooluse-bash.json"),
+    ));
 
     let claude_shaped = bash_payload("s-env", &sb.home, "git config core.pager less");
     assert_blocked_review(&guard_under_cn(&sb, &claude_shaped));

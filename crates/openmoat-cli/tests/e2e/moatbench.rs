@@ -7,6 +7,7 @@
 use serde_json::Value;
 
 use crate::common::{OK, Sandbox, USAGE, json, output, stderr, stdout};
+use openmoat_hosts::Host;
 
 /// Run `moat bench` with `args` in an isolated home; exits 0 whatever the scores.
 fn bench(sb: &Sandbox, args: &[&str]) -> (Value, String) {
@@ -92,9 +93,15 @@ fn moatbench_hook_that_allows_everything_shows_the_attacks_it_lets_through() {
     );
     let (report, err) = bench(
         &sb,
-        &["--hook", &hook, "--host", "claude-code", "--verbose"],
+        &[
+            "--hook",
+            &hook,
+            "--host",
+            Host::ClaudeCode.id(),
+            "--verbose",
+        ],
     );
-    assert_eq!(report["hosts"], serde_json::json!(["claude-code"]));
+    assert_eq!(report["hosts"], serde_json::json!([Host::ClaudeCode.id()]));
     assert!(names(&report["false_positives"]).is_empty(), "{report:#}");
     let mismatches = names(&report["mismatches"]);
     assert!(
@@ -128,7 +135,7 @@ fn moatbench_hook_that_denies_everything_blocks_attacks_and_work() {
         "echo denied >&2\nexit 2",
         "echo denied 1>&2\r\nexit /b 2",
     );
-    let out = sb.moat(&["bench", "--hook", &hook, "--host", "codex"]);
+    let out = sb.moat(&["bench", "--hook", &hook, "--host", Host::Codex.id()]);
     assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
     let text = stdout(&out);
     assert!(text.starts_with("MoatBench mini: "), "{text}");
@@ -139,7 +146,7 @@ fn moatbench_hook_that_denies_everything_blocks_attacks_and_work() {
         "{text}"
     );
     assert!(text.contains("  codex: runs the call when"), "{text}");
-    let (report, _) = bench(&sb, &["--hook", &hook, "--host", "codex"]);
+    let (report, _) = bench(&sb, &["--hook", &hook, "--host", Host::Codex.id()]);
     let attacks = &report["categories"]["exfiltration"];
     assert_eq!(attacks["blocked"], attacks["runs"], "{report:#}");
     assert!(!names(&report["false_positives"]).is_empty(), "{report:#}");
@@ -160,7 +167,7 @@ fn report(sb: &Sandbox, format: &str) -> std::process::Output {
     output(
         sb.command()
             .env("MOAT_CLAUDE_VERSION", "2.1.295")
-            .args(["bench", "--report", "--host", "claude-code"])
+            .args(["bench", "--report", "--host", Host::ClaudeCode.id()])
             .args(["--scratch-dir", &dir, "--format", format]),
         None,
     )
@@ -239,12 +246,12 @@ fn moatbench_report_answers_every_promise_per_layer() {
     assert_eq!(report["format"], "openmoat-bench-report-v1");
     assert_eq!(report["openmoat"], env!("CARGO_PKG_VERSION"));
     assert_ne!(report["os"].as_str().unwrap(), "");
-    assert_eq!(report["hosts"][0]["id"], "claude-code");
+    assert_eq!(report["hosts"][0]["id"], Host::ClaudeCode.id());
     // The hook rows are OpenMoat's model of the host, not a run of the
     // program named like it: no host version is reported beside them.
     assert_eq!(
         report["hosts"][0],
-        serde_json::json!({"id": "claude-code", "evidence": "model"})
+        serde_json::json!({"id": Host::ClaudeCode.id(), "evidence": "model"})
     );
     assert_eq!(report["summary"]["fail"], 0, "{report:#}");
     for promise in [
@@ -356,7 +363,14 @@ fn moatbench_report_refuses_what_it_cannot_do() {
     // Markdown is the proof report's; --hook tests another hook, not OpenMoat.
     let out = sb.moat(&["bench", "--format", "markdown"]);
     assert_eq!(out.status.code(), Some(USAGE), "{}", stderr(&out));
-    let out = sb.moat(&["bench", "--report", "--hook", "true", "--host", "codex"]);
+    let out = sb.moat(&[
+        "bench",
+        "--report",
+        "--hook",
+        "true",
+        "--host",
+        Host::Codex.id(),
+    ]);
     assert_eq!(out.status.code(), Some(USAGE), "{}", stderr(&out));
     // The throwaway home is never the caller's home or above it.
     let home = sb.home.to_string_lossy().into_owned();
@@ -364,7 +378,7 @@ fn moatbench_report_refuses_what_it_cannot_do() {
         "bench",
         "--report",
         "--host",
-        "codex",
+        Host::Codex.id(),
         "--scratch-dir",
         &home,
     ]);

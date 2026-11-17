@@ -16,6 +16,7 @@ use std::fs;
 use serde_json::{Value, json};
 
 use crate::common::{DENY, OK, Sandbox, json as parse, output, stdout, text};
+use openmoat_hosts::Host;
 
 const CONFIG_DIR: &str = ".config/opencode";
 
@@ -40,7 +41,7 @@ pub(crate) fn payload(sb: &Sandbox, tool: &str, args: &Value) -> String {
 
 /// The exit code and the reply; `Value::Null` when the hook printed nothing.
 fn guard(sb: &Sandbox, payload: &str) -> (Option<i32>, Value) {
-    let out = sb.guard("opencode", payload);
+    let out = sb.guard(Host::OpenCode.id(), payload);
     let reply = if stdout(&out).trim().is_empty() {
         Value::Null
     } else {
@@ -126,10 +127,10 @@ fn a_project_plugin_write_is_a_deny_that_says_how_to_approve() {
 fn a_moved_config_directory_is_followed_and_protected() {
     let sb = Sandbox::bare(&[]);
     let xdg = sb.home.join("xdg");
-    fs::create_dir_all(xdg.join("opencode")).unwrap();
+    fs::create_dir_all(xdg.join(Host::OpenCode.id())).unwrap();
     let out = output(
         sb.command()
-            .args(["init", "--yes", "--hosts", "opencode"])
+            .args(["init", "--yes", "--hosts", Host::OpenCode.id()])
             .env("XDG_CONFIG_HOME", &xdg),
         None,
     );
@@ -173,7 +174,7 @@ fn agent_at(sb: &Sandbox, version: &str) -> Value {
         .as_array()
         .unwrap()
         .iter()
-        .find(|a| a["host"] == "opencode")
+        .find(|a| a["host"] == Host::OpenCode.id())
         .unwrap()
         .clone()
 }
@@ -393,7 +394,7 @@ fn opencode_config_dir_is_protected_like_the_configuration_directory() {
     fs::create_dir_all(extra.join("plugins")).unwrap();
     let out = output(
         sb.command()
-            .args(["init", "--yes", "--hosts", "opencode"])
+            .args(["init", "--yes", "--hosts", Host::OpenCode.id()])
             .env("OPENCODE_CONFIG_DIR", &extra),
         None,
     );

@@ -19,6 +19,8 @@ use serde_json::Value;
 use sha2::{Digest as _, Sha256};
 
 use crate::common::{OK, Sandbox, USAGE, bash_payload, hook_output, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 const COMMAND: &str = "npm install left-pad-pro";
 /// The agent these tests run as, and its configuration folder.
@@ -147,7 +149,7 @@ fn with_no_channel_a_review_is_unchanged() {
 
 #[test]
 fn approvals_commands_need_a_person() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     for args in [
         &["approvals", "allow", "1"][..],
         &["approvals", "listen"],

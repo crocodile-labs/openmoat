@@ -40,6 +40,7 @@ use super::{Fixtures, Verdict, scenarios};
 mod observe;
 
 use observe::{Run, Seen};
+use openmoat_hosts::Host;
 
 /// This OS's name for the layer in `contained:` lists.
 const LAYER: &str = if cfg!(target_os = "linux") {
@@ -126,7 +127,7 @@ impl Fixtures {
     /// as `settings.json` in a fresh config dir (no hook).
     fn write_claude_settings(&self, dir: &Path) {
         let out = self.sb.moat(&["sandbox", "show", "--format", "json"]);
-        let settings = json(&out)["hosts"]["claude-code"]["settings"]
+        let settings = json(&out)["hosts"][Host::ClaudeCode.id()]["settings"]
             .as_str()
             .expect("claude settings")
             .to_owned();

@@ -8,6 +8,7 @@ use std::process::Output;
 use serde_json::Value;
 
 use crate::common::{DENY, OK, Sandbox, USAGE, fixture, hook_output, output, stdout, text};
+use openmoat_hosts::Host;
 
 /// `name` with this platform's executable suffix.
 fn exe(name: &str) -> String {
@@ -80,7 +81,7 @@ fn moat_runs_the_same_command_as_openmoat() {
     let init = person(&sb, &openmoat, &["init", "--yes"]);
     assert_eq!(init.status.code(), Some(OK), "{}", one_line(&init));
     let payload = fixture("claude-code/read.json");
-    let args = ["guard", "--host", "claude-code"];
+    let args = ["guard", "--host", Host::ClaudeCode.id()];
     let direct = run(&sb, &openmoat, &args, Some(&payload));
     let through = run(&sb, &moat, &args, Some(&payload));
     assert_eq!(
@@ -107,7 +108,7 @@ fn moat_without_openmoat_beside_it_fails_closed() {
     let out = run(
         &sb,
         &moat,
-        &["guard", "--host", "claude-code"],
+        &["guard", "--host", Host::ClaudeCode.id()],
         Some(&fixture("claude-code/read.json")),
     );
     assert_eq!(
@@ -166,7 +167,7 @@ fn init_moves_hooks_written_as_moat_to_openmoat() {
     let hook = run(
         &sb,
         &moat,
-        &["guard", "--host", "claude-code"],
+        &["guard", "--host", Host::ClaudeCode.id()],
         Some(&payload),
     );
     assert_eq!(
@@ -208,7 +209,7 @@ fn init_moves_hooks_written_as_moat_to_openmoat() {
     let hook = run(
         &sb,
         &openmoat,
-        &["guard", "--host", "claude-code"],
+        &["guard", "--host", Host::ClaudeCode.id()],
         Some(&payload),
     );
     assert_eq!(

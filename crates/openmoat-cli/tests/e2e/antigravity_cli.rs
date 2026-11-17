@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use serde_json::{Value, json};
 
 use crate::common::{OK, Sandbox, fixture, json as parse, text};
+use openmoat_hosts::Host;
 
 /// The guard's exit with a deny on stdout: 0, as the documented block is the
 /// `decision` and a non-zero exit may be ignored (the spec's `deny_exit`).
@@ -39,7 +40,7 @@ pub(crate) fn payload(sb: &Sandbox, tool: &str, args: &Value) -> String {
 }
 
 fn guard(sb: &Sandbox, payload: &str) -> (Option<i32>, Value) {
-    let out = sb.guard("antigravity-cli", payload);
+    let out = sb.guard(Host::AntigravityCli.id(), payload);
     (out.status.code(), parse(&out))
 }
 
@@ -49,7 +50,7 @@ fn status(sb: &Sandbox) -> Value {
         .as_array()
         .unwrap()
         .iter()
-        .find(|a| a["host"] == "antigravity-cli")
+        .find(|a| a["host"] == Host::AntigravityCli.id())
         .unwrap()
         .clone()
 }

@@ -12,6 +12,7 @@ use serde_json::json;
 use crate::common::{DENY, OK, Sandbox, json as json_of, skip_without_host_binary, stdout, text};
 use crate::run::confined::ran;
 use crate::run::run_sh_with;
+use openmoat_hosts::Host;
 
 // protection: run codex linux,macos
 #[test]
@@ -67,6 +68,6 @@ fn real_codex_starts_inside_moat_run_and_its_hook_is_decided_outside() {
     let rows = sb.moat(&["show", "--session", "codex-in-run", "--format", "json"]);
     let rows = json_of(&rows);
     let row = &rows[0];
-    assert_eq!(row["host"], "codex", "{rows}");
+    assert_eq!(row["host"], Host::Codex.id(), "{rows}");
     assert_eq!(row["verdict"], "deny", "{rows}");
 }

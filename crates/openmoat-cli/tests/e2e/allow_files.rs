@@ -4,6 +4,7 @@
 use std::path::Path;
 
 use crate::common::{DENY, OK, Sandbox, hook_output, stderr, stdout, text, verdict};
+use openmoat_hosts::Host;
 
 fn patch(sb: &Sandbox, file: &str) -> String {
     serde_json::json!({
@@ -30,7 +31,7 @@ fn read(sb: &Sandbox, session: &str, path: &Path) -> String {
 #[test]
 fn codex_apply_patch_review_is_approved_with_allow_last() {
     let sb = Sandbox::installed_with_review(&[".codex"]);
-    let out = sb.guard("codex", &patch(&sb, "../notes/plan.md"));
+    let out = sb.guard(Host::Codex.id(), &patch(&sb, "../notes/plan.md"));
     assert_eq!(out.status.code(), Some(DENY), "{}", stderr(&out));
     let reason = hook_output(&out)["permissionDecisionReason"].to_string();
     assert!(reason.contains("run `openmoat`"), "{reason}");
@@ -45,11 +46,11 @@ fn codex_apply_patch_review_is_approved_with_allow_last() {
     );
     assert!(shown.contains("notes/plan.md"), "{shown}");
     // Codex's allow is no output (it rejects a bare `permissionDecision: allow`).
-    let out = sb.guard("codex", &patch(&sb, "../notes/plan.md"));
+    let out = sb.guard(Host::Codex.id(), &patch(&sb, "../notes/plan.md"));
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(stdout(&out).is_empty(), "{}", text(&out));
     assert_eq!(
-        verdict(&sb.guard("codex", &patch(&sb, "../notes/other.md"))),
+        verdict(&sb.guard(Host::Codex.id(), &patch(&sb, "../notes/other.md"))),
         "deny",
         "only the approved files"
     );
@@ -64,7 +65,7 @@ fn claude_code_read_review_is_approved_for_good() {
     std::fs::create_dir_all(&notes).unwrap();
     std::fs::write(notes.join("plan.md"), "plan").unwrap();
     let plan = read(&sb, "s1", &notes.join("plan.md"));
-    assert_eq!(verdict(&sb.guard("claude-code", &plan)), "ask");
+    assert_eq!(verdict(&sb.guard(Host::ClaudeCode.id(), &plan)), "ask");
 
     let allow = sb.moat_approving(&["allow", "--last", "--always"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", text(&allow));
@@ -85,9 +86,9 @@ fn claude_code_read_review_is_approved_for_good() {
     assert!(rules.contains("plan.md") && !rules.contains('*'), "{rules}");
 
     let later = read(&sb, "s2", &notes.join("plan.md"));
-    assert_eq!(verdict(&sb.guard("claude-code", &later)), "allow");
+    assert_eq!(verdict(&sb.guard(Host::ClaudeCode.id(), &later)), "allow");
     let other = read(&sb, "s2", &notes.join("other.md"));
-    assert_eq!(verdict(&sb.guard("claude-code", &other)), "ask");
+    assert_eq!(verdict(&sb.guard(Host::ClaudeCode.id(), &other)), "ask");
 }
 
 /// Deny rules still win over an approved path: once it leads into `~/.ssh`, the
@@ -102,19 +103,19 @@ fn an_approved_path_that_leads_into_ssh_is_still_denied() {
     let key = sb.home.join("key");
     std::fs::write(&key, "not yet").unwrap();
     assert_eq!(
-        verdict(&sb.guard("claude-code", &read(&sb, "s1", &key))),
+        verdict(&sb.guard(Host::ClaudeCode.id(), &read(&sb, "s1", &key))),
         "ask"
     );
     let allow = sb.moat_approving(&["allow", "--last", "--always"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", text(&allow));
     assert_eq!(
-        verdict(&sb.guard("claude-code", &read(&sb, "s1", &key))),
+        verdict(&sb.guard(Host::ClaudeCode.id(), &read(&sb, "s1", &key))),
         "allow"
     );
 
     std::fs::remove_file(&key).unwrap();
     std::os::unix::fs::symlink(ssh.join("id_rsa"), &key).unwrap();
-    let out = sb.guard("claude-code", &read(&sb, "s1", &key));
+    let out = sb.guard(Host::ClaudeCode.id(), &read(&sb, "s1", &key));
     let reason = hook_output(&out)["permissionDecisionReason"].to_string();
     assert_eq!(out.status.code(), Some(DENY), "{reason}");
     assert!(reason.contains("secrets-paths"), "{reason}");

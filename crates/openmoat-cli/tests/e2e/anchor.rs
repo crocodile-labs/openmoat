@@ -5,13 +5,15 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::common::{OK, Sandbox, USAGE, bash_payload, json, stderr, stdout, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 /// Record `count` decisions, one after another.
 fn decide(sb: &Sandbox, count: usize) {
     let project = sb.project();
     for i in 0..count {
         let out = sb.guard(
-            "claude-code",
+            Host::ClaudeCode.id(),
             &bash_payload("s1", &project, &format!("echo {i}")),
         );
         assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
@@ -68,7 +70,7 @@ fn anchors_hold_until_truncated(sb: &Sandbox, place: &[&str], against: &Path) {
 
 #[test]
 fn a_file_anchor_names_itself_after_the_newest_events_are_deleted() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let file = sb.home.join("anchors.jsonl");
     anchors_hold_until_truncated(&sb, &["--file", file.to_str().unwrap()], &file);
     let lines = std::fs::read_to_string(&file).unwrap();
@@ -77,7 +79,7 @@ fn a_file_anchor_names_itself_after_the_newest_events_are_deleted() {
 
 #[test]
 fn a_git_anchor_is_a_commit_on_its_own_ref() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let repo = sb.home.join("anchors-repo");
     std::fs::create_dir_all(&repo).unwrap();
     let git = |args: &[&str]| {
@@ -108,7 +110,7 @@ fn a_git_anchor_is_a_commit_on_its_own_ref() {
 
 #[test]
 fn anchoring_is_for_a_person_and_needs_a_place() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     decide(&sb, 1);
     let file = sb.home.join("anchors.jsonl");
     let file = file.to_str().unwrap();

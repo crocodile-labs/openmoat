@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::common::{Sandbox, bash_payload, hook_output, json};
+use openmoat_hosts::Host;
 
 #[cfg(unix)]
 pub mod agents;
@@ -250,7 +251,7 @@ impl Fixtures {
     /// The hook decision for `command` in `project`, under audit session `id`.
     pub fn hook_decision(&self, id: &str, project: Project, command: &str) -> Verdict {
         let payload = bash_payload(id, self.tree(project), command);
-        let out = self.sb.guard("claude-code", &payload);
+        let out = self.sb.guard(Host::ClaudeCode.id(), &payload);
         let decision = hook_output(&out)["permissionDecision"].clone();
         match decision.as_str() {
             Some("allow") => Verdict::Allow,
@@ -283,7 +284,7 @@ fn scenario_file_is_well_formed() {
         }
         if let Some(gap) = &s.gap {
             assert!(
-                ["hook", "codex", "claude"].contains(&gap.layer.as_str()),
+                ["hook", Host::Codex.id(), "claude"].contains(&gap.layer.as_str()),
                 "{}: gap layer {}",
                 s.id,
                 gap.layer
@@ -306,7 +307,7 @@ fn scenario_file_is_well_formed() {
         // A host sandbox expected to let an attack run is a known gap, never a
         // silent expectation; this holds on hosts that cannot run that layer too.
         if s.is_attack() {
-            for (layer, verdict) in [("codex", s.codex), ("claude", s.claude)] {
+            for (layer, verdict) in [(Host::Codex.id(), s.codex), ("claude", s.claude)] {
                 assert!(
                     verdict != Verdict::Allow || s.gap_at(layer).is_some(),
                     "{}: {layer} is expected to allow an attack without a gap",

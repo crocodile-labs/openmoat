@@ -7,9 +7,11 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use crate::common::{DENY, OK, Sandbox, json};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 fn sandbox() -> Sandbox {
-    Sandbox::installed(&[".claude"])
+    Sandbox::installed(&[&dir_of(Host::ClaudeCode)])
 }
 
 fn settings(sb: &Sandbox) -> PathBuf {
@@ -23,7 +25,7 @@ fn config_change(sb: &Sandbox, path: &Path, change_type: &str) -> (Option<i32>, 
         "hook_event_name": "ConfigChange", "source": "user_settings",
         "change_type": change_type, "file_path": path.to_string_lossy(),
     });
-    let out = sb.guard("claude-code", &payload.to_string());
+    let out = sb.guard(Host::ClaudeCode.id(), &payload.to_string());
     (out.status.code(), json(&out))
 }
 
@@ -40,7 +42,13 @@ fn init_registers_the_config_change_hook() {
     );
     assert_eq!(
         entries[0]["hooks"][0]["args"],
-        serde_json::json!(["guard", "--host", "claude-code", "--home", sb.home_word()])
+        serde_json::json!([
+            "guard",
+            "--host",
+            Host::ClaudeCode.id(),
+            "--home",
+            sb.home_word()
+        ])
     );
 }
 
@@ -125,7 +133,7 @@ fn current_payload(sb: &Sandbox, source: &str, path: Option<&Path>) -> (Option<i
     if let Some(path) = path {
         payload["file_path"] = path.to_string_lossy().into();
     }
-    let out = sb.guard("claude-code", &payload.to_string());
+    let out = sb.guard(Host::ClaudeCode.id(), &payload.to_string());
     (out.status.code(), json(&out))
 }
 
@@ -164,7 +172,7 @@ fn change_without_a_file_is_checked_against_every_pin() {
 fn unreadable_payload_is_blocked_in_config_change_shape() {
     let sb = sandbox();
     let out = sb.guard(
-        "claude-code",
+        Host::ClaudeCode.id(),
         r#"{"hook_event_name":"ConfigChange","source":["user_settings"]}"#,
     );
     assert_eq!(out.status.code(), Some(DENY));
@@ -224,7 +232,7 @@ fn project_payload(
     if let Some(path) = path {
         payload["file_path"] = path.to_string_lossy().into();
     }
-    let out = sb.guard("claude-code", &payload.to_string());
+    let out = sb.guard(Host::ClaudeCode.id(), &payload.to_string());
     (out.status.code(), json(&out))
 }
 

@@ -6,9 +6,14 @@ use std::path::Path;
 use crate::common::{
     Sandbox, USAGE, bash_payload, hook_output, stderr, stdout, verdict_and_reason,
 };
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 fn assert_verdict(sb: &Sandbox, cwd: &Path, command: &str, expected: &str, rule: &str) {
-    let out = sb.guard("claude-code", &bash_payload("s-paths", cwd, command));
+    let out = sb.guard(
+        Host::ClaudeCode.id(),
+        &bash_payload("s-paths", cwd, command),
+    );
     let (verdict, mut reason) = verdict_and_reason(&out);
     assert!(!verdict.is_empty(), "{command}: {}", stderr(&out));
     if verdict == "defer" {
@@ -23,7 +28,7 @@ fn assert_verdict(sb: &Sandbox, cwd: &Path, command: &str, expected: &str, rule:
 /// project: `project-fs` must not turn into "the whole home directory".
 #[test]
 fn a_session_in_home_has_no_project() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     std::fs::create_dir_all(sb.home.join(".ssh")).unwrap();
     std::fs::create_dir_all(sb.home.join(".aws")).unwrap();
     let home = sb.home.clone();
@@ -44,7 +49,7 @@ fn a_session_in_home_has_no_project() {
 /// the session's own directory is the project instead.
 #[test]
 fn a_repository_in_home_is_not_the_project() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     std::fs::create_dir_all(sb.home.join(".git")).unwrap();
     let app = sb.home.join("code/app");
     std::fs::create_dir_all(&app).unwrap();
@@ -71,7 +76,7 @@ fn an_explicit_home_project_is_a_usage_error() {
 /// placed from the pure core (#400), so `~alice/…` needs review through `unparseable`.
 #[test]
 fn tilde_user_paths_are_home_directories() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     assert_verdict(
         &sb,
@@ -88,7 +93,7 @@ fn tilde_user_paths_are_home_directories() {
 /// in the real directories (#355); a quoted one stays one literal name.
 #[test]
 fn glob_operands_are_checked_as_the_files_they_match() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     std::fs::create_dir_all(sb.home.join(".ssh")).unwrap();
     std::fs::write(sb.home.join(".ssh/id_rsa"), "key").unwrap();
@@ -115,7 +120,7 @@ fn glob_operands_are_checked_as_the_files_they_match() {
 /// (#362); each one is checked, and quoted braces stay one literal name.
 #[test]
 fn brace_operands_are_checked_as_every_word_they_make() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     std::fs::create_dir_all(sb.home.join(".ssh")).unwrap();
     std::fs::write(sb.home.join(".ssh/id_rsa"), "key").unwrap();
@@ -143,7 +148,7 @@ fn brace_operands_are_checked_as_every_word_they_make() {
 #[cfg(unix)]
 #[test]
 fn relative_operands_are_resolved_through_symlinks() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     std::fs::create_dir_all(sb.home.join(".ssh")).unwrap();
     std::fs::write(sb.home.join(".ssh/id_rsa"), "key").unwrap();
@@ -174,7 +179,7 @@ fn relative_operands_are_resolved_through_symlinks() {
 #[cfg(unix)]
 #[test]
 fn a_long_chain_of_dangling_links_is_followed_to_its_end() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     std::fs::create_dir_all(sb.home.join(".ssh")).unwrap();
     let links = 12;
@@ -205,7 +210,7 @@ fn real(path: &Path) -> String {
 /// the session wrote the root, or resolved (POLICY.md §3.2).
 #[test]
 fn the_resolved_project_path_is_the_project() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     std::fs::write(project.join("a"), "x").unwrap();
     let file = format!("{}/a", real(&project));
@@ -219,7 +224,7 @@ fn the_resolved_project_path_is_the_project() {
 #[cfg(unix)]
 #[test]
 fn a_project_under_a_symlinked_directory_is_the_project() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let volume = sb.home.join("../volume/code");
     std::fs::create_dir_all(volume.join("app/.git")).unwrap();
     std::os::unix::fs::symlink(&volume, sb.home.join("code")).unwrap();
@@ -247,7 +252,7 @@ fn a_project_under_a_symlinked_directory_is_the_project() {
 /// directory, whatever `path` says; that directory is what gets checked.
 #[test]
 fn an_absolute_glob_pattern_is_a_read_of_its_directory() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     let home = sb.home.to_string_lossy().replace('\\', "/");
     let glob = |pattern: &str| {
@@ -256,7 +261,7 @@ fn an_absolute_glob_pattern_is_a_read_of_its_directory() {
             "hook_event_name": "PreToolUse", "tool_name": "Glob",
             "tool_input": {"pattern": pattern, "path": project.to_string_lossy()}
         });
-        let d = hook_output(&sb.guard("claude-code", &payload.to_string()));
+        let d = hook_output(&sb.guard(Host::ClaudeCode.id(), &payload.to_string()));
         (
             d["permissionDecision"].clone(),
             d["permissionDecisionReason"].to_string(),

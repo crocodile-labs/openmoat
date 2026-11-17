@@ -38,7 +38,7 @@ pub(crate) fn payload(sb: &Sandbox, tool: &str, input: &Value) -> String {
 
 /// The exit code and the reply; `Value::Null` when the hook printed nothing.
 fn guard(sb: &Sandbox, payload: &str) -> (Option<i32>, Value) {
-    let out = sb.guard("goose", payload);
+    let out = sb.guard(Host::Goose.id(), payload);
     let reply = serde_json::from_str(stdout(&out).trim()).unwrap_or(Value::Null);
     (out.status.code(), reply)
 }
@@ -57,7 +57,7 @@ fn init_writes_one_entry_that_blocks_when_the_hook_fails() {
         action["command"]
             .as_str()
             .unwrap()
-            .ends_with(&sb.hook_args("goose")),
+            .ends_with(&sb.hook_args(Host::Goose.id())),
         "{hook}"
     );
 }
@@ -96,7 +96,7 @@ fn a_deferred_call_is_left_to_goose_and_malformed_arguments_are_blocked() {
     let sb = Sandbox::installed(&[&dir()]);
     let file = sb.project().join("notes.txt");
     let out = sb.guard(
-        "goose",
+        Host::Goose.id(),
         &payload(
             &sb,
             "write",
@@ -124,7 +124,7 @@ fn goose_status(sb: &Sandbox, cwd: &std::path::Path) -> Value {
         .as_array()
         .unwrap()
         .iter()
-        .find(|a| a["host"] == "goose")
+        .find(|a| a["host"] == Host::Goose.id())
         .unwrap()
         .clone()
 }

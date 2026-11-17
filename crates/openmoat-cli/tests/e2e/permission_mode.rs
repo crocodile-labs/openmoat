@@ -3,14 +3,16 @@
 use std::process::Output;
 
 use crate::common::{DENY, OK, Sandbox, hook_output, stderr, stdout};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 fn installed() -> Sandbox {
-    Sandbox::installed(&[".claude"])
+    Sandbox::installed(&[&dir_of(Host::ClaudeCode)])
 }
 
 /// The guard's answer to `payload` from Claude Code's hook.
 fn guard(sb: &Sandbox, payload: &str) -> Output {
-    sb.guard("claude-code", payload)
+    sb.guard(Host::ClaudeCode.id(), payload)
 }
 
 fn bash(sb: &Sandbox, session: &str, mode: &str, command: &str) -> String {

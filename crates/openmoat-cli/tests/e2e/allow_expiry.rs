@@ -8,6 +8,7 @@
 use std::time::Duration;
 
 use crate::common::{DENY, OK, Sandbox, json, text};
+use openmoat_hosts::Host;
 
 /// Exit code of `openmoat policy check` for one action against the installed
 /// policy: 0 allow, 2 deny, 3 review.
@@ -170,7 +171,7 @@ fn for_is_refused_where_it_cannot_apply() {
                 "allow",
                 "make",
                 "--host",
-                "claude-code",
+                Host::ClaudeCode.id(),
                 "--session",
                 "s1",
                 "--for",

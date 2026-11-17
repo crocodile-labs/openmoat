@@ -3,6 +3,7 @@
 //! `openmoat mcp wrap` sandboxes by default and keeps a server's choice; and
 //! `openmoat status` and `doctor` name servers that start outside OpenMoat.
 
+use openmoat_hosts::Host;
 #[cfg(unix)]
 use std::path::Path;
 use std::path::PathBuf;
@@ -205,7 +206,7 @@ fn wrap_sandboxes_by_default_and_a_rewrap_keeps_the_choice() {
             "--server",
             "gh",
             "--host",
-            "claude-code",
+            Host::ClaudeCode.id(),
             "--sandbox",
             "--",
             "npx",
@@ -217,7 +218,7 @@ fn wrap_sandboxes_by_default_and_a_rewrap_keeps_the_choice() {
     let payload = json!({"session_id": "s", "cwd": sb.home.to_string_lossy(),
         "hook_event_name": "PreToolUse", "tool_name": "mcp__gh__x", "tool_input": {},
         "tool_use_id": "t"});
-    let out = sb.guard("claude-code", &payload.to_string());
+    let out = sb.guard(Host::ClaudeCode.id(), &payload.to_string());
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
 }
 

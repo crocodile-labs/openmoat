@@ -11,9 +11,11 @@ use std::process::Output;
 use serde_json::{Value, json};
 
 use crate::common::{DENY, OK, Sandbox, json as json_of, output, stderr, stdout, text};
+use crate::hosts::dir_of;
 use crate::run::confined::{ran, retried};
 use crate::run::{installed_with_secret, run_sh_with};
 use crate::taint::call;
+use openmoat_hosts::Host;
 
 /// The `moat` binary, copied into the project: the sandbox reads the project.
 fn moat_in(project: &Path) -> PathBuf {
@@ -284,7 +286,7 @@ fn echoing_listener() -> (String, std::thread::JoinHandle<usize>, TcpListener) {
 /// (ADR-070).
 #[test]
 fn relay_variables_outside_a_run_are_not_followed() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     let (addr, server, _listener) = echoing_listener();
     let key = json!({"file_path": sb.home.join(".ssh/id_rsa").to_string_lossy()});
@@ -292,7 +294,7 @@ fn relay_variables_outside_a_run_are_not_followed() {
     let mut cmd = sb.command();
     cmd.env("MOAT_GUARD_SOCKET", &addr)
         .env("MOAT_GUARD_TOKEN", "any")
-        .args(["guard", "--host", "claude-code"]);
+        .args(["guard", "--host", Host::ClaudeCode.id()]);
     let out = output(&mut cmd, Some(&payload));
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
     assert!(text(&out).contains("secrets-paths"), "{}", text(&out));
@@ -314,7 +316,7 @@ fn relay_variables_outside_a_run_are_not_followed() {
     let mut beat = sb.command();
     beat.env("MOAT_GUARD_SOCKET", &addr)
         .env("MOAT_GUARD_TOKEN", "any")
-        .args(["guard", "--host", "opencode", "--heartbeat"]);
+        .args(["guard", "--host", Host::OpenCode.id(), "--heartbeat"]);
     assert_eq!(output(&mut beat, None).status.code(), Some(OK));
     assert_eq!(server.join().unwrap(), 0, "the listener was never asked");
 }

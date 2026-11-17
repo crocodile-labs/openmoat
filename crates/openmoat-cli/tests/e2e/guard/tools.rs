@@ -2,6 +2,7 @@
 //! `Monitor` WebSocket, and MCP arguments checked as paths.
 
 use crate::common::{Sandbox, fixture, hook_output as decision, stderr, stdout};
+use openmoat_hosts::Host;
 
 #[test]
 fn webfetch_to_an_unlisted_host_defers_but_a_websocket_is_denied() {
@@ -12,7 +13,10 @@ fn webfetch_to_an_unlisted_host_defers_but_a_websocket_is_denied() {
         ("webfetch", 0, "allow", "registries"),
         ("monitor-ws", 2, "deny", "default.net"),
     ] {
-        let out = sb.guard("claude-code", &fixture(&format!("claude-code/{name}.json")));
+        let out = sb.guard(
+            Host::ClaudeCode.id(),
+            &fixture(&format!("claude-code/{name}.json")),
+        );
         assert_eq!(out.status.code(), Some(code), "{name}: {}", stderr(&out));
         let d = decision(&out);
         assert_eq!(d["permissionDecision"], verdict, "{name}");
@@ -32,7 +36,7 @@ fn mcp_arguments_are_checked_as_paths() {
     let sb = Sandbox::bare(&[".claude"]);
     sb.moat(&["init", "--yes"]);
     let out = sb.guard(
-        "claude-code",
+        Host::ClaudeCode.id(),
         &fixture("claude-code/mcp_filesystem_read_secret.json"),
     );
     assert_eq!(out.status.code(), Some(2));
@@ -48,7 +52,7 @@ fn mcp_arguments_are_checked_as_paths() {
         let input = format!(r#"{open}{{"path":"~/.ssh/id_rsa"}}{close}"#);
         let payload =
             format!(r#"{{"tool_name":"mcp__filesystem__read_file","tool_input":{input}}}"#);
-        let d = decision(&sb.guard("claude-code", &payload));
+        let d = decision(&sb.guard(Host::ClaudeCode.id(), &payload));
         assert_eq!(d["permissionDecision"], verdict, "{levels}");
         let reason = d["permissionDecisionReason"].to_string();
         assert!(reason.contains(why), "{reason}");

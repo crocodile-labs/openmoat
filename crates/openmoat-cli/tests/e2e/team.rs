@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use crate::common::{OK, Sandbox, USAGE, bash_payload, json, stdout, text};
+use openmoat_hosts::Host;
 
 const INSTALL: &str = "npm install left-pad-pro";
 const KEY: &str = "cat ~/.ssh/id_rsa";
@@ -13,7 +14,10 @@ fn machine(commands: &[&str], approve: bool) -> Sandbox {
     let sb = Sandbox::installed_with_review(&[".claude"]);
     let project = sb.project();
     for (n, command) in commands.iter().enumerate() {
-        sb.guard("claude-code", &bash_payload("s1", &project, command));
+        sb.guard(
+            Host::ClaudeCode.id(),
+            &bash_payload("s1", &project, command),
+        );
         if approve && n == 0 {
             let out = sb.moat_approving(&["allow", "--last"]);
             assert_eq!(out.status.code(), Some(OK), "{}", text(&out));

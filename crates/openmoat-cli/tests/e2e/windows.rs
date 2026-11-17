@@ -3,12 +3,14 @@
 //! `doctor` reads back, and Codex's Windows sandbox mode in `doctor`.
 
 use crate::common::{Sandbox, bash_payload, stderr, verdict_and_reason};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 /// The hook answers each crossing into WSL with a deny and exit 2, so the
 /// host never runs it, and leaves a plain command alone.
 #[test]
 fn the_hook_denies_work_handed_to_wsl() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     for command in [
         "wsl cat ~/.ssh/id_rsa",
@@ -16,7 +18,10 @@ fn the_hook_denies_work_handed_to_wsl() {
         "cmd /c \"WSL.EXE cat /home/me/.netrc\"",
         "cat '\\\\wsl$\\Ubuntu\\home\\me\\.ssh\\id_rsa'",
     ] {
-        let out = sb.guard("claude-code", &bash_payload("s-wsl", &project, command));
+        let out = sb.guard(
+            Host::ClaudeCode.id(),
+            &bash_payload("s-wsl", &project, command),
+        );
         let (verdict, reason) = verdict_and_reason(&out);
         assert_eq!(verdict, "deny", "{command}: {}", stderr(&out));
         assert_eq!(out.status.code(), Some(2), "{command}");
@@ -28,12 +33,12 @@ fn the_hook_denies_work_handed_to_wsl() {
         "tool_input": {"file_path": "//wsl.localhost/Ubuntu/home/me/.aws/credentials"},
         "tool_use_id": "t1"
     });
-    let out = sb.guard("claude-code", &read.to_string());
+    let out = sb.guard(Host::ClaudeCode.id(), &read.to_string());
     let (verdict, reason) = verdict_and_reason(&out);
     assert_eq!(verdict, "deny", "{}", stderr(&out));
     assert!(reason.contains("wsl-crossing"), "{reason}");
     let out = sb.guard(
-        "claude-code",
+        Host::ClaudeCode.id(),
         &bash_payload("s-wsl", &project, "git status"),
     );
     assert_ne!(verdict_and_reason(&out).0, "deny", "{}", stderr(&out));
@@ -47,7 +52,7 @@ fn the_hook_denies_work_handed_to_wsl() {
 fn the_state_directory_has_its_own_access_list() {
     use crate::common::stdout;
 
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let shown = stdout(&sb.moat(&["doctor", "--format", "json"]));
     assert!(shown.contains("no other account may open it"), "{shown}");
     assert!(shown.contains("the agent runs as you"), "{shown}");
@@ -77,7 +82,7 @@ fn the_state_directory_has_its_own_access_list() {
 fn doctor_shows_codexs_windows_sandbox_mode() {
     use crate::common::stdout;
 
-    let sb = Sandbox::installed(&[".codex"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
     let config = sb.home.join(".codex/config.toml");
     let written = std::fs::read_to_string(&config).unwrap_or_default();
     for (mode, said) in [

@@ -10,6 +10,8 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use crate::common::{OK, Sandbox, USAGE, json, stderr, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 #[test]
 fn refuses_a_non_loopback_listen_address() {
@@ -87,7 +89,7 @@ fn an_unlisted_host_gets_403_and_an_audit_row() {
 
 #[test]
 fn doctor_and_status_warn_while_the_hosts_proxy_is_not_listening() {
-    let sb = Sandbox::installed(&[".claude", ".codex"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode), &dir_of(Host::Codex)]);
     // Opt-in: without `sandbox.proxy_port` the hosts keep their own proxies.
     for args in [["doctor"], ["status"]] {
         let out = sb.moat(&args);
@@ -422,7 +424,7 @@ fn moat_uninstall_also_removes_the_proxy_service() {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
 fn sandbox_sync_notes_the_service_restart_when_installed() {
-    let sb = Sandbox::installed(&[".claude", ".codex"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode), &dir_of(Host::Codex)]);
     let out = sb
         .command()
         .args(["proxy", "install"])

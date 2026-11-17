@@ -6,6 +6,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::common::{OK, Sandbox, json, output, text};
+use openmoat_hosts::Host;
 
 /// `cmd` in the repository `dir`, whose git directory is beside it (some
 /// sandboxes refuse to create a `.git` directory; see `check_diff.rs`).
@@ -46,7 +47,7 @@ fn note(commit: &str) -> String {
         "digest": "ef",
         "files": [{
             "path": "src/lib.rs",
-            "host": "claude-code",
+            "host": Host::ClaudeCode.id(),
             "session": "3c9e1a7f02d4aa",
             "event": 7,
             "ts_ms": 1,

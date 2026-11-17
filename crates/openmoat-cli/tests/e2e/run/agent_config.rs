@@ -6,6 +6,7 @@
 use super::confined::ran;
 use super::{installed_with_secret, run_sh};
 use crate::common::{stdout, text};
+use openmoat_hosts::Host;
 
 /// On macOS Seatbelt denies them after every grant, wherever they are in the
 /// project, existing or not, and in either case; `.claude`, `.codex` and the
@@ -53,7 +54,16 @@ fn agent_configuration_and_directories_cannot_be_written_or_moved() {
     let shown = text(&out);
     assert_eq!(out.status.code(), Some(OK), "{shown}");
     for denied in [
-        "mcp", "case", "hooks", "cursor", "move", "replace", "github", "pi", "cline", "clinedir",
+        "mcp",
+        "case",
+        "hooks",
+        Host::Cursor.id(),
+        "move",
+        "replace",
+        "github",
+        Host::Pi.id(),
+        Host::Cline.id(),
+        "clinedir",
         "gemini",
     ] {
         assert!(
@@ -126,7 +136,13 @@ fn existing_agent_configuration_is_read_only_in_the_network_namespace() {
         return;
     }
     for denied in [
-        "mcp", "remove", "settings", "github", "claude", "cline", "gemini",
+        "mcp",
+        "remove",
+        "settings",
+        "github",
+        "claude",
+        Host::Cline.id(),
+        "gemini",
     ] {
         assert!(
             !stdout(&out).contains(&format!("{denied}=0\n")),
@@ -262,7 +278,7 @@ fn missing_hook_settings_cannot_be_created() {
             }
             continue;
         }
-        for denied in ["gemini", "copilot", "claude", "codex", "move"] {
+        for denied in ["gemini", "copilot", "claude", Host::Codex.id(), "move"] {
             assert!(
                 !stdout(&out).contains(&format!("{denied}=0\n")),
                 "{denied} (isolate {isolate}): {shown}"

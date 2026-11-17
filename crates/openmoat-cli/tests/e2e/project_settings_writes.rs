@@ -8,6 +8,8 @@ use std::fs;
 use serde_json::json;
 
 use crate::common::{Sandbox, verdict_and_reason};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 fn write(sb: &Sandbox, file: &str, content: &str) -> (String, String) {
     let project = sb.project();
@@ -16,12 +18,12 @@ fn write(sb: &Sandbox, file: &str, content: &str) -> (String, String) {
         "tool_name": "Write", "tool_use_id": "t1",
         "tool_input": {"file_path": project.join(file).to_string_lossy(), "content": content},
     });
-    verdict_and_reason(&sb.guard("claude-code", &payload.to_string()))
+    verdict_and_reason(&sb.guard(Host::ClaudeCode.id(), &payload.to_string()))
 }
 
 #[test]
 fn a_write_that_turns_a_hook_off_is_denied_and_other_edits_keep_their_review() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     fs::create_dir_all(sb.project().join(".codex")).unwrap();
     fs::create_dir_all(sb.project().join(".pi")).unwrap();
 
@@ -56,7 +58,7 @@ fn shell(sb: &Sandbox, command: &str) -> (String, String) {
         "session_id": "s1", "cwd": sb.project().to_string_lossy(), "hook_event_name": "PreToolUse",
         "tool_name": "Bash", "tool_use_id": "t1", "tool_input": {"command": command},
     });
-    verdict_and_reason(&sb.guard("claude-code", &payload.to_string()))
+    verdict_and_reason(&sb.guard(Host::ClaudeCode.id(), &payload.to_string()))
 }
 
 /// What a shell write leaves cannot be known before it runs, so one aimed at a
@@ -64,7 +66,7 @@ fn shell(sb: &Sandbox, command: &str) -> (String, String) {
 /// work on the same project keeps its verdict.
 #[test]
 fn a_shell_write_of_hook_settings_is_denied_and_other_shell_work_is_not() {
-    let sb = Sandbox::installed(&[".claude", ".codex"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode), &dir_of(Host::Codex)]);
     fs::create_dir_all(sb.project().join(".codex")).unwrap();
     for command in [
         "printf x > .codex/config.toml",

@@ -5,10 +5,12 @@
 use std::path::PathBuf;
 
 use crate::common::{DENY, OK, Sandbox, stdout, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 /// An installed sandbox whose project carries `yaml` as its repository policy.
 fn with_repo_policy(yaml: &str) -> (Sandbox, PathBuf) {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     std::fs::create_dir_all(project.join(".moat")).unwrap();
     std::fs::write(project.join(".moat/policy.yaml"), yaml).unwrap();

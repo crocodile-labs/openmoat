@@ -17,6 +17,8 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 
 use crate::common::{OK, Sandbox, output, stdout, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 mod flow;
 mod injected;
@@ -38,7 +40,7 @@ struct Gateway {
 
 impl Gateway {
     fn new() -> Self {
-        let sb = Sandbox::installed(&[".claude"]);
+        let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
         let record = sb.home.join("record.jsonl");
         let gateway = Self { sb, record };
         // `openmoat mcp proxy` starts only a definition a person accepted
@@ -186,7 +188,10 @@ fn an_allowed_call_arrives_unchanged_once_and_names_the_hooks_session() {
     let gw = Gateway::new();
     let arguments =
         json!({"q": "rust \u{e9}\u{2028}", "limit": 9_007_199_254_740_993_u64, "ratio": 0.1});
-    assert_ne!(gw.hook("claude-code", "s-42", "search", &arguments), "deny");
+    assert_ne!(
+        gw.hook(Host::ClaudeCode.id(), "s-42", "search", &arguments),
+        "deny"
+    );
     let host = gw.session(
         "answer",
         &[call(7, "search", &arguments), call(8, "search", &arguments)],
@@ -223,7 +228,10 @@ fn an_allowed_call_arrives_unchanged_once_and_names_the_hooks_session() {
 fn a_call_the_hook_never_decided_never_reaches_the_server() {
     let gw = Gateway::new();
     let checked = json!({"q": "rust"});
-    assert_ne!(gw.hook("claude-code", "s1", "search", &checked), "deny");
+    assert_ne!(
+        gw.hook(Host::ClaudeCode.id(), "s1", "search", &checked),
+        "deny"
+    );
     // Other arguments than the hook checked, or no hook at all.
     let host = gw.session(
         "answer",
@@ -245,9 +253,12 @@ fn a_call_the_hook_never_decided_never_reaches_the_server() {
 fn a_call_the_policy_denies_never_reaches_the_server() {
     let gw = Gateway::new();
     let key = json!({"path": gw.sb.home.join(".ssh/id_ed25519").to_string_lossy()});
-    assert_eq!(gw.hook("claude-code", "s1", "read_file", &key), "deny");
+    assert_eq!(
+        gw.hook(Host::ClaudeCode.id(), "s1", "read_file", &key),
+        "deny"
+    );
     let url = json!({"url": "https://collector.example.net/upload"});
-    assert_eq!(gw.hook("claude-code", "s1", "fetch", &url), "deny");
+    assert_eq!(gw.hook(Host::ClaudeCode.id(), "s1", "fetch", &url), "deny");
     let host = gw.session(
         "answer",
         &[call(1, "read_file", &key), call(2, "fetch", &url)],
@@ -288,13 +299,13 @@ fn a_call_held_for_review_after_a_secret_read_and_refused_never_reaches_the_serv
     // denies it below is the taint.
     let control = json!({"q": "control"});
     assert_ne!(
-        gw.hook_in("claude-code", "k1", "search", &control, "dontAsk"),
+        gw.hook_in(Host::ClaudeCode.id(), "k1", "search", &control, "dontAsk"),
         "deny"
     );
     let read = json!({"file_path": gw.sb.home.join(".ssh/id_rsa").to_string_lossy()});
     let payload = json!({"session_id": "k1", "cwd": gw.sb.project().to_string_lossy(),
         "hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": read, "tool_use_id": "r1"});
-    let reviewed = gw.sb.guard("claude-code", &payload.to_string());
+    let reviewed = gw.sb.guard(Host::ClaudeCode.id(), &payload.to_string());
     assert!(
         stdout(&reviewed).contains(r#""ask""#),
         "{}",
@@ -304,13 +315,16 @@ fn a_call_held_for_review_after_a_secret_read_and_refused_never_reaches_the_serv
     // The session read a secret, so its MCP calls need review; in a mode where no
     // person sees the question the review is a deny, which no call gets past.
     assert_eq!(
-        gw.hook_in("claude-code", "k1", "search", &search, "dontAsk"),
+        gw.hook_in(Host::ClaudeCode.id(), "k1", "search", &search, "dontAsk"),
         "deny"
     );
     // Reviewed in another session it is a question the person refuses: the host
     // then sends nothing, and the clean session is still allowed.
     let clean = json!({"q": "clean"});
-    assert_ne!(gw.hook("claude-code", "k2", "search", &clean), "deny");
+    assert_ne!(
+        gw.hook(Host::ClaudeCode.id(), "k2", "search", &clean),
+        "deny"
+    );
     let host = gw.session(
         "answer",
         &[call(1, "search", &search), call(2, "search", &clean)],
@@ -344,7 +358,10 @@ fn a_held_tool_and_a_tool_that_changed_mid_session_never_reach_the_server() {
     let gw = Gateway::new();
     let arguments = json!({});
     for _ in 0..3 {
-        assert_ne!(gw.hook("claude-code", "s1", "search", &arguments), "deny");
+        assert_ne!(
+            gw.hook(Host::ClaudeCode.id(), "s1", "search", &arguments),
+            "deny"
+        );
     }
     let mut live = Live::start(&gw, "rug");
     let first = live.ask(&call(1, "search", &arguments), 1);
@@ -376,7 +393,10 @@ fn a_held_tool_and_a_tool_that_changed_mid_session_never_reach_the_server() {
         "the relay listed the tools itself"
     );
     // A tool never accepted: refused whatever the hook said.
-    assert_ne!(gw.hook("claude-code", "s1", "rm_rf", &arguments), "deny");
+    assert_ne!(
+        gw.hook(Host::ClaudeCode.id(), "s1", "rm_rf", &arguments),
+        "deny"
+    );
     gw.forget();
     let host = gw.session("answer", &[call(3, "rm_rf", &arguments)]);
     assert_eq!(answer(&host, 3)["error"]["code"], -32602, "{host}");
@@ -457,7 +477,7 @@ fn decide_like_a_host(gw: &Gateway, line: &str) {
         if m["method"] == "tools/call" && m["params"]["name"] == "search" {
             let arguments = m["params"].get("arguments").cloned().unwrap_or(json!({}));
             if arguments.is_object() {
-                gw.hook("claude-code", "fixtures", "search", &arguments);
+                gw.hook(Host::ClaudeCode.id(), "fixtures", "search", &arguments);
             }
         }
     }

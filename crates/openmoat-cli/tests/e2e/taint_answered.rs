@@ -8,7 +8,9 @@
 use serde_json::json;
 
 use crate::common::{OK, Sandbox, text};
+use crate::hosts::dir_of;
 use crate::taint::{call, decide};
+use openmoat_hosts::Host;
 
 /// Fetched content taints `s1`; a write of `file` there.
 fn tainted_write(sb: &Sandbox, session: &str, file: &str) -> (String, String) {
@@ -19,7 +21,11 @@ fn tainted_write(sb: &Sandbox, session: &str, file: &str) -> (String, String) {
 fn tainted_write_of(sb: &Sandbox, session: &str, file: &str, content: &str) -> (String, String) {
     let proj = sb.project();
     let input = json!({"file_path": proj.join(file).to_string_lossy(), "content": content});
-    decide(sb, "claude-code", &call(session, &proj, "Write", &input))
+    decide(
+        sb,
+        Host::ClaudeCode.id(),
+        &call(session, &proj, "Write", &input),
+    )
 }
 
 /// An `Edit` of `file` in the project by `session`, replacing `old` with `new`.
@@ -28,7 +34,11 @@ fn tainted_edit(sb: &Sandbox, session: &str, file: &str, old: &str, new: &str) -
     let input = json!({
         "file_path": proj.join(file).to_string_lossy(), "old_string": old, "new_string": new
     });
-    decide(sb, "claude-code", &call(session, &proj, "Edit", &input))
+    decide(
+        sb,
+        Host::ClaudeCode.id(),
+        &call(session, &proj, "Edit", &input),
+    )
 }
 
 /// The agent writes `content` to `file`, as the host does once the person approves.
@@ -39,13 +49,17 @@ fn approved(sb: &Sandbox, file: &str, content: &str) {
 fn fetch_untrusted(sb: &Sandbox, session: &str) {
     let proj = sb.project();
     let fetch = json!({"url": "https://crates.io/crates/serde", "prompt": "summarise"});
-    let (verdict, reason) = decide(sb, "claude-code", &call(session, &proj, "WebFetch", &fetch));
+    let (verdict, reason) = decide(
+        sb,
+        Host::ClaudeCode.id(),
+        &call(session, &proj, "WebFetch", &fetch),
+    );
     assert_eq!(verdict, "allow", "{reason}");
 }
 
 #[test]
 fn a_taint_review_answered_with_moat_allow_stays_answered_for_that_file() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     fetch_untrusted(&sb, "s1");
 
     let (verdict, reason) = tainted_write(&sb, "s1", "CMakeLists.txt");
@@ -89,7 +103,7 @@ fn a_taint_review_answered_with_moat_allow_stays_answered_for_that_file() {
 
 #[test]
 fn a_grant_made_before_the_taint_does_not_answer_its_review() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     // A workflow write needs review in a clean session (`runs-later`); approve it there.
     let workflow = ".github/workflows/ci.yml";
     assert_eq!(tainted_write(&sb, "s1", workflow).0, "ask");
@@ -106,7 +120,7 @@ fn a_grant_made_before_the_taint_does_not_answer_its_review() {
 
 #[test]
 fn a_secret_the_session_read_is_not_answered_by_a_later_grant() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     // A policy that holds secret reads and shell for review, re-pinned by a person.
     std::fs::write(
         sb.home.join(".moat/policy.yaml"),
@@ -125,13 +139,17 @@ fn a_secret_the_session_read_is_not_answered_by_a_later_grant() {
     fetch_untrusted(&sb, "s1");
     let key = json!({"file_path": sb.home.join(".ssh/id_rsa").to_string_lossy()});
     assert_eq!(
-        decide(&sb, "claude-code", &call("s1", &proj, "Read", &key)).0,
+        decide(&sb, Host::ClaudeCode.id(), &call("s1", &proj, "Read", &key)).0,
         "ask"
     );
 
     let send = || {
         let input = json!({"command": "curl -s https://api.github.com/gists"});
-        decide(&sb, "claude-code", &call("s1", &proj, "Bash", &input))
+        decide(
+            &sb,
+            Host::ClaudeCode.id(),
+            &call("s1", &proj, "Bash", &input),
+        )
     };
     let (verdict, reason) = send();
     assert_eq!(verdict, "ask", "{reason}");
@@ -157,7 +175,7 @@ fn a_secret_the_session_read_is_not_answered_by_a_later_grant() {
 /// more, answered again only by a write the person let run after it.
 #[test]
 fn an_approved_write_in_the_agent_covers_later_writes_of_the_same_file() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let file = "CMakeLists.txt";
     fetch_untrusted(&sb, "s1");
     let (verdict, reason) = tainted_write_of(&sb, "s1", file, "x");
@@ -202,7 +220,7 @@ fn an_approved_write_in_the_agent_covers_later_writes_of_the_same_file() {
 /// the person may well have declined) covers nothing.
 #[test]
 fn a_write_that_changed_nothing_does_not_cover_the_file() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let file = "CMakeLists.txt";
     approved(&sb, file, "x");
     fetch_untrusted(&sb, "s1");
@@ -223,7 +241,7 @@ fn a_write_that_changed_nothing_does_not_cover_the_file() {
 /// `MultiEdit` is read the same way.
 #[test]
 fn an_approved_edit_in_the_agent_covers_later_edits_of_the_same_file() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let file = "CMakeLists.txt";
     approved(&sb, file, "project(a)\nadd_executable(a a.c)\n");
     fetch_untrusted(&sb, "s1");
@@ -257,7 +275,11 @@ fn an_approved_edit_in_the_agent_covers_later_edits_of_the_same_file() {
         {"old_string": "project", "new_string": "library"},
         {"old_string": "(c)", "new_string": "(c, d)", "replace_all": true}
     ]});
-    let (verdict, reason) = decide(&sb, "claude-code", &call("s1", &proj, "MultiEdit", &multi));
+    let (verdict, reason) = decide(
+        &sb,
+        Host::ClaudeCode.id(),
+        &call("s1", &proj, "MultiEdit", &multi),
+    );
     assert_eq!(verdict, "ask", "a later read needs review again: {reason}");
     approved(&sb, file, "library(c, d)\n");
     let (verdict, reason) = tainted_edit(&sb, "s1", file, "library", "module");
@@ -293,7 +315,7 @@ fn allow_last_answering(sb: &Sandbox, answer: &str) -> std::process::Output {
 /// is not a taint review.
 #[test]
 fn answering_s_covers_the_sessions_protected_writes_until_the_next_untrusted_read() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     fetch_untrusted(&sb, "s1");
     assert_eq!(tainted_write(&sb, "s1", "CMakeLists.txt").0, "ask");
     let out = allow_last_answering(&sb, "s\n");

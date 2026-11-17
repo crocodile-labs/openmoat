@@ -4,6 +4,8 @@
 use serde_json::{Value, json};
 
 use crate::common::{DENY, OK, Sandbox, fixture, hook_output, stdout, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 fn bash(host: &str, session: &str, command: &str) -> String {
     let mut payload = json!({
@@ -13,7 +15,7 @@ fn bash(host: &str, session: &str, command: &str) -> String {
         "tool_use_id": "call-1",
         "tool_input": { "command": command },
     });
-    if host == "codex" {
+    if host == Host::Codex.id() {
         payload["turn_id"] = Value::from("t-1");
     }
     payload.to_string()
@@ -30,8 +32,8 @@ fn reason(out: &std::process::Output) -> String {
 /// earlier releases sent as the `rule` line, one `next` step and the links.
 #[test]
 fn a_deny_reaches_claude_code_as_the_block_message() {
-    let sb = Sandbox::installed(&[".claude"]);
-    let out = sb.guard("claude-code", &fixture("claude-code/bash.json"));
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
+    let out = sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/bash.json"));
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
     let block = reason(&out);
     let lines: Vec<&str> = block.lines().collect();
@@ -74,7 +76,10 @@ fn a_review_is_held_with_one_way_to_approve_it() {
     assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(OK));
     let command = "git config core.pager less";
 
-    let out = sb.guard("claude-code", &bash("claude-code", "c1", command));
+    let out = sb.guard(
+        Host::ClaudeCode.id(),
+        &bash(Host::ClaudeCode.id(), "c1", command),
+    );
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert_eq!(hook_output(&out)["permissionDecision"], "ask");
     let block = reason(&out);
@@ -98,7 +103,7 @@ fn a_review_is_held_with_one_way_to_approve_it() {
     );
     assert!(block.ends_with("\n  more   openmoat why --last"), "{block}");
 
-    let out = sb.guard("codex", &bash("codex", "k1", command));
+    let out = sb.guard(Host::Codex.id(), &bash(Host::Codex.id(), "k1", command));
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
     let block = reason(&out);
     assert!(
@@ -122,11 +127,14 @@ fn a_review_is_held_with_one_way_to_approve_it() {
 /// every call with the check's title, the old line and the person's own step.
 #[test]
 fn a_built_in_check_reaches_claude_code_as_the_block_message() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let policy = sb.home.join(".moat/policy.yaml");
     let text_now = std::fs::read_to_string(&policy).unwrap();
     std::fs::write(&policy, format!("{text_now}\n# changed outside OpenMoat\n")).unwrap();
-    let out = sb.guard("claude-code", &bash("claude-code", "d1", "cargo test"));
+    let out = sb.guard(
+        Host::ClaudeCode.id(),
+        &bash(Host::ClaudeCode.id(), "d1", "cargo test"),
+    );
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
     let block = reason(&out);
     assert!(
@@ -148,8 +156,8 @@ fn a_built_in_check_reaches_claude_code_as_the_block_message() {
 /// `openmoat why` explains the newest deny or review; `--format json` too.
 #[test]
 fn why_explains_the_newest_deny_with_its_rule_and_source() {
-    let sb = Sandbox::installed(&[".claude"]);
-    let out = sb.guard("claude-code", &fixture("claude-code/bash.json"));
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
+    let out = sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/bash.json"));
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
 
     let out = sb.moat(&["why", "--last"]);
@@ -185,15 +193,15 @@ fn why_explains_the_newest_deny_with_its_rule_and_source() {
         "{doc}"
     );
 
-    let none = Sandbox::installed(&[".claude"]).moat(&["why"]);
+    let none = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]).moat(&["why"]);
     assert_ne!(none.status.code(), Some(OK), "{}", text(&none));
 }
 
 /// `openmoat watch --no-follow` prints the calls so far, plain when piped.
 #[test]
 fn watch_lists_the_calls_so_far_when_piped() {
-    let sb = Sandbox::installed(&[".claude"]);
-    let out = sb.guard("claude-code", &fixture("claude-code/bash.json"));
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
+    let out = sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/bash.json"));
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
     let out = sb.moat(&["watch", "--no-follow"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));

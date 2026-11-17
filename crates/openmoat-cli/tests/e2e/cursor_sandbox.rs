@@ -6,6 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 
+use openmoat_hosts::Host;
 use serde_json::Value;
 
 #[cfg(not(windows))]
@@ -105,7 +106,7 @@ fn a_weakened_sandbox_json_denies_every_call_and_drops_to_hook_only() {
     fs::write(dir.join("sandbox.json"), file.to_string()).unwrap();
 
     let read = sb.guard(
-        "cursor",
+        Host::Cursor.id(),
         &crate::common::fixture("cursor/beforeReadFile.json"),
     );
     assert_eq!(read.status.code(), Some(DENY), "{}", text(&read));

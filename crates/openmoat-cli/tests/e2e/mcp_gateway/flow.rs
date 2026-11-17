@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 
 use super::{Gateway, answer, call};
 use crate::common::stdout;
+use openmoat_hosts::Host;
 
 /// Claude Code's hook answer for `tool` (its full MCP name) in `session`.
 pub(super) fn decide(gw: &Gateway, session: &str, tool: &str, arguments: &Value) -> String {
@@ -17,7 +18,7 @@ pub(super) fn decide(gw: &Gateway, session: &str, tool: &str, arguments: &Value)
         "tool_input": arguments, "tool_use_id": format!("{session}-{tool}"),
         "permission_mode": "default"
     });
-    let out = gw.sb.guard("claude-code", &payload.to_string());
+    let out = gw.sb.guard(Host::ClaudeCode.id(), &payload.to_string());
     let answer: Value = serde_json::from_str(stdout(&out).trim()).unwrap_or(Value::Null);
     let decided = answer["hookSpecificOutput"]["permissionDecision"].as_str();
     match decided {
