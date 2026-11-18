@@ -68,7 +68,9 @@ and no repository policy is read.
 
 ## On GitHub
 
-The repository has a composite action at its root. Add this workflow to your
+The repository has a composite action at its root, named `OpenMoat merge check`; its
+`action.yml` carries the name, description, author and branding GitHub Marketplace
+lists an action by. Add this workflow to your
 repository as `.github/workflows/openmoat.yml`. Pin the action to the full commit SHA
 of an OpenMoat release tag, and set `version` to that release:
 
