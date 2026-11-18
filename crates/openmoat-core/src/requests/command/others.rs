@@ -216,7 +216,7 @@ pub(super) fn gh(args: &[String]) -> Vec<Seen> {
 }
 
 /// The API host and path `gh api --hostname <hostname>` sends `path` to, as
-/// gh normalises the name (`NormalizeHostname`): any letter case; github.com
+/// gh normalises the name as its own hostname check does: any letter case; github.com
 /// and every name under it are github.com, whose API is api.github.com; a
 /// GHE.com tenant's is `api.<tenant>.ghe.com`; `github.localhost`'s is
 /// `api.github.localhost`; any other host is GitHub Enterprise Server, which
