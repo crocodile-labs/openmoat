@@ -3,14 +3,20 @@
 //! After `d=~/.ssh;` the word `$d/id_rsa` names `~/.ssh/id_rsa`, so it is
 //! classified as that path. A variable is only substituted when every value it
 //! can hold is known text: an assignment without `$`, `$( … )`, a glob or a
-//! quoted `~`, or the words of a `for` header. Any other use of one keeps its
-//! `env.read` and leaves the path unknown (`Sink::paths`).
+//! quoted `~`, the words of a `for` header, or an assignment from known
+//! variables, plainly or with a prefix or suffix removed (`n=${x#*:}`,
+//! `trim.rs`). A command classified once per value leaves each variable it
+//! sets with every value it took (`merge_variants`). Any other use of one
+//! keeps its `env.read` and leaves the path unknown (`Sink::paths`).
+
+mod trim;
 
 use std::ops::Range;
 
 use super::{SimpleCommand, classify_as_written};
 use crate::lexer::Word;
 use crate::shell::{ClassifyError, MAX_DIRS, ShellContext, Sink};
+use trim::Trim;
 
 /// Classify `cmd` once for each value of the known variables it uses; `false`
 /// when it uses none, and the caller classifies it as written.
@@ -35,6 +41,8 @@ pub(super) fn classify_with_values(
     for name in used.into_iter().filter(|n| !crate::shell::is_lowercase(n)) {
         sink.push(crate::action::AtomicAction::EnvRead { name })?;
     }
+    let before = sink.locals.clone();
+    let mut set = Vec::with_capacity(variants.len());
     for variant in &variants {
         for w in variant.words.iter().chain(&variant.stdin) {
             sink.note_dollar_word(w);
@@ -50,9 +58,53 @@ pub(super) fn classify_with_values(
             });
         }
         // one round, as the shell does: a value is not expanded again
-        classify_as_written(variant, ctx, sink, depth)?;
+        sink.locals.clone_from(&before);
+        let classified = classify_as_written(variant, ctx, sink, depth);
+        set.push(std::mem::take(&mut sink.locals));
+        if let Err(e) = classified {
+            sink.locals = merge_variants(&before, &set, false);
+            return Err(e);
+        }
     }
+    sink.locals = merge_variants(&before, &set, true);
     Ok(true)
+}
+
+/// A shell variable, the depth it was set at, and its values when all are known.
+type Local = (String, u8, Option<Vec<String>>);
+
+/// The variables after a command classified once per variant: each one a
+/// variant set (`n=${x#*:}`, `y=$x`) may hold any value it took in any
+/// variant, so `for x in a b; do y=$x` leaves `y` as `a` or `b`, not the last.
+/// One that some variant did not set, or any variant when they did not all
+/// finish (`complete` false), is not known.
+fn merge_variants(before: &[Local], sets: &[Vec<Local>], complete: bool) -> Vec<Local> {
+    let mut changed: Vec<(&str, u8)> = Vec::new();
+    for (name, depth, _) in sets.iter().flatten().filter(|l| !before.contains(l)) {
+        if !changed.contains(&(name.as_str(), *depth)) {
+            changed.push((name, *depth));
+        }
+    }
+    let mut merged = before.to_vec();
+    for (name, depth) in changed {
+        let mut values = complete.then(Vec::new);
+        for set in sets {
+            let local = set.iter().find(|(n, d, _)| n == name && *d == depth);
+            match (local.and_then(|(_, _, v)| v.as_ref()), values.as_mut()) {
+                (Some(known), Some(all)) => {
+                    for value in known {
+                        if !all.contains(value) {
+                            all.push(value.clone());
+                        }
+                    }
+                }
+                _ => values = None,
+            }
+        }
+        merged.retain(|(n, d, _)| !(n == name && *d == depth));
+        merged.push((name.to_owned(), depth, values));
+    }
+    merged
 }
 
 /// The value of `name=value` when the shell's result is known text, with a
@@ -172,14 +224,16 @@ pub(super) fn expand(
     let words = cmd.words.iter().chain(&cmd.stdin);
     for w in words {
         for local in known {
-            if uses(&w.text, &local.0, &w.literal)? && !used.iter().any(|u| u.0 == local.0) {
+            if uses(&w.text, &local.0, &w.literal, &w.unquoted)?
+                && !used.iter().any(|u| u.0 == local.0)
+            {
                 used.push(local);
             }
         }
     }
     for text in cmd.reads.iter().chain(&cmd.writes) {
         for local in known {
-            if uses(text, &local.0, &[])? && !used.iter().any(|u| u.0 == local.0) {
+            if uses(text, &local.0, &[], &[])? && !used.iter().any(|u| u.0 == local.0) {
                 used.push(local);
             }
         }
@@ -203,18 +257,18 @@ pub(super) fn expand(
                 .map_or("", String::as_str);
             rest /= values.len().max(1);
             for (w, f) in out.words.iter_mut().zip(fields.iter_mut()) {
-                substitute(w, name, value, f);
+                substitute(w, name, value, f)?;
             }
             // a here-string and a redirection target are not split
             for w in &mut out.stdin {
-                substitute(w, name, value, &mut Vec::new());
+                substitute(w, name, value, &mut Vec::new())?;
             }
             for text in out.reads.iter_mut().chain(out.writes.iter_mut()) {
                 let mut w = Word {
                     text: std::mem::take(text),
                     ..Word::default()
                 };
-                substitute(&mut w, name, value, &mut Vec::new());
+                substitute(&mut w, name, value, &mut Vec::new())?;
                 *text = w.text;
             }
         }
@@ -284,13 +338,19 @@ fn split_fields(word: &Word, fields: &[Range<usize>], separators: &str) -> Vec<W
     out
 }
 
-/// Whether `text` expands `$name` or `${name}` outside `literal` spans; an
-/// error for a `${name…}` form with an operator.
-fn uses(text: &str, name: &str, literal: &[Range<usize>]) -> Result<bool, ClassifyError> {
+/// Whether `text` expands `$name`, `${name}` or a trim of it ([`Trim`])
+/// outside `literal` spans; an error for a `${name…}` form with any other
+/// operator, or a trim this module does not read.
+fn uses(
+    text: &str,
+    name: &str,
+    literal: &[Range<usize>],
+    unquoted: &[Range<usize>],
+) -> Result<bool, ClassifyError> {
     let mut found = false;
-    for (_, at) in references(text, name, literal) {
+    for (_, at) in references(text, name, literal, unquoted) {
         match at {
-            Ref::Plain | Ref::Braced => found = true,
+            Ref::Plain | Ref::Braced | Ref::Trimmed(..) => found = true,
             Ref::Transformed => return Err(ClassifyError::UnknownValue(text.to_owned())),
         }
     }
@@ -300,11 +360,20 @@ fn uses(text: &str, name: &str, literal: &[Range<usize>]) -> Result<bool, Classi
 enum Ref {
     Plain,
     Braced,
+    /// `${name#pattern}` and its kin, with the length of the whole expansion.
+    Trimmed(Trim, usize),
     Transformed,
 }
 
 /// Every expanded reference to `name` in `text`: its byte position and form.
-fn references(text: &str, name: &str, literal: &[Range<usize>]) -> Vec<(usize, Ref)> {
+/// A trim whose pattern holds `*` or `?` is read only when all of it lies in
+/// one of `unquoted` (`trim.rs`).
+fn references(
+    text: &str,
+    name: &str,
+    literal: &[Range<usize>],
+    unquoted: &[Range<usize>],
+) -> Vec<(usize, Ref)> {
     let is_name = |c: char| c.is_ascii_alphanumeric() || c == '_';
     let mut out = Vec::new();
     for (pos, _) in text.match_indices('$') {
@@ -316,7 +385,16 @@ fn references(text: &str, name: &str, literal: &[Range<usize>]) -> Vec<(usize, R
             if let Some(after) = body.strip_prefix(name) {
                 match after.chars().next() {
                     Some('}') => out.push((pos, Ref::Braced)),
-                    Some(c) if !is_name(c) => out.push((pos, Ref::Transformed)),
+                    Some(c) if !is_name(c) => {
+                        let read = Trim::parse(after).and_then(|(trim, used)| {
+                            let len = 2 + name.len() + used;
+                            let whole = unquoted
+                                .iter()
+                                .any(|s| s.start <= pos && pos + len <= s.end);
+                            (whole || !trim.is_glob()).then_some(Ref::Trimmed(trim, len))
+                        });
+                        out.push((pos, read.unwrap_or(Ref::Transformed)));
+                    }
                     _ => {}
                 }
             }
@@ -332,14 +410,28 @@ fn references(text: &str, name: &str, literal: &[Range<usize>]) -> Vec<(usize, R
 /// Replace every expanded `$name` and `${name}` in `word` with `value`, moving
 /// the quoting spans that follow, and add to `fields` where an unquoted one
 /// put its value (not in double quotes: `"$x"` stays one word).
-fn substitute(word: &mut Word, name: &str, value: &str, fields: &mut Vec<Range<usize>>) {
-    let refs = references(&word.text, name, &word.literal);
+fn substitute(
+    word: &mut Word,
+    name: &str,
+    value: &str,
+    fields: &mut Vec<Range<usize>>,
+) -> Result<(), ClassifyError> {
+    let refs = references(&word.text, name, &word.literal, &word.unquoted);
+    let mut trimmed = false;
     for (pos, form) in refs.into_iter().rev() {
-        let len = match form {
-            Ref::Plain => 1 + name.len(),
-            Ref::Braced => 3 + name.len(),
+        let (len, value) = match form {
+            Ref::Plain => (1 + name.len(), value.to_owned()),
+            Ref::Braced => (3 + name.len(), value.to_owned()),
+            Ref::Trimmed(trim, len) => {
+                trimmed = true;
+                let kept = trim
+                    .apply(value)
+                    .ok_or_else(|| ClassifyError::UnknownValue(word.text.clone()))?;
+                (len, kept)
+            }
             Ref::Transformed => continue,
         };
+        let value = value.as_str();
         let unquoted = word.unquoted.iter().any(|span| span.contains(&pos));
         word.text.replace_range(pos..pos + len, value);
         // a position after the reference moves by the change in length; one inside
@@ -366,4 +458,12 @@ fn substitute(word: &mut Word, name: &str, value: &str, fields: &mut Vec<Range<u
             fields.push(pos..pos + value.len());
         }
     }
+    if trimmed {
+        // a trim's `*` is its pattern, not a glob the shell expands; what is
+        // left unquoted (the value an unquoted trim put there included) still is
+        word.glob = word.text.char_indices().any(|(at, c)| {
+            matches!(c, '*' | '?' | '[') && word.unquoted.iter().any(|s| s.contains(&at))
+        });
+    }
+    Ok(())
 }

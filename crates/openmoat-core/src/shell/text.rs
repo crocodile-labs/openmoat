@@ -68,7 +68,7 @@ pub(super) fn classify(
     sink: &mut Sink,
 ) -> Result<Operands, ClassifyError> {
     let (mut ops, operands) = match program {
-        "sed" => return sed::classify(argv, ctx, sink),
+        "sed" => return sed::classify(argv, words, ctx, sink),
         "awk" => return awk::classify(argv, words, sink),
         "sort" => options(argv, &SORT, SORT_WRITES, ctx, sink)?,
         "uniq" => options(argv, &UNIQ, &[], ctx, sink)?,

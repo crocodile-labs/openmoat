@@ -2,7 +2,9 @@
 //!
 //! A script's words are not file operands (`sed -n '/a/,/b/p' f` reads only
 //! `f`). Files it reads or writes (`r FILE`, `w FILE`) become `fs` atoms. A
-//! script that runs a command or cannot be read, a script file (`-f`, itself a
+//! script that runs a command or cannot be read, one the shell expands a
+//! variable or a command into whose value is not known (`"${n}p"` after
+//! `read n`; a known one is substituted first, `commands/locals.rs`), a script file (`-f`, itself a
 //! read) and an unknown option become a `sed @<text>` atom, which `text-tools`
 //! excludes.
 //!
@@ -19,6 +21,7 @@ mod tests;
 
 use super::text::{Arg, Operands, Spec, parse, unproven};
 use super::{ClassifyError, ShellContext, Sink};
+use crate::lexer::Word;
 
 const SED: Spec = Spec {
     flags: "nErsuz",
@@ -57,6 +60,7 @@ struct Line<'a> {
 
 pub(super) fn classify(
     argv: &[String],
+    words: &[Word],
     ctx: &ShellContext<'_>,
     sink: &mut Sink,
 ) -> Result<Operands, ClassifyError> {
@@ -71,6 +75,13 @@ pub(super) fn classify(
             } => {
                 line.script_first |= line.operands.is_empty();
                 line.scripts.push(script);
+                // a value whose word is not known is taken to expand any `$` it holds
+                if data
+                    .and_then(|at| words.get(at))
+                    .map_or(script.contains('$'), expands)
+                {
+                    unproven(argv, script, sink)?;
+                }
                 ops.data.extend(data);
             }
             Arg::Opt {
@@ -110,10 +121,11 @@ pub(super) fn classify(
         if is_data {
             ops.data.push(at);
         }
-        check(argv, &argv[at], ctx, sink)?;
+        let expanded = words.get(at).is_none_or(expands);
+        check(argv, &argv[at], expanded, ctx, sink)?;
     }
     for script in &line.scripts {
-        check(argv, script, ctx, sink)?;
+        check(argv, script, false, ctx, sink)?;
     }
     if line.in_place {
         in_place(argv, &line, &mut ops, ctx, sink)?;
@@ -152,14 +164,18 @@ fn operand_scripts(argv: &[String], line: &Line<'_>) -> Vec<(usize, bool)> {
     found
 }
 
-/// Record the files `script` touches, or report it when it may do more.
+/// Record the files `script` touches, or report it when it may do more. A
+/// script the shell expands a variable or a command into (`expanded`) is not
+/// what the command line shows: `"$n"` reads as the address `$` and the
+/// command `n`, while the shell may put `1e id` there.
 fn check(
     argv: &[String],
     script: &str,
+    expanded: bool,
     ctx: &ShellContext<'_>,
     sink: &mut Sink,
 ) -> Result<(), ClassifyError> {
-    let Some(effects) = script::effects(script) else {
+    let Some(effects) = script::effects(script).filter(|_| !expanded) else {
         return unproven(argv, script, sink);
     };
     for file in &effects.reads {
@@ -169,6 +185,21 @@ fn check(
         sink.write(ctx, &literal(file))?;
     }
     Ok(())
+}
+
+/// Whether the shell puts a value into `word`: a command substitution, or a
+/// `$` outside single quotes that starts a parameter (`$n`, `${n}`, `$1`,
+/// `$?`). Before anything else (`s/ *$//`, a closing quote, the end) the `$`
+/// stays itself, sed's end of line.
+fn expands(word: &Word) -> bool {
+    let starts_parameter = |at: usize| {
+        word.text[at + 1..]
+            .starts_with(|c: char| c.is_ascii_alphanumeric() || "_{(@*#?$!-".contains(c))
+    };
+    !word.substitutions.is_empty()
+        || word.text.match_indices('$').any(|(at, _)| {
+            !word.literal.iter().any(|span| span.contains(&at)) && starts_parameter(at)
+        })
 }
 
 /// Every file operand is rewritten, and backed up next to itself.

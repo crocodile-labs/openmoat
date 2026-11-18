@@ -170,3 +170,32 @@ fn bare_in_place_with_one_file_is_the_gnu_reading() {
         "/Users/me/.zshrc"
     ));
 }
+
+#[test]
+fn a_sed_script_the_shell_expands_an_unknown_value_into_is_held() {
+    for (cmd, script) in [
+        ("read n; sed -n \"$n\" f", "@$n"),
+        ("read n; sed -n \"${n}\" f", "@${n}"),
+        ("read n; sed -n -e \"$n\" f", "@$n"),
+        ("sed -n \"$(cat s)\" f", "@$(…)"),
+    ] {
+        let a = match classify(cmd, &ctx()) {
+            ParseOutcome::Parsed(a) | ParseOutcome::Unparseable { atoms: a, .. } => a,
+        };
+        assert!(
+            a.contains(&AtomicAction::Shell {
+                argv: vec!["sed".to_owned(), script.to_owned()]
+            }),
+            "{cmd}: {a:?}"
+        );
+    }
+    // single quotes keep `$` an address, and so does a `$` that starts no
+    // parameter; a known value is substituted first
+    assert!(!has_shell(&parsed("sed -n '$p' f"), "sed @$p"));
+    for script in ["s/[[:space:]]*$//", "/^}$/p", "/a$/d"] {
+        let cmd = format!("sed -n \"{script}\" f");
+        let a = parsed(&cmd);
+        assert!(!has_shell(&a, &format!("sed @{script}")), "{cmd}: {a:?}");
+    }
+    assert!(has_shell(&parsed("n=3; sed -n \"${n}p\" f"), "sed -n 3p f"));
+}

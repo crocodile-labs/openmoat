@@ -2866,3 +2866,38 @@
 - id: benign-curl-get-url-in-a-variable
   action: { shell: "curl -s \"$URL\"" }
   expect: { verdict: defer, rules: [default] }
+# A loop over words the line shows, with a prefix or suffix of the loop variable
+# removed (`${x#*:}`, `${x%%:*}`): every value is known, so the sed script and the
+# file are the values themselves, classified once per value
+- id: benign-sed-line-numbers-from-a-literal-loop
+  why: "`n` is 21 or 17 and `f` is `editors.mdx` or `agents/opencode.mdx`: `sed -n 21p docs/editors.mdx` prints a line."
+  action: { shell: "D=/p/docs; for x in \"editors.mdx:21\" \"agents/opencode.mdx:17\"; do f=${x%%:*}; n=${x#*:}; echo \"== $x\"; sed -n ${n}p $D/$f | grep -o -i \".\\{0,90\\}every tool call.\\{0,90\\}\"; done" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-sed-line-from-a-trimmed-loop-variable
+  why: "`n` is 3 or 10, `${x%%:*}` is `README.md` or `docs/a.md`: the script only prints."
+  action: { shell: "for x in README.md:3 docs/a.md:10; do n=${x#*:}; sed -n \"${n}p\" ${x%%:*}; done" }
+  expect: { verdict: allow, rules: [shell-locals, text-tools, project-fs] }
+- id: benign-sed-line-from-a-literal-variable
+  why: "`n` is 42; `sed -n 42p` prints one line."
+  action: { shell: "n=42; sed -n \"${n}p\" src/lib.rs" }
+  expect: { verdict: allow, rules: [shell-locals, text-tools, project-fs] }
+- id: benign-awk-line-from-a-loop-variable
+  why: "the awk program is `NR==3` or `NR==7`, which prints."
+  action: { shell: "for n in 3 7; do awk \"NR==$n\" f.txt; done" }
+  expect: { verdict: allow, rules: [shell-locals, text-tools, project-fs] }
+- id: benign-suffix-removed-from-a-loop-variable
+  why: "`n` is `a` or `b`; the copies stay in the project."
+  action: { shell: "for x in a.md b.md; do n=${x%.md}; cp docs/$x docs/$n.bak; done" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-basename-of-a-loop-variable
+  why: "`${f##*/}` is `a.rs` or `b.rs`; only text is printed."
+  action: { shell: "for f in src/a.rs src/b.rs; do b=${f##*/}; echo \"${b%.rs}\"; done" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-key-and-value-of-a-loop-variable
+  why: "`k` and `v` are the halves of `a=1` and `b=2`; only text is printed."
+  action: { shell: "for x in a=1 b=2; do k=${x%%=*}; v=${x#*=}; echo \"$k -> $v\"; done" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-sed-end-of-line-in-double-quotes
+  why: "`$/` starts no shell parameter, so the shell leaves `$` as sed's end of line; the script only substitutes."
+  action: { shell: "sed \"s/[[:space:]]*$//\" src/lib.rs" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }

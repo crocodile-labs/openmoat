@@ -1,6 +1,6 @@
 //! Compound commands: reserved words, `for` loops and shell variables.
 
-use super::{ParseOutcome, classify, ctx, has_read, parsed};
+use super::{ParseOutcome, classify, ctx, has_read, has_shell, parsed};
 use crate::action::AtomicAction;
 
 fn shells(atoms: &[AtomicAction]) -> Vec<String> {
@@ -154,4 +154,44 @@ fn a_pipeline_is_reported_alone_when_a_command_follows() {
         atoms.contains(&AtomicAction::Pipeline { argv: alone }),
         "{atoms:?}"
     );
+}
+
+#[test]
+fn a_trimmed_known_variable_is_substituted() {
+    let a = parsed("for x in f.md:21 g/h.md:17; do f=${x%%:*}; n=${x#*:}; sed -n ${n}p $f; done");
+    assert!(has_shell(&a, "sed -n 21p f.md"), "{a:?}");
+    assert!(has_shell(&a, "sed -n 17p g/h.md"), "{a:?}");
+    assert!(
+        has_read(&a, "/p/f.md") && has_read(&a, "/p/g/h.md"),
+        "{a:?}"
+    );
+    assert!(!reads_env(&a, "n") && !reads_env(&a, "f"), "{a:?}");
+    let a = parsed("for f in src/a.rs; do b=${f##*/}; cat docs/${b%.rs}.md; done");
+    assert!(has_read(&a, "/p/docs/a.md"), "{a:?}");
+}
+
+#[test]
+fn a_variable_set_once_per_value_keeps_every_value() {
+    let a = parsed("for x in ~/.ssh/id_rsa README; do y=$x; cat $y; done");
+    assert!(has_read(&a, "/Users/me/.ssh/id_rsa"), "{a:?}");
+    assert!(has_read(&a, "/p/README"), "{a:?}");
+    let a = parsed("for x in p:a p:b; do f=${x#p:}; done; cat $f");
+    assert!(has_read(&a, "/p/a") && has_read(&a, "/p/b"), "{a:?}");
+}
+
+#[test]
+fn a_trim_that_is_not_read_leaves_the_value_unknown() {
+    for cmd in [
+        // quotes inside the braces may make the glob literal
+        "for x in a:~/.ssh/id_rsa; do f=\"${x#\"*\"}\"; cat \"$f\"; done",
+        "for x in a:~/.ssh/id_rsa; do f=\"${x#*:}\"; cat \"$f\"; done",
+        "for x in a:b; do f=${x#[a]:}; cat $f; done",
+        "for x in a:b; do f=${x/a/b}; cat $f; done",
+        "f=${x#*:}; cat $f",
+    ] {
+        assert!(
+            matches!(classify(cmd, &ctx()), ParseOutcome::Unparseable { .. }),
+            "{cmd}"
+        );
+    }
 }

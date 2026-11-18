@@ -207,7 +207,7 @@ good" while the guard refuses every call.
   through `cd`/`pushd` (`cwd.rs`), `net` atoms for URLs, the hosts of programs that name hosts (any other host-shaped word is a `NetWord`) and the host of a `/dev/tcp/HOST/PORT` or `/dev/udp/HOST/PORT` redirection, which bash opens as a connection (`host::of_dev_socket`), and `env.*` atoms
   for assignments and `$VAR` reads. Leading reserved words (`do`, `then`, `if`, …) are skipped, and a
   variable set earlier on the line with a known value is substituted where it is used
-  (`commands/locals.rs`); a path through one whose value is not known is `unparseable`. Shell options are read per shell
+  (`commands/locals.rs`; a prefix or suffix trim of a known value, `${x#*:}`, in `commands/locals/trim.rs`); a path through one whose value is not known is `unparseable`. Shell options are read per shell
   (`invocation.rs`), git's global options are unwrapped (`git.rs`), `make` arguments
   that run code (`make.rs`), options that run programs (`options.rs`), option values
   that name files in every spelling (`path_options.rs`), the files `curl` and `wget`
