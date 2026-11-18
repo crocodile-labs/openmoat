@@ -79,13 +79,14 @@ const SESSION_B: &str = "0d9e8f7a-1111-4b8e-9a51-0e3c2f7d9b10";
 fn an_issued_credential_names_its_session_until_it_expires() {
     let (_dir, home) = home();
     let key = Key::load_or_create(&home).unwrap();
-    let issued = issue(&key, Host::ClaudeCode, SESSION_A, NOW).unwrap();
+    let issued = issue(&key, Host::ClaudeCode, SESSION_A, NOW, false).unwrap();
     assert_eq!(issued.expires, NOW + TTL.as_secs());
     let (user, password) = pair(&issued);
     assert_eq!(
         user,
-        format!("v1.claude-code.{}.{SESSION_A}", issued.expires)
+        format!("v2.claude-code.{}.{SESSION_A}.n", issued.expires)
     );
+    assert!(!trusted(user.as_bytes()));
     assert_eq!(password.len(), 64);
     let ok = |now| verify(&key, user.as_bytes(), password.as_bytes(), now);
     assert_eq!(ok(NOW).as_deref(), Some(SESSION_A));
@@ -103,8 +104,8 @@ fn an_issued_credential_names_its_session_until_it_expires() {
 fn a_credential_opens_only_its_own_session_and_cannot_be_edited() {
     let (_dir, home) = home();
     let key = Key::load_or_create(&home).unwrap();
-    let a = issue(&key, Host::ClaudeCode, SESSION_A, NOW).unwrap();
-    let b = issue(&key, Host::ClaudeCode, SESSION_B, NOW).unwrap();
+    let a = issue(&key, Host::ClaudeCode, SESSION_A, NOW, false).unwrap();
+    let b = issue(&key, Host::ClaudeCode, SESSION_B, NOW, false).unwrap();
     let (user_a, password_a) = pair(&a);
     let (user_b, password_b) = pair(&b);
     let check =
@@ -116,7 +117,10 @@ fn a_credential_opens_only_its_own_session_and_cannot_be_edited() {
         user_a.replace(SESSION_A, SESSION_B),
         user_a.replace(&a.expires.to_string(), &(a.expires + 60).to_string()),
         user_a.replace("claude-code", "codex"),
-        user_a.replace("v1.", "v2."),
+        user_a.replace("v2.", "v1."),
+        user_a.replace("v2.", "v3."),
+        // The trust mark is signed: a session cannot add it.
+        user_a.replace(".n", ".t"),
         format!("{user_a}x"),
         String::new(),
     ];
@@ -142,14 +146,21 @@ fn a_credential_of_another_key_or_one_lasting_too_long_is_refused() {
     let (_other, home_b) = home();
     let key_a = Key::load_or_create(&home_a).unwrap();
     let key_b = Key::load_or_create(&home_b).unwrap();
-    let issued = issue(&key_b, Host::ClaudeCode, SESSION_A, NOW).unwrap();
+    let issued = issue(&key_b, Host::ClaudeCode, SESSION_A, NOW, false).unwrap();
     let (user, password) = pair(&issued);
     assert_eq!(
         verify(&key_a, user.as_bytes(), password.as_bytes(), NOW),
         None
     );
     // Signed for longer than the TTL allows: refused even with the right key.
-    let far = issue(&key_a, Host::ClaudeCode, SESSION_A, NOW + 2 * TTL.as_secs()).unwrap();
+    let far = issue(
+        &key_a,
+        Host::ClaudeCode,
+        SESSION_A,
+        NOW + 2 * TTL.as_secs(),
+        false,
+    )
+    .unwrap();
     let (user, password) = pair(&far);
     assert_eq!(
         verify(&key_a, user.as_bytes(), password.as_bytes(), NOW),
@@ -163,10 +174,47 @@ fn session_ids_that_need_escaping_or_name_no_session_get_no_credential() {
     let key = Key::load_or_create(&home).unwrap();
     for session in ["", "unknown", "a b", "a:b", "a@b", "a/b", &"s".repeat(129)] {
         assert!(
-            issue(&key, Host::ClaudeCode, session, NOW).is_err(),
+            issue(&key, Host::ClaudeCode, session, NOW, true).is_err(),
             "{session:?}"
         );
     }
+}
+
+/// A `v2` credential marks whether its session received the proxy CA's
+/// trust files (ADR-062); a `v1` one, still accepted for one release, never
+/// counts as trusted.
+#[test]
+fn the_trust_mark_is_signed_and_a_v1_credential_is_accepted_untrusted() {
+    let (_dir, home) = home();
+    let key = Key::load_or_create(&home).unwrap();
+    let issued = issue(&key, Host::ClaudeCode, SESSION_A, NOW, true).unwrap();
+    let (user, password) = pair(&issued);
+    assert!(user.ends_with(&format!("{SESSION_A}.t")), "{user}");
+    assert_eq!(
+        verify(&key, user.as_bytes(), password.as_bytes(), NOW).as_deref(),
+        Some(SESSION_A)
+    );
+    assert!(trusted(user.as_bytes()));
+    let forged = user.replace(".t", ".n");
+    assert_eq!(
+        verify(&key, forged.as_bytes(), password.as_bytes(), NOW),
+        None
+    );
+    let old = format!("v1.claude-code.{}.{SESSION_A}", NOW + 60);
+    let signed = key.sign(&old);
+    assert_eq!(
+        verify(&key, old.as_bytes(), signed.as_bytes(), NOW).as_deref(),
+        Some(SESSION_A)
+    );
+    assert!(!trusted(old.as_bytes()));
+    // A v1 session id that ends in `.t` is still the whole id, and untrusted.
+    let dotted = format!("v1.claude-code.{}.{SESSION_A}.t", NOW + 60);
+    let signed = key.sign(&dotted);
+    assert_eq!(
+        verify(&key, dotted.as_bytes(), signed.as_bytes(), NOW),
+        Some(format!("{SESSION_A}.t"))
+    );
+    assert!(!trusted(dotted.as_bytes()));
 }
 
 #[test]
@@ -185,7 +233,7 @@ fn the_key_is_made_once_owner_only_and_kept() {
     // A second maker keeps the first key; a racing writer does not replace it.
     assert!(!crate::home::write_private_new(&path, b"00\n").unwrap());
     let again = Key::load_or_create(&home).unwrap();
-    let issued = issue(&first, Host::ClaudeCode, SESSION_A, NOW).unwrap();
+    let issued = issue(&first, Host::ClaudeCode, SESSION_A, NOW, false).unwrap();
     let (user, password) = pair(&issued);
     assert!(verify(&again, user.as_bytes(), password.as_bytes(), NOW).is_some());
     std::fs::write(&path, "not hex\n").unwrap();
@@ -221,7 +269,7 @@ fn the_verifier_follows_a_replaced_key() {
     let verifier = Verifier::open_with(&home, Duration::ZERO).unwrap();
     let old = Key::load(&key_path(&home)).unwrap();
     let now = now_s();
-    let (user, password) = pair(&issue(&old, Host::ClaudeCode, SESSION_A, now).unwrap());
+    let (user, password) = pair(&issue(&old, Host::ClaudeCode, SESSION_A, now, false).unwrap());
     assert_eq!(
         verifier
             .verify(user.as_bytes(), password.as_bytes())
@@ -234,7 +282,8 @@ fn the_verifier_follows_a_replaced_key() {
     let new = Key::load_or_create(&home).unwrap();
     // The old credential is revoked with the key it was signed with.
     assert_eq!(verifier.verify(user.as_bytes(), password.as_bytes()), None);
-    let (user, password) = pair(&issue(&new, Host::ClaudeCode, SESSION_B, now).unwrap());
+    let (user, password) = pair(&issue(&new, Host::ClaudeCode, SESSION_B, now, true).unwrap());
+    assert!(openmoat_proxy::Verify::trusted(&verifier, user.as_bytes()));
     assert_eq!(
         verifier
             .verify(user.as_bytes(), password.as_bytes())

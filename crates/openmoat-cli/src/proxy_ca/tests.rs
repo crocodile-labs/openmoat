@@ -49,6 +49,44 @@ fn terminated_hosts_are_sorted_once_each_and_plain_secrets_left_out() {
     assert_eq!(terminated_hosts(&policy(&[])), Vec::<String>::new());
 }
 
+/// The hosts of `requests:` entries the proxy holds are terminated too
+/// (ADR-062); a `hook_only` entry needs no CA.
+#[test]
+fn request_rule_hosts_are_terminated_unless_hook_only() {
+    let yaml = "version: 1\nrequests:\n  - id: r\n    host: r.test\n    deny: ['POST /x']\n  \
+        - id: h\n    host: h.test\n    hook_only: true\n    deny: ['POST /x']\n";
+    let policy = Policy::parse(yaml).unwrap();
+    assert_eq!(terminated_hosts(&policy), ["r.test"]);
+    assert_eq!(request_hosts(&policy), ["r.test"]);
+    let default = Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
+    assert_eq!(terminated_hosts(&default), Vec::<String>::new());
+}
+
+/// The standalone proxy terminates `requests:` hosts only with a pinned CA
+/// that covers them, and says so either way.
+#[test]
+fn the_standalone_proxy_terminates_request_hosts_only_with_a_ca_that_covers_them() {
+    let yaml = "version: 1\nrequests:\n  - id: r\n    host: r.test\n    deny: ['POST /x']\n";
+    let policy = Policy::parse(yaml).unwrap();
+    let (_dir, home) = home_with_ca(&["r.test"], true);
+    let (tls, note) = load_for_requests(&home, &policy);
+    assert!(tls.is_some());
+    assert!(note.unwrap().contains("received the proxy CA"));
+    let (_dir, home) = home_with_ca(&["other.test"], true);
+    let (tls, note) = load_for_requests(&home, &policy);
+    assert!(tls.is_none());
+    assert!(note.unwrap().contains("proxy ca init"));
+    let (_dir, home) = home_with_ca(&["r.test"], false);
+    let (tls, note) = load_for_requests(&home, &policy);
+    assert!(tls.is_none());
+    assert!(note.unwrap().contains("no pinned proxy CA"));
+    assert!(
+        load_for_requests(&home, &Policy::parse("version: 1\n").unwrap())
+            .1
+            .is_none()
+    );
+}
+
 #[test]
 fn the_certificate_file_says_what_it_is_and_still_parses() {
     let hosts = vec!["a.test".to_owned()];

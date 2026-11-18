@@ -14,8 +14,11 @@
 //!   says `tls: terminate` (ADR-043): its one request is checked against the
 //!   leak check and the secret's `allow` rules, given the value, sent over the
 //!   proxy's own verified TLS, and its answer searched for every value. A
-//!   host with [`Requests`] rules (ADR-062 step 0, a proof of concept) is
-//!   terminated the same way, and a request its `deny` rules name is refused.
+//!   host with [`Requests`] rules (`requests:`, ADR-062) is terminated the
+//!   same way for a session that trusts the CA ([`Trust`]), and a request its
+//!   rules refuse is refused; a session it cannot terminate is refused or
+//!   relayed as the policy's `requests_untrusted` says, and after a secret read
+//!   only reads without a body pass there.
 //! - A request that carries a brokered secret's placeholder or value to a host
 //!   other than the secret's own is refused ([`Broker`]).
 //! - Every decision is recorded through a [`Recorder`]; a failed record is a
@@ -70,8 +73,8 @@ pub use request::{
 pub use requests::{RequestRuleError, Requests};
 pub use server::{Limits, Proxy};
 pub use session::{
-    AuthError, Credential, CredentialError, MIN_TOKEN_LEN, Sessions, TaintLookup, Verify, base64,
-    constant_time_eq,
+    Admitted, AuthError, Credential, CredentialError, MIN_TOKEN_LEN, Sessions, TaintLookup, Trust,
+    Verify, base64, constant_time_eq,
 };
 pub use sni::{Hello, HelloError, MAX_HELLO, server_name};
 pub use tls::{CA_VALID_DAYS, CaFiles, Roots, Tls, TlsError, new_ca};

@@ -1,7 +1,8 @@
 //! Method and path rules for HTTP requests (ADR-043): which requests a
 //! brokered secret's `allow:` rules let receive its value, and the request path
-//! in the form they are matched against. Shared, so that other request rules
-//! (ADR-062, proposed) match paths the same way.
+//! in the form they are matched against. Shared with a host's request rules
+//! (`requests:`, ADR-062), which match paths the same way, at the proxy and in
+//! the hook.
 //!
 //! A rule is `METHOD /path`: the method in capitals, compared exactly, and a
 //! path of `/`-separated segments, each a literal, `*` (exactly one non-empty
@@ -119,6 +120,55 @@ impl Route {
     pub fn matches(&self, method: &str, path: &RequestPath) -> bool {
         self.method == method && matches(&self.segments, &path.segments)
     }
+
+    /// Whether a request known only in part could match this rule: `method`
+    /// `None` is any method, `path` `None` any path, and a path's
+    /// [`Partial::One`] and [`Partial::Rest`] segments anything they may
+    /// hold (ADR-062: what the hook reads in a command before it runs).
+    #[must_use]
+    pub fn could_match(&self, method: Option<&str>, path: Option<&[Partial]>) -> bool {
+        method.is_none_or(|m| m == self.method) && path.is_none_or(|p| could(&self.segments, p))
+    }
+}
+
+/// One segment of a request path known only in part before the request is
+/// sent: a command's URL built from a variable, or `gh api`'s `{owner}`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Partial {
+    /// A segment as the server reads it (decoded).
+    Known(String),
+    /// Exactly one segment, its text unknown.
+    One,
+    /// Any number of segments, none included, their text unknown.
+    Rest,
+}
+
+/// Whether `rule` could match some path `path` stands for: `memo[i][j]` holds
+/// whether the rule from segment `i` could match the path from segment `j`.
+fn could(rule: &[Segment], path: &[Partial]) -> bool {
+    let (r, p) = (rule.len(), path.len());
+    let mut memo = vec![vec![false; p + 1]; r + 1];
+    for i in (0..=r).rev() {
+        for j in (0..=p).rev() {
+            memo[i][j] = if i == r && j == p {
+                true
+            } else if j < p && path[j] == Partial::Rest {
+                memo[i][j + 1] || (i < r && memo[i + 1][j])
+            } else if i < r && rule[i] == Segment::Any {
+                memo[i + 1][j] || (j < p && memo[i][j + 1])
+            } else if i < r && j < p {
+                let one = match (&rule[i], &path[j]) {
+                    (Segment::Literal(l), Partial::Known(k)) => l == k,
+                    (Segment::One, Partial::Known(k)) => !k.is_empty(),
+                    _ => true,
+                };
+                one && memo[i + 1][j + 1]
+            } else {
+                false
+            };
+        }
+    }
+    memo[0][0]
 }
 
 /// Whether `rule` matches `path`: `matched[j]` is true when the first `i`
@@ -240,6 +290,11 @@ impl RequestPath {
     #[must_use]
     pub fn overrides_method(&self) -> bool {
         self.overrides_method
+    }
+
+    /// The path's segments, decoded, as rules match them.
+    pub(crate) fn segments(&self) -> &[String] {
+        &self.segments
     }
 }
 

@@ -84,6 +84,8 @@ pub struct CompiledPolicy<'p> {
     /// Where a read is not collection (ADR-061, proposed): the project, read
     /// roots, caches, temporary folders and `staging.ignore`.
     inside: Vec<GlobPattern>,
+    /// Every `requests:` entry, for the requests commands send (ADR-062).
+    requests: crate::requests::RequestRules,
 }
 
 #[derive(Debug)]
@@ -143,6 +145,7 @@ impl<'p> CompiledPolicy<'p> {
             protected: taint::compile_protected(&policy, ctx)?,
             folders: contents::ProtectedFolders::compile(&policy.deny, ctx),
             inside: staging::compile_inside(&policy, ctx)?,
+            requests: crate::requests::RequestRules::for_hook(&policy.requests)?,
             policy,
         })
     }
@@ -437,10 +440,14 @@ impl CompiledPolicy<'_> {
         };
         // A folder holding paths a deny rule names needs review, whatever allows it (ADR-038).
         let folders = atoms.iter().filter_map(|atom| self.folders.decide(atom));
+        // The requests a command or fetch tool sends to a `requests:` host
+        // (ADR-062): a deny or a review, never an allow.
+        let requests = crate::requests::hook::decisions(&self.requests, action, &atoms);
         atoms
             .iter()
             .filter_map(|atom| self.evaluate_atomic(atom))
             .chain(folders)
+            .chain(requests)
             .chain(aliased)
             .chain(value_reads)
             .chain(pins)

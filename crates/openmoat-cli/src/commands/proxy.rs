@@ -67,13 +67,17 @@ pub fn run(args: &ProxyArgs) -> Result<Code> {
     let listen = args.listen.unwrap_or_else(|| {
         SocketAddr::from((Ipv4Addr::LOCALHOST, hosts_port.unwrap_or(DEFAULT_PORT)))
     });
+    // `requests:` hosts are terminated for the sessions that received the
+    // CA's trust files (ADR-062); the CA and its pins are checked here.
+    let (tls, requests_note) = crate::proxy_ca::load_for_requests(&home, &policy);
     let exit = Exit::open(
         &home,
         policy,
         context::eval_context(&home, None, None)?,
         None,
         &[],
-    )?;
+    )?
+    .with_tls(tls);
     let listener = TcpListener::bind(listen).with_context(|| format!("listening on {listen}"))?;
     let addr = listener
         .local_addr()
@@ -95,6 +99,9 @@ pub fn run(args: &ProxyArgs) -> Result<Code> {
          their session-start hook); requests without one get 407"
     };
     writeln!(std::io::stderr(), "moat proxy: note: {note}")?;
+    if let Some(line) = requests_note {
+        writeln!(std::io::stderr(), "{line}")?;
+    }
     if let Some(port) = hosts_port.filter(|p| *p != addr.port()) {
         writeln!(
             std::io::stderr(),
@@ -350,7 +357,7 @@ pub(super) struct Exit {
     local: Option<crate::guard_relay::Service>,
     /// `moat run`'s TLS termination for secrets that say `tls: terminate` (ADR-043).
     tls: Option<openmoat_proxy::Tls>,
-    /// `moat run`'s request rules (the ADR-062 proof of concept).
+    /// The policy's request rules (`requests:`, ADR-062).
     requests: openmoat_proxy::Requests,
 }
 
@@ -416,6 +423,9 @@ impl Exit {
             }
             None => None,
         };
+        // A repository's deny-only entries are in `policy` under `openmoat
+        // run`; `requests_untrusted` is the person's alone.
+        let requests = openmoat_proxy::Requests::new(&policy.requests, user.requests_untrusted())?;
         // `command` sources are renewed from here on (ADR-087).
         refresher.spawn();
         Ok(Self {
@@ -431,7 +441,7 @@ impl Exit {
             issued,
             local: None,
             tls: None,
-            requests: openmoat_proxy::Requests::default(),
+            requests,
         })
     }
 
@@ -446,16 +456,10 @@ impl Exit {
                 .is_some_and(|s| s.proxy_serve_without_credential)
     }
 
-    /// Terminate TLS with `tls` for the secrets that say `tls: terminate`.
+    /// Terminate TLS with `tls` for the secrets that say `tls: terminate` and
+    /// the `requests:` hosts (ADR-043, ADR-062).
     pub(super) fn with_tls(mut self, tls: Option<openmoat_proxy::Tls>) -> Self {
         self.tls = tls;
-        self
-    }
-
-    /// Check requests against `requests`, terminating their hosts with the TLS
-    /// [`Exit::with_tls`] set.
-    pub(super) fn with_requests(mut self, requests: openmoat_proxy::Requests) -> Self {
-        self.requests = requests;
         self
     }
 

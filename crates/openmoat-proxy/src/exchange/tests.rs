@@ -107,6 +107,8 @@ struct Setup {
     broker: Broker,
     /// The hosts' request rules (ADR-062); none unless a test sets them.
     requests: Requests,
+    /// The session's taint leaves the host to reads (ADR-062 §3).
+    reads_only: bool,
     /// The proxy's CA, which the agent trusts.
     agent_trusts: String,
     upstream: Arc<ServerConfig>,
@@ -126,6 +128,7 @@ fn setup() -> Setup {
         tls,
         broker: broker(),
         requests: Requests::default(),
+        reads_only: false,
         agent_trusts: ca.cert_pem,
         upstream,
     }
@@ -233,6 +236,7 @@ fn exchange_with(s: &Setup, request: &str, reply: &[u8], run: &Run<'_>) -> Outco
         allowed: &allowed,
         record: &record,
         still_allowed: &|| true,
+        reads_only: &|| s.reads_only,
     };
     tunnel.serve(&proxy_sock, &hello, &mut connect);
     drop(proxy_sock);

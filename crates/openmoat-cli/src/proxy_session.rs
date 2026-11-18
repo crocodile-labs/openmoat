@@ -10,9 +10,13 @@
 //!
 //! A credential is the `Basic` pair `user:password` of a proxy URL:
 //!
-//! - `user` is `v1.<host>.<expires>.<session>`: the agent host's id, the Unix
-//!   time in seconds after which it is refused, and the host's own session id,
-//!   which the proxy records every row under;
+//! - `user` is `v2.<host>.<expires>.<session>.<mark>`: the agent host's id,
+//!   the Unix time in seconds after which it is refused, the host's own
+//!   session id, which the proxy records every row under, and `t` when the
+//!   session received the proxy CA's trust files (its tunnels to `requests:`
+//!   hosts may then be terminated, ADR-062) or `n` when it did not. The
+//!   earlier `v1.<host>.<expires>.<session>` is still accepted, never trusted;
+//!   it goes in a later release;
 //! - `password` is the lowercase hex HMAC-SHA-256 of `user` under the key, with
 //!   [`DOMAIN`] in front so the key signs nothing else.
 //!
@@ -54,8 +58,19 @@ const DOMAIN: &[u8] = b"openmoat-proxy-session-v1\n";
 /// the credentials' signatures never coincide.
 const FINGERPRINT_DOMAIN: &[u8] = b"openmoat-injected-input-v1\n";
 
-/// The version prefix of `user`.
-const VERSION: &str = "v1";
+/// The version prefix of `user`: `v2` ends with a trust mark (ADR-062).
+const VERSION: &str = "v2";
+
+/// The version before the trust mark, still accepted for one release; such a
+/// session is never terminated.
+const OLD_VERSION: &str = "v1";
+
+/// The last field of a `v2` user whose session received the proxy CA's
+/// trust files, so its tunnels to `requests:` hosts may be terminated.
+const TRUSTED: &str = "t";
+
+/// The last field of a `v2` user whose session did not.
+const UNTRUSTED: &str = "n";
 
 /// Longest session id a credential carries.
 const MAX_SESSION_LEN: usize = 128;
@@ -193,8 +208,9 @@ fn plain_session(session: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
 }
 
-/// The credential of `host`'s session `session`, issued at `now` (Unix seconds).
-pub fn issue(key: &Key, host: Host, session: &str, now: u64) -> Result<Issued> {
+/// The credential of `host`'s session `session`, issued at `now` (Unix
+/// seconds); `trusted` when the session received the proxy CA's trust files.
+pub fn issue(key: &Key, host: Host, session: &str, now: u64, trusted: bool) -> Result<Issued> {
     if !plain_session(session) || openmoat_hosts::is_unknown_session(session) {
         bail!(
             "the session id {session:?} cannot carry a proxy credential: it must be 1 to 128 \
@@ -202,7 +218,8 @@ pub fn issue(key: &Key, host: Host, session: &str, now: u64) -> Result<Issued> {
         );
     }
     let expires = now.saturating_add(TTL.as_secs());
-    let user = format!("{VERSION}.{}.{expires}.{session}", host.id());
+    let mark = if trusted { TRUSTED } else { UNTRUSTED };
+    let user = format!("{VERSION}.{}.{expires}.{session}.{mark}", host.id());
     let password = key.sign(&user);
     Ok(Issued {
         user,
@@ -217,9 +234,16 @@ pub fn issue(key: &Key, host: Host, session: &str, now: u64) -> Result<Issued> {
 pub fn verify(key: &Key, user: &[u8], password: &[u8], now: u64) -> Option<String> {
     let user = std::str::from_utf8(user).ok()?;
     let mut parts = user.splitn(4, '.');
-    let (version, host, expires, session) =
+    let (version, host, expires, rest) =
         (parts.next()?, parts.next()?, parts.next()?, parts.next()?);
-    if version != VERSION || host.parse::<Host>().is_err() || !plain_session(session) {
+    let session = match version {
+        VERSION => rest
+            .strip_suffix(&format!(".{TRUSTED}"))
+            .or_else(|| rest.strip_suffix(&format!(".{UNTRUSTED}")))?,
+        OLD_VERSION => rest,
+        _ => return None,
+    };
+    if host.parse::<Host>().is_err() || !plain_session(session) {
         return None;
     }
     let expires: u64 = expires.parse().ok()?;
@@ -229,6 +253,15 @@ pub fn verify(key: &Key, user: &[u8], password: &[u8], now: u64) -> Option<Strin
     let signed = constant_time_eq(expected.as_bytes(), password);
     let current = now < expires && expires <= now.saturating_add(TTL.as_secs() + SKEW_S);
     (signed && current).then(|| session.to_owned())
+}
+
+/// Whether `user`, a credential [`verify`] accepted, marks a session that
+/// received the proxy CA's trust files: a `v2` user ending in `.t`. The mark
+/// is signed with the rest of `user`, so a session cannot add it.
+pub fn trusted(user: &[u8]) -> bool {
+    std::str::from_utf8(user).is_ok_and(|user| {
+        user.starts_with(&format!("{VERSION}.")) && user.ends_with(&format!(".{TRUSTED}"))
+    })
 }
 
 /// Seconds since the Unix epoch.
@@ -311,6 +344,10 @@ impl openmoat_proxy::Verify for Verifier {
             loaded.checked = Instant::now();
         }
         verify(loaded.key.as_ref()?, user, password, now)
+    }
+
+    fn trusted(&self, user: &[u8]) -> bool {
+        trusted(user)
     }
 }
 

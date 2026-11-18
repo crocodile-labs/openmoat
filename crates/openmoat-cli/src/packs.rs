@@ -9,7 +9,8 @@
 //! a trusted one: its rule ids get the `pack:<name>:` prefix, its deny rules join
 //! the user's, its review rules are tried before the user's allow rules, and its
 //! allow rules widen the policy, never past a deny. Its `require:` level
-//! raises the level the policy requires of an agent, never lowers it (ADR-064).
+//! raises the level the policy requires of an agent, never lowers it (ADR-064),
+//! and its `requests:` entries, deny lists only, join the policy's (ADR-062).
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -131,8 +132,8 @@ pub fn installed_files(home: &Home) -> Vec<PathBuf> {
 /// Parse a pack's text: a repository policy's shape, linted the same way.
 pub fn parse(text: &str) -> Result<RepoPolicy> {
     let pack = RepoPolicy::parse(text).context(
-        "not a policy pack: a pack holds only `version`, `deny`, `review` and `allow` rules \
-         and a `require` level",
+        "not a policy pack: a pack holds only `version`, `deny`, `review` and `allow` rules, \
+         a `require` level and `requests:` deny lists",
     )?;
     crate::protection::required::check_agents(pack.require.as_ref())?;
     Ok(pack)
@@ -152,6 +153,8 @@ pub fn apply(policy: &mut Policy, name: &str, pack: &RepoPolicy) -> Result<()> {
     policy.deny.extend(prefixed(&pack.deny));
     policy.repo_review.extend(prefixed(&pack.review));
     policy.allow.extend(prefixed(&pack.allow));
+    // Request rules: deny lists only, which narrow (ADR-062).
+    pack.add_requests(policy, &format!("{PACK_RULE_PREFIX}{name}:"));
     // A pack's level only raises the one the policy requires (ADR-064).
     if let Some(require) = &pack.require {
         policy.add_requirement(RequiredBy::Pack(name.to_owned()), require);

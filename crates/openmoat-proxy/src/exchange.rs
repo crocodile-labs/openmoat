@@ -23,7 +23,7 @@ use std::io::{self, ErrorKind, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::time::{Duration, Instant};
 
-use openmoat_core::rule_id::{PROXY_AUDIT, PROXY_REQUEST, PROXY_TLS};
+use openmoat_core::rule_id::{PROXY_AUDIT, PROXY_REQUEST, PROXY_TLS, SESSION_TAINT};
 use openmoat_core::{Decision, Verdict};
 use rustls::{ServerConnection, StreamOwned};
 use zeroize::Zeroizing;
@@ -86,7 +86,13 @@ pub(crate) struct Tunnel<'a> {
     pub(crate) record: Record<'a>,
     /// `false` once the session's taint refuses the host (recorded by it).
     pub(crate) still_allowed: &'a dyn Fn() -> bool,
+    /// `true` once the session's taint leaves the host to reads only
+    /// (ADR-062 §3): `GET`, `HEAD` and `OPTIONS` without a body.
+    pub(crate) reads_only: &'a dyn Fn() -> bool,
 }
+
+/// The methods a tainted session may still send to a `requests:` host.
+const READS: &[&str] = &["GET", "HEAD", "OPTIONS"];
 
 /// Why the tunnel ends early. The decision, if any, is still to be recorded.
 enum Stop {
@@ -191,6 +197,28 @@ impl Tunnel<'_> {
             .map_err(|refused| Stop::Refuse(403, refused))?;
         if !(self.still_allowed)() {
             return Err(Stop::Quiet);
+        }
+        if (self.reads_only)() {
+            let bodyless = matches!(
+                inner.framing,
+                crate::body::Framing::None | crate::body::Framing::Length(0)
+            );
+            // Methods are case-sensitive (RFC 9110 §9.1): `get` is no read.
+            if !bodyless || !READS.contains(&inner.method.as_str()) {
+                return Err(Stop::Refuse(
+                    403,
+                    Decision::single(
+                        Verdict::Deny,
+                        SESSION_TAINT,
+                        format!(
+                            "{} request to {}: the session read secret material, so only GET, \
+                             HEAD and OPTIONS requests without a body reach the host until it \
+                             ends (ADR-062)",
+                            inner.method, self.host
+                        ),
+                    ),
+                ));
+            }
         }
         let mut upstream = self.upstream(connect)?;
         let mut row = self.allowed.clone();

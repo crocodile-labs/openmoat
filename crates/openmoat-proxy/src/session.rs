@@ -102,6 +102,39 @@ pub trait Verify: Send + Sync {
     /// The comparison must take time that does not depend on where a guess
     /// first differs from a valid credential.
     fn verify(&self, user: &[u8], password: &[u8]) -> Option<String>;
+
+    /// Whether the session of `user`, a credential [`Self::verify`] just
+    /// accepted, received the trust files of the proxy's certificate
+    /// authority (ADR-062), so its tunnels to `requests:` hosts may be
+    /// terminated. `false` unless the implementation says so.
+    fn trusted(&self, user: &[u8]) -> bool {
+        let _ = user;
+        false
+    }
+}
+
+/// A request's session, as its credential authenticated it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Admitted {
+    /// The audit session id.
+    pub session: String,
+    /// Which tunnels of the session may be terminated.
+    pub trust: Trust,
+}
+
+/// Which of a session's tunnels the proxy may terminate: those whose
+/// clients trust its certificate authority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Trust {
+    /// None: the session's commands were not given the CA.
+    None,
+    /// Those to `requests:` hosts (ADR-062): an issued credential whose
+    /// session received the trust files ([`Verify::trusted`]).
+    Requests,
+    /// Every one the proxy terminates: a credential the proxy holds, whose
+    /// commands `openmoat run` gives the trust files (ADR-043).
+    All,
 }
 
 /// What a session was exposed to, read when one of its requests is decided.
@@ -213,6 +246,11 @@ impl<'a> Sessions<'a> {
     /// request) authenticate. Every credential is compared in full, in time
     /// that does not depend on where a guess first differs.
     pub fn verify<T: AsRef<[u8]>>(&self, headers: &[T]) -> Result<String, AuthError> {
+        self.admit(headers).map(|admitted| admitted.session)
+    }
+
+    /// [`Self::verify`], with whether the session trusts the proxy's CA.
+    pub fn admit<T: AsRef<[u8]>>(&self, headers: &[T]) -> Result<Admitted, AuthError> {
         let value = match headers {
             [] => return Err(AuthError::Missing),
             [one] => one.as_ref(),
@@ -229,13 +267,23 @@ impl<'a> Sessions<'a> {
             let id = constant_time_eq(credential.session.as_bytes(), session);
             let secret = constant_time_eq(&credential.token, token);
             if id & secret {
-                found = Some(credential.session.clone());
+                found = Some(Admitted {
+                    session: credential.session.clone(),
+                    trust: Trust::All,
+                });
             }
         }
         if found.is_none()
             && let Some(issued) = self.issued
         {
-            found = issued.verify(session, token);
+            found = issued.verify(session, token).map(|id| Admitted {
+                session: id,
+                trust: if issued.trusted(session) {
+                    Trust::Requests
+                } else {
+                    Trust::None
+                },
+            });
         }
         found.ok_or(AuthError::Invalid)
     }

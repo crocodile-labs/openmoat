@@ -71,7 +71,7 @@ fn issued_url(sb: &Sandbox, session: &str, cwd: &Path) -> String {
         "https_proxy",
     ] {
         assert!(
-            lines.contains(&format!("export {variable}=http://v1.claude-code.")),
+            lines.contains(&format!("export {variable}=http://v2.claude-code.")),
             "{lines}"
         );
     }
@@ -403,6 +403,80 @@ fn a_session_start_without_an_env_file_says_so_and_without_a_port_does_nothing()
     assert_eq!(stdout(&out), "");
     assert!(!env_file.exists());
     assert!(!sb.home.join(".moat/proxy.key").exists());
+}
+
+/// The default policy's gist rules held by the proxy too (`hook_only` off),
+/// and a CA that covers them, made by a person (ADR-062).
+fn proxy_held_rules_and_ca(sb: &Sandbox) {
+    // Edited as YAML, not as text: a Windows checkout has CRLF line endings.
+    let path = sb.home.join(".moat/policy.yaml");
+    let mut policy: Value =
+        openmoat_core::yaml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    policy["requests"][0]["hook_only"] = false.into();
+    std::fs::write(&path, openmoat_core::yaml::to_string(&policy).unwrap()).unwrap();
+    let accepted = sb.moat_as_person(&["doctor", "--accept"]);
+    assert!(text(&accepted).contains("re-pinned"), "{}", text(&accepted));
+    let mut cmd = sb.command();
+    cmd.args(["proxy", "ca", "init"])
+        .env("MOAT_ASSUME_TTY", "1");
+    let out = crate::common::output(&mut cmd, Some("y\n"));
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+}
+
+/// Claude Code's `SessionStart` gives the session the proxy CA's trust files
+/// (ADR-062 §2) only when the policy has request rules the proxy holds and a
+/// pinned CA exists: the certificate, never the key, and a credential whose
+/// trust mark says so. A folder planted as a symbolic link gets no files.
+#[test]
+fn a_session_start_gives_the_session_the_ca_only_when_a_ca_covers_its_request_rules() {
+    const SESSION_C: &str = "3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b9a";
+    let (sb, _port, project) = setup();
+    let tmp = sb.home.join("tmp");
+    std::fs::create_dir_all(&tmp).unwrap();
+    let start_in = |session: &str| {
+        let env_file = sb.home.join(format!("env-{session}.sh"));
+        let mut cmd = sb.command();
+        cmd.args(["guard", "--host", Host::ClaudeCode.id()])
+            .env("CLAUDE_ENV_FILE", &env_file)
+            .env("TMPDIR", &tmp);
+        let out = crate::common::output(&mut cmd, Some(&session_start(session, &project)));
+        assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+        std::fs::read_to_string(&env_file).unwrap()
+    };
+    // The default policy's rules are the hook's: no trust files.
+    let lines = start_in(SESSION_A);
+    assert!(!lines.contains("NODE_EXTRA_CA_CERTS"), "{lines}");
+    assert!(lines.contains(&format!("{SESSION_A}.n:")), "{lines}");
+
+    proxy_held_rules_and_ca(&sb);
+    let lines = start_in(SESSION_B);
+    assert!(lines.contains(&format!("{SESSION_B}.t:")), "{lines}");
+    let ca_file = lines
+        .lines()
+        .find_map(|l| l.strip_prefix("export NODE_EXTRA_CA_CERTS='"))
+        .and_then(|rest| rest.strip_suffix('\''))
+        .unwrap_or_else(|| panic!("{lines}"))
+        .to_owned();
+    assert!(
+        ca_file.contains(&format!("moat-session-{SESSION_B}-ca")),
+        "{ca_file}"
+    );
+    let written = std::fs::read_to_string(&ca_file).unwrap();
+    let pinned = std::fs::read_to_string(sb.home.join(".moat/proxy-ca/ca.pem")).unwrap();
+    assert_eq!(written, pinned);
+    assert!(!written.contains("PRIVATE KEY"));
+
+    #[cfg(unix)]
+    {
+        let elsewhere = sb.home.join("elsewhere");
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        std::os::unix::fs::symlink(&elsewhere, tmp.join(format!("moat-session-{SESSION_C}-ca")))
+            .unwrap();
+        let lines = start_in(SESSION_C);
+        assert!(!lines.contains("NODE_EXTRA_CA_CERTS"), "{lines}");
+        assert!(lines.contains(&format!("{SESSION_C}.n:")), "{lines}");
+        assert_eq!(std::fs::read_dir(&elsewhere).unwrap().count(), 0);
+    }
 }
 
 /// `init` installs the `SessionStart` entry, and `doctor` and `status` say

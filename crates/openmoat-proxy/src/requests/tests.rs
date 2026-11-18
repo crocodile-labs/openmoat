@@ -1,5 +1,5 @@
 use super::Requests;
-use openmoat_core::rule_id::PROXY_REQUEST_RULE;
+use openmoat_core::rule_id::REQUEST_RULE;
 
 const HOST: &str = "api.github.com";
 
@@ -15,7 +15,7 @@ fn head(line: &str, extra: &str) -> Vec<u8> {
 
 fn refused(r: &Requests, line: &str, extra: &str) -> String {
     let d = r.check(HOST, &head(line, extra)).unwrap_err();
-    assert_eq!(d.rules, [PROXY_REQUEST_RULE], "{line}");
+    assert_eq!(d.rules, [REQUEST_RULE], "{line}");
     d.reasons.join("; ")
 }
 
@@ -88,7 +88,7 @@ fn another_host_is_not_checked() {
 #[test]
 fn an_unreadable_head_is_refused() {
     let d = gists().check(HOST, b"POST /gists").unwrap_err();
-    assert_eq!(d.rules, [PROXY_REQUEST_RULE]);
+    assert_eq!(d.rules, [REQUEST_RULE]);
 }
 
 #[test]
@@ -106,11 +106,71 @@ fn bad_rules_and_hosts_are_refused() {
             "{host} {rule}"
         );
     }
-    let hosts: Vec<_> = Requests::default()
-        .deny("API.github.com", &["POST /Gists"])
+    assert!(
+        Requests::default()
+            .deny("API.github.com", &["POST /gists"])
+            .is_err()
+    );
+    let hosts = Requests::default()
+        .deny(HOST, &["POST /Gists"])
         .unwrap()
-        .hosts()
-        .map(str::to_owned)
-        .collect();
+        .deny(HOST, &["PATCH /gists/**"])
+        .unwrap()
+        .hosts();
     assert_eq!(hosts, [HOST]);
+}
+
+#[test]
+fn hook_only_entries_are_left_to_the_hook() {
+    let entry = |hook_only| openmoat_core::RequestEntry {
+        id: "gists".to_owned(),
+        host: HOST.to_owned(),
+        allow: Vec::new(),
+        deny: vec!["POST /gists".to_owned()],
+        hook_only,
+    };
+    let untrusted = openmoat_core::RequestsUntrusted::Refuse;
+    assert!(
+        !Requests::new(&[entry(true)], untrusted)
+            .unwrap()
+            .names(HOST)
+    );
+    assert!(
+        Requests::new(&[entry(false)], untrusted)
+            .unwrap()
+            .names(HOST)
+    );
+}
+
+#[test]
+fn an_allow_list_refuses_what_it_does_not_name() {
+    let entry = openmoat_core::RequestEntry {
+        id: "api".to_owned(),
+        host: HOST.to_owned(),
+        allow: vec!["GET /**".to_owned()],
+        deny: vec!["GET /gists".to_owned()],
+        hook_only: false,
+    };
+    let r = Requests::new(&[entry], openmoat_core::RequestsUntrusted::Refuse).unwrap();
+    assert!(
+        r.check(HOST, &head("GET /repos/o/r", ""))
+            .unwrap()
+            .is_some()
+    );
+    refused(&r, "GET /gists", "");
+    refused(&r, "POST /repos/o/r/issues", "");
+}
+
+#[test]
+fn a_connection_that_cannot_be_terminated_is_refused_or_relayed() {
+    let refuse = Requests::default();
+    let d = refuse.untrusted(HOST, "the session has no CA").unwrap_err();
+    assert_eq!(d.rules, [REQUEST_RULE]);
+    let relay = Requests::new(&[], openmoat_core::RequestsUntrusted::Relay).unwrap();
+    assert!(
+        relay
+            .untrusted(HOST, "x")
+            .unwrap()
+            .contains("relayed unread")
+    );
 }

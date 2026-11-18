@@ -10,6 +10,7 @@
 use serde::Deserialize;
 
 use crate::policy::{Policy, PolicyError, Require, RequiredBy, RuleGroup};
+use crate::requests::RequestEntry;
 
 /// Prefix of every rule id a repository policy contributes, so decisions and
 /// the audit log say where a rule came from, and a repository rule can never
@@ -39,6 +40,11 @@ pub struct RepoPolicy {
     /// ([`Policy::required_for`] takes the strictest), trusted or not.
     #[serde(default)]
     pub require: Option<Require>,
+    /// Request rules for allowed hosts (ADR-062): `deny` lists only, which
+    /// narrow, trusted or not. An `allow` list is a parse error: it would let
+    /// a repository decide which requests the person's hosts receive.
+    #[serde(default)]
+    pub requests: Vec<RequestEntry>,
 }
 
 impl RepoPolicy {
@@ -48,7 +54,27 @@ impl RepoPolicy {
         // Every key it has is a policy key, so the policy lint checks the
         // version, the ids and every pattern the same way.
         Policy::parse(yaml)?;
+        if let Some(entry) = repo.requests.iter().find(|e| !e.allow.is_empty()) {
+            return Err(PolicyError::Rule {
+                rule: format!("{}{}", crate::requests::REQUESTS_RULE_PREFIX, entry.id),
+                problem: "a repository policy or a pack may list `deny` request rules only; \
+                          `allow` lists belong in your own policy"
+                    .to_owned(),
+            });
+        }
         Ok(repo)
+    }
+
+    /// This policy's `requests:` entries under `prefix` ids, added to `policy`:
+    /// deny lists only, so they narrow whether trusted or not.
+    pub fn add_requests(&self, policy: &mut Policy, prefix: &str) {
+        policy
+            .requests
+            .extend(self.requests.iter().map(|entry| RequestEntry {
+                id: format!("{prefix}{}", entry.id),
+                allow: Vec::new(),
+                ..entry.clone()
+            }));
     }
 
     /// `user` with this policy merged in; its allow rules only when `trusted`.
@@ -72,6 +98,7 @@ impl RepoPolicy {
         if let Some(require) = &self.require {
             merged.add_requirement(RequiredBy::Repository, require);
         }
+        self.add_requests(&mut merged, REPO_RULE_PREFIX);
         merged
     }
 

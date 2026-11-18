@@ -353,6 +353,16 @@ pub struct Policy {
     /// Secrets `moat proxy` keeps from the agent and injects for one host each.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secrets: Vec<Secret>,
+    /// Method and path rules for allowed hosts (ADR-062): what the hook reads
+    /// in commands and fetch tools, and the proxy inside the tunnels it
+    /// terminates. They only narrow what `net` and `fetch` allow.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requests: Vec<crate::requests::RequestEntry>,
+    /// What `openmoat proxy` does with a connection to a `requests:` host it
+    /// cannot terminate (ADR-062): `refuse` (absent, the default) or `relay`.
+    /// Only the person's own policy holds it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requests_untrusted: Option<crate::requests::Untrusted>,
     /// What session taint protects beyond the built-in list. Absent in older policies.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub taint: Option<TaintSettings>,
@@ -700,7 +710,16 @@ impl Policy {
         for (_, added) in &self.require_added {
             require::check(Some(added))?;
         }
-        secret::check(&self.secrets)
+        secret::check(&self.secrets)?;
+        crate::requests::check(&self.requests)
+    }
+
+    /// What `openmoat proxy` does with a connection to a `requests:` host it
+    /// cannot terminate (`requests_untrusted:`): refuse it unless the policy
+    /// says `relay`.
+    #[must_use]
+    pub fn requests_untrusted(&self) -> crate::requests::Untrusted {
+        self.requests_untrusted.unwrap_or_default()
     }
 
     /// Every rule group, in the order the engine tries the lists.

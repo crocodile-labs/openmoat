@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use openmoat_core::rule_id::PROXY_REQUEST_RULE;
+use openmoat_core::rule_id::REQUEST_RULE;
 
 use rcgen::{BasicConstraints, CertificateParams, IsCa, Issuer, KeyPair};
 use rustls::pki_types::pem::PemObject as _;
@@ -157,7 +157,7 @@ fn terminating_for(terminate: bool, without_credential: bool, requests: Requests
     }
 }
 
-fn launch_tls(
+pub(super) fn launch_tls(
     broker: Broker,
     (upstream, received): (SocketAddr, Receiver<Vec<u8>>),
     (tls, requests): (&'static Tls, &'static Requests),
@@ -205,7 +205,7 @@ fn launch_tls(
 /// CONNECT owner.test through the proxy with `auth` (a header line, or
 /// nothing), then speak TLS trusting `ca` (with `sni` as the server name) and
 /// send `request`. What came back, decrypted.
-fn https(h: &Harness, auth: &str, ca: &str, sni: &str, request: &str) -> String {
+pub(super) fn https(h: &Harness, auth: &str, ca: &str, sni: &str, request: &str) -> String {
     let mut s = h.connect();
     write!(
         s,
@@ -244,7 +244,7 @@ fn https(h: &Harness, auth: &str, ca: &str, sni: &str, request: &str) -> String 
 
 /// A request inside the tunnel. Its `Host` names the port the tunnel was
 /// opened to, as a client's does: one without a port names 443.
-fn request(line: &str, port: u16) -> String {
+pub(super) fn request(line: &str, port: u16) -> String {
     format!(
         "{line} HTTP/1.1\r\nHost: owner.test:{port}\r\nAuthorization: Bearer {PLACEHOLDER}\r\n\r\n"
     )
@@ -404,7 +404,7 @@ fn a_host_with_request_rules_is_terminated_and_its_denied_requests_stay_local() 
     ] {
         let reply = send(line);
         assert!(reply.starts_with("HTTP/1.1 403 "), "{line}: {reply}");
-        assert!(reply.contains(PROXY_REQUEST_RULE), "{reply}");
+        assert!(reply.contains(REQUEST_RULE), "{reply}");
     }
     assert!(t.h.nothing_forwarded());
     let reply = send("GET /gists");
@@ -417,7 +417,7 @@ fn a_host_with_request_rules_is_terminated_and_its_denied_requests_stay_local() 
         "{head}"
     );
     let rows = t.h.rows();
-    let refused = rows.iter().filter(|r| r.rules == [PROXY_REQUEST_RULE]);
+    let refused = rows.iter().filter(|r| r.rules == [REQUEST_RULE]);
     assert_eq!(refused.count(), 4, "{rows:?}");
     assert!(
         rows.iter().any(|r| r

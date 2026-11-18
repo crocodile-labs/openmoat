@@ -41,6 +41,10 @@ pub const PROTECTED_CONTENTS: &str = "protected-contents";
 pub const EXECUTABLES: &str = "executables";
 /// A decision tightened by session taint.
 pub const SESSION_TAINT: &str = "session-taint";
+/// A request to a `requests:` host its rules refuse, or one the hook cannot
+/// read in full where a rule could refuse it (ADR-062); also the proxy's
+/// refusal of a session it cannot terminate for such a host.
+pub const REQUEST_RULE: &str = "request-rule";
 /// A decision tightened by injected input.
 pub const INJECTED_INPUT: &str = "injected-input";
 /// A call held because its arguments carry text another MCP server returned
@@ -152,8 +156,6 @@ pub const PROXY_SECRET: &str = "proxy-secret";
 pub const PROXY_SECRET_EXPIRED: &str = "proxy-secret-expired";
 /// A request to a secret's host that the secret's `allow` rules do not name.
 pub const PROXY_SECRET_ROUTE: &str = "proxy-secret-route";
-/// A proxy request a host's request rules refuse (ADR-062).
-pub const PROXY_REQUEST_RULE: &str = "proxy-request-rule";
 /// A destination the proxy refuses whatever the policy says.
 pub const PROXY_ADDRESS: &str = "proxy-address";
 /// A tunnel whose TLS `ClientHello` does not name the CONNECT host.
@@ -266,6 +268,7 @@ pub const BUILTIN_RULES: &[BuiltinRule] = &[
     worded(PROTECTED_CONTENTS, &words::PROTECTED_CONTENTS),
     worded(EXECUTABLES, &words::EXECUTABLES),
     worded(SESSION_TAINT, &words::SESSION_TAINT),
+    worded(REQUEST_RULE, &words::REQUEST_RULE),
     worded(INJECTED_INPUT, &words::INJECTED_INPUT),
     worded(MCP_CROSS_SERVER, &words::MCP_CROSS_SERVER),
     worded(KERNEL_INTEGRITY, &words::KERNEL_INTEGRITY),
@@ -311,7 +314,6 @@ pub const BUILTIN_RULES: &[BuiltinRule] = &[
     quiet(PROXY_SECRET),
     quiet(PROXY_SECRET_EXPIRED),
     quiet(PROXY_SECRET_ROUTE),
-    quiet(PROXY_REQUEST_RULE),
     quiet(PROXY_ADDRESS),
     quiet(PROXY_SNI),
     quiet(PROXY_REQUEST),

@@ -302,6 +302,7 @@ mod http;
 mod limits;
 mod post;
 mod private;
+mod requests;
 mod sessions;
 mod terminate;
 mod tunnel;

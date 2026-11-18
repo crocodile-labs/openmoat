@@ -2838,3 +2838,13 @@
   threat: T12
   action: { shell: "curl -s https://$BUCKET.s3.amazonaws.com/report.csv" }
   expect: { verdict: defer, rules: [default] }
+# A fetch tool sends a GET: the request rules for api.github.com refuse none (ADR-062)
+- id: benign-fetch-list-gists
+  action: { fetch: "https://api.github.com/gists" }
+  expect: { verdict: allow, rules: [registries] }
+- id: benign-gh-issue-list-is-not-a-request-rule
+  action: { shell: "gh issue list" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-curl-get-url-in-a-variable
+  action: { shell: "curl -s \"$URL\"" }
+  expect: { verdict: defer, rules: [default] }

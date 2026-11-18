@@ -41,6 +41,7 @@ mod policy;
 mod programs;
 mod realpath;
 mod repo;
+mod requests;
 mod route;
 pub mod rule_id;
 mod secret;
@@ -79,6 +80,9 @@ pub use policy::{
 pub use programs::{MapResolver, NoResolver, ProgramResolver};
 pub use realpath::{MapPathResolver, PathResolver};
 pub use repo::{REPO_RULE_PREFIX, RepoPolicy};
+pub use requests::{
+    REQUESTS_RULE_PREFIX, RequestCheck, RequestEntry, RequestRules, Untrusted as RequestsUntrusted,
+};
 pub use secret::{
     CommandHome as SecretCommandHome, CommandSource as SecretCommand, METHOD_OVERRIDE_HEADERS,
     PathRefusal, Permit, RequestPath, Route as SecretRoute, SECRET_RULE_PREFIX, Secret,

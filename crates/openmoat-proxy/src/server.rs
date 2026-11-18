@@ -40,7 +40,7 @@ use crate::decide;
 use crate::local::{self, LocalService};
 use crate::request::{Request, Target};
 use crate::requests::Requests;
-use crate::session::{AuthError, Sessions};
+use crate::session::{Admitted, AuthError, Sessions, Trust};
 use crate::slots::{PENDING, Share, Shares, WITHOUT_CREDENTIAL};
 use crate::tls::Tls;
 use crate::tunnel::{self, Forward};
@@ -118,6 +118,8 @@ struct Served<'s> {
 #[derive(Clone, Copy)]
 struct Turn<'s> {
     session: Option<&'s str>,
+    /// Which of the session's tunnels may be terminated.
+    trust: Trust,
     started: Instant,
 }
 
@@ -204,6 +206,7 @@ impl Proxy<'_> {
                 let decision = Decision::single(Verdict::Deny, PROXY_REQUEST, why);
                 let turn = Turn {
                     session: None,
+                    trust: Trust::None,
                     started,
                 };
                 // Before any credential: counted, not one row each.
@@ -219,7 +222,8 @@ impl Proxy<'_> {
         };
         drop(pending);
         let turn = Turn {
-            session: session.as_deref(),
+            session: session.as_ref().map(|a| a.session.as_str()),
+            trust: session.as_ref().map_or(Trust::None, |a| a.trust),
             started,
         };
         // `buf` holds the head and any body bytes read with it. Watching all of
@@ -233,17 +237,22 @@ impl Proxy<'_> {
             return;
         }
         let rest = Zeroizing::new(buf.split_off(request.head_len));
-        let decision = decide::host_port(self.policy, served.ports, request.host(), request.port());
+        let mut decision =
+            decide::host_port(self.policy, served.ports, request.host(), request.port());
         if decision.verdict != Verdict::Allow {
             self.record(turn, Some(&request), &decision);
             refuse(client, 403, &summary(&decision));
             return;
         }
-        if let Some(refusal) = self.tainted(turn, &request, None) {
-            self.record(turn, Some(&request), &refusal);
-            refuse(client, 403, &summary(&refusal));
-            return;
-        }
+        // The session's taint, and whether a `requests:` host can be terminated.
+        let reads_only = match self.gate(turn, &request, &mut decision) {
+            Ok(reads_only) => reads_only,
+            Err(refusal) => {
+                self.record(turn, Some(&request), &refusal);
+                refuse(client, 403, &summary(&refusal));
+                return;
+            }
+        };
         // The host's request rules (ADR-062), then a secret's `allow` rules
         // (ADR-043), before anything goes upstream.
         let routed = match &request.target {
@@ -266,15 +275,12 @@ impl Proxy<'_> {
         if let Target::Connect { host, .. } = &request.target
             && let Some(tls) = self.terminating(host, turn)
         {
-            self.terminate(
-                client,
-                &request,
-                turn,
-                &decision,
-                rest.to_vec(),
-                served,
-                tls,
-            );
+            let tunnel = terminate::Opened {
+                allowed: &decision,
+                rest: rest.to_vec(),
+                reads_only,
+            };
+            self.terminate(client, &request, turn, tunnel, served, tls);
             return;
         }
         // A plain-HTTP request is one request: its body is forwarded, and
@@ -393,18 +399,19 @@ impl Proxy<'_> {
         request: &Request,
         served: &'s Served<'_>,
         started: Instant,
-    ) -> Option<(Option<String>, Option<Share<'s>>)> {
+    ) -> Option<(Option<Admitted>, Option<Share<'s>>)> {
         let unnamed = Turn {
             session: None,
+            trust: Trust::None,
             started,
         };
         let Some(sessions) = self.sessions else {
             return Some((None, None));
         };
-        let (session, holder) = match sessions.verify(&request.credentials) {
-            Ok(session) => {
-                let holder = session.clone();
-                (Some(session), holder)
+        let (session, holder) = match sessions.admit(&request.credentials) {
+            Ok(admitted) => {
+                let holder = admitted.session.clone();
+                (Some(admitted), holder)
             }
             Err(AuthError::Missing) if sessions.serves_without_credential() => {
                 (None, WITHOUT_CREDENTIAL.to_owned())
@@ -426,7 +433,8 @@ impl Proxy<'_> {
             return Some((session, Some(share)));
         }
         let turn = Turn {
-            session: session.as_deref(),
+            session: session.as_ref().map(|a| a.session.as_str()),
+            trust: Trust::None,
             started,
         };
         let holder = if session.is_some() {

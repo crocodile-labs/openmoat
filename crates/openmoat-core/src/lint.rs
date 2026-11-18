@@ -10,6 +10,7 @@ use std::fmt;
 
 mod check_diff;
 mod ports;
+mod requests;
 mod secrets;
 mod staging;
 mod taint;
@@ -98,6 +99,7 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
     }
     ports::malformed(policy, &mut out);
     secrets::warn(policy, &mut out);
+    requests::warn(policy, &mut out);
     if policy.sandbox.as_ref().is_some_and(|s| s.proxy_allow_ech) {
         out.push(Warning {
             rule: "sandbox.proxy_allow_ech".to_owned(),

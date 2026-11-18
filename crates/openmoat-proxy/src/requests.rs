@@ -1,88 +1,89 @@
-//! Method and path rules for a host with no brokered secret (ADR-062, step 0:
-//! the proof of concept). A host listed here is terminated in `openmoat run`
-//! like the host of a `tls: terminate` secret (ADR-043), and each request read
-//! inside its tunnel is refused when a `deny` rule names it, before anything
-//! goes upstream; every other request passes unchanged.
+//! A host's request rules at the proxy (`requests:`, ADR-062). A host they
+//! name is terminated like the host of a `tls: terminate` secret (ADR-043),
+//! for a session that trusts the proxy's certificate authority, and each
+//! request read inside its tunnel, or sent to it as plain HTTP, is checked
+//! before anything goes upstream. The rules and their matching are the core's
+//! ([`openmoat_core::RequestRules`]), the same the hook holds.
 //!
-//! The rules are ADR-043's `METHOD /path` rules (`openmoat_core::SecretRoute`),
-//! matched the same way, with two differences that make a deny list err wide:
-//! the method and the path are compared in any letter case (a server may read
-//! `post` or `/Gists` as the route the rule names), and a request whose path
-//! the server could read as another, or that asks the server for another
-//! method, is refused instead of being matched.
-//!
-//! There is no policy schema for these rules yet: the CLI builds them from an
-//! unlisted setting of `openmoat run`, which ADR-062 step 0 measures.
+//! A connection to such a host that cannot be terminated (a session that did
+//! not receive the CA, a request without a session) is refused or relayed as
+//! [`Untrusted`] says.
 
-use openmoat_core::rule_id::PROXY_REQUEST_RULE;
-use openmoat_core::{Decision, METHOD_OVERRIDE_HEADERS, RequestPath, SecretRoute, Verdict};
+use openmoat_core::rule_id::REQUEST_RULE;
+use openmoat_core::{
+    Decision, RequestCheck, RequestEntry, RequestRules, RequestsUntrusted as Untrusted, Verdict,
+};
 
 /// The request rules of one proxy run. [`Requests::default`] holds none.
 #[derive(Debug, Default)]
 pub struct Requests {
-    hosts: Vec<HostRules>,
-}
-
-/// One host's `deny` rules, each with the text it was written as.
-#[derive(Debug)]
-struct HostRules {
-    host: String,
-    deny: Vec<(String, SecretRoute)>,
+    entries: Vec<RequestEntry>,
+    rules: RequestRules,
+    untrusted: Untrusted,
 }
 
 /// A request rule that cannot be used.
 #[derive(Debug, thiserror::Error)]
-#[error("request rules for {host}: {why}")]
-pub struct RequestRuleError {
-    host: String,
-    why: String,
-}
+#[error("request rules: {0}")]
+pub struct RequestRuleError(String);
 
 impl Requests {
-    /// These rules, and `host` refused every request one of `deny` names
-    /// (`METHOD /path`, as a secret's `allow` rules are written).
-    pub fn deny(mut self, host: &str, deny: &[&str]) -> Result<Self, RequestRuleError> {
-        let fail = |why: String| RequestRuleError {
-            host: host.to_owned(),
-            why,
-        };
-        if host.is_empty() || host.contains(['*', ':', '/']) {
-            return Err(fail("the host must be one DNS name".to_owned()));
-        }
-        let mut rules = Vec::with_capacity(deny.len());
-        for text in deny {
-            // The method stays as written: `Route::parse` wants it in capitals.
-            let folded = text.split_once(' ').map_or_else(
-                || (*text).to_owned(),
-                |(m, p)| format!("{m} {}", p.to_ascii_lowercase()),
-            );
-            rules.push((
-                (*text).to_owned(),
-                SecretRoute::parse(&folded).map_err(fail)?,
-            ));
-        }
-        self.hosts.push(HostRules {
-            host: host.to_ascii_lowercase(),
-            deny: rules,
-        });
-        Ok(self)
+    /// The proxy's half of `entries` (every entry not marked `hook_only`);
+    /// a connection it cannot terminate is handled as `untrusted` says.
+    pub fn new(entries: &[RequestEntry], untrusted: Untrusted) -> Result<Self, RequestRuleError> {
+        let entries: Vec<RequestEntry> = entries.iter().filter(|e| !e.hook_only).cloned().collect();
+        let rules =
+            RequestRules::for_proxy(&entries).map_err(|e| RequestRuleError(e.to_string()))?;
+        Ok(Self {
+            entries,
+            rules,
+            untrusted,
+        })
     }
 
-    /// The hosts these rules name, as the CA must cover them.
+    /// These rules, and `host` refusing every request one of `deny` names
+    /// (`METHOD /path`, as a secret's `allow` rules are written).
+    pub fn deny(self, host: &str, deny: &[&str]) -> Result<Self, RequestRuleError> {
+        let mut entries = self.entries;
+        entries.push(RequestEntry {
+            id: format!("rules-{}", entries.len() + 1),
+            host: host.to_owned(),
+            allow: Vec::new(),
+            deny: deny.iter().map(|d| (*d).to_owned()).collect(),
+            hook_only: false,
+        });
+        Self::new(&entries, self.untrusted)
+    }
+
+    /// The hosts these rules name, sorted, once each: what the CA must cover.
     #[must_use = "the hosts are only listed"]
-    pub fn hosts(&self) -> impl Iterator<Item = &str> {
-        self.hosts.iter().map(|h| h.host.as_str())
+    pub fn hosts(&self) -> Vec<String> {
+        self.rules.hosts()
     }
 
     /// Whether `host` has rules, so its tunnels are terminated.
     pub(crate) fn names(&self, host: &str) -> bool {
-        self.rules(host).is_some()
+        self.rules.names(host)
     }
 
-    fn rules(&self, host: &str) -> Option<&HostRules> {
-        self.hosts
-            .iter()
-            .find(|h| h.host.eq_ignore_ascii_case(host))
+    /// What a connection to one of these hosts gets when it cannot be
+    /// terminated: `Ok` the note its allow row carries (relayed), `Err` the
+    /// refusal to record. `why` says why it cannot be terminated.
+    pub(crate) fn untrusted(&self, host: &str, why: &str) -> Result<String, Decision> {
+        match self.untrusted {
+            Untrusted::Relay => Ok(format!(
+                "{host} has request rules, but {why}, so the tunnel is relayed unread \
+                 (`requests_untrusted: relay`)"
+            )),
+            Untrusted::Refuse => Err(Decision::single(
+                Verdict::Deny,
+                REQUEST_RULE,
+                format!(
+                    "{host} has request rules, but {why}, so they cannot be held and the \
+                     connection is refused (`requests_untrusted: refuse`)"
+                ),
+            )),
+        }
     }
 
     /// Check `head` (the complete request head the proxy will send) to
@@ -90,10 +91,10 @@ impl Requests {
     /// `Err` the deny to record. The reasons name the method and the rule,
     /// never the path, which may carry data.
     pub(crate) fn check(&self, host: &str, head: &[u8]) -> Result<Option<String>, Decision> {
-        let Some(rules) = self.rules(host) else {
+        if !self.names(host) {
             return Ok(None);
-        };
-        let refuse = |why: String| Decision::single(Verdict::Deny, PROXY_REQUEST_RULE, why);
+        }
+        let refuse = |why: String| Decision::single(Verdict::Deny, REQUEST_RULE, why);
         let mut headers = [httparse::EMPTY_HEADER; crate::request::MAX_HEADERS + 2];
         let mut request = httparse::Request::new(&mut headers);
         let (Ok(httparse::Status::Complete(_)), Some(method), Some(target)) =
@@ -103,41 +104,11 @@ impl Requests {
                 "the request to {host} could not be read again to check its request rules"
             )));
         };
-        let method = method.to_ascii_uppercase();
-        let path = RequestPath::parse(&target.to_ascii_lowercase()).map_err(|why| {
-            refuse(format!(
-                "{method} request to {host}: {why}, so the request rules cannot tell what the \
-                 server would read"
-            ))
-        })?;
-        let overriding = request.headers.iter().find(|h| {
-            METHOD_OVERRIDE_HEADERS
-                .iter()
-                .any(|o| h.name.eq_ignore_ascii_case(o))
-        });
-        if let Some(header) = overriding {
-            return Err(refuse(format!(
-                "{method} request to {host}: its `{}` header asks the server for another method",
-                header.name
-            )));
-        }
-        if path.overrides_method() {
-            return Err(refuse(format!(
-                "{method} request to {host}: its query names a `_method` parameter"
-            )));
-        }
-        match rules
-            .deny
-            .iter()
-            .find(|(_, rule)| rule.matches(&method, &path))
-        {
-            Some((text, _)) => Err(refuse(format!(
-                "{method} request to {host} is refused by the request rule `deny: {text}` \
-                 (ADR-062 proof of concept)"
-            ))),
-            None => Ok(Some(format!(
-                "no request rule for {host} refuses this {method} request"
-            ))),
+        let names: Vec<&str> = request.headers.iter().map(|h| h.name).collect();
+        match self.rules.check(host, method, target, &names) {
+            RequestCheck::Refused(why) => Err(refuse(why)),
+            RequestCheck::Passed(why) => Ok(Some(why)),
+            _ => Ok(None),
         }
     }
 }

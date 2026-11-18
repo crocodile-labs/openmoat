@@ -1,0 +1,32 @@
+# OpenMoat policy pack `exfil-endpoints` (ADR-031, ADR-062): request rules that
+# refuse the endpoints of hosts the default policy allows that publish what they
+# are sent. The default policy already holds these as hook-only rules (the hook
+# reads them in commands); this pack has the proxy hold them too, inside HTTPS,
+# for every client and script, so it needs a proxy CA:
+#
+#   openmoat proxy ca init        # once, and again after a host is added
+#
+# A pack is installed only with a signature from a key you trust. Whoever
+# distributes it signs it, and each person installs it:
+#
+#   ssh-keygen -Y sign -f <key> -n openmoat-pack exfil-endpoints.yaml
+#   openmoat policy trust-key <key>.pub --name <signer>
+#   openmoat policy install exfil-endpoints.yaml
+#
+# Only endpoints the service's own API documentation describes are listed. The
+# other hosts the default policy allows (github.com, registry.npmjs.org,
+# crates.io, static.crates.io, index.crates.io, proxy.golang.org, pypi.org,
+# files.pythonhosted.org) take uploads only through publishing with the
+# person's own token (`npm publish`, `cargo publish`; PyPI uploads go to
+# upload.pypi.org, which the default policy does not allow), or through web
+# forms that need a browser session; refusing those here would stop ordinary
+# releases, so they are left to the token.
+version: 1
+requests:
+  # GitHub REST API, "Gists" (docs.github.com/en/rest/gists): create a gist
+  # (`POST /gists`), update one (`PATCH /gists/{gist_id}`), comment on one
+  # (`POST /gists/{gist_id}/comments`) and update a comment
+  # (`PATCH /gists/{gist_id}/comments/{comment_id}`)
+  - id: github-gists
+    host: api.github.com
+    deny: ["POST /gists", "PATCH /gists/**", "POST /gists/*/comments"]

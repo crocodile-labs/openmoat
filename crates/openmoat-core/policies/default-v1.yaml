@@ -1636,6 +1636,29 @@ defer:
 
 executables: {}
 
+# Method and path rules for hosts the rules above allow (ADR-062). `registries` opens
+# api.github.com to git, gh and the agents' GitHub tools, and so to its endpoints that
+# publish what they are sent: a new gist is public to anyone with its link. The hook
+# reads the method and URL a command or fetch tool sends (`curl -X POST …`, `gh api`,
+# `gh gist create`): a request a deny rule names is denied, one it cannot read in full
+# where a rule could refuse it needs review. `hook_only: true` keeps them out of the
+# proxy, which would need a certificate authority to read requests inside HTTPS.
+#
+# With a proxy CA (`openmoat proxy ca init`), an entry without `hook_only` is also held
+# by the proxy, inside the tunnels it terminates, and may list `allow` rules:
+#   - id: github-api
+#     host: api.github.com
+#     allow: ["GET /**", "HEAD /**", "POST /repos/*/*/issues", "POST /repos/*/*/pulls"]
+#     deny: ["POST /gists", "PATCH /gists/**", "POST /gists/*/comments"]
+# `requests_untrusted: refuse` (the default) refuses a connection `openmoat proxy`
+# cannot terminate for such an entry; `relay` passes it unread.
+requests:
+  # GitHub REST API, "Gists": create a gist, update one (and its comments), comment on one
+  - id: exfil-gists
+    host: api.github.com
+    hook_only: true
+    deny: ["POST /gists", "PATCH /gists/**", "POST /gists/*/comments"]
+
 # What the host sandboxes OpenMoat configures (ADR-018) may read beyond the project:
 # system and toolchain locations every build reads. Only OS layers use this list;
 # the hook still applies the rules above to these reads (defer), and secrets-paths

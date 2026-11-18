@@ -44,14 +44,16 @@ pub(in crate::commands) fn make(home: &Home, policy: &Policy, out: &mut Deferred
     let hosts = terminated_hosts(policy);
     if hosts.is_empty() {
         bail!(
-            "no brokered secret says `tls: terminate`, so there is nothing for a CA to cover; \
-             `openmoat secret add <id> --tls-terminate` adds one"
+            "no brokered secret says `tls: terminate` and no `requests:` entry is held by the \
+             proxy (each is `hook_only`), so there is nothing for a CA to cover; `openmoat \
+             secret add <id> --tls-terminate` adds a secret"
         );
     }
     let (cert, key) = (cert_path(home), key_path(home));
     writeln!(
         out,
-        "The proxy CA lets `openmoat run` read HTTPS to {} and put brokered secrets in it.",
+        "The proxy CA lets the proxy read HTTPS to {}, to put brokered secrets in it or hold \
+         request rules there.",
         hosts.join(", ")
     )?;
     writeln!(
@@ -61,7 +63,9 @@ pub(in crate::commands) fn make(home: &Home, policy: &Policy, out: &mut Deferred
     )?;
     writeln!(
         out,
-        "  Only the commands `openmoat run` starts trust it; no trust store on this machine changes."
+        "  Only the commands `openmoat run` starts, and those of an agent session `openmoat proxy`\n  \
+         serves with request rules, trust it, through files of their own; no trust store on this\n  \
+         machine changes."
     )?;
     writeln!(
         out,

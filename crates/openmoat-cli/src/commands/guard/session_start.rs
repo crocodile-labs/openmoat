@@ -108,19 +108,25 @@ pub(super) fn decision(
         return refuse(&format!("{name} sent no working directory for the session"));
     }
     let key = Key::load_or_create(home)?;
-    let issued = match proxy_session::issue(
-        &key,
-        request.host,
-        &request.session_id,
-        proxy_session::now_s(),
-    ) {
+    let now = proxy_session::now_s();
+    // Checks the session id, which also names the trust files' folder.
+    let untrusted = match proxy_session::issue(&key, request.host, &request.session_id, now, false)
+    {
         Ok(issued) => issued,
         Err(error) => return refuse(&format!("{error:#}")),
+    };
+    let (trust, trust_note) = session_trust(home, &policy, &request.session_id);
+    let issued = match &trust {
+        Some(_) => proxy_session::issue(&key, request.host, &request.session_id, now, true)?,
+        None => untrusted,
     };
     let url = issued.proxy_url(port);
     let mut lines = Zeroizing::new(String::with_capacity(
         VARIABLES.len() * (url.len() + 24) + 80,
     ));
+    if let Some(exports) = &trust {
+        lines.push_str(exports);
+    }
     lines.push_str("# openmoat: this session's openmoat proxy credential (ADR-044)\n");
     for variable in VARIABLES {
         lines.push_str("export ");
@@ -129,7 +135,7 @@ pub(super) fn decision(
         lines.push_str(&url);
         lines.push('\n');
     }
-    let decision = Decision::single(
+    let mut decision = Decision::single(
         Verdict::Allow,
         PROXY_CREDENTIAL,
         format!(
@@ -138,5 +144,57 @@ pub(super) fn decision(
             issued.expires
         ),
     );
+    decision.reasons.extend(trust_note);
     Ok((decision, Some(Pending { path, lines })))
+}
+
+/// The session's trust files (ADR-062 §2), when the policy has `requests:`
+/// hosts the proxy holds and a pinned CA exists: the `export` lines that
+/// point the session's TLS clients at them, and what the row says. Only the
+/// certificate is written, never the key. `None` lines leave the session
+/// untrusted, so the proxy never terminates its tunnels.
+fn session_trust(
+    home: &Home,
+    policy: &openmoat_core::Policy,
+    session: &str,
+) -> (Option<String>, Option<String>) {
+    let hosts = crate::proxy_ca::request_hosts(policy);
+    if hosts.is_empty() {
+        return (None, None);
+    }
+    let Some(cert) = crate::proxy_ca::pinned_cert(home) else {
+        let why = format!(
+            "{} have request rules, but there is no pinned proxy CA, so the session gets no \
+             trust files and `openmoat proxy` cannot read its HTTPS there",
+            hosts.join(", ")
+        );
+        return (None, Some(why));
+    };
+    let trust = match crate::proxy_ca::Trust::write_for_session(&cert, session) {
+        Ok(trust) => trust,
+        Err(error) => {
+            let why = format!("the session's trust files were not written: {error:#}");
+            return (None, Some(why));
+        }
+    };
+    let mut lines =
+        String::from("# openmoat: the proxy CA this session's commands trust (ADR-062)\n");
+    for (variable, file) in trust.env() {
+        let file = file.to_string_lossy();
+        if file.contains('\'') {
+            return (
+                None,
+                Some(format!("the trust file path {file} holds a quote")),
+            );
+        }
+        for part in ["export ", variable, "='", &file, "'\n"] {
+            lines.push_str(part);
+        }
+    }
+    let why = format!(
+        "its TLS clients trust the proxy CA through {}, so `openmoat proxy` reads its HTTPS to {}",
+        trust.dir().display(),
+        hosts.join(", ")
+    );
+    (Some(lines), Some(why))
 }

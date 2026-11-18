@@ -67,7 +67,7 @@ use crate::environment::find_on_path;
 use crate::exit::Code;
 use crate::guard_relay::{self, Service, random_hex};
 use crate::home::Home;
-use crate::proxy_ca::{Trust, request_poc};
+use crate::proxy_ca::Trust;
 use crate::sandbox::Grants;
 use crate::sandbox::Report;
 use crate::sandbox::git_env;
@@ -234,8 +234,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let (guard, guard_token) = guard_service(&home, &run_session, agent_host)?;
     let exit = Exit::open(&home, policy, ctx, Some(credential), &write_roots)?
         .with_guard(guard)
-        .with_tls(terminating.map(|t| t.tls))
-        .with_requests(request_poc::requests()?);
+        .with_tls(terminating.map(|t| t.tls));
     notice(
         &program,
         port,
@@ -250,7 +249,6 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         .into_iter()
         .chain(hook_off::notice(agent_host, &hook_off))
         .chain(release_age.notices)
-        .chain(request_poc::notice())
         .chain(trust.iter().filter_map(Trust::notice));
     for line in notices {
         eprintln!("{line}");

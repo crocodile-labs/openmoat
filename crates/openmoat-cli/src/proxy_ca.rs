@@ -1,5 +1,7 @@
-//! The certificate authority `openmoat run`'s proxy terminates TLS with, for
-//! secrets that say `tls: terminate` (ADR-043).
+//! The certificate authority the proxy terminates TLS with: `openmoat run`'s,
+//! for secrets that say `tls: terminate` (ADR-043) and `requests:` hosts, and
+//! the standalone `openmoat proxy`'s, for `requests:` hosts and the sessions
+//! that received the trust files (ADR-062).
 //!
 //! - It lives in OpenMoat's state directory, `proxy-ca/`: `ca.pem` (the
 //!   certificate, which clients in the run trust) and `key.pem` (the key,
@@ -11,7 +13,6 @@
 //! - `openmoat run` uses the CA only while both files are pinned and intact,
 //!   and only when it signs leaves that verify today for every terminated host.
 
-pub mod request_poc;
 mod trust;
 
 use std::path::PathBuf;
@@ -43,19 +44,83 @@ pub fn files(home: &Home) -> Vec<PathBuf> {
     vec![cert_path(home), key_path(home)]
 }
 
-/// The hosts of `policy`'s secrets that say `tls: terminate`, and the host of
-/// the ADR-062 proof of concept while its setting is on, sorted, once each.
+/// The hosts of `policy`'s secrets that say `tls: terminate`, and of its
+/// `requests:` entries the proxy holds (not `hook_only`, ADR-062), sorted,
+/// once each.
 pub fn terminated_hosts(policy: &Policy) -> Vec<String> {
     let mut hosts: Vec<String> = policy
         .secrets
         .iter()
         .filter(|s| s.terminates())
         .map(|s| s.host.clone())
-        .chain(request_poc::hosts())
+        .chain(request_hosts(policy))
         .collect();
     hosts.sort();
     hosts.dedup();
     hosts
+}
+
+/// The hosts of `policy`'s `requests:` entries the proxy holds.
+pub fn request_hosts(policy: &Policy) -> Vec<String> {
+    // The policy linted, so its entries compile.
+    openmoat_core::RequestRules::for_proxy(&policy.requests)
+        .map(|rules| rules.hosts())
+        .unwrap_or_default()
+}
+
+/// The CA's certificate, when both files are pinned and present: what a
+/// session's trust files hold (ADR-062 §2). Never the key.
+pub fn pinned_cert(home: &Home) -> Option<String> {
+    let lock = Lock::load(&home.lock_path()).ok()?;
+    if !files(home).iter().all(|f| lock.pins(f) && f.is_file()) {
+        return None;
+    }
+    std::fs::read_to_string(cert_path(home)).ok()
+}
+
+/// The standalone proxy's termination for `policy`'s `requests:` hosts
+/// (ADR-062): the CA, when one is pinned, intact and covers each of them, and
+/// what to say at start-up. Without one, the proxy cannot terminate them and
+/// `requests_untrusted` decides their connections.
+pub fn load_for_requests(home: &Home, policy: &Policy) -> (Option<Tls>, Option<String>) {
+    let hosts = request_hosts(policy);
+    if hosts.is_empty() {
+        return (None, None);
+    }
+    let untrusted = match policy.requests_untrusted() {
+        openmoat_core::RequestsUntrusted::Refuse => "refused",
+        openmoat_core::RequestsUntrusted::Relay => "relayed unread",
+    };
+    let pinned = Lock::load(&home.lock_path())
+        .is_ok_and(|lock| files(home).iter().all(|f| lock.pins(f) && f.is_file()));
+    let loaded = if pinned {
+        std::fs::read_to_string(cert_path(home))
+            .map_err(anyhow::Error::from)
+            .and_then(|cert| Ok((cert, crate::key_file::read(&key_path(home))?)))
+            .and_then(|(cert, key)| Ok(Tls::new(&cert, &key, &Roots::System, &hosts)?))
+    } else {
+        Err(anyhow::Error::msg("there is no pinned proxy CA yet"))
+    };
+    match loaded {
+        Ok(tls) => (
+            Some(tls),
+            Some(format!(
+                "moat proxy: note: {} have request rules: HTTPS there is read for the sessions \
+                 that received the proxy CA (from their agent's session-start hook); the \
+                 connections of other sessions are {untrusted} (`requests_untrusted`)",
+                hosts.join(", ")
+            )),
+        ),
+        Err(why) => (
+            None,
+            Some(format!(
+                "moat proxy: WARNING: {} have request rules, but {why:#}: run `openmoat proxy ca \
+                 init` in a terminal (again, when a host was added since); until then their \
+                 connections are {untrusted} (`requests_untrusted`)",
+                hosts.join(", ")
+            )),
+        ),
+    }
 }
 
 /// `YYYY-MM-DD` of `ts_ms`, in UTC.
@@ -69,7 +134,8 @@ pub fn cert_text(ca: &CaFiles, hosts: &[String], now_ms: i64) -> String {
     format!(
         "# OpenMoat proxy CA, made by `openmoat proxy ca init` on {}\n\
          # valid until {}, and only for: {}\n\
-         # trusted only by the commands `openmoat run` starts (ADR-043)\n{}",
+         # trusted only by the commands `openmoat run` starts (ADR-043), and those of a \
+         session given its per-session trust files (ADR-062)\n{}",
         date(now_ms),
         date(now_ms + CA_VALID_DAYS * MS_PER_DAY),
         hosts.join(", "),
@@ -104,14 +170,9 @@ pub fn load(home: &Home, policy: &Policy) -> Result<Option<Loaded>> {
     let again = "run `openmoat proxy ca init` in a terminal";
     let lock = Lock::load(&home.lock_path())?;
     if !files(home).iter().all(|f| lock.pins(f) && f.is_file()) {
-        let poc = if request_poc::enabled() {
-            format!(" or {}=1", request_poc::ENV)
-        } else {
-            String::new()
-        };
         bail!(
-            "TLS to {} is terminated (`tls: terminate`{poc}), but there is no pinned proxy CA \
-             yet: {again}",
+            "TLS to {} is terminated (`tls: terminate`, or `requests:` without `hook_only`), but \
+             there is no pinned proxy CA yet: {again}",
             hosts.join(", ")
         );
     }
@@ -119,8 +180,13 @@ pub fn load(home: &Home, policy: &Policy) -> Result<Option<Loaded>> {
         .with_context(|| format!("reading {}", cert_path(home).display()))?;
     // Refused when others may read or replace it (`key_file::read`).
     let key = crate::key_file::read(&key_path(home))?;
-    let tls = Tls::new(&cert, &key, &Roots::System, &hosts)
-        .with_context(|| format!("the proxy CA cannot be used; {again}"))?;
+    let tls = Tls::new(&cert, &key, &Roots::System, &hosts).with_context(|| {
+        format!(
+            "the proxy CA cannot be used for {} (a host added since it was made needs a new \
+             one); {again}",
+            hosts.join(", ")
+        )
+    })?;
     let now = crate::time::now_ms();
     let notice = valid_until(&cert)
         .filter(|until| *until <= date(now + EXPIRY_NOTICE_DAYS * MS_PER_DAY).as_str())

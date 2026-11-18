@@ -21,6 +21,16 @@ pub(super) const SESSION_TAINT: Words = Words {
     next: None,
 };
 
+pub(super) const REQUEST_RULE: Words = Words {
+    title: "sending a request your request rules refuse to a host you allow",
+    why: "an allowed host can receive your data through an endpoint that publishes it, such as \
+          a new gist",
+    next: Some((
+        Verdict::Review,
+        "approve it in this prompt only if you know what the command sends and where",
+    )),
+};
+
 pub(super) const SESSION_WRITTEN_CODE: Words = Words {
     title: "running code this session wrote, with no OS sandbox below the hook",
     why: "the hook sees the command that starts the code, not what the code does",
