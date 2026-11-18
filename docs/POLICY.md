@@ -487,7 +487,10 @@ requests_untrusted: refuse        # optional, your own policy only: or `relay` (
 - **A proxy CA** (`openmoat proxy ca init`) covers the hosts of those entries as well as
   the `tls: terminate` secrets'. Without one, or with one made before a host was added,
   `openmoat run` stops before the agent starts, and `openmoat proxy` says so at start-up
-  and refuses (or relays) the host's connections. `hook_only` entries need none.
+  and refuses (or relays) the host's connections; a host a repository's entry adds that
+  the CA does not cover is refused (or relayed) the same way, never terminated.
+  `openmoat doctor` and `openmoat status` name such a host, and say when a CA exists
+  without the `exfil-endpoints` pack. `hook_only` entries need none.
 - **Session taint.** After a secret read, a terminated tunnel to a `requests:` host stays
   open for reads: `GET`, `HEAD` and `OPTIONS` without a body pass, anything else is
   refused with `session-taint` (§4.1). Every other host keeps the whole-host refusal

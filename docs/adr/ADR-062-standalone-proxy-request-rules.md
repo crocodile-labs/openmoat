@@ -195,8 +195,12 @@ command's words name the method and the URL. So the hook decides with the same r
   and the session folder holds only public material.
 - Codex sessions get `requests:` protection only inside `openmoat run`, or a refusal when
   `requests_untrusted: refuse`. THREAT_MODEL §5 says so.
-- A new rule id (`proxy-request`) and a new credential version; the proxy keeps accepting
-  `v1` credentials (no termination for them) for one release.
+- A new rule id (`request-rule`, "Settled when built") and a new credential version; the
+  proxy keeps accepting `v1` credentials (no termination for them) for one release.
+- Follow-ups, not built with this decision: a proxy latency check in CI (a `.github`
+  workflow change, measured as step 0 measured it), and a differential test that sends
+  `curl -X POST …/gists` through Claude Code's real sandbox and the standalone proxy (a
+  test with the real agent binary, `tests/e2e/differential/agents`).
 
 ## Alternatives
 
@@ -282,8 +286,14 @@ something holds it and the hook's half needed no CA:
   `openmoat_proxy::Trust`), the standalone proxy's termination of `requests:` hosts for
   them, `requests_untrusted`, and the session folder `SessionStart` writes
   (`commands/guard/session_start.rs`, `proxy_ca::Trust::write_for_session`).
-- Step 7: the pack, without the `status` note and the MoatBench scenario (still open);
-  THREAT_MODEL T12.
+- Step 7: the pack; the `openmoat doctor` and `openmoat status` notes (a CA without the
+  pack, with the command that installs it; a proxy-held host the CA does not cover, with
+  `openmoat proxy ca init`); the MoatBench scenario
+  `issue-injection-posts-notes-to-an-allowed-host`; THREAT_MODEL T12; INSTALL "Teams:
+  request rules for allowed hosts".
+- A host the CA does not cover (a repository's proxy-held entry, or one added after `ca
+  init`) is not terminated (`Tls::covers`): `requests_untrusted` decides it, refused by
+  default, rather than a failed handshake.
 - Decision 6: `openmoat-core/src/requests/{command,hook}.rs`, with conformance attack,
   review and benign fixtures.
 - The proof of concept's setting (`OPENMOAT_ADR062_POC`) is gone; its tests' claims are
@@ -291,7 +301,7 @@ something holds it and the hook's half needed no CA:
   `exchange/tests/requests.rs` and `tests/proxy/{terminate,requests}.rs`; the run's in the
   e2e test `proxy_ca::a_request_rule_the_proxy_holds_needs_a_ca_for_its_host`).
 - Not built: the differential test through Claude Code's sandbox and the proxy latency
-  check in CI.
+  check in CI (follow-ups under "Consequences").
 
 ## Step 0 results
 
