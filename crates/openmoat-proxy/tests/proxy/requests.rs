@@ -165,8 +165,23 @@ fn a_session_without_the_ca_is_refused_by_default() {
 #[test]
 fn a_session_without_the_ca_is_relayed_unread_when_the_policy_says_relay() {
     let t = ruled(false, RequestsUntrusted::Relay, false);
-    let answer = t.connect();
-    assert!(answer.starts_with("HTTP/1.1 200"), "{answer}");
+    let mut s = t.h.connect();
+    write!(
+        s,
+        "CONNECT owner.test:{} HTTP/1.1\r\nHost: owner.test\r\n{}\r\n",
+        t.h.port(),
+        t.auth
+    )
+    .unwrap();
+    let mut answer = [0u8; 12];
+    s.read_exact(&mut answer).unwrap();
+    assert!(answer.starts_with(b"HTTP/1.1 200"), "{answer:?}");
+    // a relayed tunnel is recorded once its ClientHello's name is checked
+    s.write_all(&client_hello("owner.test")).unwrap();
+    let start = std::time::Instant::now();
+    while t.h.rows().is_empty() && start.elapsed() < WAIT {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
     let rows = t.h.rows();
     let noted = rows.iter().any(|r| {
         r.verdict == Verdict::Allow && r.reasons.iter().any(|w| w.contains("relayed unread"))
