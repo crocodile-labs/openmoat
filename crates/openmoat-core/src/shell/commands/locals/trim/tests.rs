@@ -35,7 +35,8 @@ fn trims_as_the_shell_does() {
 fn patterns_it_does_not_read_stay_unknown() {
     for expansion in [
         "#[0-9]}", "#\"*\"}", "#'*'}", "#\\*}", "#$y}", "#`y`}", "#${y}}", ":-x}", "/a/b}", "^}",
-        "#*",
+        "#*", // extended globs: bash `extglob`, zsh `extendedglob`
+        "#*(a)}", "#+(a)}", "#@(a|b)}", "#!(x)}", "%%a#}", "#^a}", "#*~b}",
     ] {
         assert!(Trim::parse(expansion).is_none(), "{expansion}");
     }

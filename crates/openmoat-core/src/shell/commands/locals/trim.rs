@@ -41,7 +41,14 @@ impl Trim {
         let start = 1 + usize::from(longest);
         let end = after.find('}')?;
         let pattern = after.get(start..end)?;
-        if pattern.contains(['[', ']', '\'', '"', '\\', '$', '`', '{']) {
+        // Also every character an extended glob gives a meaning: bash's
+        // `extglob` (`*(…)`, `+(…)`, `@(…)`, `!(…)`, `|`) and zsh's
+        // `extendedglob` (`#`, `^`, `~`, `(…)`), which a command can turn on
+        // before the trim (`shopt -s extglob; … ${x#*(a)}`); read as plain
+        // characters they would give a value the shell does not.
+        if pattern.contains([
+            '[', ']', '\'', '"', '\\', '$', '`', '{', '(', ')', '|', '#', '^', '~',
+        ]) {
             return None;
         }
         let trim = Self {

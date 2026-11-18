@@ -6872,3 +6872,11 @@
   threat: T1
   action: { shell: "for x in 'p:.ssh/id_rsa' 'p:README'; do f=${x#p:}; done; cat ~/$f" }
   expect: { verdict: deny, rules: [secrets-paths] }
+# An extended glob the command turns on (zsh `extendedglob`, the shell many agents run
+# on macOS) trims what plain characters would not: `${x##a#}` removes the leading `a`s,
+# so read as plain characters the value would look like a harmless `aa.ssh/id_rsa`.
+# The pattern is not read: the value stays unknown, never allowed
+- id: T1-key-through-an-extended-glob-trim
+  threat: T1
+  action: { shell: "setopt extendedglob; for x in 'aa.ssh/id_rsa'; do f=${x##a#}; cat ~/$f; done" }
+  expect: { verdict: defer, rules: [unparseable] }
