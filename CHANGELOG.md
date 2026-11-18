@@ -8,6 +8,13 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-11-17
+
+**Upgrading:** on Linux with Codex, run `openmoat init` once after upgrading (or `openmoat sandbox sync`): it rewrites Codex's sandbox profile without the glob under `/run/user` that kept Codex from starting a session. Nothing else to run.
+
+### Fixed
+- Codex starts on Linux again with OpenMoat's sandbox profile: 0.22.0 wrote the deny for OpenMoat's service files under `/run/user` into Codex's profile as a glob, and Codex, which lists every folder below a deny glob before each command, stopped at the root-only `/run/user/<uid>/systemd/inaccessible` and started no session. A glob under `/run` is now left out of Codex's profile and reported; OpenMoat's hook still denies the agent's own calls there ([#829](https://github.com/crocodile-labs/openmoat/pull/829)).
+
 ## [0.22.0] - 2026-11-15
 
 **Upgrading:** run `openmoat policy upgrade` in your own terminal for the new and changed default rules (`package-run-unknown`, `unattended`, the keyed audit key and the new agents' paths), then `openmoat init` once: it sets Claude Code's `CLAUDE_CODE_DISABLE_FILE_MENTIONS`, makes the audit key, and sets up Qwen Code and Crush where they are installed. Restart a running `openmoat proxy`, `openmoat approvals listen` or `openmoat mcp proxy` after upgrading: one from the older build refuses to record until it is restarted. A policy with `unattended:` is refused by an older binary. Running a package with `npx`, `uvx` or `pipx run` that the project neither installs nor declares now needs review once.
@@ -1336,7 +1343,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.22.1...HEAD
+[0.22.1]: https://github.com/crocodile-labs/openmoat/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/crocodile-labs/openmoat/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/crocodile-labs/openmoat/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/crocodile-labs/openmoat/compare/v0.19.0...v0.20.0

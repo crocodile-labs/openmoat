@@ -1,2 +1,0 @@
-### Fixed
-- Codex starts on Linux again with OpenMoat's sandbox profile: 0.22.0 wrote the deny for OpenMoat's service files under `/run/user` into Codex's profile as a glob, and Codex, which lists every folder below a deny glob before each command, stopped at the root-only `/run/user/<uid>/systemd/inaccessible` and started no session. A glob under `/run` is now left out of Codex's profile and reported; OpenMoat's hook still denies the agent's own calls there ([#829](https://github.com/crocodile-labs/openmoat/pull/829)).
