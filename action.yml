@@ -145,8 +145,10 @@ runs:
         if [ "$OPENMOAT_PROVENANCE" != review ]; then
           args+=("--provenance=$OPENMOAT_PROVENANCE")
         fi
-        "$OPENMOAT" "${args[@]}"
-        code=$?
+        # `shell: bash` runs this with `-e`, which would end the step at the check's own
+        # exit code (3 for review, 2 for deny) before `fail-on` is read
+        code=0
+        "$OPENMOAT" "${args[@]}" || code=$?
         case "$code" in
           0) result=clean ;;
           2) result=deny ;;

@@ -25,6 +25,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: crocodile-labs/openmoat@ea6aeec0b7b64820fe6dc17417a9ef3f7b506bac # v0.22.1
+        # v0.22.1's action ends the step on any finding, whatever `fail-on` says (fixed
+        # in action.yml after it); remove this once the pin moves past that release
+        continue-on-error: true
         with:
           version: 0.22.1
           fail-on: never
