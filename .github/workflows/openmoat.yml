@@ -1,0 +1,30 @@
+name: openmoat
+
+# OpenMoat's own merge check (docs/MERGE_CHECK.md) on this repository's pull requests,
+# run from the latest release. Report-only for now: every finding is an annotation on
+# the pull request (`deny` as an error, `review` as a warning) and the step never
+# fails, since this repository changes policy, hook and CI files as ordinary work.
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  merge-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: crocodile-labs/openmoat@ea6aeec0b7b64820fe6dc17417a9ef3f7b506bac # v0.22.1
+        with:
+          version: 0.22.1
+          fail-on: never
