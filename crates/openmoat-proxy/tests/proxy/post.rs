@@ -52,9 +52,51 @@ fn a_server_another_ca_signed_is_refused() {
     );
 }
 
+/// A plain HTTP server that reads each request whole (its head and the
+/// `Content-Length` bytes after it) before it answers with `UPSTREAM_REPLY`.
+/// Answering after only the first read can close the socket with the body
+/// still unread, which Windows turns into a reset the client sees before the
+/// answer.
+fn whole_request_upstream() -> (SocketAddr, Receiver<Vec<u8>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { return };
+            stream.set_read_timeout(Some(WAIT)).unwrap();
+            let mut got = Vec::new();
+            let mut chunk = [0u8; 4096];
+            while !whole(&got) {
+                match stream.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => got.extend_from_slice(&chunk[..n]),
+                }
+            }
+            let _ = tx.send(got);
+            let _ = stream.write_all(UPSTREAM_REPLY);
+        }
+    });
+    (addr, rx)
+}
+
+/// Whether `got` holds a request head and all the body its `Content-Length` names.
+fn whole(got: &[u8]) -> bool {
+    let Some(end) = got.windows(4).position(|w| w == b"\r\n\r\n") else {
+        return false;
+    };
+    let head = String::from_utf8_lossy(&got[..end]).to_ascii_lowercase();
+    let length = head
+        .lines()
+        .find_map(|l| l.strip_prefix("content-length:"))
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(0);
+    got.len() >= end + 4 + length
+}
+
 #[test]
 fn plain_http_reaches_loopback_and_reads_the_status() {
-    let (addr, firsts) = upstream();
+    let (addr, firsts) = whole_request_upstream();
     let (ca, _) = upstream_tls();
     let client = poster(&Roots::Pem(ca), &[]);
     let endpoint = Endpoint::parse(&format!("http://127.0.0.1:{}/hook", addr.port())).unwrap();
