@@ -66,13 +66,23 @@ impl RepoPolicy {
     }
 
     /// This policy's `requests:` entries under `prefix` ids, added to `policy`:
-    /// deny lists only, so they narrow whether trusted or not.
+    /// deny lists only, so they narrow whether trusted or not. An entry is held
+    /// by the hook alone (`hook_only`) unless the person's own policy has the
+    /// proxy hold that host: otherwise it would make the proxy terminate, and
+    /// without a CA refuse, a host the person's git and package managers use.
     pub fn add_requests(&self, policy: &mut Policy, prefix: &str) {
+        let held: Vec<String> = policy
+            .requests
+            .iter()
+            .filter(|e| !e.hook_only && !e.id.contains(':'))
+            .map(|e| e.host.clone())
+            .collect();
         policy
             .requests
             .extend(self.requests.iter().map(|entry| RequestEntry {
                 id: format!("{prefix}{}", entry.id),
                 allow: Vec::new(),
+                hook_only: entry.hook_only || !held.contains(&entry.host),
                 ..entry.clone()
             }));
     }

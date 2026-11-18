@@ -235,9 +235,10 @@ fn lint_says_when_no_allow_rule_reaches_the_host_and_what_the_proxy_needs() {
 }
 
 /// The shipped `exfil-endpoints` pack is a pack (a repository policy's
-/// shape), and holds at the proxy what the default policy holds in the hook.
+/// shape). Its rules are the hook's unless the person's own policy has the
+/// proxy hold api.github.com; then the proxy holds them too.
 #[test]
-fn the_exfil_endpoints_pack_holds_the_default_policys_hook_rules_at_the_proxy() {
+fn the_exfil_endpoints_pack_reaches_the_proxy_only_where_the_person_opts_in() {
     let pack = crate::RepoPolicy::parse(include_str!("../../policies/packs/exfil-endpoints.yaml"))
         .unwrap();
     let default = Policy::parse(crate::DEFAULT_POLICY).unwrap();
@@ -255,19 +256,50 @@ fn the_exfil_endpoints_pack_holds_the_default_policys_hook_rules_at_the_proxy() 
             hook.id
         );
     }
+    // The default policy holds api.github.com in the hook only: so does the pack.
     let mut merged = default.clone();
     pack.add_requests(&mut merged, "pack:exfil-endpoints:");
     merged.lint_structure().unwrap();
-    let proxy = RequestRules::for_proxy(&merged.requests).unwrap();
+    assert!(
+        RequestRules::for_proxy(&merged.requests)
+            .unwrap()
+            .is_empty()
+    );
+    // The person opts in: an entry of their own the proxy holds.
+    let mut opted = default.clone();
+    opted
+        .requests
+        .push(entry("github-api", &["GET /**", "POST /**"], &[]));
+    pack.add_requests(&mut opted, "pack:exfil-endpoints:");
+    opted.lint_structure().unwrap();
+    let proxy = RequestRules::for_proxy(&opted.requests).unwrap();
     assert!(matches!(
         proxy.check(HOST, "POST", "/gists", &[]),
         RequestCheck::Refused(_)
     ));
-    assert!(
-        RequestRules::for_proxy(&default.requests)
-            .unwrap()
-            .is_empty()
-    );
+}
+
+/// A repository's entry for a host the person's own policy does not have
+/// the proxy hold is the hook's alone, so a repository cannot make the
+/// proxy terminate (and without a CA refuse) a host git and package
+/// managers use.
+#[test]
+fn a_repository_entry_is_hook_only_unless_the_person_has_the_proxy_hold_the_host() {
+    let repo =
+        "version: 1\nrequests:\n  - id: x\n    host: registry.npmjs.org\n    deny: ['PUT /**']\n";
+    let user = Policy::parse("version: 1\n").unwrap();
+    let merged = crate::RepoPolicy::parse(repo)
+        .unwrap()
+        .merge(&user, true)
+        .unwrap();
+    assert!(merged.requests[0].hook_only);
+    let held = "version: 1\nrequests:\n  - id: npm\n    host: registry.npmjs.org\n    allow: ['GET /**']\n";
+    let user = Policy::parse(held).unwrap();
+    let merged = crate::RepoPolicy::parse(repo)
+        .unwrap()
+        .merge_deny(&user)
+        .unwrap();
+    assert!(!merged.requests[1].hook_only);
 }
 
 #[test]

@@ -181,12 +181,14 @@ impl RequestRules {
         }
         let refused =
             |why: String| RequestCheck::Refused(format!("{method} request to {host} {why}"));
-        let (exact, folded) = match (
-            RequestPath::parse(target),
-            RequestPath::parse(&target.to_ascii_lowercase()),
-        ) {
-            (Ok(exact), Ok(folded)) => (exact, folded),
-            (Err(why), _) | (_, Err(why)) => {
+        // Folded after decoding: `/%47ists` is `/gists` to a server that
+        // ignores case.
+        let (exact, folded) = match RequestPath::parse(target) {
+            Ok(exact) => {
+                let folded = exact.folded();
+                (exact, folded)
+            }
+            Err(why) => {
                 return refused(format!(
                     "is refused: {why}, so its request rules cannot tell what the server would read"
                 ));
@@ -206,8 +208,9 @@ impl RequestRules {
         }
         let upper = method.to_ascii_uppercase();
         // A server may read `/gists/` as `/gists`: a deny rule matches both.
-        let bare = without_trailing_slash(&target.to_ascii_lowercase())
-            .and_then(|t| RequestPath::parse(&t).ok());
+        let bare = without_trailing_slash(target)
+            .and_then(|t| RequestPath::parse(&t).ok())
+            .map(|p| p.folded());
         for entry in self.of(Some(host)) {
             if let Some((text, _)) = entry.deny.iter().find(|(_, r)| {
                 r.matches(&upper, &folded) || bare.as_ref().is_some_and(|b| r.matches(&upper, b))

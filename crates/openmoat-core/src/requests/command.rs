@@ -65,8 +65,10 @@ pub(crate) fn read(argv: &[String]) -> Vec<Seen> {
         "https" => others::httpie(words, "https", "https"),
         "xh" => others::httpie(words, "xh", "http"),
         "xhs" => others::httpie(words, "xhs", "https"),
+        // curlie takes HTTPie's syntax and sends with curl.
+        "curlie" => others::httpie(words, "curlie", "https"),
         "gh" => others::gh(words),
-        _ => Vec::new(),
+        other => others::inline(other, words),
     }
 }
 
@@ -110,11 +112,14 @@ pub(crate) fn url_parts(
             _ => after_user,
         };
         let host = host.trim_end_matches('.').to_ascii_lowercase();
-        Some(if host.is_empty() {
-            "localhost".to_owned()
+        if host.contains('%') {
+            // An encoded name: the client may decode it into a listed host.
+            None
+        } else if host.is_empty() {
+            Some("localhost".to_owned())
         } else {
-            host
-        })
+            Some(host)
+        }
     };
     let target = if tail.starts_with('/') {
         tail.to_owned()
@@ -124,21 +129,39 @@ pub(crate) fn url_parts(
     let target = target_of(&target, &unknown, &|_| false);
     if host.is_none() {
         // A variable in the host may hold a path too: `$BASE/gists`.
-        let mut parts = vec![Partial::Rest];
-        match target {
-            Target::Known(known) => parts.extend(
-                RequestPath::parse(&known)
-                    .ok()
-                    .into_iter()
-                    .flat_map(|p| p.segments().to_vec())
-                    .map(Partial::Known),
-            ),
-            Target::Partial(rest) => parts.extend(rest),
-            Target::Unknown => {}
-        }
-        return Some((None, Target::Partial(parts)));
+        return Some((None, unhosted(target)));
     }
     Some((host, target))
+}
+
+/// `target` of a request whose host is not known: whatever names the host
+/// may hold a path in front of it too.
+fn unhosted(target: Target) -> Target {
+    let mut parts = vec![Partial::Rest];
+    match target {
+        Target::Known(known) => parts.extend(
+            RequestPath::parse(&known)
+                .ok()
+                .into_iter()
+                .flat_map(|p| p.segments().to_vec())
+                .map(Partial::Known),
+        ),
+        Target::Partial(rest) => parts.extend(rest),
+        Target::Unknown => return Target::Unknown,
+    }
+    Target::Partial(parts)
+}
+
+/// A request nothing about is known: options or URLs read from a file, or
+/// set by a configuration file the command's environment moves.
+pub(crate) fn unknown_request(program: &'static str) -> Seen {
+    Seen {
+        program,
+        host: None,
+        methods: None,
+        target: Target::Unknown,
+        headers: Vec::new(),
+    }
 }
 
 /// `target` as known: in full, or by segment where `unknown` (any number of
@@ -275,6 +298,13 @@ struct Curl<'a> {
     globoff: bool,
     /// An option that sets the request in a way this reading does not follow.
     unknown: bool,
+    /// Options read from a file (`-K`): more URLs, methods and data.
+    config: bool,
+    /// `--request-target`: the path sent is not the URL's.
+    target: bool,
+    /// `--connect-to`, `--resolve` or a `Host:` header: the request may go to
+    /// another host than the URL names.
+    rerouted: bool,
     headers: Vec<String>,
     urls: Vec<&'a str>,
 }
@@ -288,11 +318,26 @@ impl<'a> Curl<'a> {
             | "--data-urlencode" | "--json" | "--form" | "-F" | "--form-string" => self.data = true,
             "--upload-file" | "-T" => self.upload = true,
             "--url" => self.urls.extend(value),
-            "--header" | "-H" => self.headers.extend(value.and_then(header_name)),
+            "--header" | "-H" => {
+                let name = value.and_then(header_name);
+                // A header made at run time may be `Host:` too.
+                let unknown = value.is_some_and(|v| v.contains(EXPANDED) || !v.contains(':'));
+                if unknown
+                    || name
+                        .as_deref()
+                        .is_some_and(|n| n.eq_ignore_ascii_case("host"))
+                {
+                    self.rerouted = true;
+                }
+                self.headers.extend(name);
+            }
             "--get" | "-G" => self.get = true,
             "--head" | "-I" => self.head = true,
             "--globoff" | "-g" => self.globoff = true,
-            "--next" | "-:" | "--config" | "-K" | "--request-target" => self.unknown = true,
+            "--config" | "-K" => self.config = true,
+            "--request-target" => self.target = true,
+            "--connect-to" | "--resolve" => self.rerouted = true,
+            "--next" | "-:" => self.unknown = true,
             other if other.starts_with("--expand-") => self.unknown = true,
             _ => {}
         }
@@ -320,7 +365,8 @@ impl<'a> Curl<'a> {
     }
 
     fn methods(&self) -> Option<Vec<String>> {
-        if self.unknown || self.method.as_ref().is_some_and(|m| m.contains(EXPANDED)) {
+        if self.unknown || self.config || self.method.as_ref().is_some_and(|m| m.contains(EXPANDED))
+        {
             return None;
         }
         let method = match &self.method {
@@ -376,17 +422,31 @@ fn curl(args: &[String]) -> Vec<Seen> {
         }
     }
     let methods = c.methods();
-    c.urls
+    let mut seen: Vec<Seen> = c
+        .urls
         .iter()
         .filter_map(|url| url_parts(url, "http", !c.globoff))
-        .map(|(host, target)| Seen {
-            program: "curl",
-            host,
-            methods: methods.clone(),
-            target,
-            headers: c.headers.clone(),
+        .map(|(host, target)| {
+            let (host, target) = match (c.rerouted, c.target) {
+                (_, true) => (host.filter(|_| !c.rerouted), Target::Unknown),
+                (true, false) => (None, unhosted(target)),
+                (false, false) => (host, target),
+            };
+            Seen {
+                program: "curl",
+                host,
+                methods: methods.clone(),
+                target,
+                headers: c.headers.clone(),
+            }
         })
-        .collect()
+        .collect();
+    if c.config || c.unknown {
+        // `-K FILE` (or `-K -`) reads more URLs and options; after `--next`
+        // and `--expand-…` the options of each URL are not followed here.
+        seen.push(unknown_request("curl"));
+    }
+    seen
 }
 
 /// wget short options that take a value.
@@ -402,6 +462,7 @@ const WGET_VALUED_LONG: &[&str] = &[
     "--header",
     "--execute",
     "--input-file",
+    "--config",
     "--output-document",
     "--output-file",
     "--user",
@@ -434,7 +495,9 @@ fn wget(args: &[String]) -> Vec<Seen> {
         "--method" => method = value.map(str::to_owned),
         "--post-data" | "--post-file" => post = true,
         "--header" => headers.extend(value.and_then(header_name)),
-        "--execute" | "-e" | "--input-file" | "-i" => unknown = true,
+        // `--config FILE` and `-e` set any wgetrc command (`method`,
+        // `post_data`, `input`); `-i FILE` reads more URLs.
+        "--execute" | "-e" | "--input-file" | "-i" | "--config" => unknown = true,
         _ => {}
     };
     let mut i = 0;
@@ -451,11 +514,18 @@ fn wget(args: &[String]) -> Vec<Seen> {
                 args.get(i - 1).map(String::as_str)
             });
             take(word, value.flatten());
-        } else if let Some(letter) = word.chars().nth(1).filter(|l| WGET_VALUED.contains(*l)) {
-            if word.len() == 2 {
-                i += 1;
+        } else {
+            // Every letter of a cluster (`-qi urls.txt`): the first that
+            // takes a value takes the rest of the word or the next word.
+            for (at, letter) in word.char_indices().skip(1) {
+                if WGET_VALUED.contains(letter) {
+                    if word[at + letter.len_utf8()..].is_empty() {
+                        i += 1;
+                    }
+                    take(&format!("-{letter}"), None);
+                    break;
+                }
             }
-            take(&format!("-{letter}"), None);
         }
     }
     let methods = if unknown || method.as_ref().is_some_and(|m| m.contains(EXPANDED)) {
@@ -477,14 +547,7 @@ fn wget(args: &[String]) -> Vec<Seen> {
         })
         .collect();
     if unknown {
-        // `-i FILE` reads more URLs from the file; `-e` may set anything.
-        seen.push(Seen {
-            program: "wget",
-            host: None,
-            methods: None,
-            target: Target::Unknown,
-            headers: Vec::new(),
-        });
+        seen.push(unknown_request("wget"));
     }
     seen
 }

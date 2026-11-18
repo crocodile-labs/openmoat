@@ -2848,6 +2848,21 @@
 - id: benign-gh-pr-list-is-not-a-request-rule
   action: { shell: "gh pr list" }
   expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-gh-alias-list
+  action: { shell: "gh alias list" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-gh-api-hostname-github-com-read
+  action: { shell: "gh api --hostname github.com repos/o/r" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-curl-resolve-read
+  action: { shell: "curl --resolve api.github.com:443:140.82.112.6 https://api.github.com/repos/o/r" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-python-reads-the-api
+  action: { shell: "python3 -c \"import urllib.request as u; print(u.urlopen('https://api.github.com/repos/o/r').read())\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-httpie-ignore-stdin-read
+  action: { shell: "http --ignore-stdin api.github.com/gists" }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-curl-get-url-in-a-variable
   action: { shell: "curl -s \"$URL\"" }
   expect: { verdict: defer, rules: [default] }

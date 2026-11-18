@@ -1,10 +1,18 @@
 # OpenMoat policy pack `exfil-endpoints` (ADR-031, ADR-062): request rules that
 # refuse the endpoints of hosts the default policy allows that publish what they
 # are sent. The default policy already holds these as hook-only rules (the hook
-# reads them in commands); this pack has the proxy hold them too, inside HTTPS,
-# for every client and script, so it needs a proxy CA:
+# reads them in commands). A pack's entries are held by the hook alone too,
+# unless your own policy has the proxy hold the host: then the proxy holds them
+# inside HTTPS, for every client and script. To opt in for api.github.com, add
+# an entry of your own without `hook_only` (the commented recipe in the default
+# policy, or set `hook_only: false` on its `exfil-gists` entry) and make a CA:
 #
 #   openmoat proxy ca init        # once, and again after a host is added
+#
+# The opt-in is off by default because on macOS Go clients (`gh`) read the
+# system keychain, not `SSL_CERT_FILE`, so under the standalone proxy they do
+# not trust the CA and their requests to a proxy-held host fail; the hook
+# already holds what `gh` and `curl` send.
 #
 # A pack is installed only with a signature from a key you trust. Whoever
 # distributes it signs it, and each person installs it:

@@ -108,6 +108,77 @@ pub(super) fn httpie(args: &[String], program: &'static str, scheme: &str) -> Ve
         .collect()
 }
 
+/// The options that hand an interpreter its program as text, per program
+/// (base name, prefix for `python3.12`).
+const INLINE: &[(&str, &[&str])] = &[
+    ("python", &["-c"]),
+    ("node", &["-e", "--eval", "-p", "--print"]),
+    ("bun", &["-e", "--eval", "-p", "--print"]),
+    ("deno", &["eval"]),
+    ("perl", &["-e", "-E"]),
+    ("ruby", &["-e"]),
+    ("php", &["-r"]),
+];
+
+/// Words in inline code that mark a request other than a plain `GET`.
+const SENDS: &[&str] = &[
+    "post", "put", "patch", "delete", "method", "data=", "data:", "json=", "body", "upload",
+    "send(", "request(", "files=",
+];
+
+/// The requests inline interpreter code (`python3 -c`, `node -e`) shows: each
+/// HTTP URL written in it, a `GET` unless the code holds a word that marks
+/// another method or a body, when its method is not known. The code itself is
+/// not run or parsed, so this only says where a request may go.
+pub(super) fn inline(base: &str, args: &[String]) -> Vec<Seen> {
+    let Some((_, options)) = INLINE.iter().find(|(p, _)| base.starts_with(p)) else {
+        return Vec::new();
+    };
+    let code = args.iter().enumerate().find_map(|(i, a)| {
+        if options.contains(&a.as_str()) {
+            return args.get(i + 1).map(String::as_str);
+        }
+        options
+            .iter()
+            .filter(|o| o.len() == 2)
+            .find_map(|o| a.strip_prefix(o).filter(|rest| !rest.is_empty()))
+    });
+    let Some(code) = code else {
+        return Vec::new();
+    };
+    let lower = code.to_ascii_lowercase();
+    let methods = if SENDS.iter().any(|w| lower.contains(w)) {
+        None
+    } else {
+        Some(vec!["GET".to_owned()])
+    };
+    let mut seen = Vec::new();
+    for (at, _) in lower.match_indices("http") {
+        let rest = &code[at..];
+        let starts = |scheme: &[u8]| {
+            rest.as_bytes()
+                .get(..scheme.len())
+                .is_some_and(|b| b.eq_ignore_ascii_case(scheme))
+        };
+        if !(starts(b"https://") || starts(b"http://")) {
+            continue;
+        }
+        let end = rest
+            .find(|c: char| c.is_whitespace() || "'\"`),;".contains(c))
+            .unwrap_or(rest.len());
+        if let Some((host, target)) = url_parts(&rest[..end], "https", false) {
+            seen.push(Seen {
+                program: "inline code",
+                host,
+                methods: methods.clone(),
+                target,
+                headers: Vec::new(),
+            });
+        }
+    }
+    seen
+}
+
 /// `gh api` options that take a value (`-X POST`, `-XPOST`, `--method=POST`).
 const GH_API_VALUED: &[&str] = &[
     "-X",
@@ -139,8 +210,65 @@ pub(super) fn gh(args: &[String]) -> Vec<Seen> {
     match args.first().map(String::as_str) {
         Some("api") => gh_api(&args[1..]).into_iter().collect(),
         Some("gist") => gh_gist(&args[1..]).into_iter().collect(),
+        Some("alias") => gh_alias(&args[1..]).into_iter().collect(),
         _ => Vec::new(),
     }
+}
+
+/// The API host and path `gh api --hostname <hostname>` sends `path` to, as
+/// gh normalises the name (`NormalizeHostname`): any letter case; github.com
+/// and every name under it are github.com, whose API is api.github.com; a
+/// GHE.com tenant's is `api.<tenant>.ghe.com`; `github.localhost`'s is
+/// `api.github.localhost`; any other host is GitHub Enterprise Server, which
+/// serves its API under `/api/v3`.
+fn api_host(hostname: &str, path: String) -> (Option<String>, String) {
+    let h = hostname.trim().trim_end_matches('.').to_ascii_lowercase();
+    let h = h.strip_prefix("https://").unwrap_or(&h);
+    let h = h.split('/').next().unwrap_or_default();
+    if h == "github.com" || h.ends_with(".github.com") {
+        return (Some(API_HOST.to_owned()), path);
+    }
+    if h == "github.localhost" || h.ends_with(".github.localhost") {
+        return (Some("api.github.localhost".to_owned()), path);
+    }
+    if let Some(tenant) = h.strip_suffix(".ghe.com") {
+        let tenant = tenant.rsplit('.').next().unwrap_or(tenant);
+        return (Some(format!("api.{tenant}.ghe.com")), path);
+    }
+    (Some(h.to_owned()), format!("/api/v3{path}"))
+}
+
+/// `gh alias set NAME EXPANSION` and `gh alias import`: an alias that runs
+/// `gh api` or `gh gist` (or a shell alias that names them) sends requests
+/// later, under a name the hook cannot read then, so it is a request to
+/// api.github.com whose method and path are not known.
+fn gh_alias(args: &[String]) -> Option<Seen> {
+    let positional: Vec<&str> = args
+        .iter()
+        .skip(1)
+        .filter(|a| !a.starts_with('-'))
+        .map(String::as_str)
+        .collect();
+    let shell = args.iter().any(|a| a == "--shell" || a == "-s");
+    let sends = match args.first().map(String::as_str)? {
+        "set" => positional.get(1).is_none_or(|expansion| {
+            let first = expansion.trim_start_matches('!').trim_start();
+            let names = expansion.contains("gist") || expansion.contains("api");
+            first.starts_with("gist")
+                || first.starts_with("api")
+                || ((shell || expansion.starts_with('!')) && names)
+                || expansion.contains(EXPANDED)
+        }),
+        "import" => true,
+        _ => false,
+    };
+    sends.then(|| Seen {
+        program: "gh alias",
+        host: Some(API_HOST.to_owned()),
+        methods: None,
+        target: Target::Partial(vec![Rest]),
+        headers: Vec::new(),
+    })
 }
 
 fn gh_api(args: &[String]) -> Option<Seen> {
@@ -190,11 +318,10 @@ fn gh_api(args: &[String]) -> Option<Seen> {
         url_parts(endpoint, "https", false)?
     } else {
         let path = format!("/{}", endpoint.trim_start_matches('/'));
-        // GitHub Enterprise Server serves its API under `/api/v3`.
         let (host, path) = match hostname.as_deref() {
-            None | Some("github.com") => (Some(API_HOST.to_owned()), path),
-            Some(h) if h.contains(EXPANDED) => (None, path),
-            Some(h) => (Some(h.to_ascii_lowercase()), format!("/api/v3{path}")),
+            None => (Some(API_HOST.to_owned()), path),
+            Some(h) if h.contains(EXPANDED) || h.contains('%') => (None, path),
+            Some(h) => api_host(h, path),
         };
         (host, target_of(&path, &unknown, &placeholder))
     };

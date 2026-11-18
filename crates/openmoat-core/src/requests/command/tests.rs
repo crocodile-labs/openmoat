@@ -31,7 +31,8 @@ fn curl_options_set_the_method_as_curl_does() {
     ] {
         assert_eq!(methods(&one(words)), [want], "{words:?}");
     }
-    assert_eq!(one(&["curl", "-K", "f", "h.example/x"]).methods, None);
+    let config = read(&argv(&["curl", "-K", "f", "h.example/x"]));
+    assert!(config.iter().all(|s| s.methods.is_none()), "{config:?}");
 }
 
 #[test]
@@ -128,4 +129,116 @@ fn wget_reads_its_method_and_marks_urls_from_a_file_unknown() {
     let from_file = read(&argv(&["wget", "-i", "urls"]));
     assert_eq!(from_file.len(), 1);
     assert_eq!(from_file[0].host, None);
+    // Every letter of a cluster, and `--config` like `-e`.
+    for words in [
+        &["wget", "-qi", "urls.txt"][..],
+        &["wget", "-qiurls.txt"],
+        &["wget", "--config=w.rc", "h.example"],
+        &["wget", "--config", "w.rc", "h.example"],
+    ] {
+        let seen = read(&argv(words));
+        assert!(
+            seen.iter().any(|s| s.host.is_none() && s.methods.is_none()),
+            "{words:?}"
+        );
+    }
+}
+
+#[test]
+fn gh_hostnames_are_read_as_gh_normalises_them() {
+    for hostname in [
+        "github.com",
+        "GITHUB.COM",
+        "api.github.com",
+        "foo.github.com",
+        "github.com.",
+    ] {
+        let seen = one(&["gh", "api", "--hostname", hostname, "gists"]);
+        assert_eq!(seen.host.as_deref(), Some("api.github.com"), "{hostname}");
+        assert_eq!(
+            seen.target,
+            Target::Known("/gists".to_owned()),
+            "{hostname}"
+        );
+    }
+    let tenant = one(&["gh", "api", "--hostname", "acme.ghe.com", "user"]);
+    assert_eq!(tenant.host.as_deref(), Some("api.acme.ghe.com"));
+    assert_eq!(tenant.target, Target::Known("/user".to_owned()));
+    let local = one(&["gh", "api", "--hostname", "github.localhost", "user"]);
+    assert_eq!(local.host.as_deref(), Some("api.github.localhost"));
+}
+
+#[test]
+fn curl_options_that_hide_the_request_leave_it_unknown() {
+    let unknown = |words: &[&str]| {
+        read(&argv(words))
+            .iter()
+            .any(|s| s.host.is_none() && s.methods.is_none() && s.target == Target::Unknown)
+    };
+    assert!(unknown(&["curl", "-K", "gist.cfg"]));
+    assert!(unknown(&["curl", "--config=-"]));
+    assert!(unknown(&["curl", "-sK", "f", "h.example"]));
+    let target = one(&["curl", "--request-target", "/x", "-d", "x", "h.example/y"]);
+    assert_eq!(target.target, Target::Unknown);
+    for words in [
+        &["curl", "--connect-to", "a:443:b:443", "h.example/x"][..],
+        &["curl", "--resolve", "h.example:443:1.2.3.4", "h.example/x"],
+        &["curl", "-H", "host: other.example", "h.example/x"],
+        &["curl", "-H", "@headers.txt", "h.example/x"],
+    ] {
+        let seen = one(words);
+        assert_eq!(seen.host, None, "{words:?}");
+        assert!(matches!(seen.target, Target::Partial(_)), "{words:?}");
+    }
+    assert_eq!(
+        one(&["curl", "-H", "Accept: x", "h.example/x"])
+            .host
+            .as_deref(),
+        Some("h.example")
+    );
+    assert_eq!(one(&["curl", "https://h%2eexample/x"]).host, None);
+}
+
+#[test]
+fn inline_code_shows_where_it_sends_and_whether_it_writes() {
+    let posts = one(&[
+        "python3",
+        "-c",
+        "requests.post('https://h.example/x', data=d)",
+    ]);
+    assert_eq!(posts.host.as_deref(), Some("h.example"));
+    assert_eq!(posts.methods, None);
+    let reads = one(&[
+        "node",
+        "-e",
+        "fetch(\"https://h.example/x\").then(r => r.text())",
+    ]);
+    assert_eq!(methods(&reads), ["GET"]);
+    assert_eq!(read(&argv(&["python3", "-c", "print(1)"])), []);
+    assert_eq!(read(&argv(&["python3", "script.py"])), []);
+}
+
+#[test]
+fn a_gh_alias_that_runs_api_or_gist_is_a_request_not_known() {
+    for words in [
+        &["gh", "alias", "set", "mk", "gist create"][..],
+        &["gh", "alias", "set", "p", "api -X POST gists"],
+        &[
+            "gh",
+            "alias",
+            "set",
+            "--shell",
+            "s",
+            "!gh gist create \"$1\"",
+        ],
+        &["gh", "alias", "import", "aliases.yml"],
+    ] {
+        let seen = one(words);
+        assert_eq!(seen.methods, None, "{words:?}");
+    }
+    assert_eq!(
+        read(&argv(&["gh", "alias", "set", "co", "pr checkout"])),
+        []
+    );
+    assert_eq!(read(&argv(&["gh", "alias", "list"])), []);
 }

@@ -28,16 +28,42 @@ pub(crate) fn decisions(
         Action::Fetch { url } => command::fetch(url),
         _ => None,
     };
-    let commands = atoms.iter().filter_map(|atom| match atom {
-        AtomicAction::Shell { argv } => Some(command::read(argv)),
-        _ => None,
-    });
+    let mut seen: Vec<Seen> = atoms
+        .iter()
+        .filter_map(|atom| match atom {
+            AtomicAction::Shell { argv } => Some(command::read(argv)),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    // A variable that moves a client's own configuration file (`HOME=/p
+    // curl …` reads `/p/.curlrc`, which may add a body or a URL) or gh's host
+    // leaves what it sends unknown.
+    if let Some(program) = seen.first().map(|s| s.program)
+        && atoms.iter().any(|atom| {
+            matches!(atom, AtomicAction::EnvSet { name } if MOVES_CONFIG.contains(&name.as_str()))
+        })
+    {
+        seen.push(command::unknown_request(program));
+    }
     fetched
         .into_iter()
-        .chain(commands.flatten())
+        .chain(seen)
         .filter_map(|seen| decide(rules, &seen))
         .collect()
 }
+
+/// Variables that make curl, wget or gh read another configuration file, or
+/// send to another host, than the command shows.
+const MOVES_CONFIG: &[&str] = &[
+    "HOME",
+    "CURL_HOME",
+    "XDG_CONFIG_HOME",
+    "WGETRC",
+    "SYSTEM_WGETRC",
+    "GH_HOST",
+    "GH_CONFIG_DIR",
+];
 
 fn decide(rules: &RequestRules, seen: &Seen) -> Option<Decision> {
     if seen.host.as_deref().is_some_and(|h| !rules.names(h)) {

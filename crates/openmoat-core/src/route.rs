@@ -296,6 +296,20 @@ impl RequestPath {
     pub(crate) fn segments(&self) -> &[String] {
         &self.segments
     }
+
+    /// The path with each decoded segment in lowercase: what a deny rule,
+    /// which errs wide, is matched against (`/%47ists` is `/gists`).
+    #[must_use]
+    pub(crate) fn folded(&self) -> Self {
+        Self {
+            segments: self
+                .segments
+                .iter()
+                .map(|s| s.to_ascii_lowercase())
+                .collect(),
+            overrides_method: self.overrides_method,
+        }
+    }
 }
 
 /// `text` with each `%XX` replaced by its byte; `None` for a malformed escape.
