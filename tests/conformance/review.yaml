@@ -2648,6 +2648,28 @@
   threat: T7
   action: { shell: "awk \"$prog\" f" }
   expect: { verdict: review, rules: [opaque-code] }
+# in double quotes, an escaped `$` is literal but the program is read as awk gets it,
+# and a `$` or substitution the shell still expands keeps it unknown
+- id: review-awk-double-quoted-system-call
+  threat: T7
+  action: { shell: "awk \"BEGIN{system(\\\"id\\\")}\"" }
+  expect: { verdict: review, rules: [opaque-code] }
+- id: review-awk-double-quoted-escaped-field-piped-to-shell
+  threat: T7
+  action: { shell: "awk \"{print \\$1 | \\\"sh\\\"}\" f.txt" }
+  expect: { verdict: review, rules: [opaque-code] }
+- id: review-awk-double-quoted-escaped-field-and-shell-variable
+  threat: T7
+  action: { shell: "awk \"{print \\$1 $var}\" f.txt" }
+  expect: { verdict: review, rules: [opaque-code] }
+- id: review-awk-double-quoted-escaped-field-and-substitution
+  threat: T7
+  action: { shell: "awk \"{print \\$1}$(cat prog.awk)\" f.txt" }
+  expect: { verdict: review, rules: [opaque-code] }
+- id: review-awk-double-quoted-escaped-field-and-backticks
+  threat: T7
+  action: { shell: "awk \"{print \\$1 `cat prog.awk`}\" f.txt" }
+  expect: { verdict: review, rules: [opaque-code] }
 - id: review-awk-close-and-fflush
   threat: T7
   action: { shell: "awk '{print; close(\"x\"); fflush()}' f" }

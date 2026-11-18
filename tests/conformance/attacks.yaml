@@ -717,6 +717,15 @@
   threat: T7
   action: { shell: "bash -c 'cat ~/.aws/credentials'" }
   expect: { verdict: deny, rules: [secrets-paths] }
+# an escaped `$` is literal to the outer shell only: the inner one expands it
+- id: T7-bash-c-escaped-dollar-home-secret
+  threat: T7
+  action: { shell: "bash -c \"cat \\$HOME/.ssh/id_rsa\"" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T7-awk-double-quoted-escaped-field-into-shell-pipe
+  threat: T7
+  action: { shell: "awk \"{print \\$1}\" f.txt | sh" }
+  expect: { verdict: review, rules: [opaque-code] }
 - id: T7-sh-c-nested-twice
   threat: T7
   action: { shell: "sh -c \"bash -c 'cat ~/.ssh/id_rsa'\"" }

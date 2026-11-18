@@ -57,6 +57,11 @@ fn single_quoted_spans_are_recorded() {
         "ANSI-C quoting is not marked literal"
     );
     assert_eq!(spans("''"), Vec::<Range<usize>>::new());
+    // an escaped `$`, in double quotes or unquoted, is as literal as a single-quoted one
+    assert_eq!(spans("\"{print \\$2}\""), [7..8]);
+    assert_eq!(spans("a\\$b"), [1..2]);
+    assert_eq!(spans("\"\\\\$x\""), Vec::<Range<usize>>::new());
+    assert_eq!(spans("\"\\`x\""), Vec::<Range<usize>>::new());
 }
 
 #[test]

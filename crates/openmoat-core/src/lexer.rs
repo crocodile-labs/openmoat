@@ -114,8 +114,8 @@ pub struct Word {
     /// True if an unquoted, unescaped `*`, `?` or `[` is part of the word: the
     /// shell replaces such a word with the file names it matches.
     pub glob: bool,
-    /// Byte ranges of `text` that came from single quotes: the shell does not
-    /// expand a `$` inside them, so it names no variable.
+    /// Byte ranges of `text` that came from single quotes or a backslash-escaped
+    /// `$` (`\$`): the shell does not expand a `$` there, so it names no variable.
     pub literal: Vec<Range<usize>>,
     /// Byte ranges of `text` taken from unquoted, unescaped source: only there
     /// are `{`, `,` and `}` brace syntax (`brace.rs`).
@@ -289,7 +289,11 @@ impl Lexer {
                                 pending.literal = true;
                             }
                             self.boundary();
-                            self.word().text.push(escaped);
+                            if escaped == '$' {
+                                self.escaped_dollar();
+                            } else {
+                                self.word().text.push(escaped);
+                            }
                             self.boundary();
                         }
                         None => return Err(LexError::TrailingBackslash),
@@ -376,6 +380,16 @@ impl Lexer {
         }
     }
 
+    /// A `\$`, unquoted, in double quotes or in an unquoted here-document body: the
+    /// shell passes a plain `$` and expands nothing there, as inside single quotes,
+    /// so the `$` is marked literal (`awk "{print \$2}"` gives awk `{print $2}`).
+    fn escaped_dollar(&mut self) {
+        let word = self.word();
+        let at = word.text.len();
+        word.text.push('$');
+        word.literal.push(at..word.text.len());
+    }
+
     fn double_quoted(&mut self) -> Result<(), LexError> {
         self.word().quoted = true;
         self.expanding(Some('"'))
@@ -388,7 +402,8 @@ impl Lexer {
             match self.bump() {
                 Some(c) if Some(c) == close => return Ok(()),
                 Some('\\') => match self.bump() {
-                    Some(c @ ('\\' | '$' | '`')) => self.word().text.push(c),
+                    Some('$') => self.escaped_dollar(),
+                    Some(c @ ('\\' | '`')) => self.word().text.push(c),
                     Some(c) if Some(c) == close => self.word().text.push(c),
                     Some('\n') => {}
                     Some(c) => {

@@ -57,3 +57,20 @@ fn heredoc_delimiter_quoting_decides_expansion() {
         "GITHUB_TOKEN"
     ));
 }
+
+#[test]
+fn escaped_dollar_is_literal() {
+    assert!(!reads_env("echo \\$GITHUB_TOKEN", "GITHUB_TOKEN"));
+    assert!(!reads_env("echo \"\\$GITHUB_TOKEN\"", "GITHUB_TOKEN"));
+    assert!(!reads_env("cat <<EOF\n\\$GITHUB_TOKEN\nEOF", "GITHUB_TOKEN"));
+    // an escaped backslash leaves the `$` unescaped
+    assert!(reads_env("echo \"\\\\$GITHUB_TOKEN\"", "GITHUB_TOKEN"));
+    assert!(reads_env("echo \\\\$GITHUB_TOKEN", "GITHUB_TOKEN"));
+}
+
+#[test]
+fn inner_shell_expands_what_the_outer_one_escaped() {
+    assert!(reads_env("sh -c \"echo \\$GITHUB_TOKEN\"", "GITHUB_TOKEN"));
+    assert!(reads_env("eval \"echo \\$GITHUB_TOKEN\"", "GITHUB_TOKEN"));
+    assert!(reads_env("bash <<EOF\necho \\$GITHUB_TOKEN\nEOF", "GITHUB_TOKEN"));
+}

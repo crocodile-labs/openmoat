@@ -2335,6 +2335,17 @@
   why: "`${X+set}` is the same with an empty value counting as set."
   action: { shell: "echo ${GITHUB_TOKEN+set}" }
   expect: { verdict: allow, rules: [dev-shell] }
+# an awk program in double quotes with its `$` escaped: the shell passes awk the
+# same program as in single quotes, and expands nothing (lexer.rs, `\$`)
+- id: benign-awk-escaped-dollar-in-double-quotes
+  action: { shell: "awk \"{print \\$2}\" f.txt" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-awk-escaped-dollar-with-pattern
+  action: { shell: "awk \"NR==1{print \\$1}\" f.txt" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-awk-escaped-dollar-field-expression
+  action: { shell: "awk \"{print \\$(NF-1)}\" f.txt" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
 # awk programs whose `|` is regex alternation and whose `>` sits inside a regex or
 # a string are read-only: neither is a pipe or an output redirection (shell/awk.rs)
 - id: benign-awk-regex-alternation
