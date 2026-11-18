@@ -211,7 +211,7 @@ Everything OpenMoat does, by area. Each links to the page that explains it.
 | Risk | What OpenMoat does | Rules |
 |---|---|---|
 | **Secrets read or sent** | SSH keys, `.env`, cloud credentials and every agent's login files are denied however the path is spelt; so are secret variables and environment dumps. | `secrets-paths`, `agent-credentials`, `env-secrets`, `env-dump` |
-| **Data leaving the machine** | Sending to a host the policy does not list is denied, and so are cloud metadata services, tokens sent to the wrong host, encoded data after a secret read and card numbers the call's own text shows (not one read from a file, encoded or split). | `default.net`, `cloud-metadata`, `token-egress`, `encoded-egress`, `card-egress` |
+| **Data leaving the machine** | Sending to a host the policy does not list is denied, and so are cloud metadata services, tokens sent to the wrong host, encoded data after a secret read and card numbers the call's own text shows (not one read from a file, encoded or split). On allowed hosts, per-path request rules deny uploads such as a new GitHub gist from `curl`, `wget`, HTTPie, `xh` or `gh`, and hold a request whose address is built at run time. | `default.net`, `cloud-metadata`, `token-egress`, `encoded-egress`, `card-egress`, `request-rule` |
 | **Instructions planted in what the agent reads** | A command or write that uses a host, path or command a fetched page or tool result named waits for you, with the source named; also in another spelling of the same request. | `injected-input` |
 | **Code that runs later** | CI workflows, git hooks, login items, `PATH` folders, editor and package-manager configuration, virtual environments and dev containers wait for you; shell startup files and the agents' system-wide settings are denied. | `runs-later`, `git-internals`, `persistence`, `shell-rc`, `managed-settings` |
 | **Look-alike and fresh packages** | A name one typo away from a popular npm, PyPI, crates.io, RubyGems or Go package waits for you; so does a package `npx`, `uvx`, `pipx run` and the like would fetch that the project neither installs nor declares; inside `openmoat run`, npm and uv skip versions published in the last 7 days. | `package-near-miss`, `package-run-unknown` |
@@ -239,7 +239,10 @@ after a session read many files outside the project (recorded only,
   `--isolate`), with network only through OpenMoat's proxy; inside it, npm and uv skip
   package versions published in the last 7 days.
 - **An egress proxy.** `openmoat proxy` lets network reach only the hosts the policy
-  lists; `openmoat proxy install` keeps it running as a user service.
+  lists; `openmoat proxy install` keeps it running as a user service. With a CA from
+  `openmoat proxy ca init`, it also applies a `requests:` entry's method and path rules
+  inside HTTPS, and after a secret read lets a session only read from those hosts
+  ([docs/POLICY.md](docs/POLICY.md)).
 - **Tokens the agent never sees.** `openmoat secret add` gives the agent a placeholder; the
   proxy adds the real token for its one host
   ([docs/USAGE.md](docs/USAGE.md#keep-a-token-from-the-agent)).
@@ -297,7 +300,11 @@ after a session read many files outside the project (recorded only,
   to CI, git hooks, agent settings, the policy or secret files before it merges, and,
   line by line and offline, look-alike dependencies, swapped lockfile hashes, workflows a
   fork can take over, downloaded code that runs, private keys and new hosts
-  ([docs/MERGE_CHECK.md](docs/MERGE_CHECK.md)).
+  ([docs/MERGE_CHECK.md](docs/MERGE_CHECK.md)). This repository runs it on its own pull
+  requests ([.github/workflows/openmoat.yml](.github/workflows/openmoat.yml)).
+- **Request rules for a team.** The `exfil-endpoints` pack (signed by whoever shares it) and repository policies
+  add `requests:` deny rules for allowed hosts; they apply in the hook, and in the proxy
+  only for hosts your own policy has it hold ([docs/INSTALL.md](docs/INSTALL.md)).
 
 ### Everyday commands
 
@@ -432,7 +439,7 @@ The two attacks not stopped, `rm -rf .` and an MCP tool deleting a repository, a
 
 ## Status
 
-**Usable daily.** The latest release is `0.22.1`. The policy format and the commands can
+**Usable daily.** The latest release is `0.23.0`. The policy format and the commands can
 still change before 1.0; every such change has a CHANGELOG line. What comes next:
 [docs/ROADMAP.md](docs/ROADMAP.md).
 
