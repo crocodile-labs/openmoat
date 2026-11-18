@@ -301,7 +301,9 @@ after a session read many files outside the project (recorded only,
   line by line and offline, look-alike dependencies, swapped lockfile hashes, workflows a
   fork can take over, downloaded code that runs, private keys and new hosts
   ([docs/MERGE_CHECK.md](docs/MERGE_CHECK.md)). This repository runs it on its own pull
-  requests ([.github/workflows/openmoat.yml](.github/workflows/openmoat.yml)).
+  requests ([.github/workflows/openmoat.yml](.github/workflows/openmoat.yml)). The action is
+  on GitHub Marketplace as
+  [OpenMoat merge check](https://github.com/marketplace/actions/openmoat-merge-check).
 - **Request rules for a team.** The `exfil-endpoints` pack (signed by whoever shares it) and repository policies
   add `requests:` deny rules for allowed hosts; they apply in the hook, and in the proxy
   only for hosts your own policy has it hold ([docs/INSTALL.md](docs/INSTALL.md)).
