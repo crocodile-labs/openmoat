@@ -141,7 +141,8 @@ Each agent's gaps and the reasons are in
   unless a `requests:` entry it holds names the host and a proxy CA lets it read the
   request (POLICY.md §2.3). The hook reads request rules in the words of `curl`, `wget`,
   HTTPie, `xh`, `gh api` and `gh gist` (and a URL written in inline interpreter code),
-  never in a script's own requests, and no rule reads a request's body. Only GitHub's
+  never in a script's own requests, nor in a raw connection a program opens itself
+  (`openssl s_client`, `nc`), and no rule reads a request's body. Only GitHub's
   gist endpoints are listed by default, but an issue, a comment or a pull request on any
   public repository, sent with the same token, is as public a channel, and the rules do
   not cover it. On macOS, Go programs (`gh`) read the system keychain rather than
