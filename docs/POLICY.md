@@ -466,9 +466,16 @@ requests_untrusted: refuse        # optional, your own policy only: or `relay` (
   (`sudo`, `sh -c`, …); a fetch tool's URL is a `GET`. A request the rules refuse is
   denied (`request-rule`). One the hook cannot read in full, where a rule could refuse it,
   needs review (`request-rule`): a URL, host or method made at run time (`curl -d @f
-  "$URL"`), a curl URL glob, options from a file (`curl -K`, `wget -i`, `wget -e`),
-  `curl --next`, and an HTTPie request with no method or data, which may send standard
-  input as a `POST` body. Other `gh` commands (`gh pr create`, `gh issue list`) choose
+  "$URL"`), a curl URL glob, options from a file (`curl -K`, `wget -i`, `wget -e`,
+  `wget --config`), `curl --next` and `--request-target`, a request curl may send to
+  another host than its URL (`--connect-to`, `--resolve`, a `Host:` header), a variable
+  that moves the client's configuration file or gh's host (`HOME`, `CURL_HOME`,
+  `XDG_CONFIG_HOME`, `WGETRC`, `GH_HOST`), a `gh alias set` or `gh alias import` that
+  runs `gh api` or `gh gist`, inline interpreter code (`python3 -c`, `node -e`, …) that
+  writes the host's URL with a word that marks a write (`post`, `data=`, `method`), and
+  an HTTPie, `xh` or `curlie` request with no method or data and no `--ignore-stdin`,
+  which may send standard input as a `POST` body. `gh api --hostname` is read as gh
+  reads it (`GITHUB.COM` and names under github.com are api.github.com). Other `gh` commands (`gh pr create`, `gh issue list`) choose
   their own requests, which the command does not show, and are not read; nor is a script
   or a program that builds its own request.
 - **At the proxy**, an entry without `hook_only` is held inside HTTPS: the proxy terminates
@@ -497,11 +504,15 @@ requests_untrusted: refuse        # optional, your own policy only: or `relay` (
   (§5.2).
 - **Repository policies and packs** may add entries with `deny` lists only, trusted or
   not (§10, §11); an `allow` list there is a parse error, and `requests_untrusted` is your
-  own policy's alone.
+  own policy's alone. Their entries are held by the hook alone (`hook_only`) unless your
+  own policy has the proxy hold the same host, so a repository cannot make the proxy
+  terminate, and without a CA refuse, a host your git and package managers use.
 - **The default policy** ships one hook-only entry, `exfil-gists`, for GitHub's gist
   endpoints, and a commented recipe for one the proxy holds. The signed-pack source
-  `crates/openmoat-core/policies/packs/exfil-endpoints.yaml` has the proxy hold the same
-  denies (§11).
+  `crates/openmoat-core/policies/packs/exfil-endpoints.yaml` lists the same denies
+  (§11), held by the proxy only where your own policy has it hold api.github.com.
+- **After a secret read**, a tainted session's reads through a terminated tunnel are
+  also limited to a target of at most 2048 bytes, so a long query cannot carry it.
 - `openmoat policy lint` warns about an entry no `net` or `fetch` allow rule reaches, and
   says what the proxy needs for an entry without `hook_only`.
 - **What they do not do**: read bodies (an allowed write endpoint, such as an issue
@@ -2210,8 +2221,8 @@ openmoat policy remove team
   deny rules still win. Deny and allow rules also reach the host sandboxes at the next
   `openmoat sandbox sync`; review rules are hook only. Its `requests:` entries (deny lists
   only, §2.3) join yours. `crates/openmoat-core/policies/packs/exfil-endpoints.yaml` is
-  such a pack: it has the proxy hold the default policy's hook-only gist rules, so it
-  needs a proxy CA; whoever distributes it signs it.
+  such a pack: it lists the default policy's gist rules, which the proxy holds too where
+  your own policy has it hold api.github.com (§2.3); whoever distributes it signs it.
 - The allowed signers, `packs.json` and each installed pack are pinned by the lock
   (§8). A pack changed after install is drift, and every call is denied with
   `kernel-integrity`. Only these three commands add those pins; another re-pin keeps

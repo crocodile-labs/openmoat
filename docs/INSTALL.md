@@ -610,10 +610,15 @@ are three levels, and a team picks how far to go:
    `relay` passes them unread). Codex's sandbox sessions cannot be given the CA, so
    under `openmoat proxy` they are refused for such hosts; inside `openmoat run` they
    are held like any other.
-3. **The pack, to hold the default rules at the proxy.** The `exfil-endpoints` pack
+3. **The pack, to share the rules.** The `exfil-endpoints` pack
    (`crates/openmoat-core/policies/packs/exfil-endpoints.yaml` in the source) lists the
-   same denies without `hook_only`. Whoever maintains the team's rules signs it, and each
-   person installs it after the CA:
+   same denies. A pack's (and a repository's) entries are held by the hook alone unless
+   your own policy has the proxy hold the host: to opt in for `api.github.com`, set
+   `hook_only: false` on the default policy's `exfil-gists` entry, or add your own entry
+   for it, and make the CA. The opt-in is off by default because on macOS Go programs
+   (`gh`) do not read `SSL_CERT_FILE`, so under `openmoat proxy` they do not trust the
+   CA and fail against a proxy-held host. Whoever maintains the team's rules signs the
+   pack, and each person installs it:
 
    ```bash
    ssh-keygen -Y sign -f ~/.ssh/id_ed25519 -n openmoat-pack exfil-endpoints.yaml   # the maintainer
@@ -622,7 +627,8 @@ are three levels, and a team picks how far to go:
    ```
 
 `openmoat doctor` and `openmoat status` say, where the host sandboxes use `openmoat
-proxy`, when a CA exists but the pack is not installed, and when a host a proxy-held
+proxy`, when a CA exists and your policy has the proxy hold a host but the pack is not
+installed, and when a host a proxy-held
 entry names is not covered by the CA (run `openmoat proxy ca init` again). The rules
 narrow what an allowed host receives; they do not read request bodies, so an endpoint
 they allow (an issue comment) still carries what is put in it (THREAT_MODEL T12).

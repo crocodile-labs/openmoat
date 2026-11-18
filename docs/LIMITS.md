@@ -140,9 +140,14 @@ Each agent's gaps and the reasons are in
   from an allowed command: the proxy checks the host, not what is sent inside HTTPS,
   unless a `requests:` entry it holds names the host and a proxy CA lets it read the
   request (POLICY.md §2.3). The hook reads request rules in the words of `curl`, `wget`,
-  HTTPie, `xh`, `gh api` and `gh gist` only, never in a script's own requests, and no
-  rule reads a request's body, so an endpoint the rules allow (an issue comment) still
-  carries what is put in it.
+  HTTPie, `xh`, `gh api` and `gh gist` (and a URL written in inline interpreter code),
+  never in a script's own requests, and no rule reads a request's body. Only GitHub's
+  gist endpoints are listed by default, but an issue, a comment or a pull request on any
+  public repository, sent with the same token, is as public a channel, and the rules do
+  not cover it. On macOS, Go programs (`gh`) read the system keychain rather than
+  `SSL_CERT_FILE`, so under the standalone `openmoat proxy` they do not trust the proxy
+  CA, and their requests to a host the proxy holds fail closed; the default and the
+  `exfil-endpoints` pack keep GitHub's rules in the hook for that reason.
 - **A program that runs as you outside any sandbox** can change the policy and
   recompute the lock. Only the OS sandboxes stop that, so hook-only agents do not have
   this protection. The same goes for the audit log: such a program reads the audit key

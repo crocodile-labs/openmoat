@@ -197,6 +197,20 @@ command's words name the method and the URL. So the hook decides with the same r
   `requests_untrusted: refuse`. THREAT_MODEL §5 says so.
 - A new rule id (`request-rule`, "Settled when built") and a new credential version; the
   proxy keeps accepting `v1` credentials (no termination for them) for one release.
+- On macOS, Go clients (`gh`) take their roots from the system keychain, not
+  `SSL_CERT_FILE`, so a Claude Code session under the standalone proxy does not trust the
+  CA there and `gh` fails closed against a proxy-held host. The default policy and the
+  `exfil-endpoints` pack therefore keep api.github.com's rules in the hook, which reads
+  what `gh` and `curl` send; a repository's or a pack's entry reaches the proxy only for a
+  host the person's own policy has the proxy hold. A person who opts in for
+  api.github.com accepts that `gh` under the standalone proxy on macOS needs
+  `openmoat run`.
+- A security review after the first build found ways around the hook's reading, each now
+  closed with an attack fixture: `gh api --hostname` spellings gh normalises, `curl -K`
+  and `--request-target`, a variable that moves curl's or wget's configuration file,
+  wget's option clusters and `--config`, a percent-encoded capital in the path,
+  `--connect-to`/`--resolve`/`Host:`, `gh alias`, inline interpreter code, and a planted
+  session folder; a tainted session's reads are capped at a 2048-byte target.
 - Follow-ups, not built with this decision: a proxy latency check in CI (a `.github`
   workflow change, measured as step 0 measured it), and a differential test that sends
   `curl -X POST …/gists` through Claude Code's real sandbox and the standalone proxy (a
