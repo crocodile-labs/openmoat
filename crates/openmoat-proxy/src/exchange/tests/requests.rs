@@ -70,7 +70,8 @@ fn a_tainted_session_only_reads_from_a_host_with_request_rules() {
     let out = exchange(&s, &get("/repos/o/r", ""), OK);
     assert!(out.agent.starts_with("HTTP/1.1 200 OK"), "{}", out.agent);
     let body_get = get("/repos/o/r", "Content-Length: 2\r\n") + "{}";
-    for request in [post("/repos/o/r/issues"), body_get] {
+    let long_get = get(&format!("/repos/o/r?q={}", "a".repeat(2100)), "");
+    for request in [post("/repos/o/r/issues"), body_get, long_get] {
         let out = exchange(&s, &request, OK);
         assert!(out.agent.starts_with("HTTP/1.1 403 "), "{}", out.agent);
         assert_eq!(out.rules(), [openmoat_core::rule_id::SESSION_TAINT]);

@@ -94,6 +94,10 @@ pub(crate) struct Tunnel<'a> {
 /// The methods a tainted session may still send to a `requests:` host.
 const READS: &[&str] = &["GET", "HEAD", "OPTIONS"];
 
+/// The longest request target (path and query) a read of a tainted session
+/// may send: a longer one could carry what the session read.
+const MAX_READ_TARGET: usize = 2048;
+
 /// Why the tunnel ends early. The decision, if any, is still to be recorded.
 enum Stop {
     /// Recorded already, or nothing to record (the agent left).
@@ -203,8 +207,15 @@ impl Tunnel<'_> {
                 inner.framing,
                 crate::body::Framing::None | crate::body::Framing::Length(0)
             );
+            // A read's target can carry data too: a long one is no read.
+            let target_len = inner
+                .head
+                .split(|b| *b == b' ')
+                .nth(1)
+                .map_or(usize::MAX, <[u8]>::len);
             // Methods are case-sensitive (RFC 9110 §9.1): `get` is no read.
-            if !bodyless || !READS.contains(&inner.method.as_str()) {
+            if !bodyless || !READS.contains(&inner.method.as_str()) || target_len > MAX_READ_TARGET
+            {
                 return Err(Stop::Refuse(
                     403,
                     Decision::single(
@@ -212,8 +223,8 @@ impl Tunnel<'_> {
                         SESSION_TAINT,
                         format!(
                             "{} request to {}: the session read secret material, so only GET, \
-                             HEAD and OPTIONS requests without a body reach the host until it \
-                             ends (ADR-062)",
+                             HEAD and OPTIONS requests without a body, and with a target of at \
+                             most {MAX_READ_TARGET} bytes, reach the host until it ends (ADR-062)",
                             inner.method, self.host
                         ),
                     ),

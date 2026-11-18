@@ -33,6 +33,9 @@ fn a_denied_route_is_refused_in_every_spelling_and_names_no_path() {
         "POST /gists/abc123/comments",
         "POST /gists/abc123/forks",
         "POST /%67ists",
+        // folded after decoding: `%47` is `G`
+        "POST /%47ists",
+        "POST /%47ISTS/",
     ] {
         let why = refused(&r, line, "");
         assert!(why.contains("request rule"), "{line}: {why}");
