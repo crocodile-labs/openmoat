@@ -104,7 +104,13 @@ pub(super) fn sandboxes(
             report.warn(&line);
         }
         let lines =
-            crate::commands::proxy::session_lines(&with_sandbox, plan.serve_without_credential);
+            crate::commands::proxy::session_lines(&with_sandbox, plan.serve_without_credential)
+                .into_iter()
+                .chain(
+                    crate::proxy_ca::status_lines(home, policy)
+                        .into_iter()
+                        .map(|(ok, text)| (ok, "openmoat proxy", text)),
+                );
         for (ok, label, text) in lines {
             let line = format!("{label:<16} {text}");
             if ok {

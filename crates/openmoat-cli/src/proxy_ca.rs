@@ -78,6 +78,62 @@ pub fn pinned_cert(home: &Home) -> Option<String> {
     std::fs::read_to_string(cert_path(home)).ok()
 }
 
+/// The name of the pack that has the proxy hold the default policy's
+/// hook-only request rules (ADR-062, `policies/packs/exfil-endpoints.yaml`).
+pub const EXFIL_PACK: &str = "exfil-endpoints";
+
+/// What `openmoat doctor` and `openmoat status` say about request rules when
+/// the host sandboxes send traffic to `openmoat proxy` (`(ok, text)`, a
+/// `false` one a warning): a `requests:` host the pinned CA does not cover,
+/// with `openmoat proxy ca init` as the fix, and a CA without the
+/// `exfil-endpoints` pack, with the command that installs it.
+pub fn status_lines(home: &Home, policy: &Policy) -> Vec<(bool, String)> {
+    let Some(cert) = pinned_cert(home) else {
+        return Vec::new();
+    };
+    let mut lines = Vec::new();
+    let hosts = request_hosts(policy);
+    if !hosts.is_empty() {
+        let tls = crate::key_file::read(&key_path(home))
+            .ok()
+            .and_then(|key| Tls::new(&cert, &key, &Roots::System, &[]).ok());
+        let uncovered: Vec<&str> = hosts
+            .iter()
+            .filter(|h| !tls.as_ref().is_some_and(|t| t.covers(h)))
+            .map(String::as_str)
+            .collect();
+        if uncovered.is_empty() {
+            lines.push((
+                true,
+                format!("request rules: the proxy CA covers {}", hosts.join(", ")),
+            ));
+        } else {
+            lines.push((
+                false,
+                format!(
+                    "request rules: the proxy CA does not cover {}, so the proxy refuses their \
+                     connections (`requests_untrusted`); run `openmoat proxy ca init` in a \
+                     terminal",
+                    uncovered.join(", ")
+                ),
+            ));
+        }
+    }
+    let installed = crate::packs::Packs::load(&home.packs_path())
+        .is_ok_and(|packs| packs.packs.contains_key(EXFIL_PACK));
+    if !installed {
+        lines.push((
+            false,
+            format!(
+                "request rules: a proxy CA exists, but the `{EXFIL_PACK}` pack is not installed, \
+                 so the proxy holds none of the default policy's hook-only rules; install it \
+                 signed by whoever distributes it: `openmoat policy install {EXFIL_PACK}.yaml`"
+            ),
+        ));
+    }
+    lines
+}
+
 /// The standalone proxy's termination for `policy`'s `requests:` hosts
 /// (ADR-062): the CA, when one is pinned, intact and covers each of them, and
 /// what to say at start-up. Without one, the proxy cannot terminate them and

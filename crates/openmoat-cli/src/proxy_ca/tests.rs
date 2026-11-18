@@ -182,3 +182,44 @@ fn trust_files_hold_the_ca_and_go_with_the_run() {
     drop(trust);
     assert!(!dir.exists(), "removed when the run ends");
 }
+
+/// `doctor` and `status` say when a proxy-held `requests:` host is not
+/// covered by the CA, and when a CA exists without the `exfil-endpoints`
+/// pack; nothing without a CA.
+#[test]
+fn status_names_an_uncovered_request_host_and_a_missing_pack() {
+    let yaml = "version: 1\nrequests:\n  - id: r\n    host: r.test\n    deny: ['POST /x']\n";
+    let policy = Policy::parse(yaml).unwrap();
+    let (_dir, home) = home_with_ca(&["r.test"], false);
+    assert_eq!(status_lines(&home, &policy), Vec::new());
+
+    let (_dir, home) = home_with_ca(&["other.test"], true);
+    let lines = status_lines(&home, &policy);
+    let uncovered = lines.iter().find(|(ok, _)| !ok).unwrap();
+    assert!(
+        uncovered.1.contains("does not cover r.test") && uncovered.1.contains("proxy ca init"),
+        "{lines:?}"
+    );
+    assert!(
+        lines
+            .iter()
+            .any(|(ok, t)| !ok && t.contains("openmoat policy install exfil-endpoints.yaml")),
+        "{lines:?}"
+    );
+
+    let (_dir, home) = home_with_ca(&["r.test"], true);
+    let mut packs = crate::packs::Packs::default();
+    packs.packs.insert(
+        EXFIL_PACK.to_owned(),
+        crate::packs::Installed {
+            sha256: String::new(),
+            signer: "team".to_owned(),
+            at_ms: 0,
+        },
+    );
+    packs.save(&home.packs_path()).unwrap();
+    assert_eq!(
+        status_lines(&home, &policy),
+        [(true, "request rules: the proxy CA covers r.test".to_owned())]
+    );
+}

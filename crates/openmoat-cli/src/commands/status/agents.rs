@@ -154,6 +154,13 @@ pub(super) fn sandboxes(shown: &mut Shown, home: &Home, plan: &Plan, binary: &Pa
         for (ok, label, text) in lines {
             proxy_row(shown, ok, label, text);
         }
+        // Request rules the proxy may not hold (ADR-062): warnings too.
+        if let Ok(policy) = home.load_policy() {
+            for (ok, text) in crate::proxy_ca::status_lines(home, &policy) {
+                let text = text.strip_prefix("request rules: ").unwrap_or(&text);
+                proxy_row(shown, ok, "Request rules", text.to_owned());
+            }
+        }
     }
     for (ok, text) in crate::commands::proxy::service_lines(home) {
         // `service          <state>` and `service file     <finding>`, as

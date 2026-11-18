@@ -144,7 +144,12 @@ fn the_ca_cannot_vouch_for_a_host_outside_its_constraints() {
         .unwrap();
         let refused = handshake(c, tls.accept(outside).unwrap()).unwrap_err();
         assert!(refused.contains("client:"), "{outside}: {refused}");
+        // So the proxy does not terminate it (ADR-062): it says so first.
+        assert!(!tls.covers(outside), "{outside}");
+        assert!(!tls.covers(outside), "remembered: {outside}");
     }
+    let tls = Tls::new(&ca.cert_pem, &ca.key_pem, &upstream_roots(), &[]).unwrap();
+    assert!(tls.covers(HOST) && tls.covers("api.owner.test"));
     // A name under a covered host is in the subtree (RFC 5280 §4.2.1.10).
     assert!(
         Tls::new(

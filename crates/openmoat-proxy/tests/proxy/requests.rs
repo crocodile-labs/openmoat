@@ -39,6 +39,16 @@ struct Ruled {
 /// A proxy whose request rules refuse `POST /gists` on owner.test, serving
 /// one issued session (trusted or not), tainted by a secret read when `read_secret`.
 fn ruled(trusted: bool, untrusted: RequestsUntrusted, read_secret: bool) -> Ruled {
+    ruled_on("owner.test", trusted, untrusted, read_secret)
+}
+
+/// [`ruled`], with the rules on `rule_host`; the CA covers owner.test only.
+fn ruled_on(
+    rule_host: &str,
+    trusted: bool,
+    untrusted: RequestsUntrusted,
+    read_secret: bool,
+) -> Ruled {
     let (upstream_ca, config) = upstream_tls();
     let (addr, received) = https_upstream(config);
     let ca = new_ca(&["owner.test".to_owned()]).unwrap();
@@ -53,7 +63,7 @@ fn ruled(trusted: bool, untrusted: RequestsUntrusted, read_secret: bool) -> Rule
     ));
     let entry = RequestEntry {
         id: "gists".to_owned(),
-        host: "owner.test".to_owned(),
+        host: rule_host.to_owned(),
         allow: Vec::new(),
         deny: vec!["POST /gists".to_owned()],
         hook_only: false,
@@ -110,10 +120,15 @@ impl Ruled {
 
     /// The answer to the CONNECT alone.
     fn connect(&self) -> String {
+        self.connect_to("owner.test")
+    }
+
+    /// The answer to a CONNECT to `host` alone.
+    fn connect_to(&self, host: &str) -> String {
         let mut s = self.h.connect();
         write!(
             s,
-            "CONNECT owner.test:{} HTTP/1.1\r\nHost: owner.test\r\n{}\r\n",
+            "CONNECT {host}:{} HTTP/1.1\r\nHost: {host}\r\n{}\r\n",
             self.h.port(),
             self.auth
         )
@@ -171,6 +186,29 @@ fn a_tainted_session_reads_from_a_requests_host_and_writes_nothing() {
     assert!(reply.starts_with("HTTP/1.1 403 "), "{reply}");
     assert!(reply.contains(SESSION_TAINT), "{reply}");
     assert!(t.h.nothing_forwarded());
+}
+
+/// A `requests:` host the CA does not cover (a repository's entry added
+/// after `ca init`) is decided by `requests_untrusted`, even for a session
+/// that trusts the CA: refused by default, never a failed handshake.
+#[test]
+fn a_host_the_ca_does_not_cover_is_refused_by_default_and_relayed_when_asked() {
+    let t = ruled_on("allowed.test", true, RequestsUntrusted::Refuse, false);
+    let answer = t.connect_to("allowed.test");
+    assert!(answer.starts_with("HTTP/1.1 403"), "{answer}");
+    let rows = t.h.rows();
+    let refused = rows.iter().find(|r| r.rules == [REQUEST_RULE]);
+    assert!(
+        refused.is_some_and(|r| r.reasons.iter().any(|w| w.contains("covers it"))),
+        "{rows:?}"
+    );
+    assert!(rows.iter().all(|r| !r.terminated), "{rows:?}");
+    assert!(t.h.nothing_forwarded());
+
+    let t = ruled_on("allowed.test", true, RequestsUntrusted::Relay, false);
+    let answer = t.connect_to("allowed.test");
+    assert!(answer.starts_with("HTTP/1.1 200"), "{answer}");
+    assert!(t.h.rows().iter().all(|r| !r.terminated));
 }
 
 #[test]

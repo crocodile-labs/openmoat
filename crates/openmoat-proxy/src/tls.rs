@@ -130,6 +130,8 @@ pub struct Tls {
     upstream: Arc<ClientConfig>,
     /// Per host, the server configuration holding today's leaf.
     leaves: Mutex<HashMap<String, (Day, Arc<ServerConfig>)>>,
+    /// Per host, whether the CA may sign for it ([`Tls::covers`]).
+    covered: Mutex<HashMap<String, bool>>,
 }
 
 impl std::fmt::Debug for Tls {
@@ -156,11 +158,27 @@ impl Tls {
             provider,
             ca,
             leaves: Mutex::new(HashMap::new()),
+            covered: Mutex::new(HashMap::new()),
         };
         for host in hosts {
             tls.check(host)?;
         }
         Ok(tls)
+    }
+
+    /// Whether the CA signs leaves that verify for `host`: its name
+    /// constraints cover it. A host a repository's `requests:` entry adds
+    /// after the CA was made is not covered, and is not terminated (ADR-062).
+    /// Checked once per host and remembered.
+    #[must_use]
+    pub fn covers(&self, host: &str) -> bool {
+        let mut covered = self
+            .covered
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *covered
+            .entry(host.to_ascii_lowercase())
+            .or_insert_with(|| self.check(host).is_ok())
     }
 
     /// Whether a leaf for `host` verifies against the CA alone today, the

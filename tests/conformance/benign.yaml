@@ -2845,6 +2845,9 @@
 - id: benign-gh-issue-list-is-not-a-request-rule
   action: { shell: "gh issue list" }
   expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-gh-pr-list-is-not-a-request-rule
+  action: { shell: "gh pr list" }
+  expect: { verdict: allow, rules: [dev-readonly] }
 - id: benign-curl-get-url-in-a-variable
   action: { shell: "curl -s \"$URL\"" }
   expect: { verdict: defer, rules: [default] }

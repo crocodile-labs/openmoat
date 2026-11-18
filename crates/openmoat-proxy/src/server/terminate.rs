@@ -49,7 +49,10 @@ impl Proxy<'_> {
             Trust::Requests => self.requests.names(host),
             _ => false,
         };
-        self.tls.filter(|_| turn.session.is_some() && listed)
+        // A host the CA does not cover (a repository's `requests:` entry added
+        // after `ca init`) is not terminated: `requests_untrusted` decides it.
+        self.tls
+            .filter(|tls| turn.session.is_some() && listed && tls.covers(host))
     }
 
     /// The session's taint and, for a CONNECT to a `requests:` host, whether
@@ -66,8 +69,9 @@ impl Proxy<'_> {
         let ruled = matches!(request.target, Target::Connect { .. }) && self.requests.names(host);
         let terminated = ruled && self.terminating(host, turn).is_some();
         if ruled && !terminated {
-            let why = if self.tls.is_none() {
-                "the proxy has no certificate authority that covers it"
+            let why = if !self.tls.is_some_and(|tls| tls.covers(host)) {
+                "the proxy has no certificate authority that covers it (`openmoat proxy ca init` \
+                 makes one)"
             } else if turn.session.is_none() {
                 "the request carries no session credential"
             } else {
