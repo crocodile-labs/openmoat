@@ -1,9 +1,9 @@
 name: openmoat
 
 # OpenMoat's own merge check (docs/MERGE_CHECK.md) on this repository's pull requests,
-# run from the latest release. Report-only for now: every finding is an annotation on
-# the pull request (`deny` as an error, `review` as a warning) and the step never
-# fails, since this repository changes policy, hook and CI files as ordinary work.
+# run from a release, as any repository would run it. A `deny` finding fails the check
+# and blocks the merge; a `review` finding is a warning on the pull request for the
+# reviewer, since this repository changes policy, hook and CI files as ordinary work.
 
 on:
   pull_request:
@@ -24,10 +24,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: crocodile-labs/openmoat@ea6aeec0b7b64820fe6dc17417a9ef3f7b506bac # v0.22.1
-        # v0.22.1's action ends the step on any finding, whatever `fail-on` says (fixed
-        # in action.yml after it); remove this once the pin moves past that release
-        continue-on-error: true
+      - uses: crocodile-labs/openmoat@1dd88d81246a60ffa318f619375628128d5b7ece # v0.23.0
         with:
-          version: 0.22.1
-          fail-on: never
+          version: 0.23.0
+          fail-on: deny
