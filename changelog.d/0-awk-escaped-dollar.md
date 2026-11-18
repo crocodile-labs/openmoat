@@ -1,2 +1,0 @@
-### Fixed
-- A `\$` the shell passes as a plain `$` (unquoted, in double quotes or in an unquoted here-document) no longer counts as a variable the shell expands, so `awk "{print \$2}" f.txt` is decided as `awk '{print $2}' f.txt` is, instead of being held for review; a `$`, `$(…)` or backticks the shell still expands in the program keep it held, and an inner shell (`sh -c "… \$X"`) still reads the variable ([#0](https://github.com/crocodile-labs/openmoat/pull/0)).
