@@ -1,0 +1,20 @@
+# Not for merging: a test that OpenMoat's merge check blocks a workflow a fork can take
+# over (`pull_request_target` with a checkout of the pull request's own code). GitHub runs
+# `pull_request_target` workflows from the base branch, so this file never runs here.
+name: do-not-merge
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+
+jobs:
+  takeover:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - run: echo "the pull request's code would run here with the base repository's token"
