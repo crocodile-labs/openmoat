@@ -53,7 +53,15 @@ call OpenMoat defers then runs unasked. A deny from any hook wins over an allow.
   tool (a server's name may hold `_`), so the policy's per-server MCP rules (such as
   `safe-mcp`) do not apply: each MCP call is decided by what its arguments name, and
   one naming an unlisted host is denied. MoatBench's MCP scenarios are not run for
-  Crush.
+  Crush. The payload carries nothing else that names the server: `internal/hooks/input.go`
+  (`Payload`) has only `tool_name` and `tool_input` for the call, and the hook's
+  `CRUSH_TOOL_*` variables repeat them; `mcp-tools.go` builds the name as
+  `fmt.Sprintf("mcp_%s_%s", server, tool)`, both parts as written (read 2026-11-18).
+  Splitting it by the configured server names, as OpenCode's plugin can, is not done:
+  a server a `crushrc` script adds is one OpenMoat does not read, and its tools
+  (`mcp_docs_x_y` of a server `docs_x`) would be taken for another server's
+  (`docs`'s tool `x_y`), whose rules may allow them. Pins still apply by prefix
+  (`mcp_<server>_`), so a changed or unaccepted server's tools are held.
 - `agent` and `agentic_fetch`: subagents, whose own tool calls fire no hook. Starting
   one is an `UnknownTool` that needs review, a deny in Crush.
 - Ungoverned: `todos`, `question`, `job_output`, `job_kill`, `crush_logs`, `crush_info`,
