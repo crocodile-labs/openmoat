@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 
 use crate::common::{DENY, OK, Sandbox, json as json_of, stderr, stdout, text};
-use crate::hosts::dir_of;
+use crate::hosts::{dir_of, hook_file};
 use crate::taint::call;
 use openmoat_hosts::Host;
 
@@ -499,10 +499,9 @@ fn a_session_start_gives_the_session_the_ca_only_when_a_ca_covers_its_request_ru
 #[test]
 fn init_installs_the_entry_and_doctor_and_status_name_each_host() {
     let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode), &dir_of(Host::Codex)]);
-    let settings: Value = serde_json::from_str(
-        &std::fs::read_to_string(sb.home.join(".claude/settings.json")).unwrap(),
-    )
-    .unwrap();
+    let settings: Value =
+        serde_json::from_str(&std::fs::read_to_string(hook_file(&sb, Host::ClaudeCode)).unwrap())
+            .unwrap();
     let entry = &settings["hooks"]["SessionStart"][0];
     assert_eq!(
         entry["matcher"], "startup|resume|clear|compact",

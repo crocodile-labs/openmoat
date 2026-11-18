@@ -4,13 +4,13 @@
 
 use serde_json::Value;
 
-use crate::common::{Sandbox, fixture, hook_output as decision, stderr, stdout};
-use crate::hosts::dir_of;
+use crate::common::{Sandbox, hook_output as decision, host_fixture, stderr, stdout};
+use crate::hosts::{dir_of, hook_file};
 use openmoat_hosts::Host;
 
 /// The parsed `~/.claude/settings.json`.
 fn settings(sb: &Sandbox) -> Value {
-    let text = std::fs::read_to_string(sb.home.join(".claude/settings.json")).unwrap();
+    let text = std::fs::read_to_string(hook_file(sb, Host::ClaudeCode)).unwrap();
     serde_json::from_str(&text).unwrap()
 }
 
@@ -20,7 +20,7 @@ fn settings(sb: &Sandbox) -> Value {
 #[test]
 fn the_hooks_state_directory_wins_and_another_moat_home_is_refused() {
     let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
-    let payload = fixture("claude-code/read.json");
+    let payload = host_fixture(Host::ClaudeCode, "read.json");
     let homed = sb.guard_homed(Host::ClaudeCode.id(), &payload);
     assert_eq!(homed.status.code(), Some(0), "{}", stderr(&homed));
 
@@ -80,7 +80,7 @@ fn the_hooks_state_directory_wins_and_another_moat_home_is_refused() {
 #[test]
 fn a_hook_without_the_state_directory_is_flagged_until_init() {
     let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
-    let path = sb.home.join(".claude/settings.json");
+    let path = hook_file(&sb, Host::ClaudeCode);
     let mut root = settings(&sb);
     for entries in root["hooks"].as_object_mut().unwrap().values_mut() {
         for entry in entries.as_array_mut().unwrap() {
@@ -96,7 +96,7 @@ fn a_hook_without_the_state_directory_is_flagged_until_init() {
         "{}",
         stdout(&accepted)
     );
-    let decided = sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/read.json"));
+    let decided = sb.guard_fixture(Host::ClaudeCode, "read.json");
     assert_eq!(decided.status.code(), Some(0), "{}", stderr(&decided));
     for command in ["status", "doctor"] {
         let out = sb.moat(&[command]);

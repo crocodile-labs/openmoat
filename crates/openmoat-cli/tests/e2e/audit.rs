@@ -1,15 +1,17 @@
 //! The audit hash chain end to end: concurrent `guard` processes, `show` and
 //! `doctor` after an edit.
 
-use crate::common::{OK, Sandbox, USAGE, bash_payload, json, stdout, text};
+use openmoat_hosts::Host;
 
-/// The host every test here records through, and its config directory.
-const HOST: &str = "claude-code";
-const HOST_DIR: &str = ".claude";
+use crate::common::{OK, Sandbox, USAGE, bash_payload, json, stdout, text};
+use crate::hosts::dir_of;
+
+/// The host every test here records through.
+const HOST: Host = Host::ClaudeCode;
 
 /// A sandbox with OpenMoat installed for [`HOST`].
 fn installed() -> Sandbox {
-    Sandbox::installed(&[HOST_DIR])
+    Sandbox::installed(&[&dir_of(HOST)])
 }
 
 /// Run `count` `guard` calls at once, as parallel tool calls do.
@@ -19,7 +21,7 @@ fn guard_concurrently(sb: &Sandbox, count: usize) {
         let calls: Vec<_> = (0..count)
             .map(|i| {
                 let payload = bash_payload("s1", &project, &format!("echo {i}"));
-                scope.spawn(move || sb.guard(HOST, &payload))
+                scope.spawn(move || sb.guard(HOST.id(), &payload))
             })
             .collect();
         for call in calls {
@@ -164,7 +166,7 @@ fn a_deleted_audit_key_denies_every_call_and_doctor_says_why() {
     let key = sb.home.join(".moat/audit.key");
     std::fs::remove_file(&key).unwrap();
     let payload = bash_payload("s1", &sb.project(), "echo after");
-    let out = sb.guard(HOST, &payload);
+    let out = sb.guard(HOST.id(), &payload);
     assert_eq!(
         out.status.code(),
         Some(crate::common::DENY),

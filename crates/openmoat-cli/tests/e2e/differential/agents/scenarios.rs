@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 
 use super::{Agent, Home, call, decided_verdict, has_rule, reasons, session};
 use crate::common::{Sandbox, text};
-use crate::hosts::dir_of;
+use crate::hosts::{dir_of, mcp_user_file};
 use crate::push::{commit, fake_token, repo};
 use crate::taint::decide;
 use openmoat_hosts::Host;
@@ -161,7 +161,7 @@ fn real_claude_changed_mcp_server_is_denied() {
     );
 
     // The same server with one more argument: its calls are denied.
-    let path = home.sb.home.join(".claude.json");
+    let path = mcp_user_file(&home.sb, Host::ClaudeCode);
     let mut config: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     config["mcpServers"]["probe"]["args"]
         .as_array_mut()

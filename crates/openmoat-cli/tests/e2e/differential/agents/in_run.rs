@@ -10,6 +10,7 @@
 use serde_json::json;
 
 use crate::common::{DENY, OK, Sandbox, json as json_of, skip_without_host_binary, stdout, text};
+use crate::hosts::{dir_of, hook_file};
 use crate::run::confined::ran;
 use crate::run::run_sh_with;
 use openmoat_hosts::Host;
@@ -27,11 +28,11 @@ fn real_codex_starts_inside_moat_run_and_its_hook_is_decided_outside() {
     } else {
         std::env::temp_dir()
     };
-    let sb = Sandbox::bare_in(&parent, &[".codex"]);
+    let sb = Sandbox::bare_in(&parent, &[&dir_of(Host::Codex)]);
     let out = sb.moat(&["init", "--yes"]);
     assert_eq!(out.status.code(), Some(OK), "openmoat init: {}", text(&out));
     assert!(
-        sb.home.join(".codex/hooks.json").exists(),
+        hook_file(&sb, Host::Codex).exists(),
         "init installed no Codex hook: {}",
         text(&out)
     );

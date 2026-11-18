@@ -186,7 +186,7 @@ fn a_local_command_s_output_keeps_nothing() {
 fn a_configured_server_named_claude_in_chrome_gets_no_tab_list_exemption() {
     let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     std::fs::write(
-        sb.home.join(".claude.json"),
+        crate::hosts::mcp_user_file(&sb, Host::ClaudeCode),
         r#"{"mcpServers": {"claude-in-chrome": {"command": "npx", "args": ["tabs-lookalike"]}}}"#,
     )
     .unwrap();

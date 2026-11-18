@@ -9,7 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 
-use openmoat_hosts::{Host, HostSpec, InstallSpec, Location};
+use openmoat_hosts::{Host, HostSpec, InstallSpec, Location, McpFile};
 use serde_json::Value;
 
 use crate::common::{OK, Sandbox, output, squash, stdout, text};
@@ -53,11 +53,49 @@ pub fn dir_of(host: Host) -> String {
 /// The file `moat init` writes `host`'s hook into, under the home's default
 /// directory for it, or where the host's own rules put it (goose's plugin is
 /// outside its configuration directory).
-fn hook_file(sb: &Sandbox, host: Host) -> PathBuf {
+pub fn hook_file(sb: &Sandbox, host: Host) -> PathBuf {
     let install = install(host);
     match install.location {
         Location::Custom(locate) => locate.default_for(&sb.home).config,
         Location::OneDir => sb.home.join(dir_of(host)).join(install.config_file),
+    }
+}
+
+/// [`hook_file`] relative to the home, slash-separated, as a repository or a
+/// message names it (`<dir_name>/<config_file>`).
+pub fn hook_path(host: Host) -> String {
+    let install = install(host);
+    match install.location {
+        Location::Custom(locate) => locate
+            .default_for(Path::new(""))
+            .config
+            .to_string_lossy()
+            .replace('\\', "/"),
+        Location::OneDir => format!("{}/{}", dir_of(host), install.config_file),
+    }
+}
+
+/// The name of the file `moat init` writes `host`'s hook into, in whichever
+/// configuration directory the host uses (`config_file`).
+pub fn hook_file_name(host: Host) -> &'static str {
+    install(host).config_file
+}
+
+/// The user-level file of `host`'s MCP servers in the home's default
+/// configuration ([`McpFile`]): the first one, where the host reads several.
+pub fn mcp_user_file(sb: &Sandbox, host: Host) -> PathBuf {
+    let mcp = host
+        .spec()
+        .mcp
+        .as_ref()
+        .unwrap_or_else(|| panic!("{host} reads no MCP servers"));
+    let config_dir = || sb.home.join(dir_of(host));
+    match mcp.user_file {
+        McpFile::HookFile => hook_file(sb, host),
+        McpFile::BesideHookFile(name) => hook_file(sb, host).with_file_name(name),
+        McpFile::InConfigDir(name) => config_dir().join(name),
+        McpFile::EachInConfigDir(names) => config_dir().join(names[0]),
+        McpFile::BesideDefaultDir(name) => sb.home.join(name),
     }
 }
 
@@ -112,6 +150,20 @@ fn installed_level(spec: &HostSpec) -> Option<String> {
         Some(sandbox) => sandbox
             .unavailable_on_windows
             .map(|why| format!("hook only: {}", why.split(';').next().unwrap_or(why))),
+    }
+}
+
+/// The path helpers the shared tests use name the same files for every host.
+#[test]
+fn the_path_helpers_agree_for_every_host() {
+    let sb = Sandbox::bare(&[]);
+    for host in Host::ALL.into_iter().filter(|h| h.spec().install.is_some()) {
+        let hook = hook_file(&sb, host);
+        assert_eq!(hook, sb.home.join(hook_path(host)), "{host}");
+        assert!(hook.ends_with(hook_file_name(host)), "{host}");
+        if host.spec().mcp.is_some() {
+            assert!(mcp_user_file(&sb, host).starts_with(&sb.home), "{host}");
+        }
     }
 }
 

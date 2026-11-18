@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use std::process::Output;
 
 use crate::common::{DENY, OK, Sandbox, USAGE, output, stderr, stdout};
+use crate::hosts::{dir_of, hook_file};
+use openmoat_hosts::Host;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -360,7 +362,7 @@ fn kernel_self_covers_moved_config_directories() {
 /// nothing at that path (#313).
 #[test]
 fn init_names_a_config_dir_variable_whose_directory_is_missing() {
-    let sb = Sandbox::bare(&[".codex"]);
+    let sb = Sandbox::bare(&[&dir_of(Host::Codex)]);
     let missing = sb.home.join(".claude-not-yet");
     let out = output(
         sb.command()
@@ -376,16 +378,12 @@ fn init_names_a_config_dir_variable_whose_directory_is_missing() {
     );
     assert!(stdout(&out).contains(&expected), "{}", stdout(&out));
     assert!(!missing.exists(), "init must not create the directory");
-    assert!(
-        sb.home.join(".codex/hooks.json").is_file(),
-        "{}",
-        stdout(&out)
-    );
+    assert!(hook_file(&sb, Host::Codex).is_file(), "{}", stdout(&out));
 }
 
 #[test]
 fn demo_decides_the_examples_and_writes_nothing() {
-    let sb = Sandbox::bare(&[".claude"]);
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode)]);
     let out = sb.moat(&["demo"]);
     assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
     let text = stdout(&out);
@@ -404,7 +402,9 @@ fn demo_decides_the_examples_and_writes_nothing() {
         "the demo wrote OpenMoat state"
     );
     assert_eq!(
-        std::fs::read_dir(sb.home.join(".claude")).unwrap().count(),
+        std::fs::read_dir(sb.home.join(dir_of(Host::ClaudeCode)))
+            .unwrap()
+            .count(),
         0,
         "the demo touched the agent's settings"
     );
@@ -416,7 +416,7 @@ fn demo_decides_the_examples_and_writes_nothing() {
 #[cfg(unix)]
 #[test]
 fn demo_denies_a_key_read_under_a_home_spelled_with_a_double_slash() {
-    let sb = Sandbox::bare(&[".claude"]);
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode)]);
     let parent = sb.home.parent().unwrap().display().to_string();
     let name = sb.home.file_name().unwrap().to_string_lossy().into_owned();
     let out = sb

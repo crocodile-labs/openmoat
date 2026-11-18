@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use crate::common::{DENY, OK, Sandbox, json};
-use crate::hosts::dir_of;
+use crate::hosts::{dir_of, hook_file};
 use openmoat_hosts::Host;
 
 fn sandbox() -> Sandbox {
@@ -15,7 +15,7 @@ fn sandbox() -> Sandbox {
 }
 
 fn settings(sb: &Sandbox) -> PathBuf {
-    sb.home.join(".claude/settings.json")
+    hook_file(sb, Host::ClaudeCode)
 }
 
 /// Send a `ConfigChange` for `path` and return the exit code and response.

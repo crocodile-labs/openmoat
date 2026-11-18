@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use serde_json::json;
 
 use crate::common::{OK, Sandbox, USAGE, output, text, verdict_and_reason};
+use crate::hosts::{dir_of, hook_file, mcp_user_file};
 use openmoat_hosts::Host;
 
 /// A copy of the built binary at `path`.
@@ -31,7 +32,7 @@ fn write_payload(cwd: &Path, path: &Path) -> String {
 fn a_binary_under_another_name_is_protected_by_its_recorded_path() {
     let sb = Sandbox::bare_in(
         Path::new(env!("CARGO_TARGET_TMPDIR")),
-        &[".claude", ".codex"],
+        &[&dir_of(Host::ClaudeCode), &dir_of(Host::Codex)],
     );
     let root = sb.home.parent().unwrap().to_path_buf();
     let target = root.join("build/release/moat-dev");
@@ -57,9 +58,9 @@ fn a_binary_under_another_name_is_protected_by_its_recorded_path() {
     // the link's target, which an upgrade moves, is left to the hook. Codex
     // gets only the directory: its deny covers the file, and on Linux a file
     // entry inside a denied directory makes bubblewrap fail every command.
-    let settings = fs::read_to_string(sb.home.join(".claude/settings.json")).unwrap();
+    let settings = fs::read_to_string(hook_file(&sb, Host::ClaudeCode)).unwrap();
     let settings: serde_json::Value = serde_json::from_str(&settings).unwrap();
-    let codex = fs::read_to_string(sb.home.join(".codex/config.toml")).unwrap();
+    let codex = fs::read_to_string(mcp_user_file(&sb, Host::Codex)).unwrap();
     let link_dir = real(link.parent().unwrap()).to_string_lossy().into_owned();
     for path in [link.to_string_lossy().into_owned(), link_dir.clone()] {
         let deny = &settings["sandbox"]["filesystem"]["denyWrite"];
@@ -98,7 +99,10 @@ fn a_binary_under_another_name_is_protected_by_its_recorded_path() {
 
 #[test]
 fn init_refuses_a_binary_inside_the_project() {
-    let sb = Sandbox::bare_in(Path::new(env!("CARGO_TARGET_TMPDIR")), &[".claude"]);
+    let sb = Sandbox::bare_in(
+        Path::new(env!("CARGO_TARGET_TMPDIR")),
+        &[&dir_of(Host::ClaudeCode)],
+    );
     let project = sb.project();
     let binary = project.join("target/release/moat");
     install_copy(&binary);
@@ -111,12 +115,15 @@ fn init_refuses_a_binary_inside_the_project() {
     assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
     assert!(text(&out).contains("inside the project"), "{}", text(&out));
     assert!(!sb.home.join(".moat").exists(), "nothing written");
-    assert!(!sb.home.join(".claude/settings.json").exists());
+    assert!(!hook_file(&sb, Host::ClaudeCode).exists());
 }
 
 #[test]
 fn init_refuses_a_binary_in_a_temp_directory() {
-    let sb = Sandbox::bare_in(Path::new(env!("CARGO_TARGET_TMPDIR")), &[".claude"]);
+    let sb = Sandbox::bare_in(
+        Path::new(env!("CARGO_TARGET_TMPDIR")),
+        &[&dir_of(Host::ClaudeCode)],
+    );
     let tmp = tempfile::tempdir().unwrap();
     let binary = tmp.path().join("moat");
     install_copy(&binary);

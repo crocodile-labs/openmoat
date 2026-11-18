@@ -5,11 +5,12 @@ use std::process::Stdio;
 use serde_json::Value;
 
 use crate::common::{OK, Sandbox, USAGE, bash_payload, stdout, text};
+use crate::hosts::dir_of;
 use openmoat_hosts::Host;
 
 /// An installed sandbox with two sessions of recorded decisions.
 fn seeded() -> Sandbox {
-    let sb = Sandbox::installed_with_review(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     for (session, command) in [
         ("alpha", "git status --short"),

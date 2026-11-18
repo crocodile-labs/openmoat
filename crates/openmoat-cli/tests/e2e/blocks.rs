@@ -3,7 +3,7 @@
 
 use serde_json::{Value, json};
 
-use crate::common::{DENY, OK, Sandbox, fixture, hook_output, stdout, text};
+use crate::common::{DENY, OK, Sandbox, hook_output, stdout, text};
 use crate::hosts::dir_of;
 use openmoat_hosts::Host;
 
@@ -33,7 +33,7 @@ fn reason(out: &std::process::Output) -> String {
 #[test]
 fn a_deny_reaches_claude_code_as_the_block_message() {
     let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
-    let out = sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/bash.json"));
+    let out = sb.guard_fixture(Host::ClaudeCode, "bash.json");
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
     let block = reason(&out);
     let lines: Vec<&str> = block.lines().collect();
@@ -72,7 +72,7 @@ fn a_deny_reaches_claude_code_as_the_block_message() {
 /// Codex cannot ask: the same review is a deny whose `next` says how to approve.
 #[test]
 fn a_review_is_held_with_one_way_to_approve_it() {
-    let sb = Sandbox::bare(&[".claude", ".codex"]);
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode), &dir_of(Host::Codex)]);
     assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(OK));
     let command = "git config core.pager less";
 
@@ -157,7 +157,7 @@ fn a_built_in_check_reaches_claude_code_as_the_block_message() {
 #[test]
 fn why_explains_the_newest_deny_with_its_rule_and_source() {
     let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
-    let out = sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/bash.json"));
+    let out = sb.guard_fixture(Host::ClaudeCode, "bash.json");
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
 
     let out = sb.moat(&["why", "--last"]);
@@ -201,7 +201,7 @@ fn why_explains_the_newest_deny_with_its_rule_and_source() {
 #[test]
 fn watch_lists_the_calls_so_far_when_piped() {
     let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
-    let out = sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/bash.json"));
+    let out = sb.guard_fixture(Host::ClaudeCode, "bash.json");
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
     let out = sb.moat(&["watch", "--no-follow"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));

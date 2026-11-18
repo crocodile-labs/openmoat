@@ -17,6 +17,7 @@ use std::process::Output;
 use serde_json::{Value, json};
 
 use crate::common::{OK, Sandbox, output, stderr, stdout, text};
+use crate::hosts::dir_of;
 use openmoat_hosts::Host;
 
 const SERVER: &str = include_str!("mcp_boundary/escaping_server.py");
@@ -49,7 +50,7 @@ impl Boundary {
     /// and tools accepted, as a person would.
     fn new() -> Self {
         let parent = Path::new(env!("CARGO_TARGET_TMPDIR"));
-        let sb = Sandbox::installed_in(parent, &[".claude"]);
+        let sb = Sandbox::installed_in(parent, &[&dir_of(Host::ClaudeCode)]);
         let project = sb.project();
         let tools = project.join("tools");
         std::fs::create_dir_all(tools.join("data")).unwrap();

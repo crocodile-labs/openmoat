@@ -6,7 +6,7 @@ use std::fs;
 use serde_json::Value;
 
 use crate::common::{OK, Sandbox, json, output, squash, stdout, text};
-use crate::hosts::dir_of;
+use crate::hosts::{dir_of, hook_file, mcp_user_file};
 use openmoat_hosts::Host;
 
 /// The `agents` entry of `moat status --format json` for `host`.
@@ -40,8 +40,20 @@ fn each_agent_reports_its_level_and_gaps() {
     let out = sb.moat(&["doctor"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let doctor = squash(&stdout(&out));
-    assert!(doctor.contains(" Codex hook + OS sandbox\n"), "{doctor}");
-    assert!(doctor.contains(" Cursor hook + OS sandbox\n"), "{doctor}");
+    assert!(
+        doctor.contains(&format!(
+            " {} hook + OS sandbox\n",
+            Host::Codex.display_name()
+        )),
+        "{doctor}"
+    );
+    assert!(
+        doctor.contains(&format!(
+            " {} hook + OS sandbox\n",
+            Host::Cursor.display_name()
+        )),
+        "{doctor}"
+    );
     assert!(!doctor.contains("known gaps:"), "{doctor}");
     let verbose = squash(&stdout(&sb.moat(&["doctor", "--verbose"])));
     for line in [
@@ -80,7 +92,7 @@ fn each_agent_reports_its_level_and_gaps() {
 #[test]
 fn a_drifted_sandbox_is_hook_only_and_says_which() {
     let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
-    let path = sb.home.join(".codex/config.toml");
+    let path = mcp_user_file(&sb, Host::Codex);
     let weakened = fs::read_to_string(&path).unwrap().replace(
         "default_permissions = \"moat\"",
         "default_permissions = \":workspace\"",
@@ -95,11 +107,17 @@ fn a_drifted_sandbox_is_hook_only_and_says_which() {
     );
     let status = squash(&stdout(&sb.moat(&["status"])));
     assert!(
-        status.contains("! Codex hook only (sandbox: default_permissions"),
+        status.contains(&format!(
+            "! {} hook only (sandbox: default_permissions",
+            Host::Codex.display_name()
+        )),
         "{status}"
     );
     assert!(
-        status.contains("✗ Codex sandbox: default_permissions"),
+        status.contains(&format!(
+            "✗ {} sandbox: default_permissions",
+            Host::Codex.display_name()
+        )),
         "the drift needs the person: {status}"
     );
 }
@@ -107,7 +125,7 @@ fn a_drifted_sandbox_is_hook_only_and_says_which() {
 #[test]
 fn a_missing_hook_is_not_protected_and_absent_agents_keep_their_line() {
     let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
-    fs::write(sb.home.join(".claude/settings.json"), "{}").unwrap();
+    fs::write(hook_file(&sb, Host::ClaudeCode), "{}").unwrap();
     let claude = agent(&sb, Host::ClaudeCode.id());
     assert_eq!(claude["level"], "not-protected", "{claude}");
     assert_eq!(claude["reason"], "hook missing", "{claude}");
@@ -115,11 +133,17 @@ fn a_missing_hook_is_not_protected_and_absent_agents_keep_their_line() {
 
     let status = squash(&stdout(&sb.moat(&["status"])));
     assert!(
-        status.contains("✗ Claude Code not protected (hook missing)\n"),
+        status.contains(&format!(
+            "✗ {} not protected (hook missing)\n",
+            Host::ClaudeCode.display_name()
+        )),
         "{status}"
     );
     assert!(
-        status.contains("✗ Claude Code hook missing → openmoat init\n"),
+        status.contains(&format!(
+            "✗ {} hook missing → openmoat init\n",
+            Host::ClaudeCode.display_name()
+        )),
         "{status}"
     );
     // agents with no folder share one line
@@ -127,10 +151,16 @@ fn a_missing_hook_is_not_protected_and_absent_agents_keep_their_line() {
         .lines()
         .find(|l| l.starts_with(" – Not installed: "))
         .expect(&status);
-    assert!(not_found.contains("Codex"), "{status}");
-    assert!(!not_found.contains("Claude Code"), "{status}");
+    assert!(not_found.contains(Host::Codex.display_name()), "{status}");
+    assert!(
+        !not_found.contains(Host::ClaudeCode.display_name()),
+        "{status}"
+    );
     assert!(!status.contains("host not found"), "{status}");
-    assert!(!status.contains("✗ Codex"), "{status}");
+    assert!(
+        !status.contains(&format!("✗ {}", Host::Codex.display_name())),
+        "{status}"
+    );
     assert!(!status.contains("known gaps"), "{status}");
 
     let home = text(&output(&mut sb.command(), Some("")));
@@ -142,7 +172,7 @@ fn a_missing_hook_is_not_protected_and_absent_agents_keep_their_line() {
 /// out of date until `moat init` adds the key.
 #[test]
 fn an_older_claude_code_gets_no_on_failure_until_it_is_updated() {
-    let sb = Sandbox::bare(&[".claude"]);
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode)]);
     let old = |args: &[&str]| {
         output(
             sb.command()
@@ -153,7 +183,7 @@ fn an_older_claude_code_gets_no_on_failure_until_it_is_updated() {
     };
     let out = old(&["init", "--yes"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    let settings = sb.home.join(".claude/settings.json");
+    let settings = hook_file(&sb, Host::ClaudeCode);
     let handler = || -> Value {
         let doc: Value = serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
         doc["hooks"]["PreToolUse"][0]["hooks"][0].clone()
@@ -184,7 +214,7 @@ fn the_vs_code_extensions_claude_code_gets_on_failure() {
         (&["2.1.318"][..], true),
         (&["2.1.318", "2.1.200"][..], false),
     ] {
-        let sb = Sandbox::bare(&[".claude"]);
+        let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode)]);
         let extensions = sb.home.join(".vscode/extensions");
         let entries: Vec<Value> = versions
             .iter()
@@ -209,7 +239,7 @@ fn the_vs_code_extensions_claude_code_gets_on_failure() {
         };
         let out = no_cli(&["init", "--yes"]);
         assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-        let settings = sb.home.join(".claude/settings.json");
+        let settings = hook_file(&sb, Host::ClaudeCode);
         let doc: Value = serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
         let handler = &doc["hooks"]["PreToolUse"][0]["hooks"][0];
         assert_eq!(
@@ -253,12 +283,18 @@ fn claude_code_on_native_windows_is_hook_only() {
     );
     let status = squash(&stdout(&sb.moat(&["status"])));
     assert!(
-        status.contains(" Claude Code hook only (sandbox not available"),
+        status.contains(&format!(
+            " {} hook only (sandbox not available",
+            Host::ClaudeCode.display_name()
+        )),
         "{status}"
     );
     let home = text(&output(&mut sb.command(), Some("")));
     assert!(
-        home.contains("Protecting Claude Code (hook only)"),
+        home.contains(&format!(
+            "Protecting {} (hook only)",
+            Host::ClaudeCode.display_name()
+        )),
         "{home}"
     );
 }

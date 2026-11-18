@@ -7,8 +7,8 @@ use std::path::PathBuf;
 
 use serde_json::{Value, json};
 
-use crate::common::{OK, Sandbox, USAGE, fixture, json, text, verdict_and_reason};
-use crate::hosts::dir_of;
+use crate::common::{OK, Sandbox, USAGE, json, text, verdict_and_reason};
+use crate::hosts::{dir_of, hook_file};
 use openmoat_hosts::Host;
 
 const SESSION: &str = "7c1e4b2a";
@@ -18,7 +18,7 @@ fn sandbox() -> Sandbox {
 }
 
 fn settings_path(sb: &Sandbox) -> PathBuf {
-    sb.home.join(".claude/settings.json")
+    hook_file(sb, Host::ClaudeCode)
 }
 
 /// Apply `change` to the installed settings file, as a person or an agent would.
@@ -31,7 +31,7 @@ fn edit_settings(sb: &Sandbox, change: impl FnOnce(&mut Value)) {
 
 /// The verdict and reason for the golden `Read src/lib.rs` payload.
 fn read_src(sb: &Sandbox) -> (String, String) {
-    verdict_and_reason(&sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/read.json")))
+    verdict_and_reason(&sb.guard_fixture(Host::ClaudeCode, "read.json"))
 }
 
 fn read_ssh_key(sb: &Sandbox) -> (String, String) {

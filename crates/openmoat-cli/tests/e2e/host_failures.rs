@@ -14,7 +14,7 @@ use openmoat_hosts::Host;
 
 use crate::common::{Sandbox, USAGE, deny_exit, fixture, json, stderr, text};
 use crate::hosts::rows::{Row, rows};
-use crate::hosts::{assert_reason, dir_of, guard, verdict};
+use crate::hosts::{assert_reason, dir_of, guard, hook_file, verdict};
 
 /// `moat guard` for `row`'s hook, its input not yet written.
 fn command(row: &Row, sb: &Sandbox) -> Command {
@@ -344,7 +344,7 @@ fn doctor_names_an_agent_that_runs_the_call_when_the_hook_fails() {
 #[test]
 fn moat_init_adds_a_new_tool_to_an_installed_matcher() {
     let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
-    let path = sb.home.join(".claude/settings.json");
+    let path = hook_file(&sb, Host::ClaudeCode);
     let old = fs::read_to_string(&path).unwrap().replace("|WebSearch", "");
     fs::write(&path, old).unwrap();
     let status = json(&sb.moat(&["status", "--format", "json"]));
@@ -360,10 +360,7 @@ fn moat_init_adds_a_new_tool_to_an_installed_matcher() {
         .as_str()
         .unwrap();
     assert!(matcher.split('|').any(|m| m == "WebSearch"), "{matcher}");
-    let out = sb.guard(
-        Host::ClaudeCode.id(),
-        &fixture("claude-code/websearch.json"),
-    );
+    let out = sb.guard_fixture(Host::ClaudeCode, "websearch.json");
     assert_eq!(
         out.status.code(),
         Some(0),

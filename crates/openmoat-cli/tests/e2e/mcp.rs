@@ -7,6 +7,7 @@ use std::path::Path;
 use serde_json::{Value, json};
 
 use crate::common::{DENY, OK, Sandbox, USAGE, output, stdout, text};
+use crate::hosts::{dir_of, mcp_user_file};
 use openmoat_hosts::Host;
 
 const SERVERS: &str = r#"{"numStartups": 3, "mcpServers": {
@@ -15,8 +16,8 @@ const SERVERS: &str = r#"{"numStartups": 3, "mcpServers": {
 
 /// A home with Claude Code and `~/.claude.json` defining `servers`, then `moat init`.
 fn installed_with(servers: &str) -> Sandbox {
-    let sb = Sandbox::bare(&[".claude"]);
-    std::fs::write(sb.home.join(".claude.json"), servers).unwrap();
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode)]);
+    std::fs::write(mcp_user_file(&sb, Host::ClaudeCode), servers).unwrap();
     let out = sb.moat(&["init", "--yes", "--verbose"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(
@@ -36,7 +37,7 @@ fn mcp_call(sb: &Sandbox, cwd: &Path, tool: &str) -> std::process::Output {
 }
 
 fn edit_claude_json(sb: &Sandbox, from: &str, to: &str) {
-    let path = sb.home.join(".claude.json");
+    let path = mcp_user_file(sb, Host::ClaudeCode);
     let now = std::fs::read_to_string(&path).unwrap();
     assert!(now.contains(from), "{now}");
     std::fs::write(&path, now.replacen(from, to, 1)).unwrap();
@@ -47,8 +48,8 @@ fn edit_claude_json(sb: &Sandbox, from: &str, to: &str) {
 /// a change to one is denied, whether or not `moat` sees the variable.
 #[test]
 fn servers_inside_the_claude_config_dir_are_pinned() {
-    let sb = Sandbox::bare(&[".claude"]);
-    let config = sb.home.join(".claude");
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode)]);
+    let config = sb.home.join(dir_of(Host::ClaudeCode));
     let inside = config.join(".claude.json");
     std::fs::write(&inside, SERVERS).unwrap();
     let out = output(
@@ -233,9 +234,10 @@ fn wrap_points_a_server_at_the_proxy_and_uninstall_restores_it() {
         "{}",
         text(&out)
     );
-    let file: Value =
-        serde_json::from_str(&std::fs::read_to_string(sb.home.join(".claude.json")).unwrap())
-            .unwrap();
+    let file: Value = serde_json::from_str(
+        &std::fs::read_to_string(mcp_user_file(&sb, Host::ClaudeCode)).unwrap(),
+    )
+    .unwrap();
     let gh = &file["mcpServers"]["gh"];
     assert_eq!(
         gh["args"],
@@ -267,9 +269,10 @@ fn wrap_points_a_server_at_the_proxy_and_uninstall_restores_it() {
 
     let out = sb.moat_as_person(&["uninstall"]);
     assert!(text(&out).contains("unwrapped `gh`"), "{}", text(&out));
-    let file: Value =
-        serde_json::from_str(&std::fs::read_to_string(sb.home.join(".claude.json")).unwrap())
-            .unwrap();
+    let file: Value = serde_json::from_str(
+        &std::fs::read_to_string(mcp_user_file(&sb, Host::ClaudeCode)).unwrap(),
+    )
+    .unwrap();
     assert_eq!(
         file["mcpServers"]["gh"],
         json!({"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"]})

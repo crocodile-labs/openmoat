@@ -3,6 +3,7 @@
 use std::fs;
 
 use crate::common::{OK, Sandbox, USAGE, bash_payload, hook_output, output, text};
+use crate::hosts::dir_of;
 use openmoat_hosts::Host;
 
 const INSTALL: &str = "npm install left-pad";
@@ -31,18 +32,21 @@ fn lock(sb: &Sandbox) -> String {
 
 #[test]
 fn nothing_needs_a_person() {
-    let sb = Sandbox::installed_with_review(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     let out = output(&mut sb.command(), Some(""));
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let shown = text(&out);
-    assert!(shown.contains("Protecting Claude Code"), "{shown}");
+    assert!(
+        shown.contains(&format!("Protecting {}", Host::ClaudeCode.display_name())),
+        "{shown}"
+    );
     assert!(shown.contains("today: 0 decisions"), "{shown}");
     assert!(shown.contains("Nothing needs you."), "{shown}");
 }
 
 #[test]
 fn drift_accepted_with_y_repins() {
-    let sb = Sandbox::installed_with_review(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     edit_policy(&sb);
     let shown = home_as_person(&sb, "y\n");
     assert!(shown.contains("policy.yaml"), "{shown}");
@@ -56,7 +60,7 @@ fn drift_accepted_with_y_repins() {
 
 #[test]
 fn drift_declined_changes_nothing() {
-    let sb = Sandbox::installed_with_review(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     edit_policy(&sb);
     let before = lock(&sb);
     let shown = home_as_person(&sb, "n\n");
@@ -67,7 +71,7 @@ fn drift_declined_changes_nothing() {
 
 #[test]
 fn review_allowed_once_grants_the_session() {
-    let sb = Sandbox::installed_with_review(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     assert_eq!(verdict(&sb, "s1"), "ask");
     let shown = home_as_person(&sb, "o\n");
     assert!(
@@ -89,7 +93,7 @@ fn review_allowed_once_grants_the_session() {
 /// rule also matches extra arguments, a file rule only the exact path.
 #[test]
 fn review_allowed_always_shows_what_the_rule_matches() {
-    let sb = Sandbox::installed_with_review(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     assert_eq!(verdict(&sb, "s1"), "ask");
     let shown = home_as_person(&sb, "a\n");
     assert!(
@@ -127,7 +131,7 @@ fn review_allowed_always_shows_what_the_rule_matches() {
 
 #[test]
 fn without_a_terminal_nothing_changes() {
-    let sb = Sandbox::installed_with_review(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     assert_eq!(verdict(&sb, "s1"), "ask");
     let out = output(&mut sb.command(), Some("o\n"));
     let shown = text(&out);
@@ -149,7 +153,7 @@ fn without_a_terminal_nothing_changes() {
 
 #[test]
 fn file_review_is_shown_and_allowed_once() {
-    let sb = Sandbox::installed_with_review(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     let notes = sb.home.join("notes.md");
     let payload = serde_json::json!({
         "session_id": "s1", "cwd": sb.project().to_string_lossy(),
@@ -165,7 +169,13 @@ fn file_review_is_shown_and_allowed_once() {
         shown.contains("today: 1 decision, 0 denied, 1 reviewed"),
         "{shown}"
     );
-    assert!(shown.contains("Claude Code asked to read"), "{shown}");
+    assert!(
+        shown.contains(&format!(
+            "{} asked to read",
+            Host::ClaudeCode.display_name()
+        )),
+        "{shown}"
+    );
     assert!(
         shown.contains("session s1 on claude-code may read"),
         "{shown}"

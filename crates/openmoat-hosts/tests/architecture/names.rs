@@ -315,7 +315,11 @@ fn shared_end_to_end_tests_name_a_host_only_where_listed() {
             record(&mut found, relative, lines);
         }
     }
-    assert!(found.contains_key("common.rs"), "the scan found too little");
+    // `protection.rs` checks every agent's displayed level, by name
+    assert!(
+        found.contains_key("protection.rs"),
+        "the scan found too little"
+    );
     check_only_shrinks(
         &found,
         ALLOWED_IN_SHARED_TESTS,

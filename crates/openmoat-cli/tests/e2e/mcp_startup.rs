@@ -13,12 +13,13 @@ use serde_json::{Value, json};
 #[cfg(unix)]
 use crate::common::stderr;
 use crate::common::{OK, Sandbox, output, stdout, text};
+use crate::hosts::{dir_of, mcp_user_file};
 
 const SERVERS: &str = r#"{"mcpServers": {"gh": {"command": "npx", "args": ["-y", "gh-server"]}}}"#;
 
 fn installed() -> Sandbox {
-    let sb = Sandbox::bare(&[".claude"]);
-    std::fs::write(sb.home.join(".claude.json"), SERVERS).unwrap();
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode)]);
+    std::fs::write(mcp_user_file(&sb, Host::ClaudeCode), SERVERS).unwrap();
     let out = sb.moat(&["init", "--yes"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     sb
@@ -118,7 +119,7 @@ fn a_changed_definition_never_starts() {
     // Only an environment variable added.
     define(&sb, &line);
     sb.accept_mcp();
-    let path = sb.home.join(".claude.json");
+    let path = mcp_user_file(&sb, Host::ClaudeCode);
     let mut root: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     root["mcpServers"]["marker"]["env"] = json!({"NODE_OPTIONS": "--require ./x.js"});
     std::fs::write(&path, root.to_string()).unwrap();
@@ -156,9 +157,10 @@ fn a_drifted_lock_starts_nothing() {
 
 /// The `args` of `name` in `~/.claude.json`.
 fn args_of(sb: &Sandbox, name: &str) -> Value {
-    let file: Value =
-        serde_json::from_str(&std::fs::read_to_string(sb.home.join(".claude.json")).unwrap())
-            .unwrap();
+    let file: Value = serde_json::from_str(
+        &std::fs::read_to_string(mcp_user_file(sb, Host::ClaudeCode)).unwrap(),
+    )
+    .unwrap();
     file["mcpServers"][name]["args"].clone()
 }
 
@@ -233,7 +235,10 @@ fn status_and_doctor_name_servers_that_start_outside_openmoat() {
         text(&status)
     );
     let said = stdout(&status);
-    assert!(said.contains("`gh` (Claude Code,"), "{said}");
+    assert!(
+        said.contains(&format!("`gh` ({},", Host::ClaudeCode.display_name())),
+        "{said}"
+    );
     assert!(said.contains("starts outside OpenMoat"), "{said}");
     let doctor = sb.moat(&["doctor"]);
     assert!(

@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::common::{Sandbox, bash_payload, hook_output, json};
+use crate::hosts::dir_of;
 use openmoat_hosts::Host;
 
 #[cfg(unix)]
@@ -175,7 +176,7 @@ impl Fixtures {
 
     /// [`Fixtures::build`] with the home in a temporary directory below `parent`.
     pub fn build_in(parent: &Path) -> Self {
-        let sb = Sandbox::installed_in(parent, &[".claude", ".codex"]);
+        let sb = Sandbox::installed_in(parent, &[&dir_of(Host::ClaudeCode), &dir_of(Host::Codex)]);
         let w = |p: &Path, name: &str, body: &str| std::fs::write(p.join(name), body).unwrap();
 
         std::fs::create_dir_all(sb.home.join(".ssh")).unwrap();

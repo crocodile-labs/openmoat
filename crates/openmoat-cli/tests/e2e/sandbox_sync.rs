@@ -6,21 +6,21 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-use crate::common::{DENY, OK, Sandbox, USAGE, fixture, stdout, text};
-use crate::hosts::dir_of;
+use crate::common::{DENY, OK, Sandbox, USAGE, stdout, text};
+use crate::hosts::{dir_of, hook_file, mcp_user_file};
 use openmoat_hosts::Host;
 
 fn claude_settings(sb: &Sandbox) -> PathBuf {
-    sb.home.join(".claude/settings.json")
+    hook_file(sb, Host::ClaudeCode)
 }
 
 fn codex_config(sb: &Sandbox) -> PathBuf {
-    sb.home.join(".codex/config.toml")
+    mcp_user_file(sb, Host::Codex)
 }
 
 /// Both hosts present, each with a setting of the user's own, then `init`.
 fn installed() -> Sandbox {
-    let sb = Sandbox::bare(&[".claude", ".codex"]);
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode), &dir_of(Host::Codex)]);
     fs::write(
         claude_settings(&sb),
         r#"{"theme":"dark","permissions":{"allow":["Bash(ls)"]}}"#,
@@ -87,7 +87,10 @@ fn init_writes_both_sandboxes_keeps_user_settings_and_pins_them() {
     let doctor = sb.moat(&["doctor"]);
     assert_eq!(doctor.status.code(), Some(OK), "{}", text(&doctor));
     assert!(
-        crate::common::squash(&stdout(&doctor)).contains(" Codex hook + OS sandbox\n"),
+        crate::common::squash(&stdout(&doctor)).contains(&format!(
+            " {} hook + OS sandbox\n",
+            Host::Codex.display_name()
+        )),
         "{}",
         text(&doctor)
     );
@@ -97,7 +100,10 @@ fn init_writes_both_sandboxes_keeps_user_settings_and_pins_them() {
     );
     let verbose = crate::common::squash(&stdout(&sb.moat(&["doctor", "--verbose"])));
     assert!(
-        verbose.contains("Codex sandbox matches the policy ("),
+        verbose.contains(&format!(
+            "{} sandbox matches the policy (",
+            Host::Codex.display_name()
+        )),
         "{verbose}"
     );
     assert!(
@@ -140,7 +146,7 @@ fn a_tampered_sandbox_block_denies_every_call_and_sync_refuses_over_it() {
     claude["sandbox"]["excludedCommands"] = serde_json::json!(["curl"]);
     fs::write(claude_settings(&sb), claude.to_string()).unwrap();
 
-    let out = sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/read.json"));
+    let out = sb.guard_fixture(Host::ClaudeCode, "read.json");
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
     assert!(text(&out).contains("kernel-integrity"), "{}", text(&out));
 
@@ -208,7 +214,7 @@ fn codex_may_edit_its_own_keys_but_not_the_moat_profile() {
 fn native_windows_leaves_out_the_claude_code_sandbox() {
     let note = "Claude Code      sandbox not available on native Windows; \
                 the hook still applies the policy (use WSL2 for OS confinement)";
-    let sb = Sandbox::bare(&[".claude", ".codex"]);
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode), &dir_of(Host::Codex)]);
     let init = sb.moat(&["init", "--yes", "--verbose"]);
     assert_eq!(init.status.code(), Some(OK), "{}", text(&init));
     assert!(stdout(&init).contains(note), "{}", text(&init));
@@ -217,7 +223,7 @@ fn native_windows_leaves_out_the_claude_code_sandbox() {
     let permissions = claude["permissions"].as_object().unwrap();
     assert_eq!(permissions.keys().collect::<Vec<_>>(), ["deny"], "{claude}");
     assert!(claude["hooks"]["PreToolUse"].is_array(), "{claude}");
-    let read = sb.guard(Host::ClaudeCode.id(), &fixture("claude-code/read.json"));
+    let read = sb.guard_fixture(Host::ClaudeCode, "read.json");
     assert_eq!(crate::common::verdict(&read), "allow", "{}", text(&read));
     let codex = fs::read_to_string(codex_config(&sb)).unwrap();
     assert!(codex.contains("default_permissions = \"moat\""), "{codex}");
@@ -247,7 +253,7 @@ fn native_windows_leaves_out_the_claude_code_sandbox() {
 #[cfg(windows)]
 #[test]
 fn native_windows_init_removes_an_old_claude_code_sandbox() {
-    let sb = Sandbox::bare(&[".claude"]);
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode)]);
     fs::write(
         claude_settings(&sb),
         r#"{"theme":"dark","permissions":{"allow":["Bash(ls)"],"blockReadsOutsideWorkingDirectories":true},
@@ -298,7 +304,11 @@ fn sandbox_backups(dir: &std::path::Path) -> Vec<String> {
 /// the agents that are set up and says how to add the others.
 #[test]
 fn sync_leaves_agents_init_left_out_untouched() {
-    let sb = Sandbox::bare(&[".claude", ".codex", ".cursor"]);
+    let sb = Sandbox::bare(&[
+        &dir_of(Host::ClaudeCode),
+        &dir_of(Host::Codex),
+        &dir_of(Host::Cursor),
+    ]);
     let mine = "# my settings\nmodel = \"o3\"\n";
     fs::write(codex_config(&sb), mine).unwrap();
     let init = sb.moat(&["init", "--hosts", Host::ClaudeCode.id(), "--yes"]);
@@ -317,7 +327,7 @@ fn sync_leaves_agents_init_left_out_untouched() {
     }
     assert_eq!(fs::read_to_string(codex_config(&sb)).unwrap(), mine);
     assert_eq!(
-        sandbox_backups(&sb.home.join(".codex")),
+        sandbox_backups(&sb.home.join(dir_of(Host::Codex))),
         Vec::<String>::new()
     );
     assert!(!sb.home.join(".cursor/sandbox.json").exists());
@@ -329,7 +339,7 @@ fn sync_leaves_agents_init_left_out_untouched() {
 #[cfg(not(windows))] // #327: no Claude Code sandbox on native Windows
 #[test]
 fn sync_updates_every_agent_init_set_up() {
-    let sb = Sandbox::bare(&[".claude", ".codex"]);
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode), &dir_of(Host::Codex)]);
     let init = sb.moat(&["init", "--hosts", "claude-code,codex", "--yes"]);
     assert_eq!(init.status.code(), Some(OK), "{}", text(&init));
     let mut claude = settings(&sb);

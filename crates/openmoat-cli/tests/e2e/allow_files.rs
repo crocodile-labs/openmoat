@@ -4,6 +4,7 @@
 use std::path::Path;
 
 use crate::common::{DENY, OK, Sandbox, hook_output, stderr, stdout, text, verdict};
+use crate::hosts::dir_of;
 use openmoat_hosts::Host;
 
 fn patch(sb: &Sandbox, file: &str) -> String {
@@ -30,7 +31,7 @@ fn read(sb: &Sandbox, session: &str, path: &Path) -> String {
 /// how to approve it; `moat allow --last` grants that exact patch to the session.
 #[test]
 fn codex_apply_patch_review_is_approved_with_allow_last() {
-    let sb = Sandbox::installed_with_review(&[".codex"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::Codex)]);
     let out = sb.guard(Host::Codex.id(), &patch(&sb, "../notes/plan.md"));
     assert_eq!(out.status.code(), Some(DENY), "{}", stderr(&out));
     let reason = hook_output(&out)["permissionDecisionReason"].to_string();
@@ -60,7 +61,7 @@ fn codex_apply_patch_review_is_approved_with_allow_last() {
 /// to take it back; it then applies to every session, and to that path only.
 #[test]
 fn claude_code_read_review_is_approved_for_good() {
-    let sb = Sandbox::installed_with_review(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     let notes = sb.home.join("notes");
     std::fs::create_dir_all(&notes).unwrap();
     std::fs::write(notes.join("plan.md"), "plan").unwrap();
@@ -96,7 +97,7 @@ fn claude_code_read_review_is_approved_for_good() {
 #[cfg(unix)]
 #[test]
 fn an_approved_path_that_leads_into_ssh_is_still_denied() {
-    let sb = Sandbox::installed_with_review(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     let ssh = sb.home.join(".ssh");
     std::fs::create_dir_all(&ssh).unwrap();
     std::fs::write(ssh.join("id_rsa"), "key").unwrap();

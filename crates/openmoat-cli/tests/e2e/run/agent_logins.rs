@@ -8,6 +8,8 @@ use std::process::Output;
 use super::confined::ran;
 use super::installed_with_secret;
 use crate::common::{Sandbox, output, stderr, stdout, text};
+use crate::hosts::dir_of;
+use openmoat_hosts::Host;
 
 /// Reads Claude Code's and Codex's login files and says which opened.
 const SCRIPT: &str = "cat \"$HOME/.claude/.credentials.json\"; echo \"claude=$?\"
@@ -25,7 +27,10 @@ fn run_as(sb: &Sandbox, project: &Path, program: &Path) -> Output {
     }
     let tmp = sb.home.with_file_name("tmp");
     std::fs::create_dir_all(&tmp).unwrap();
-    let (claude, codex) = (sb.home.join(".claude"), sb.home.join(".codex"));
+    let (claude, codex) = (
+        sb.home.join(dir_of(Host::ClaudeCode)),
+        sb.home.join(dir_of(Host::Codex)),
+    );
     output(
         sb.command()
             .current_dir(project)

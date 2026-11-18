@@ -10,7 +10,7 @@ use openmoat_hosts::Host;
 #[test]
 fn show_prints_the_settings_and_their_losses_without_writing() {
     let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
-    let settings = sb.home.join(".claude/settings.json");
+    let settings = crate::hosts::hook_file(&sb, Host::ClaudeCode);
     let before = std::fs::read(&settings).unwrap();
     let out = sb.moat(&["sandbox", "show"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
@@ -122,7 +122,7 @@ fn doctor_says_whether_claude_code_masks_each_secret() {
         assert!(shown.contains(expected), "{expected}: {shown}");
     }
 
-    let settings = sb.home.join(".claude/settings.json");
+    let settings = crate::hosts::hook_file(&sb, Host::ClaudeCode);
     let mut root: Value =
         serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
     root["sandbox"]["credentials"]["allowPlaintextInject"] = Value::Bool(true);
@@ -150,7 +150,10 @@ fn show_says_claude_code_has_no_sandbox_on_native_windows() {
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let shown = stdout(&out);
     assert!(
-        shown.contains("Claude Code  sandbox not available on native Windows"),
+        shown.contains(&format!(
+            "{}  sandbox not available on native Windows",
+            Host::ClaudeCode.display_name()
+        )),
         "{shown}"
     );
     assert!(!shown.contains("failIfUnavailable"), "{shown}");

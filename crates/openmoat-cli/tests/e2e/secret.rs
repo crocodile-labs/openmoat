@@ -5,7 +5,7 @@ use std::fs;
 use std::process::Output;
 
 use crate::common::{OK, Sandbox, USAGE, output, text};
-use crate::hosts::dir_of;
+use crate::hosts::{dir_of, hook_file};
 use openmoat_hosts::Host;
 
 fn add(sb: &Sandbox, args: &[&str], answer: &str) -> Output {
@@ -55,7 +55,7 @@ fn secret_add_gh_shows_the_change_and_applies_only_on_yes() {
     assert!(policy(&sb).contains("env: GITHUB_TOKEN"));
     if cfg!(not(windows)) {
         // #327: no Claude Code sandbox on native Windows
-        let settings = fs::read_to_string(sb.home.join(".claude/settings.json")).unwrap();
+        let settings = fs::read_to_string(hook_file(&sb, Host::ClaudeCode)).unwrap();
         assert!(settings.contains("GITHUB_TOKEN"), "{settings}");
     }
     let doctor = sb.moat(&["doctor"]);

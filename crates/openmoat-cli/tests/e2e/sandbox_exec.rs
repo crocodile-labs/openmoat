@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use crate::common::{Sandbox, output, skip_without_host_binary, text};
+use crate::hosts::dir_of;
 use openmoat_hosts::Host;
 
 fn codex_binary() -> Option<PathBuf> {
@@ -54,7 +55,7 @@ fn cat_output(codex: &Path, sb: &Sandbox, project: &Path, file: &str) -> Output 
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .env("HOME", &sb.home)
-        .env("CODEX_HOME", sb.home.join(".codex"))
+        .env("CODEX_HOME", sb.home.join(dir_of(Host::Codex)))
         .output()
         .expect("running codex sandbox")
 }
@@ -65,7 +66,7 @@ fn codex_enforces_the_generated_profile() {
         skip_without_host_binary("the generated Codex profile (set MOAT_CODEX_BIN)");
         return;
     };
-    let sb = Sandbox::bare(&[".codex"]);
+    let sb = Sandbox::bare(&[&dir_of(Host::Codex)]);
     init(&sb, codex.parent().unwrap());
     let project = sb.project();
     fs::write(project.join("main.rs"), "fn main() {}").unwrap();
@@ -113,7 +114,10 @@ fn codex_from_the_standalone_installer_starts_commands() {
         return;
     };
     // Outside the read roots (`/tmp`), as a home directory is.
-    let sb = Sandbox::bare_in(Path::new(env!("CARGO_TARGET_TMPDIR")), &[".codex"]);
+    let sb = Sandbox::bare_in(
+        Path::new(env!("CARGO_TARGET_TMPDIR")),
+        &[&dir_of(Host::Codex)],
+    );
     let standalone = sb.home.join(".codex/packages/standalone");
     let install = |version: &str| {
         let release = standalone.join(format!("releases/{version}-x86_64-unknown-linux-musl"));
@@ -130,7 +134,8 @@ fn codex_from_the_standalone_installer_starts_commands() {
     fs::create_dir_all(&bin).unwrap();
     let installed = bin.join(Host::Codex.id());
     symlink(standalone.join("current/bin/codex"), &installed).unwrap();
-    let state = ["auth.json", "state_5.sqlite"].map(|name| sb.home.join(".codex").join(name));
+    let state =
+        ["auth.json", "state_5.sqlite"].map(|name| sb.home.join(dir_of(Host::Codex)).join(name));
     for file in &state {
         fs::write(file, "FAKE-STATE").unwrap();
     }

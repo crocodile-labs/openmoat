@@ -5,12 +5,14 @@
 use serde_json::Value;
 
 use crate::common::{OK, Sandbox, USAGE, json as parse, text};
+use crate::hosts::{dir_of, mcp_user_file};
+use openmoat_hosts::Host;
 
 const SERVERS: &str = r#"{"mcpServers": {"gh": {"command": "npx", "args": ["-y", "gh-server"]}}}"#;
 
 fn installed() -> Sandbox {
-    let sb = Sandbox::bare(&[".claude"]);
-    std::fs::write(sb.home.join(".claude.json"), SERVERS).unwrap();
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode)]);
+    std::fs::write(mcp_user_file(&sb, Host::ClaudeCode), SERVERS).unwrap();
     let out = sb.moat(&["init", "--yes"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     sb
@@ -79,7 +81,7 @@ fn an_unprotected_local_server_fails_the_requirement() {
 #[cfg(unix)]
 #[test]
 fn a_wrapped_accepted_server_is_protected_and_does_not_fail_it() {
-    let sb = Sandbox::bare(&[".claude"]);
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode)]);
     let out = sb.moat(&["init", "--yes"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     sb.define_wrapped("marker", &["--server", "marker", "--", "true"]);

@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::common::{OK, Sandbox, USAGE, fixture, hook_output, output, text};
+use crate::common::{OK, Sandbox, USAGE, hook_output, host_fixture, output, text};
+use crate::hosts::{dir_of, hook_file};
+use openmoat_hosts::Host;
 
 /// Install `version` into the Cellar and point `<prefix>/bin/moat` at it.
 fn brew_install(prefix: &Path, version: &str) {
@@ -24,11 +26,14 @@ fn brew_install(prefix: &Path, version: &str) {
 
 /// A home outside the temp directory: `init` refuses a binary inside one.
 fn outside_temp() -> Sandbox {
-    Sandbox::bare_in(Path::new(env!("CARGO_TARGET_TMPDIR")), &[".claude"])
+    Sandbox::bare_in(
+        Path::new(env!("CARGO_TARGET_TMPDIR")),
+        &[&dir_of(Host::ClaudeCode)],
+    )
 }
 
 fn hook_command(sb: &Sandbox) -> String {
-    let settings = fs::read_to_string(sb.home.join(".claude/settings.json")).unwrap();
+    let settings = fs::read_to_string(hook_file(sb, Host::ClaudeCode)).unwrap();
     let settings: Value = serde_json::from_str(&settings).unwrap();
     settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
         .as_str()
@@ -66,8 +71,8 @@ fn hooks_survive_a_package_manager_upgrade() {
     let hook = PathBuf::from(&command);
     let out = run(
         &hook,
-        &["guard", "--host", "claude-code"],
-        Some(&fixture("claude-code/read.json")),
+        &["guard", "--host", Host::ClaudeCode.id()],
+        Some(&host_fixture(Host::ClaudeCode, "read.json")),
     );
     assert_eq!(
         hook_output(&out)["permissionDecision"],
@@ -104,7 +109,7 @@ fn doctor_and_status_name_a_missing_or_different_hook_binary() {
     }
 
     // A hook left pointing at a version the package manager removed.
-    let settings = sb.home.join(".claude/settings.json");
+    let settings = hook_file(&sb, Host::ClaudeCode);
     let gone = prefix.join("Cellar/moat/0.0.9/bin/moat");
     let edited = fs::read_to_string(&settings)
         .unwrap()

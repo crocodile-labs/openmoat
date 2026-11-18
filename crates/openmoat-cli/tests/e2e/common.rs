@@ -10,6 +10,7 @@ use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdout, Command, Output, Stdio};
 
+use openmoat_hosts::Host;
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -178,6 +179,11 @@ impl Sandbox {
         self.moat_stdin(&["guard", "--host", host], payload)
     }
 
+    /// Run the hook for `host` with its golden payload `name` ([`host_fixture`]).
+    pub fn guard_fixture(&self, host: Host, name: &str) -> Output {
+        self.guard(host.id(), &host_fixture(host, name))
+    }
+
     /// The state directory's word `moat init` writes after `--home` in this
     /// home's hooks (ADR-071).
     pub fn home_word(&self) -> String {
@@ -204,7 +210,7 @@ impl Sandbox {
     /// Nothing is accepted: `openmoat mcp proxy` starts it only after
     /// [`Sandbox::accept_mcp`] (ADR-049).
     pub fn define_wrapped(&self, name: &str, proxy: &[&str]) {
-        let path = self.home.join(".claude.json");
+        let path = crate::hosts::mcp_user_file(self, Host::ClaudeCode);
         let mut root: Value = std::fs::read_to_string(&path)
             .ok()
             .and_then(|t| serde_json::from_str(&t).ok())
@@ -230,9 +236,10 @@ impl Sandbox {
     pub fn trust_codex_hook(&self) {
         use sha2::Digest as _;
         // Codex keys its trust state by the path it read, built with native separators.
-        let path = self.home.join(".codex").join("hooks.json");
+        let path = crate::hosts::hook_file(self, Host::Codex);
         let root: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        let config = self.home.join(".codex/config.toml");
+        // the `config.toml` beside it, which also holds Codex's MCP servers
+        let config = crate::hosts::mcp_user_file(self, Host::Codex);
         let mut doc: toml_edit::DocumentMut =
             std::fs::read_to_string(&config).unwrap().parse().unwrap();
         for (event, name) in [
@@ -262,7 +269,7 @@ impl Sandbox {
 
     /// The verdict and reason the Claude Code hook gives one Bash `command` in `cwd`.
     pub fn guard_bash(&self, session: &str, cwd: &Path, command: &str) -> (String, String) {
-        verdict_and_reason(&self.guard("claude-code", &bash_payload(session, cwd, command)))
+        verdict_and_reason(&self.guard(Host::ClaudeCode.id(), &bash_payload(session, cwd, command)))
     }
 
     /// Opt the host sandboxes into `moat proxy` on a free loopback port
@@ -383,6 +390,11 @@ pub fn fixture(relative: &str) -> String {
         .join("fixtures")
         .join(name);
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+/// [`fixture`] `name` of `host`.
+pub fn host_fixture(host: openmoat_hosts::Host, name: &str) -> String {
+    fixture(&format!("{}/{name}", host.id()))
 }
 
 /// Standard output as text.

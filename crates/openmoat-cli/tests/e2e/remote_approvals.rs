@@ -23,9 +23,8 @@ use crate::hosts::dir_of;
 use openmoat_hosts::Host;
 
 const COMMAND: &str = "npm install left-pad-pro";
-/// The agent these tests run as, and its configuration folder.
-const HOST: &str = "claude-code";
-const CONFIG: &[&str] = &[".claude"];
+/// The agent these tests run as.
+const HOST: Host = Host::ClaudeCode;
 /// An approver id: the channel's name, then the user id on it.
 const APPROVER: &str = "telegram:4242";
 /// Made for this test; no real key.
@@ -129,12 +128,12 @@ fn answer(sb: &Sandbox, request: &Value, verdict: &str, approver: &str) {
 }
 
 fn decide(sb: &Sandbox, command: &str) -> Value {
-    hook_output(&sb.guard(HOST, &bash_payload("s1", &sb.project(), command)))
+    hook_output(&sb.guard(HOST.id(), &bash_payload("s1", &sb.project(), command)))
 }
 
 #[test]
 fn with_no_channel_a_review_is_unchanged() {
-    let sb = Sandbox::installed_with_review(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     let d = decide(&sb, COMMAND);
     assert_eq!(d["permissionDecision"], "ask", "{d}");
     assert!(!remote(&sb).exists());
@@ -173,13 +172,13 @@ fn approvals_commands_need_a_person() {
 #[cfg(unix)] // the key's owner-only mode is what `key_file` checks
 #[test]
 fn an_approved_call_runs_once_and_only_that_call() {
-    let sb = Sandbox::installed_with_review(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     connect(&sb);
     let d = decide(&sb, COMMAND);
     assert_eq!(d["permissionDecision"], "ask", "{d}");
     let sent = requests(&sb);
     assert_eq!(sent.len(), 1, "{sent:?}");
-    assert_eq!(sent[0]["host"], HOST);
+    assert_eq!(sent[0]["host"], HOST.id());
     assert_eq!(sent[0]["session"], "s1");
 
     // Someone not on the list, or the approver's bare number: still a review.
@@ -210,7 +209,7 @@ fn an_approved_call_runs_once_and_only_that_call() {
 #[cfg(unix)]
 #[test]
 fn a_deny_is_never_sent_for_approval() {
-    let sb = Sandbox::installed_with_review(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     connect(&sb);
     let d = decide(&sb, "cat ~/.ssh/id_rsa");
     assert_eq!(d["permissionDecision"], "deny", "{d}");
@@ -247,10 +246,10 @@ fn decide_while(sb: &Sandbox, args: &[&str], approve: bool) -> (Value, Duration)
 #[cfg(unix)]
 #[test]
 fn with_a_listener_an_approval_during_the_wait_allows_the_held_call() {
-    let sb = Sandbox::installed_with_review(CONFIG);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     connect_with(&sb, r#","wait_s":3"#);
     listening(&sb);
-    let (d, took) = decide_while(&sb, &["guard", "--host", HOST], true);
+    let (d, took) = decide_while(&sb, &["guard", "--host", HOST.id()], true);
     assert_eq!(d["permissionDecision"], "allow", "{d}");
     // An allow can only come from the wait: after it the hook answers `ask`.
     assert!(took < Duration::from_secs(10), "{took:?}");
@@ -264,10 +263,10 @@ fn with_a_listener_an_approval_during_the_wait_allows_the_held_call() {
 #[cfg(unix)]
 #[test]
 fn with_a_listener_and_no_answer_the_review_comes_after_the_wait() {
-    let sb = Sandbox::installed_with_review(CONFIG);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     connect_with(&sb, r#","wait_s":1"#);
     listening(&sb);
-    let (d, took) = decide_while(&sb, &["guard", "--host", HOST], false);
+    let (d, took) = decide_while(&sb, &["guard", "--host", HOST.id()], false);
     assert_eq!(d["permissionDecision"], "ask", "{d}");
     assert!(
         took >= Duration::from_secs(1) && took < Duration::from_secs(10),
@@ -275,7 +274,7 @@ fn with_a_listener_and_no_answer_the_review_comes_after_the_wait() {
     );
     // Without a listener the hook does not wait at all.
     std::fs::remove_file(remote(&sb).join("listening.json")).unwrap();
-    let (d, took) = decide_while(&sb, &["guard", "--host", HOST], false);
+    let (d, took) = decide_while(&sb, &["guard", "--host", HOST.id()], false);
     assert_eq!(d["permissionDecision"], "ask", "{d}");
     assert!(took < Duration::from_secs(1), "{took:?}");
 }
@@ -283,10 +282,10 @@ fn with_a_listener_and_no_answer_the_review_comes_after_the_wait() {
 #[cfg(unix)]
 #[test]
 fn the_guard_openmoat_run_relays_to_waits_too() {
-    let sb = Sandbox::installed_with_review(CONFIG);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     connect_with(&sb, r#","wait_s":3"#);
     listening(&sb);
-    let (d, took) = decide_while(&sb, &["guard", "--host", HOST, "--relayed"], true);
+    let (d, took) = decide_while(&sb, &["guard", "--host", HOST.id(), "--relayed"], true);
     assert_eq!(d["permissionDecision"], "allow", "{d}");
     assert!(took < Duration::from_secs(10), "{took:?}");
 }

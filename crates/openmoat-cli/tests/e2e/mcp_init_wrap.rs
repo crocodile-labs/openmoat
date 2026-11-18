@@ -9,17 +9,18 @@ use std::process::Output;
 use serde_json::{Value, json};
 
 use crate::common::{DENY, OK, Sandbox, output, stdout, text};
+use crate::hosts::{dir_of, mcp_user_file};
 use openmoat_hosts::Host;
 
 const SERVERS: &str = r#"{"mcpServers": {"gh": {"command": "npx", "args": ["-y", "gh-server"]}}}"#;
 
 fn bare() -> Sandbox {
-    Sandbox::bare(&[".claude"])
+    Sandbox::bare(&[&dir_of(Host::ClaudeCode)])
 }
 
 /// The agent's user MCP file with [`SERVERS`] in it.
 fn add_servers(sb: &Sandbox) {
-    std::fs::write(sb.home.join(".claude.json"), SERVERS).unwrap();
+    std::fs::write(mcp_user_file(sb, Host::ClaudeCode), SERVERS).unwrap();
 }
 
 fn bare_with_servers() -> Sandbox {
@@ -39,9 +40,10 @@ fn init_answering(sb: &Sandbox, answers: &str) -> Output {
 }
 
 fn args_of_gh(sb: &Sandbox) -> Value {
-    let file: Value =
-        serde_json::from_str(&std::fs::read_to_string(sb.home.join(".claude.json")).unwrap())
-            .unwrap();
+    let file: Value = serde_json::from_str(
+        &std::fs::read_to_string(mcp_user_file(sb, Host::ClaudeCode)).unwrap(),
+    )
+    .unwrap();
     file["mcpServers"]["gh"]["args"].clone()
 }
 
@@ -68,7 +70,10 @@ fn a_person_is_asked_and_a_yes_wraps_and_a_guard_still_works() {
         said.contains("Run them through OpenMoat? [Y/n/d]"),
         "{said}"
     );
-    assert!(said.contains("`gh` (Claude Code"), "{said}");
+    assert!(
+        said.contains(&format!("`gh` ({}", Host::ClaudeCode.display_name())),
+        "{said}"
+    );
     assert!(wrapped(&sb), "{said}");
     assert!(
         sb.home.join(".claude.json.moat-mcp-backup").exists(),
@@ -110,7 +115,7 @@ fn a_no_is_kept_and_not_asked_again_and_the_server_stays_reported() {
 #[test]
 fn the_diff_is_shown_on_request_and_nothing_changes_before_the_answer() {
     let sb = bare_with_servers();
-    let before = std::fs::read_to_string(sb.home.join(".claude.json")).unwrap();
+    let before = std::fs::read_to_string(mcp_user_file(&sb, Host::ClaudeCode)).unwrap();
     let out = init_answering(&sb, "d\nn\n");
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(
@@ -120,7 +125,7 @@ fn the_diff_is_shown_on_request_and_nothing_changes_before_the_answer() {
     );
     assert!(text(&out).contains("mcp"), "{}", text(&out));
     assert_eq!(
-        std::fs::read_to_string(sb.home.join(".claude.json")).unwrap(),
+        std::fs::read_to_string(mcp_user_file(&sb, Host::ClaudeCode)).unwrap(),
         before,
         "the diff changed the file"
     );
@@ -231,7 +236,7 @@ fn a_planted_project_definition_is_reported_and_held_and_never_run_by_openmoat()
 
 #[test]
 fn a_planted_definitions_tool_call_is_denied_and_an_accepted_one_passes() {
-    let sb = Sandbox::bare(&[".claude"]);
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode)]);
     let out = sb.moat(&["init", "--yes"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let project = sb.project();

@@ -167,7 +167,7 @@ fn an_approved_secret_read_makes_later_network_need_review() {
 /// refused never ran, so it taints nothing.
 #[test]
 fn codex_receives_a_taint_review_as_a_deny() {
-    let sb = Sandbox::bare(&[".claude", ".codex"]);
+    let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode), &dir_of(Host::Codex)]);
     assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(OK));
     let proj = sb.project();
     let instructions = |session| {

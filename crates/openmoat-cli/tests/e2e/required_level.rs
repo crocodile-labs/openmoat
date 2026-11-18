@@ -10,7 +10,7 @@ use std::fs;
 
 use serde_json::{Value, json};
 
-use crate::common::{DENY, OK, Sandbox, USAGE, fixture, json as parse, output, stdout, text};
+use crate::common::{DENY, OK, Sandbox, USAGE, host_fixture, json as parse, output, stdout, text};
 use crate::hosts::dir_of;
 use openmoat_hosts::Host;
 
@@ -85,7 +85,7 @@ fn below_the_required_level_every_call_is_denied_and_status_says_why() {
     let (code, reply) = gemini(&sb, &write);
     assert_required_deny(code, &reply, "your policy");
     // A tool OpenMoat does not govern, which the host decides otherwise.
-    let (code, reply) = gemini(&sb, &fixture("gemini-cli/write_todos.json"));
+    let (code, reply) = gemini(&sb, &host_fixture(Host::GeminiCli, "write_todos.json"));
     assert_eq!(code, Some(DENY), "{reply}");
     assert!(
         reply["reason"].to_string().contains("protection-required"),
@@ -108,7 +108,10 @@ fn below_the_required_level_every_call_is_denied_and_status_says_why() {
     assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
     let home = text(&output(&mut sb.command(), Some("")));
     assert!(
-        home.contains("Gemini CLI (hook only, below the required hook + OS sandbox)"),
+        home.contains(&format!(
+            "{} (hook only, below the required hook + OS sandbox)",
+            Host::GeminiCli.display_name()
+        )),
         "{home}"
     );
     // The audit log has the deny under its rule id.
@@ -143,7 +146,10 @@ fn at_the_required_level_a_call_gets_its_usual_decision() {
     );
     // A deny of the policy's own stays that deny.
     if !cfg!(windows) {
-        let (code, reply) = gemini(&sb, &fixture("gemini-cli/run_shell_command.json"));
+        let (code, reply) = gemini(
+            &sb,
+            &host_fixture(Host::GeminiCli, "run_shell_command.json"),
+        );
         assert_eq!(code, Some(DENY), "{reply}");
         assert!(
             reply["reason"].to_string().contains("secrets-paths"),
@@ -231,7 +237,7 @@ fn run_refuses_a_program_below_the_required_level() {
     } else {
         std::env::temp_dir()
     };
-    let sb = Sandbox::installed_in(&parent, &[".gemini"]);
+    let sb = Sandbox::installed_in(&parent, &[&dir_of(Host::GeminiCli)]);
     require(&sb, "require:\n  protection: hook-only\n");
     let project = sb.project();
     let out = output(

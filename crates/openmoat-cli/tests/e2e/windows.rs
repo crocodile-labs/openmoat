@@ -83,7 +83,8 @@ fn doctor_shows_codexs_windows_sandbox_mode() {
     use crate::common::stdout;
 
     let sb = Sandbox::installed(&[&dir_of(Host::Codex)]);
-    let config = sb.home.join(".codex/config.toml");
+    // Codex's `config.toml`, which holds its MCP servers and its sandbox settings
+    let config = crate::hosts::mcp_user_file(&sb, Host::Codex);
     let written = std::fs::read_to_string(&config).unwrap_or_default();
     for (mode, said) in [
         ("elevated", "elevated sandbox enforces"),

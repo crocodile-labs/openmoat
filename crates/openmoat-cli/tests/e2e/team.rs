@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use crate::common::{OK, Sandbox, USAGE, bash_payload, json, stdout, text};
+use crate::hosts::dir_of;
 use openmoat_hosts::Host;
 
 const INSTALL: &str = "npm install left-pad-pro";
@@ -11,7 +12,7 @@ const KEY: &str = "cat ~/.ssh/id_rsa";
 /// A machine where `commands` ran in session `s1`; `approve` runs
 /// `moat allow --last` after the first of them, as a person would.
 fn machine(commands: &[&str], approve: bool) -> Sandbox {
-    let sb = Sandbox::installed_with_review(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[&dir_of(Host::ClaudeCode)]);
     let project = sb.project();
     for (n, command) in commands.iter().enumerate() {
         sb.guard(
