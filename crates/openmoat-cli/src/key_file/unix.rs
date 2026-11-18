@@ -49,9 +49,45 @@ pub(super) fn check(
     Ok(())
 }
 
+/// `dir` is a real folder, owned by whoever owns `mine`, with no group or
+/// other bits.
+pub(super) fn private_folder(dir: &Path, folder: &Metadata, mine: &Metadata) -> Result<()> {
+    use std::os::unix::fs::MetadataExt as _;
+    if !folder.is_dir() || folder.file_type().is_symlink() {
+        bail!("{} is not a folder", dir.display());
+    }
+    if folder.uid() != mine.uid() {
+        bail!(
+            "{} belongs to another user (uid {}), who could change what is in it",
+            dir.display(),
+            folder.uid()
+        );
+    }
+    let mode = folder.permissions().mode() & 0o777;
+    if mode & FILE_OPEN != 0 {
+        bail!(
+            "{} has mode {mode:03o}: other users may change what is in it",
+            dir.display()
+        );
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::PermissionsExt as _;
+
+    #[test]
+    fn a_folder_others_may_enter_is_not_private() {
+        let dir = tempfile::tempdir().unwrap();
+        let mine = dir.path().join("mine");
+        std::fs::write(&mine, "x").unwrap();
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(crate::key_file::private_folder(dir.path(), &mine).is_ok());
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o777)).unwrap();
+        let err = crate::key_file::private_folder(dir.path(), &mine).unwrap_err();
+        assert!(err.to_string().contains("mode 777"), "{err}");
+    }
 
     use super::super::read;
 

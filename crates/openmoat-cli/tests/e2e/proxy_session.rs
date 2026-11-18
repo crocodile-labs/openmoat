@@ -438,7 +438,8 @@ fn a_session_start_gives_the_session_the_ca_only_when_a_ca_covers_its_request_ru
         let mut cmd = sb.command();
         cmd.args(["guard", "--host", Host::ClaudeCode.id()])
             .env("CLAUDE_ENV_FILE", &env_file)
-            .env("TMPDIR", &tmp);
+            .env("TMPDIR", &tmp)
+            .env("XDG_RUNTIME_DIR", &tmp);
         let out = crate::common::output(&mut cmd, Some(&session_start(session, &project)));
         assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
         std::fs::read_to_string(&env_file).unwrap()
@@ -476,6 +477,20 @@ fn a_session_start_gives_the_session_the_ca_only_when_a_ca_covers_its_request_ru
         assert!(!lines.contains("NODE_EXTRA_CA_CERTS"), "{lines}");
         assert!(lines.contains(&format!("{SESSION_C}.n:")), "{lines}");
         assert_eq!(std::fs::read_dir(&elsewhere).unwrap().count(), 0);
+
+        // A folder planted in advance that others may enter is refused too.
+        let session_d = "7d6c5b4a-3f2e-4d1c-8b0a-9f8e7d6c5b4a";
+        let planted = tmp.join(format!("moat-session-{session_d}-ca"));
+        std::fs::create_dir(&planted).unwrap();
+        std::fs::set_permissions(
+            &planted,
+            <std::fs::Permissions as std::os::unix::fs::PermissionsExt>::from_mode(0o777),
+        )
+        .unwrap();
+        let lines = start_in(session_d);
+        assert!(!lines.contains("NODE_EXTRA_CA_CERTS"), "{lines}");
+        assert!(lines.contains(&format!("{session_d}.n:")), "{lines}");
+        assert_eq!(std::fs::read_dir(&planted).unwrap().count(), 0);
     }
 }
 

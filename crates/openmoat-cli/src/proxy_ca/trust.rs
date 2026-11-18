@@ -76,19 +76,36 @@ impl Trust {
     /// The trust files of agent session `session` of the standalone proxy
     /// (ADR-062 §2), in the temp directory, kept when this is dropped: the
     /// session's commands read them for as long as it lasts, and its next
-    /// start writes them again. A folder that is a symbolic link is refused.
+    /// start writes them again. The folder is in the per-user runtime
+    /// directory where there is one (`XDG_RUNTIME_DIR`), else in the temp
+    /// directory (per user on macOS). A folder that is a symbolic link or a
+    /// file, that another user owns, or that others may enter, is refused: one
+    /// planted before OpenMoat made it could have its files swapped.
     pub fn write_for_session(cert_pem: &str, session: &str) -> Result<Self> {
-        let temp =
-            std::fs::canonicalize(std::env::temp_dir()).context("resolving the temp directory")?;
-        let dir = temp.join(format!("moat-session-{session}-ca"));
-        if std::fs::symlink_metadata(&dir).is_ok_and(|m| !m.is_dir() || m.file_type().is_symlink())
-        {
-            anyhow::bail!(
-                "{} is not a directory OpenMoat made (a symbolic link or a file)",
-                dir.display()
-            );
+        let base = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute() && p.is_dir())
+            .unwrap_or_else(std::env::temp_dir);
+        let base = std::fs::canonicalize(base).context("resolving the temp directory")?;
+        let dir = base.join(format!("moat-session-{session}-ca"));
+        if let Ok(meta) = std::fs::symlink_metadata(&dir) {
+            if !meta.is_dir() || meta.file_type().is_symlink() {
+                anyhow::bail!(
+                    "{} is not a directory OpenMoat made (a symbolic link or a file)",
+                    dir.display()
+                );
+            }
+            // Others' bits first, so nothing is written into a shared folder.
+            crate::key_file::private_folder(&dir, &dir)?;
         }
-        Self::write_at(cert_pem, dir, true)
+        let trust = Self::write_at(cert_pem, dir, true)?;
+        if let Err(error) = crate::key_file::private_folder(&trust.dir, &trust.ca) {
+            let mut trust = trust;
+            trust.keep = false;
+            drop(trust);
+            return Err(error);
+        }
+        Ok(trust)
     }
 
     fn write_at(cert_pem: &str, dir: PathBuf, keep: bool) -> Result<Self> {

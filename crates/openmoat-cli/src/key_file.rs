@@ -26,6 +26,18 @@ use other as platform;
 #[cfg(unix)]
 use unix as platform;
 
+/// Whether `dir` is a folder of this user's that no one else may enter:
+/// owned by the owner of `mine` (a file this process just made in it) and
+/// with no group or other bits. A folder planted in a shared temp directory
+/// before OpenMoat made it fails this (ADR-062's session trust files).
+pub fn private_folder(dir: &Path, mine: &Path) -> Result<()> {
+    let folder =
+        std::fs::symlink_metadata(dir).with_context(|| format!("reading {}", dir.display()))?;
+    let made =
+        std::fs::symlink_metadata(mine).with_context(|| format!("reading {}", mine.display()))?;
+    platform::private_folder(dir, &folder, &made)
+}
+
 /// The key in `path`, refused when the file is not a regular file, or when it
 /// or its directory is open to others ([`platform::check`]).
 pub fn read(path: &Path) -> Result<Zeroizing<String>> {

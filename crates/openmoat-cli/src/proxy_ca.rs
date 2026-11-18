@@ -119,15 +119,18 @@ pub fn status_lines(home: &Home, policy: &Policy) -> Vec<(bool, String)> {
             ));
         }
     }
+    // The pack reaches the proxy only for hosts the person's own policy has
+    // the proxy hold, so it is worth naming only then.
     let installed = crate::packs::Packs::load(&home.packs_path())
         .is_ok_and(|packs| packs.packs.contains_key(EXFIL_PACK));
-    if !installed {
+    if !installed && !hosts.is_empty() {
         lines.push((
             false,
             format!(
                 "request rules: a proxy CA exists, but the `{EXFIL_PACK}` pack is not installed, \
-                 so the proxy holds none of the default policy's hook-only rules; install it \
-                 signed by whoever distributes it: `openmoat policy install {EXFIL_PACK}.yaml`"
+                 so the proxy holds none of its endpoint rules for {}; install it signed by \
+                 whoever distributes it: `openmoat policy install {EXFIL_PACK}.yaml`",
+                hosts.join(", ")
             ),
         ));
     }

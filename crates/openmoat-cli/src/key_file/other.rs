@@ -15,3 +15,12 @@ pub(super) fn check(path: &Path, file: &Metadata, _: Option<&Metadata>, _: &str)
     }
     Ok(())
 }
+
+/// Without Unix modes only that `dir` is a real folder is checked; its
+/// access is its ACL, under the person's own temp directory.
+pub(super) fn private_folder(dir: &Path, folder: &Metadata, _: &Metadata) -> Result<()> {
+    if !folder.is_dir() || folder.file_type().is_symlink() {
+        bail!("{} is not a folder", dir.display());
+    }
+    Ok(())
+}
