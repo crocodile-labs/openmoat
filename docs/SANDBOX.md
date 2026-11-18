@@ -676,7 +676,9 @@ bubblewrap.
   (`SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `PIP_CERT`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`,
   `CARGO_HTTP_CAINFO`; `NODE_EXTRA_CA_CERTS` gets the certificate alone). Nothing is
   added to the system's or the person's trust store, and the standalone `openmoat proxy`
-  of the Standard tier never terminates. `~/.moat/proxy-ca/` itself stays out of reach
+  of the Standard tier never terminates for a secret; it terminates only the hosts of
+  `requests:` entries it holds, for a Claude Code session whose `SessionStart` hook wrote
+  the same files to `$TMPDIR/moat-session-<id>-ca/` (POLICY.md §2.3, ADR-062). `~/.moat/proxy-ca/` itself stays out of reach
   of sandboxed commands: `kernel-self` denies reading it, and every sandbox OpenMoat
   writes keeps it out (Seatbelt, Landlock and bubblewrap here, where the state directory
   is in no grant; Claude Code's `denyRead` and `Read(//…)` rules; Codex's and Cursor's

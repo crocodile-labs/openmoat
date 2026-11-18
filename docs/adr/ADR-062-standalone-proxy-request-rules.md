@@ -1,7 +1,10 @@
 # ADR-062: Method and path rules for allowed hosts, in `openmoat run` and the standalone proxy
 
-Status: proposed · Date: 2026-11-06 · Builds on ADR-020 (egress proxy), ADR-027 and
-ADR-044 (proxy sessions) and ADR-043 (TLS termination) · Follows up #247
+Status: accepted 2026-11-18 (proposed 2026-11-06), with decision 6 (the hook's half)
+added and the rule id, credential mark, `requests_untrusted` default and defaults of
+decisions 1, 2 and 4 settled as "Settled when built" says · Builds on ADR-020 (egress
+proxy), ADR-027 and ADR-044 (proxy sessions), ADR-034 (`hook_only`) and ADR-043 (TLS
+termination) · Follows up #247
 
 ## Context
 
@@ -67,8 +70,8 @@ requests:
 - The host must also be allowed by `net`/`fetch`; `requests:` only narrows, never opens.
   `policy lint` rejects an entry whose host no allow rule reaches, a bare IP, and a host
   pattern with a glob (one entry, one DNS name, as the CA's name constraints need).
-- Refusals are recorded with a new rule id, `proxy-request` (method and the rule that
-  refused, never the path, as for `proxy-secret-route`).
+- Refusals are recorded with a new rule id, `request-rule` ("Settled when built"; method
+  and the rule that refused, never the path, as for `proxy-secret-route`).
 
 ### 2. TLS termination in the standalone proxy, for sessions that carry the CA
 
@@ -80,12 +83,12 @@ requests:
   `REQUESTS_CA_BUNDLE`, `PIP_CERT`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`,
   `CARGO_HTTP_CAINFO`). Only the certificate, never the key.
 - **The credential says so:** the session user name gains a version (`v2.<host>.<expires>.
-  <session>.t`) whose trailing `t` marks a session that received the trust files. The proxy
-  terminates only for such a session; it never guesses.
+  <session>.t`) whose trailing `t` marks a session that received the trust files (`n` one
+  that did not). The proxy terminates only for such a session; it never guesses.
 - **A session without trust** (Codex, whose environment OpenMoat cannot set per session; a
   credential-less request under `proxy_serve_without_credential`) reaching a `requests:`
-  host is handled by `requests_untrusted:` in the policy: `refuse` (default when the entry
-  has a `deny` list: the rules cannot be held otherwise) or `relay` (today's behaviour,
+  host is handled by `requests_untrusted:` in the policy: `refuse` (the default: the rules
+  cannot be held otherwise) or `relay` (today's behaviour,
   recorded with a note). Fail closed is the default, as AGENTS §1 asks.
 - **CA:** the same person-only `openmoat proxy ca init`, its name constraints now covering
   the hosts of `requests:` entries as well as `tls: terminate` secrets; the lock pins both
@@ -101,13 +104,73 @@ working, writes stop. Hosts that are not terminated keep today's whole-host refu
 
 ### 4. Defaults
 
-The default policy ships **no active `requests:` entry**: termination needs a CA only a
-person can make. It ships a commented recipe, and `openmoat policy` gains a signed pack
-(ADR-031) `exfil-endpoints` with `deny` lists for known write-to-public endpoints of hosts
-the default policy allows: `api.github.com` (`POST /gists`, `PATCH /gists/**`,
-`POST /gists/*/comments`), and the paste and upload endpoints of other common allowed hosts
-as they are added. `openmoat status` notes when `sandbox.proxy_port` is set, the CA exists
-and the pack is not installed.
+The default policy ships **no `requests:` entry the proxy holds**: termination needs a CA
+only a person can make. It ships one **hook-only** entry instead (decision 6),
+`exfil-gists`: `api.github.com` `deny: POST /gists, PATCH /gists/**, POST
+/gists/*/comments` (GitHub's REST "Gists" endpoints), and a commented recipe for an entry
+the proxy holds. The pack `exfil-endpoints`
+(`crates/openmoat-core/policies/packs/exfil-endpoints.yaml`, ADR-031: signed by whoever
+distributes it) has the proxy hold the same denies, for every client and script. The
+other hosts the default policy allows take uploads only by publishing with the person's
+own token (`npm publish`, `cargo publish`; PyPI's upload host is not allowed) or through
+web forms that need a browser session, so no endpoint of theirs is listed: refusing those
+would stop ordinary releases. The `openmoat status` note for a CA without the pack is not
+built yet.
+
+### 6. The hook's half: the same rules, read in the command
+
+The proxy sees a request only where it terminates, which needs a CA, and only for
+traffic that reaches it: not a hook-only agent's commands, nor Codex's outside `openmoat
+run`. The hook sees every command before it runs, and for the common HTTP clients the
+command's words name the method and the URL. So the hook decides with the same rules:
+
+- **What it reads** (`openmoat-core/src/requests/command.rs`, its own module beside the
+  shell classifier, over the argument vector of each simple command the classifier found
+  after unwrapping `sudo`, `sh -c` and the rest): `curl` (`-X`/`--request` in any
+  spelling, `-d`/`--data*`/`--json`/`-F` implying `POST`, `-T` `PUT`, `-I` `HEAD`, `-G`,
+  `--url`, `-H` for method-override headers), `wget` (`--method`, `--post-data`,
+  `--post-file`), HTTPie and `xh` (`[METHOD] URL [ITEM …]`; data items imply `POST`;
+  without `--ignore-stdin` a bare request may be a `POST` of standard input), `gh api`
+  (`-X`, fields implying `POST`, `--hostname`, `{owner}`-style placeholders as one
+  unknown segment), `gh gist create`/`edit`/`delete`/`list`/`view`, and a fetch tool's URL
+  (`WebFetch`), which is a `GET`. Other `gh` commands choose their own requests (mostly
+  GraphQL), which the words do not show; they are left to the proxy.
+- **How it decides** (`requests/hook.rs`): a request whose method and target are known,
+  refused for every method it may be sent with, is denied with `request-rule`; refused for
+  some of them (an HTTPie request that may read a body from standard input), or known only
+  in part (a URL, host or method made at run time, a curl URL glob, `curl -K`, `--next`,
+  `--expand-…`, `wget -i`/`-e`) where a rule could refuse it, it needs review. A path the
+  server could read as another, and a method-override header or `_method` parameter, are
+  denied as at the proxy. Nothing is ever allowed by these rules: the decision only adds
+  a deny or a review to the call's own (strictest wins).
+- **No CA needed:** the hook reads the command, not the TLS stream, so an entry with
+  `hook_only: true` (ADR-034's word, now valid on a `requests:` entry) is held by the hook
+  alone: the proxy neither terminates its host nor refuses a session it cannot terminate.
+  That is what lets the default policy ship request rules (decision 4).
+- **Limits:** the hook sees what the words say, not what a program does: a script, a
+  compiled client or `python -c` that builds its own request is the proxy's (with a CA)
+  or nobody's. THREAT_MODEL T12 says so.
+
+### Settled when built
+
+- **Rule id `request-rule`**, worded (ADR-059), for the hook's deny and review and the
+  proxy's refusals alike. `proxy-request` was already the id of a request the proxy cannot
+  parse, and the proof of concept's `proxy-request-rule` named the proxy only.
+- **`requests_untrusted` defaults to `refuse` for every entry the proxy holds**, not only
+  one with a `deny` list: an `allow` list cannot be held unread either. `hook_only`
+  entries never reach the proxy, so the default policy's entry changes nothing there.
+- **The credential mark** is a last field `t` or `n` after the session id
+  (`v2.<host>.<expires>.<session>.<t|n>`), signed with the rest; `v1` credentials are still
+  accepted for one release, never trusted. A session folder that exists as a symbolic link
+  or a file is refused, and the session gets an untrusted credential.
+- **A repository policy or pack may add `requests:` entries with `deny` lists only**,
+  trusted or not; an `allow` list there is a parse error, and `requests_untrusted` is the
+  person's alone.
+- **`policy lint` warns** (rather than fails) for an entry no `net`/`fetch` allow rule
+  reaches, since such an entry only narrows nothing; a glob, an address, a port and an
+  upper-case name are errors.
+- **Matching**: deny rules match the method and the path in any letter case and with or
+  without a trailing `/`; allow rules match as written, so an allow list errs closed.
 
 ### 5. Out of scope
 
@@ -160,8 +223,10 @@ and the pack is not installed.
   refused.
 - Differential (`tests/e2e/differential`): `curl -X POST …/gists` through Claude Code's
   sandbox with the standalone proxy is refused; `curl …/repos/x/y` passes.
-- Conformance: none (the hook's decision does not change); MoatBench gets an
-  "exfil to an allowed host" scenario.
+- Conformance: with decision 6 the hook's decision does change: attack fixtures for every
+  spelling of posting a gist the hook reads, review fixtures for requests made at run time,
+  and benign ones for reads, `gh pr create`, `gh issue list` and `git push`. MoatBench
+  gets an "exfil to an allowed host" scenario (not built yet).
 
 ## Docs
 
@@ -197,11 +262,45 @@ and the standalone half (5 and 6) starts only if it holds.
 6. *(only if step 0 held)* `feat(cli)`: `SessionStart` writes the per-session trust files and variables; e2e.
 7. `policy`: the `exfil-endpoints` pack, `status` note, MoatBench scenario, THREAT_MODEL.
 
+### What the steps became
+
+Step 0 held (below), so the standalone half was built. Steps 2 to 7 and decision 6 were
+built together, in one branch of a few commits, because the schema is only useful once
+something holds it and the hook's half needed no CA:
+
+- Step 1 had landed before (`openmoat-core/src/route.rs`); it gained the matching of a
+  path known only in part (`Route::could_match`, `Partial`), which the hook needs.
+- Steps 2 and 3: `requests:` and `requests_untrusted:` in `openmoat-core/src/requests.rs`
+  (schema, checks, the compiled rules both enforcers use), enforced from the start (no
+  "parsed, not enforced" release); `openmoat run`'s proxy holds every entry not marked
+  `hook_only`, with `request-rule` rows; the read-only taint rule in
+  `openmoat-proxy/src/server/terminate.rs` and `exchange.rs`.
+- Step 4: `proxy_ca::terminated_hosts` includes those hosts, so `ca init` covers them and
+  `openmoat run` stops before the agent starts when the CA does not; the standalone proxy
+  says so at start-up.
+- Steps 5 and 6: `v2` credentials (`proxy_session.rs`, `Verify::trusted`,
+  `openmoat_proxy::Trust`), the standalone proxy's termination of `requests:` hosts for
+  them, `requests_untrusted`, and the session folder `SessionStart` writes
+  (`commands/guard/session_start.rs`, `proxy_ca::Trust::write_for_session`).
+- Step 7: the pack, without the `status` note and the MoatBench scenario (still open);
+  THREAT_MODEL T12.
+- Decision 6: `openmoat-core/src/requests/{command,hook}.rs`, with conformance attack,
+  review and benign fixtures.
+- The proof of concept's setting (`OPENMOAT_ADR062_POC`) is gone; its tests' claims are
+  kept by the `requests:` tests (the proxy's in `requests/tests.rs`,
+  `exchange/tests/requests.rs` and `tests/proxy/{terminate,requests}.rs`; the run's in the
+  e2e test `proxy_ca::a_request_rule_the_proxy_holds_needs_a_ca_for_its_host`).
+- Not built: the differential test through Claude Code's sandbox and the proxy latency
+  check in CI.
+
 ## Step 0 results
 
 Status: measured 2026-11-09 by the CI job on GitHub's `ubuntu-latest` and `macos-15` runners. The exit criteria below hold for every client measured.
 
 ### What is built
+
+What follows is the proof of concept as measured; its setting has since been replaced by
+`requests:` ("What the steps became").
 
 - **The setting.** `OPENMOAT_ADR062_POC=1` in the environment of `openmoat run`, read
   only by the CLI (`openmoat-cli/src/proxy_ca/request_poc.rs`). It is temporary, not

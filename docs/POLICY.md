@@ -48,6 +48,8 @@ sandbox:                            # optional: what the host sandboxes may read
   project_hook_off: refuse          # optional, your own policy only: `start` lets `openmoat run` start an agent whose project turns its hook off (§9.5)
 
 secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§2.1)
+requests:   [ <request rules>, … ]  # method and path rules for allowed hosts (§2.3)
+requests_untrusted: refuse          # optional, your own policy only: `relay` passes what `openmoat proxy` cannot read (§2.3)
 
 taint:                              # optional: more paths session taint protects (§4.1)
   protected_writes: ["**/deploy/**"]
@@ -425,6 +427,83 @@ that an administrator installed.
   secret.
 - **Masking.** Every value it gave (the last five) is masked in the proxy's audit rows,
   and the leak and echo checks look for the value it replaced too.
+
+### 2.3 Request rules for allowed hosts (`requests:`)
+
+An allowed host can receive data: `registries` allows `api.github.com` for `git`, `gh` and
+the agents' GitHub tools, and with it `POST /gists`, which publishes what it is sent.
+`requests:` lists method and path rules for one host each (ADR-062). They only narrow what
+`net` and `fetch` allow; they never open a host.
+
+```yaml
+requests:
+  - id: exfil-gists               # lowercase letters, digits and `-`
+    host: api.github.com          # one lowercase DNS name: no address, port or pattern
+    hook_only: true               # optional: the hook holds the rules, the proxy does not
+    deny: ["POST /gists", "PATCH /gists/**", "POST /gists/*/comments"]
+  - id: github-api                # with a proxy CA: the proxy holds it too
+    host: api.github.com
+    allow: ["GET /**", "HEAD /**", "POST /repos/*/*/issues", "POST /repos/*/*/pulls"]
+
+requests_untrusted: refuse        # optional, your own policy only: or `relay` (below)
+```
+
+- **Rules** are written as a secret's `allow` rules (§2.1): `METHOD /path`, the method in
+  capitals, segments literal, `*` (one) or `**` (any number); `TRACE`, `TRACK` and
+  `CONNECT` are refused; at most 64 per list. `deny` is tried first and wins over every
+  `allow`, a secret's included. With an `allow` list, a request no `allow` rule of the
+  host's entries names is refused; with only `deny`, everything else passes. A deny rule
+  matches the method and the path in any letter case and with or without a trailing `/`
+  (`post /Gists/` is `POST /gists`); an allow rule matches as written. A path the server
+  could read as another (`..` in any spelling, `%2f`, `;`, `//`) and a request that asks for
+  another method (`X-HTTP-Method-Override` and the like, a `_method` parameter) are refused
+  whatever the rules say. Several entries may name one host; their rules add up.
+- **In the hook**, every entry applies. The hook reads the requests a command will send:
+  `curl` (`-X`/`--request`, data and form options imply `POST`, `-T` `PUT`, `-I` `HEAD`,
+  `-G`), `wget` (`--method`, `--post-data`, `--post-file`), HTTPie and `xh` (`[METHOD] URL
+  [ITEM …]`), `gh api` (`-X`, fields imply `POST`, `--hostname`) and `gh gist create`,
+  `edit`, `delete`, `list`, `view`, through every wrapper the classifier unwraps
+  (`sudo`, `sh -c`, …); a fetch tool's URL is a `GET`. A request the rules refuse is
+  denied (`request-rule`). One the hook cannot read in full, where a rule could refuse it,
+  needs review (`request-rule`): a URL, host or method made at run time (`curl -d @f
+  "$URL"`), a curl URL glob, options from a file (`curl -K`, `wget -i`, `wget -e`),
+  `curl --next`, and an HTTPie request with no method or data, which may send standard
+  input as a `POST` body. Other `gh` commands (`gh pr create`, `gh issue list`) choose
+  their own requests, which the command does not show, and are not read; nor is a script
+  or a program that builds its own request.
+- **At the proxy**, an entry without `hook_only` is held inside HTTPS: the proxy terminates
+  TLS to its host as for a `tls: terminate` secret (§2.1) and checks each request before
+  anything goes upstream; a refusal is a `request-rule` row naming the method and the
+  rule, never the path. `openmoat run`'s proxy terminates for its session. The standalone
+  `openmoat proxy` terminates only for a session that received the proxy CA's trust files:
+  Claude Code's `SessionStart` hook writes the CA's certificate and a bundle to
+  `$TMPDIR/moat-session-<id>-ca/` and exports `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`,
+  `REQUESTS_CA_BUNDLE`, `PIP_CERT`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO` and
+  `CARGO_HTTP_CAINFO` in the session's environment file, beside its credential, which
+  then carries the trust mark (§9). A connection it cannot terminate (another agent's,
+  one without a credential, or no CA that covers the host) is refused with
+  `request-rule` under `requests_untrusted: refuse`, the default, or relayed unread with
+  a note under `relay`.
+- **A proxy CA** (`openmoat proxy ca init`) covers the hosts of those entries as well as
+  the `tls: terminate` secrets'. Without one, or with one made before a host was added,
+  `openmoat run` stops before the agent starts, and `openmoat proxy` says so at start-up
+  and refuses (or relays) the host's connections. `hook_only` entries need none.
+- **Session taint.** After a secret read, a terminated tunnel to a `requests:` host stays
+  open for reads: `GET`, `HEAD` and `OPTIONS` without a body pass, anything else is
+  refused with `session-taint` (§4.1). Every other host keeps the whole-host refusal
+  (§5.2).
+- **Repository policies and packs** may add entries with `deny` lists only, trusted or
+  not (§10, §11); an `allow` list there is a parse error, and `requests_untrusted` is your
+  own policy's alone.
+- **The default policy** ships one hook-only entry, `exfil-gists`, for GitHub's gist
+  endpoints, and a commented recipe for one the proxy holds. The signed-pack source
+  `crates/openmoat-core/policies/packs/exfil-endpoints.yaml` has the proxy hold the same
+  denies (§11).
+- `openmoat policy lint` warns about an entry no `net` or `fetch` allow rule reaches, and
+  says what the proxy needs for an entry without `hook_only`.
+- **What they do not do**: read bodies (an allowed write endpoint, such as an issue
+  comment, can still carry data), tell a GraphQL query from a mutation (`POST /graphql` is
+  one path), or read HTTP/2, which terminated tunnels refuse (THREAT_MODEL T12).
 
 ## 3. Pattern syntax
 
@@ -1021,7 +1100,7 @@ A deny or review from one of OpenMoat's own checks that reaches the agent (`unpa
 `unchecked`, `executables`, `kernel-integrity`, `kernel-error`, `mcp-server-changed`,
 `ungoverned`, `project-settings`, `session-taint`, `injected-input`, `mcp-cross-server`,
 `protected-contents`, `session-written-code`, `push-secret`, `push-runs-later`,
-`push-unchecked`, `protection-required`, `unattended`) carries the block message as a titled rule does (§2), with OpenMoat's
+`push-unchecked`, `protection-required`, `unattended`, `request-rule`) carries the block message as a titled rule does (§2), with OpenMoat's
 own title and `why` (ADR-059, amended); a rule of your policy with one of these ids keeps
 your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat proxy` and
 `policy check-diff` keep their own output.
@@ -1049,6 +1128,7 @@ your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat prox
 | `protected-contents` | review | the call reads a folder that holds paths a deny rule names (`cp -r ~/.codex x`, `grep -r . ~/.gemini`, `ls ~/.codex`), or writes into one (`tar xf a.tar -C ~/.config`): the folder rule (§3.2, ADR-038) |
 | `session-written-code` | review | the call runs a file the same host session wrote (`python3 x.py`, `bash x.sh`, `./x`) and no OS sandbox from OpenMoat holds it (§4.3, ADR-039) |
 | `unattended` | review | the policy says `unattended: review`, the call would be a `defer`, and the agent runs in a mode in which it runs such a call with no person asked (§5.4, ADR-102); the agent receives it as a deny that says how to approve it |
+| `request-rule` | deny, review | a request to a `requests:` host its rules refuse, read in a shell command or a fetch tool's URL (deny), or one the hook cannot read in full (a URL, host or method made at run time, options from a file) where a rule could refuse it (review); at `openmoat proxy`, a request refused inside a terminated tunnel or as plain HTTP, and a connection to such a host it cannot terminate under `requests_untrusted: refuse` (deny) (§2.3, ADR-062) |
 | `push-secret` | deny | a commit a `git push` or `gh pr create` would publish adds a known token format or a brokered secret's value (§4.2) |
 | `push-runs-later` | review | the session read untrusted content or a secret, and the push changes a file `runs-later` names (§4.2) |
 | `push-unchecked` | review | what a push would publish could not be checked within 10 s or 8 MiB, or where it runs is not known (§4.2) |
@@ -1088,7 +1168,9 @@ first. Differences from the hook:
   too when the hook should allow it.
 - A `fetch` allow opens the host to every method through the proxy, including requests with a
   body. Inside a CONNECT tunnel the method cannot be seen, except to a host whose
-  brokered secret says `tls: terminate` (§2.1).
+  brokered secret says `tls: terminate` (§2.1) or whose `requests:` entry the proxy holds,
+  for a session that trusts the proxy CA (§2.3); there each request is checked against the
+  host's request rules.
 - Loopback, link-local, cloud metadata (`metadata.google.internal`, `metadata.goog`,
   `100.100.100.200`, `fd00:ec2::254`) and non-unicast destinations are refused whatever the
   policy allows. This applies to the name as written and to every address it resolves to.
@@ -2009,10 +2091,13 @@ review:
     fs.write: ["${project}/db/migrations/**"]
 ```
 
-- Only `version`, `deny`, `review` (or its old name `ask`), `allow` and `require` are accepted. `defaults`, `executables` and
-  `sandbox` stay yours, and any other key is an error. Rules follow §1–§3.
+- Only `version`, `deny`, `review` (or its old name `ask`), `allow`, `require` and `requests` are accepted. `defaults`, `executables`,
+  `sandbox` and `requests_untrusted` stay yours, and any other key is an error. Rules follow §1–§3.
 - `require` raises the protection level an agent must be at in the project (§9.2), never
   lowers it, and needs no trust.
+- `requests` entries (§2.3) may list `deny` rules only, which join yours under `repo:` ids
+  and need no trust; an `allow` list is an error. Under `openmoat run` the proxy holds
+  those without `hook_only` too.
 - `deny` groups join your deny rules. `review` groups are tried after your deny rules and
   before your allow rules. So they make an action your policy allows need review, but they
   never soften one of your denies, a `deny` your `defaults` give included: a repository
@@ -2083,7 +2168,7 @@ every call in the project is denied.
 ## 11. Signed policy packs
 
 A policy pack is a team's rules that you install for every project (ADR-031). It has a
-repository policy's shape (only `version`, `deny`, `review`, `allow` and `require`, §10; its
+repository policy's shape (only `version`, `deny`, `review`, `allow`, `require` and `requests` deny lists, §10; its
 `require` raises the protection level as a repository's does, §9.2) and a
 detached OpenSSH signature. OpenMoat has no signature code of its own: it runs the
 system `ssh-keygen` (OpenSSH 8.1 or later), found through the environment snapshot
@@ -2120,7 +2205,10 @@ openmoat policy remove team
   `pack:<name>:` (`pack:team:no-deploy`): its deny rules join yours, its review rules are
   tried before your allow rules, and its allow rules are added after yours, so your
   deny rules still win. Deny and allow rules also reach the host sandboxes at the next
-  `openmoat sandbox sync`; review rules are hook only.
+  `openmoat sandbox sync`; review rules are hook only. Its `requests:` entries (deny lists
+  only, §2.3) join yours. `crates/openmoat-core/policies/packs/exfil-endpoints.yaml` is
+  such a pack: it has the proxy hold the default policy's hook-only gist rules, so it
+  needs a proxy CA; whoever distributes it signs it.
 - The allowed signers, `packs.json` and each installed pack are pinned by the lock
   (§8). A pack changed after install is drift, and every call is denied with
   `kernel-integrity`. Only these three commands add those pins; another re-pin keeps

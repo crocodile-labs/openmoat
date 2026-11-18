@@ -137,7 +137,12 @@ Each agent's gaps and the reasons are in
   wrote does not, nor does a file another session wrote or one written by a program
   whose writes the hook cannot see (the files `tar x` or `unzip` extract, a build's or
   a package manager's output, what a script writes). An allowed host can receive data
-  from an allowed command: the proxy checks the host, not what is sent inside HTTPS.
+  from an allowed command: the proxy checks the host, not what is sent inside HTTPS,
+  unless a `requests:` entry it holds names the host and a proxy CA lets it read the
+  request (POLICY.md §2.3). The hook reads request rules in the words of `curl`, `wget`,
+  HTTPie, `xh`, `gh api` and `gh gist` only, never in a script's own requests, and no
+  rule reads a request's body, so an endpoint the rules allow (an issue comment) still
+  carries what is put in it.
 - **A program that runs as you outside any sandbox** can change the policy and
   recompute the lock. Only the OS sandboxes stop that, so hook-only agents do not have
   this protection. The same goes for the audit log: such a program reads the audit key
