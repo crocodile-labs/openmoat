@@ -404,7 +404,8 @@ names instead (`<program> @<argument>`, `<shell> @stdin`, a `net` host, a real p
 ## Governance
 
 Single maintainer for now. CODEOWNERS routes review; the trusted core, the default
-policy and CI require maintainer approval.
+policy and CI require maintainer approval. How decisions are made, how someone becomes
+a maintainer, and how security reports and releases are handled: [GOVERNANCE.md](GOVERNANCE.md).
 
 ## License
 
