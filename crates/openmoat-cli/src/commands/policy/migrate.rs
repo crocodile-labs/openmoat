@@ -23,8 +23,10 @@ const COMMAND: &str = "openmoat policy migrate";
 
 pub fn run(args: &MigrateArgs) -> Result<Code> {
     let home = Home::locate()?;
-    let installed = args.file.is_none();
     let path = args.file.clone().unwrap_or_else(|| home.policy_path());
+    // `--file` naming the installed policy is the installed policy: written
+    // plainly it would drift from the lock and every later call would be refused.
+    let installed = same_file(&path, &home.policy_path());
     let current = read_policy(&path)?;
     let migration = migrate(&current).with_context(|| format!("migrating {}", path.display()))?;
     let paths = crate::report::Paths::detect();
@@ -111,6 +113,15 @@ fn backup_of(path: &Path) -> PathBuf {
     let mut name = path.as_os_str().to_owned();
     name.push(".before-migrate");
     PathBuf::from(name)
+}
+
+/// Whether `a` and `b` name one file, through links and `..`; the paths
+/// themselves when either cannot be resolved.
+fn same_file(a: &Path, b: &Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
 }
 
 /// A file outside OpenMoat's state directory, written as the person's editor
