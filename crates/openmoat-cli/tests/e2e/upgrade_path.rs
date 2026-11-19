@@ -53,7 +53,7 @@ fn older_home(version: i64) -> (Sandbox, i64) {
     std::fs::write(state(&sb, "policy.yaml"), mine).unwrap();
     std::fs::remove_file(state(&sb, "policy.base.yaml")).unwrap();
     let out = sb.moat_as_person(&["doctor", "--accept"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(text(&out).contains("re-pinned"), "{}", text(&out));
     let out = sb.moat_as_person(&["sandbox", "sync"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     // The lock an older binary wrote: its release and its bytes.

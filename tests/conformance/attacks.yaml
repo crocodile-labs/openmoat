@@ -6174,6 +6174,14 @@
   threat: T9
   action: { shell: "openmoat policy upgrade" }
   expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-openmoat-policy-migrate
+  threat: T9
+  action: { shell: "openmoat policy migrate --yes" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-openmoat-policy-migrate-repo-file
+  threat: T9
+  action: { shell: "moat policy migrate --file .moat/policy.yaml --yes" }
+  expect: { verdict: deny, rules: [kernel-self] }
 - id: T9-openmoat-policy-install-after-lint-word
   threat: T9
   action: { shell: "openmoat policy install lint.yaml" }

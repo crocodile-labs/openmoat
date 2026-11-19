@@ -22,8 +22,9 @@ platform and false positives from daily use turned into fixtures, then enforceme
 (`openmoat run` with Seatbelt and Landlock + seccomp, the egress proxy, session taint,
 the MCP proxy with description pinning) shown by the executing fixtures in
 [EVIDENCE.md](EVIDENCE.md), where exfiltration fails at the OS level. What 1.0 still
-needs, as ADR-013 sets it: a stable policy schema with `openmoat policy migrate` (#136)
-and MoatBench meeting a 1.0 gate; the third, `openmoat serve` (#320), is built (ADR-066). [MOATBENCH.md](MOATBENCH.md)
+needs, as ADR-013 sets it: a stable policy schema with `openmoat policy migrate` (#136;
+the versioning rules, the version-first errors and the command are built, ADR-103; a
+machine-readable schema for editors is left) and MoatBench meeting a 1.0 gate; the third, `openmoat serve` (#320), is built (ADR-066). [MOATBENCH.md](MOATBENCH.md)
 defines the gate CI applies today (every bundled scenario decided as expected, with no
 false positive, on every platform); the threshold 1.0 asks beyond that is not yet set.
 What exists:
@@ -135,7 +136,9 @@ Planned for 1.0 or after, not yet scheduled:
 
 - Windows enforcement: an OS sandbox on Windows (#135).
 - A user service for `openmoat proxy` on Windows (#272).
-- A stable policy schema and `openmoat policy migrate` (#136).
+- The rest of the stable policy schema (#136): a JSON Schema generated from the policy
+  model and checked against [POLICY.md](POLICY.md) §1, so editors can validate a policy.
+  The versioning rules and `openmoat policy migrate` are built (ADR-103, POLICY.md §1.1).
 - The Isolated tier on macOS: `openmoat run --isolate` in an Apple Virtualization guest (#175, ADR-023).
 - HTTPS injection of brokered secrets in the standalone `openmoat proxy`, and keep-alive
   inside a terminated tunnel; `openmoat run` has both injection and the method and path
@@ -158,6 +161,15 @@ agent has an adapter, `openmoat run` can still sandbox it.
 
 Aider and the Zed agent have no pre-execution hook, and Roo Code has shut down; use
 `openmoat run` for those.
+
+Kiro and Junie were checked against their documentation on 2026-11-19 and wait for it
+to say more; nothing ships for them until it does, so no adapter guesses a field.
+Kiro CLI V3 documents neither its built-in tool names nor any tool's input, and two of
+its pages disagree on whether a failed hook blocks the call
+([agents/kiro-cli.md](agents/kiro-cli.md)). Junie's hooks are in Early Access, and its
+`PreToolUse` input does not promise a session or a working directory
+([agents/junie-cli.md](agents/junie-cli.md)). Each draft lists what is missing and the
+safe choices an adapter would make.
 
 ## Not planned
 

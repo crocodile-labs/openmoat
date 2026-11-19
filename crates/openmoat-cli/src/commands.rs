@@ -116,6 +116,7 @@ pub fn run(cli: Cli) -> Result<Code> {
             PolicyCommand::CheckDiff(args) => policy::check_diff(&args),
             PolicyCommand::Compile(args) => policy::compile(&args),
             PolicyCommand::Upgrade(args) => policy::upgrade(&args),
+            PolicyCommand::Migrate(args) => policy::migrate(&args),
             PolicyCommand::Install(args) => policy::install(&args),
             PolicyCommand::TrustKey(args) => policy::trust_key(&args),
             PolicyCommand::Remove(args) => policy::remove(&args),

@@ -50,6 +50,7 @@ pub struct RepoPolicy {
 impl RepoPolicy {
     /// Parse and lint a repository policy. Pure: takes the YAML text.
     pub fn parse(yaml: &str) -> Result<Self, PolicyError> {
+        crate::policy::check_version(yaml)?;
         let repo: Self = crate::yaml::from_str(yaml).map_err(PolicyError::Parse)?;
         // Every key it has is a policy key, so the policy lint checks the
         // version, the ids and every pattern the same way.

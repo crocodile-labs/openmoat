@@ -5,6 +5,8 @@
 //! the policy started from (`policy.base.yaml`) and this release's default into
 //! the policy, three ways (`merge.rs`), and leaves every line the person changed.
 //! It also renames `ask`, the name `review` had before 0.14.0 (`rename.rs`).
+//! `moat policy migrate` rewrites a policy in the current schema without
+//! changing a rule (`migrate.rs`, ADR-103).
 
 use anyhow::Result;
 use openmoat_core::DEFAULT_POLICY;
@@ -13,6 +15,7 @@ use crate::context::read_policy;
 use crate::home::Home;
 
 mod merge;
+pub mod migrate;
 mod rename;
 
 pub use merge::{Change, Merge};

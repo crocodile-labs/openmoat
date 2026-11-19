@@ -23,6 +23,10 @@ pub enum PolicyCommand {
     /// line you changed; shows the diff and asks first. Refused unless run from an
     /// interactive terminal, except with --dry-run.
     Upgrade(UpgradeArgs),
+    /// Rewrite a policy file in the current policy schema (`version:`), changing no rule:
+    /// shows the diff, asks, and keeps the previous file beside it. Refused unless run from
+    /// an interactive terminal, except with --dry-run.
+    Migrate(MigrateArgs),
     /// Install a team's signed policy pack: verify its OpenSSH signature against the
     /// keys `openmoat policy trust-key` trusted, then merge its rules into the policy and
     /// pin the pack. Refused unless run from an interactive terminal, and over a
@@ -189,4 +193,20 @@ pub struct UpgradeArgs {
     /// Restore the policy the last upgrade replaced, byte for byte.
     #[arg(long)]
     pub undo: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct MigrateArgs {
+    /// Policy file to migrate (a repository policy or a pack's source). Defaults to the
+    /// installed user policy, which is re-pinned after it is written.
+    #[arg(long, value_name = "PATH")]
+    pub file: Option<PathBuf>,
+
+    /// Show the diff without writing anything; needs no terminal.
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Apply without asking (still only from a terminal).
+    #[arg(long, short = 'y')]
+    pub yes: bool,
 }

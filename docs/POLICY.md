@@ -20,7 +20,7 @@ the operating system also bounds what the call can reach ([SANDBOX.md](SANDBOX.m
 ## 1. Shape
 
 ```yaml
-version: 1                          # required; only 1 is supported
+version: 1                          # required: the policy schema version (§1.1); only 1 exists
 
 defaults:                           # verdict when no rule matches: allow, defer, review or deny
   "*": defer                        #   one verdict for everything, or a map per kind
@@ -105,6 +105,48 @@ The file is YAML 1.2, read strictly (ADR-024): a key repeated in one mapping, a 
 (`<<`) and a tag OpenMoat does not know (`!env`) are errors, only `true` and `false` are
 booleans (`yes`, `no`, `on`, `off` are text), and anchors and aliases (`&paths`, `*paths`)
 work as usual.
+
+### 1.1 Schema version (`version:`) and `openmoat policy migrate`
+
+`version:` is the policy schema version: the format the file is written in, not the
+release that wrote it or the rules it holds (ADR-103). Version 1 is the only one, and every
+policy, repository policy and pack any release wrote says `version: 1`. It is stable:
+
+- a later release may add a key to version 1, always optional and with a default that
+  keeps what an older file means (the keys above marked "since" came that way);
+- a key, value or rule field of version 1 is never renamed, removed or given another
+  meaning. A spelling version 1 once had stays readable: `ask` (§1 above);
+- a change that cannot keep to that is a new schema version, shipped with a migration
+  step for `openmoat policy migrate` and read beside the old one for at least one minor
+  release.
+
+The version is read before anything else, so the error says what to do:
+
+| The file | The error starts | What to do |
+|---|---|---|
+| has no `version:` | `the policy has no version:` | add `version: 1` as its first key, or run `openmoat policy migrate` |
+| names a newer version | `unsupported policy version 2: … written for policy schema version 2` | upgrade OpenMoat |
+| names version 0 | `unsupported policy version 0` | set `version: 1`; `openmoat policy migrate` says so |
+| has a key or value version 1 does not have | `policy parse error (policy schema version 1): unknown field …` | the field is named, with its line and column |
+
+A policy that does not load decides nothing: every guard call is denied until it is fixed.
+
+`openmoat policy migrate` rewrites a policy in the current schema, on its text, so
+comments, order and every rule stay as written. It never adds a rule: new default rules
+are `openmoat policy upgrade`'s. Within version 1 it adds `version: 1` to a file without
+it and renames `ask` to `review`; later versions add their own steps.
+
+```bash
+openmoat policy migrate --dry-run                # what it would change, as a diff; changes nothing
+openmoat policy migrate                          # the installed policy: shows the diff, asks, keeps
+                                                 # policy.yaml.before-migrate, re-pins the lock
+openmoat policy migrate --file .moat/policy.yaml # a repository policy, kept beside it the same way
+```
+
+Like the other commands that change what OpenMoat trusts, it applies a change only for a
+person at a terminal, and never with an agent among its parent processes; the installed
+policy is not rewritten over a drifted lock. A repository policy a person trusted needs
+`openmoat trust` again once its file changes (§10).
 
 ## 2. Rule groups
 
