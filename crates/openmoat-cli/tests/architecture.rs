@@ -197,6 +197,40 @@ fn only_channels_use_the_network() {
     assert_eq!(offenders, Vec::<String>::new());
 }
 
+/// The audit log is opened for writing only through `audit_key.rs` (ADR-101):
+/// a writable open upgrades an older log to keyed events, and only the key's
+/// module makes the key in that same call. A writable open anywhere else,
+/// first after an upgrade, would leave a keyed log with no key, and every
+/// later call would be refused. Read-only opens (`Store::open_read_only`) may
+/// be anywhere.
+#[test]
+fn only_the_audit_key_module_opens_the_log_for_writing() {
+    let mut files = Vec::new();
+    rust_files(&src(), &mut files);
+    let mut offenders = Vec::new();
+    for file in files {
+        let rel = relative(&file);
+        if rel == "audit_key.rs" || rel.contains("/tests/") || rel.ends_with("/tests.rs") {
+            continue;
+        }
+        let text = fs::read_to_string(&file).unwrap();
+        for (n, line) in text.lines().enumerate() {
+            // `snapshot::Store::open` is another store, so `Store::open(` counts
+            // only on a line that names the audit log.
+            if line.contains("Store::open_existing(")
+                || (line.contains("Store::open(") && line.contains("audit"))
+            {
+                offenders.push(format!("{rel}:{}", n + 1));
+            }
+        }
+    }
+    assert_eq!(
+        offenders,
+        Vec::<String>::new(),
+        "open the audit log for writing with `crate::audit_key::open_existing`"
+    );
+}
+
 /// `found` against `allowed`: nothing over its count, no entry above what the
 /// code now has.
 fn check_only_shrinks(found: &BTreeMap<String, usize>, allowed: &[(&str, usize)], list: &str) {

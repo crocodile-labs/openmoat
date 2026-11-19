@@ -9,7 +9,7 @@ use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_audit::{KnownSecrets, Store};
+use openmoat_audit::KnownSecrets;
 use openmoat_core::rule_id::{APPROVED_SESSION, KERNEL_ERROR, UNGOVERNED};
 use openmoat_core::{CompiledPolicy, Decision, Verdict};
 use openmoat_hosts::{HookEvent, HookRequest, Host};
@@ -456,10 +456,13 @@ fn evaluate(
     // A grant made after the session read untrusted content answers that
     // content's review for this exact call (taint.rs).
     // A long fold saves what it reached as it goes, on a writable handle, so
-    // the next call reads on even if this one runs out of time.
-    let audit = home.audit_path();
+    // the next call reads on even if this one runs out of time. The handle is
+    // opened through the audit key's module, as every writable one is: an open
+    // that upgrades the log to keyed events makes the key in the same call,
+    // and one opened beside it would upgrade the log and leave no key, so
+    // every later call would be refused (`audit_key.rs`).
     let mut save = |write: &taint::CacheWrite| {
-        if let Ok(writable) = Store::open_existing(&audit) {
+        if let Ok(writable) = crate::audit_key::open_existing(&home) {
             write.write(&writable);
         }
     };

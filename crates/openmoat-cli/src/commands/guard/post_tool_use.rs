@@ -75,7 +75,7 @@ fn kept(host: Host, request: HookRequest, output: &str) -> Result<Decision> {
     let compiled = CompiledPolicy::compile(&policy, &ctx)?;
     hangs::enter(Phase::Record);
     home.require_exists()?;
-    let store = openmoat_audit::Store::open_existing(&home.audit_path())?;
+    let store = crate::audit_key::open_existing(&home)?;
     let output = taint::injected::Output {
         host,
         session: &request.session_id,

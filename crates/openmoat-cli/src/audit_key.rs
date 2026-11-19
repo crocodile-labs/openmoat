@@ -92,6 +92,15 @@ fn for_writing(home: &Home, store: &Store, writer: Writer) -> Result<ChainKey> {
         {
             return Ok(key);
         }
+        if !store.has_keyed_events()? {
+            bail!(
+                "the audit key {} is missing and this audit log already holds events, so \
+                 OpenMoat records nothing more: only an upgrade or a person's `openmoat init` makes \
+                 a key for a log with events. No event in it is keyed yet, so run `openmoat init` \
+                 in your terminal: it makes the key and keeps the log",
+                path.display()
+            );
+        }
         bail!(
             "the audit key {} is missing and this audit log already holds events, so \
              OpenMoat records nothing more: only an upgrade or a person's `openmoat init` makes \

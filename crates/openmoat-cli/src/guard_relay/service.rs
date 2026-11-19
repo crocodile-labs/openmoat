@@ -23,7 +23,7 @@ use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_audit::{EventId, NewEvent, Store};
+use openmoat_audit::{EventId, NewEvent};
 use openmoat_core::rule_id::{RUN_GUARD_HOST, RUN_GUARD_SESSION, RUN_GUARD_TOKEN};
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::{HookEvent, Host};
@@ -180,7 +180,7 @@ impl Service {
         if scope.sessions.len() >= MAX_SESSIONS {
             return refuse(&format!("the run already has {MAX_SESSIONS} sessions"));
         }
-        let store = Store::open_existing(&self.home.audit_path())?;
+        let store = crate::audit_key::open_existing(&self.home)?;
         let first = store.session_page(&session, EventId(0), 1)?;
         let resumed = matches!(parsed.event, HookEvent::SessionStart { .. });
         match first.first() {
