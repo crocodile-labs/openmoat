@@ -574,9 +574,15 @@ impl Keying<'_> {
 }
 
 /// Recompute `prev_hash` and `hash` of event `from` and of every event after
-/// it, leaving their MACs: what a rewrite by someone without the key leaves.
+/// it, leaving their MACs: what a rewrite by someone without the key leaves,
+/// or what a build before the key wrote, on a log below version 12.
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) fn rehash_from(conn: &rusqlite::Connection, from: i64) -> Result<(), StoreError> {
+    let rows = if super::schema::has_column(conn, "events", "mac")? {
+        ROWS_KEYED
+    } else {
+        ROWS_UNKEYED
+    };
     let mut prev: String = conn
         .query_row(
             "SELECT hash FROM events WHERE id < ?1 ORDER BY id DESC LIMIT 1",
@@ -587,7 +593,7 @@ pub(crate) fn rehash_from(conn: &rusqlite::Connection, from: i64) -> Result<(), 
         .flatten()
         .unwrap_or_else(|| GENESIS.to_owned());
     let rows: Vec<Row> = {
-        let mut stmt = conn.prepare(&format!("{ROWS_KEYED} WHERE id >= ?1 ORDER BY id"))?;
+        let mut stmt = conn.prepare(&format!("{rows} WHERE id >= ?1 ORDER BY id"))?;
         stmt.query_map(params![from], read_row)?
             .collect::<Result<_, _>>()?
     };

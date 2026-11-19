@@ -377,7 +377,7 @@ fn widen_check(tx: &Transaction<'_>, step: &Widening) -> Result<bool, StoreError
 }
 
 /// Whether `table` has a column named `column`.
-fn has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, StoreError> {
+pub(super) fn has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, StoreError> {
     let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
     let names = stmt.query_map([], |r| r.get::<_, String>(1))?;
     for name in names {
@@ -412,7 +412,6 @@ pub(super) fn too_new(found: i64) -> Result<(), StoreError> {
 /// upgrade from before version 12 does (a version set back by hand keeps the
 /// column).
 pub(super) fn migrate(conn: &Connection) -> Result<bool, StoreError> {
-    let mut added_mac = false;
     let found = version(conn)?;
     if found >= SCHEMA_VERSION {
         return too_new(found).map(|()| false);
@@ -426,61 +425,82 @@ pub(super) fn migrate(conn: &Connection) -> Result<bool, StoreError> {
         drop(tx);
         return too_new(found).map(|()| false);
     }
-    if found < 1 {
-        tx.execute_batch(V1)?;
-    }
-    if found < 2 {
-        tx.execute_batch(V2)?;
-    }
-    if found < 3 && !widen_check(&tx, &V3)? {
-        tx.execute_batch(V3_REBUILD)?;
-    }
-    if found < 4 {
-        tx.execute_batch(V4)?;
-    }
-    if found < 5 {
-        tx.execute_batch(V5)?;
-    }
-    if found < 6 {
-        tx.execute_batch(V6)?;
-    }
-    if found < 7 && !has_column(&tx, "session_writes", "before_sha256")? {
-        tx.execute_batch(V7)?;
-    }
-    if found < 8 {
-        let [events, tickets] = &V8;
-        if !widen_check(&tx, events)? {
-            tx.execute_batch(V8_REBUILD_EVENTS)?;
-        }
-        if !widen_check(&tx, tickets)? {
-            tx.execute_batch(V8_REBUILD_TICKETS)?;
-        }
-    }
-    if found < 9 {
-        tx.execute_batch(V9)?;
-    }
-    if found < INJECTED_INPUTS_VERSION {
-        tx.execute_batch(V10)?;
-    }
-    if found < PACKAGE_EVENTS_VERSION {
-        tx.execute_batch(V11)?;
-    }
-    if found < KEYED_VERSION {
-        if !has_column(&tx, "events", "mac")? {
-            tx.execute_batch(V12)?;
-            added_mac = true;
-        }
-        tx.execute_batch(V12_MARK)?;
-    }
+    let added_mac = climb(&tx, found, SCHEMA_VERSION)?;
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;
     Ok(added_mac)
 }
 
+/// Run the ladder's steps past `found` up to and including `to`: [`migrate`]
+/// climbs to [`SCHEMA_VERSION`]; the upgrade tests climb a new database only
+/// to an older version, so it is laid out as that version's build laid it out.
+/// Returns whether the climb added the audit key's MAC column.
+fn climb(tx: &Transaction<'_>, found: i64, to: i64) -> Result<bool, StoreError> {
+    let step = |v: i64| found < v && v <= to;
+    let mut added_mac = false;
+    if step(1) {
+        tx.execute_batch(V1)?;
+    }
+    if step(CHAIN_VERSION) {
+        tx.execute_batch(V2)?;
+    }
+    if step(3) && !widen_check(tx, &V3)? {
+        tx.execute_batch(V3_REBUILD)?;
+    }
+    if step(PROVENANCE_VERSION) {
+        tx.execute_batch(V4)?;
+    }
+    if step(SESSION_WRITES_VERSION) {
+        tx.execute_batch(V5)?;
+    }
+    if step(MCP_TICKETS_VERSION) {
+        tx.execute_batch(V6)?;
+    }
+    if step(WRITE_BEFORE_VERSION) && !has_column(tx, "session_writes", "before_sha256")? {
+        tx.execute_batch(V7)?;
+    }
+    if step(8) {
+        let [events, tickets] = &V8;
+        if !widen_check(tx, events)? {
+            tx.execute_batch(V8_REBUILD_EVENTS)?;
+        }
+        if !widen_check(tx, tickets)? {
+            tx.execute_batch(V8_REBUILD_TICKETS)?;
+        }
+    }
+    if step(MCP_FLOW_VERSION) {
+        tx.execute_batch(V9)?;
+    }
+    if step(INJECTED_INPUTS_VERSION) {
+        tx.execute_batch(V10)?;
+    }
+    if step(PACKAGE_EVENTS_VERSION) {
+        tx.execute_batch(V11)?;
+    }
+    if step(KEYED_VERSION) {
+        if !has_column(tx, "events", "mac")? {
+            tx.execute_batch(V12)?;
+            added_mac = true;
+        }
+        tx.execute_batch(V12_MARK)?;
+    }
+    Ok(added_mac)
+}
+
+/// Lay out the new database `conn` as the build of schema `version` (1 to
+/// [`SCHEMA_VERSION`]) did, by the same ladder steps, for the tests that open
+/// a log an older build wrote.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn create_at(conn: &Connection, version: i64) -> Result<(), StoreError> {
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    climb(&tx, 0, version)?;
+    tx.pragma_update(None, "user_version", version)?;
+    tx.commit()?;
+    Ok(())
+}
+
 /// The version-1 schema, for tests that open a database an older build wrote.
 #[cfg(test)]
 pub(super) fn create_v1(conn: &Connection) -> Result<(), StoreError> {
-    conn.execute_batch(V1)?;
-    conn.pragma_update(None, "user_version", 1)?;
-    Ok(())
+    create_at(conn, 1)
 }

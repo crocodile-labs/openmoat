@@ -91,6 +91,7 @@ impl Session {
         let mut progress = Progress {
             deadline,
             save: &mut save,
+            every: super::super::CHECKPOINT_EVERY,
             folded: 0,
         };
         let (taint, write) = of_session(

@@ -456,19 +456,13 @@ fn evaluate(
     // A grant made after the session read untrusted content answers that
     // content's review for this exact call (taint.rs).
     // A long fold saves what it reached as it goes, on a writable handle, so
-    // the next call reads on even if this one runs out of time. The handle is
-    // opened through the audit key's module, as every writable one is: an open
-    // that upgrades the log to keyed events makes the key in the same call,
-    // and one opened beside it would upgrade the log and leave no key, so
-    // every later call would be refused (`audit_key.rs`).
-    let mut save = |write: &taint::CacheWrite| {
-        if let Ok(writable) = crate::audit_key::open_existing(&home) {
-            write.write(&writable);
-        }
-    };
+    // the next call reads on even if this one runs out of time
+    // (`CacheWrite::save_in` says why that handle comes from the key's module).
+    let mut save = |write: &taint::CacheWrite| write.save_in(&home);
     let mut progress = taint::Progress {
         deadline: (started + TAINT_BUDGET).max(Instant::now() + MIN_TAINT_TIME),
         save: &mut save,
+        every: taint::checkpoint_every(),
         folded: 0,
     };
     let (session, write) = taint::of_session(

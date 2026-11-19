@@ -105,4 +105,5 @@ mod taint_answered;
 mod team;
 mod trust;
 mod uninstall;
+mod upgrade_path;
 mod windows;

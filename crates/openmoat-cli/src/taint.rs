@@ -79,7 +79,7 @@ pub fn is_dir(path: &str) -> bool {
 /// The read is on a read-only handle; the new cache row, when there is one, is
 /// returned for the caller to write on the handle it records the call with.
 /// A fold that runs long hands what it has reached to `progress.save` every
-/// [`CHECKPOINT_EVERY`], and stops at `progress.deadline`, saving what it
+/// `progress.every`, and stops at `progress.deadline`, saving what it
 /// reached and failing the call (the guard denies, as its budget would): a
 /// fold of part of the session is never an answer, since it may lack the
 /// event that tainted it, but the next call reads on from where this one got.
@@ -132,7 +132,7 @@ pub fn of_session(
         if events.len() < PAGE_LEN {
             break;
         }
-        if saved.elapsed() >= CHECKPOINT_EVERY {
+        if saved.elapsed() >= progress.every {
             (progress.save)(&write(&out, upto)?);
             saved = Instant::now();
         }
@@ -185,6 +185,7 @@ pub fn catch_up(
     let mut progress = Progress {
         deadline,
         save: &mut save,
+        every: CHECKPOINT_EVERY,
         folded: 0,
     };
     if let Ok((_, Some(write))) = of_session(store, host, session, policy, cwd, &mut progress) {
@@ -205,8 +206,33 @@ pub struct Progress<'a> {
     pub deadline: Instant,
     /// Stores a fold of part of the session, so a later call reads on from it.
     pub save: &'a mut dyn FnMut(&CacheWrite),
+    /// How often a long fold hands what it reached to `save`:
+    /// [`CHECKPOINT_EVERY`], or [`checkpoint_every`] in the guard.
+    pub every: Duration,
     /// The events of the session classified so far.
     pub folded: usize,
+}
+
+/// Debug builds take [`Progress::every`] in milliseconds from here instead of
+/// [`CHECKPOINT_EVERY`], so the end-to-end tests can make a short fold save
+/// part-way as a long one does (the upgrade path, where that save was the
+/// first writer to open an older log). Release builds do not read it.
+#[cfg(debug_assertions)]
+const CHECKPOINT_ENV: &str = "MOAT_TEST_TAINT_CHECKPOINT_MS";
+
+/// How often the guard's fold saves what it reached: [`CHECKPOINT_EVERY`].
+#[cfg(debug_assertions)]
+pub fn checkpoint_every() -> Duration {
+    std::env::var(CHECKPOINT_ENV)
+        .ok()
+        .and_then(|ms| ms.parse().ok())
+        .map_or(CHECKPOINT_EVERY, Duration::from_millis)
+}
+
+/// How often the guard's fold saves what it reached: [`CHECKPOINT_EVERY`].
+#[cfg(not(debug_assertions))]
+pub fn checkpoint_every() -> Duration {
+    CHECKPOINT_EVERY
 }
 
 /// A session's fold to store in the cache.
@@ -222,6 +248,19 @@ impl CacheWrite {
     /// the session id as [`of_session`] reads it, on a handle that masks none.
     pub fn write(&self, store: &Store) {
         let _ = store.try_set_session_cache(&self.session, self.host.id(), &self.cached);
+    }
+
+    /// [`CacheWrite::write`] on a writable handle to the audit log of `home`,
+    /// for a fold read on a read-only one (the guard's). The handle is opened
+    /// through the audit key's module, as every writable one is: this may be
+    /// the first writer after an upgrade, whose open moves the log to keyed
+    /// events and must make the key in the same call; an open beside that
+    /// module would upgrade the log and leave no key, and every later call
+    /// would be refused (#837, `audit_key.rs`). Best effort, as `write`.
+    pub fn save_in(&self, home: &Home) {
+        if let Ok(writable) = crate::audit_key::open_existing(home) {
+            self.write(&writable);
+        }
     }
 }
 

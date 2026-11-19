@@ -40,6 +40,8 @@ pub use mcp_flow::{MAX_AGE_MS as MCP_FLOW_MAX_AGE_MS, MAX_SESSION_ROWS as MCP_FL
 pub use mcp_tickets::{MAX_AGE_MS as MCP_TICKET_MAX_AGE_MS, NewTicket, Ticket};
 pub use provenance::{Exposure, FileProvenance, NewProvenance, ProvenanceKind};
 pub use rules::RuleSeen;
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) use schema::create_at;
 pub use session_cache::Cached;
 pub use session_writes::{RecordedWrite, SessionWrite, Written};
 

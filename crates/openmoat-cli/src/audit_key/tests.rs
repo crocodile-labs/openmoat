@@ -3,6 +3,8 @@ use openmoat_core::{Decision, Verdict};
 
 use super::*;
 
+mod upgrade_path;
+
 fn home() -> (tempfile::TempDir, Home) {
     let dir = tempfile::tempdir().unwrap();
     // Not `.moat`: a sandbox the tests may run in refuses writes to one.

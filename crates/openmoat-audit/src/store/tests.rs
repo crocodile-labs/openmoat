@@ -9,6 +9,7 @@ mod migration_cost;
 mod provenance;
 mod session_cache;
 mod session_writes;
+mod upgrade_path;
 mod verdict_names;
 
 use super::*;

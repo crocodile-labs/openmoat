@@ -84,6 +84,7 @@ fn run(scenario: &Scenario, sandboxed: bool) -> Vec<String> {
         let mut progress = taint::Progress {
             deadline: Instant::now() + Duration::from_secs(10),
             save: &mut save,
+            every: taint::CHECKPOINT_EVERY,
             folded: 0,
         };
         let (session, _) =

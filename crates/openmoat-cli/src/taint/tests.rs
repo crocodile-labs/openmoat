@@ -87,6 +87,7 @@ fn call(store: &Store, cwd: &str, deadline: Instant) -> anyhow::Result<(SessionT
     let mut progress = Progress {
         deadline,
         save: &mut save,
+        every: super::CHECKPOINT_EVERY,
         folded: 0,
     };
     let (taint, write) = of_session(store, Host::ClaudeCode, "s1", &compiled, cwd, &mut progress)?;
