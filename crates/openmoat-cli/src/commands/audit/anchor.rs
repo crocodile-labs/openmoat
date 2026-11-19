@@ -139,10 +139,17 @@ pub fn verify_against(path: &Path, format: Format) -> Result<Code> {
                 .last()
                 .map(|r| r.event.to_string())
                 .unwrap_or_default();
+            // Event ids print in hex (`openmoat show` takes them so): put the
+            // log's newest id beside the anchored one, not the decimal count,
+            // which reads as a much later event (`10442` is event 66626).
+            let now = store
+                .head()?
+                .map(|head| head.id.to_string())
+                .unwrap_or_default();
             writeln!(
                 out,
                 "✔ {} anchor(s) from {} hold: the log still holds each anchored event with its hash \
-                 (newest anchored: event {newest}; {} events now)",
+                 (newest anchored: event {newest}; newest in the log: event {now}; {} events)",
                 report.anchors,
                 place.describe(),
                 report.events

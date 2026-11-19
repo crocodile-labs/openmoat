@@ -552,7 +552,8 @@ openmoat audit anchor --file ~/anchors.jsonl # or one line appended to a file yo
 openmoat audit verify --against ~/notes      # later: fails, naming the anchor, if anchored events are gone
 ```
 
-An anchor protects only as well as the place you keep it: push the ref
+Event ids print in hexadecimal, the form `openmoat show` and `openmoat why` take: event
+`10442` is the log's 66626th. An anchor protects only as well as the place you keep it: push the ref
 (`git -C ~/notes push origin refs/moat/anchors`) or copy the file somewhere else.
 `openmoat doctor` shows when you last anchored.
 

@@ -43,6 +43,13 @@ fn anchors_hold_until_truncated(sb: &Sandbox, place: &[&str], against: &Path) {
     let ok = sb.moat(&["audit", "verify", "--against", against]);
     assert_eq!(ok.status.code(), Some(OK), "{}", text(&ok));
     assert!(stdout(&ok).contains("1 anchor(s)"), "{}", text(&ok));
+    // Ids beside ids: the newest anchored one and the log's newest, never the
+    // decimal count beside a hex id.
+    assert!(
+        stdout(&ok).contains("newest anchored: event 2; newest in the log: event "),
+        "{}",
+        text(&ok)
+    );
 
     anchor(sb, place);
     truncate_after(sb, 3);
