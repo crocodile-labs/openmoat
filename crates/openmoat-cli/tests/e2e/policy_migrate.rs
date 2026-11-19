@@ -79,8 +79,13 @@ fn the_installed_policy_is_migrated_and_the_lock_re_pinned() {
     let policy = sb.home.join(".moat/policy.yaml");
     let old = std::fs::read_to_string(&policy)
         .unwrap()
-        .replacen("\nreview:\n", "\nask:\n", 1);
+        // The key alone, so a CRLF checkout (Windows) matches too.
+        .replacen("\nreview:", "\nask:", 1);
     std::fs::write(&policy, &old).unwrap();
+    assert!(
+        old.contains("\nask:"),
+        "the default policy has a top-level `review:`"
+    );
     let accepted = sb.moat_as_person(&["doctor", "--accept"]);
     assert!(text(&accepted).contains("re-pinned"), "{}", text(&accepted));
 
@@ -88,7 +93,7 @@ fn the_installed_policy_is_migrated_and_the_lock_re_pinned() {
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(text(&out).contains("lock re-pinned"), "{}", text(&out));
     let migrated = std::fs::read_to_string(&policy).unwrap();
-    assert!(migrated.contains("\nreview:\n") && !migrated.contains("\nask:\n"));
+    assert!(migrated.contains("\nreview:") && !migrated.contains("\nask:"));
     assert_eq!(
         std::fs::read_to_string(sb.home.join(".moat/policy.yaml.before-migrate")).unwrap(),
         old
