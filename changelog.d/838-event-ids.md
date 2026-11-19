@@ -1,2 +1,0 @@
-### Fixed
-- `openmoat audit verify --against` put the newest anchored event's id, which prints in hexadecimal as every event id does, beside the log's decimal event count, so `event 10442; 66626 events now` read as an anchor far behind the log when it was the newest event. It now prints the log's newest id beside the anchored one, and the count apart ([#838](https://github.com/crocodile-labs/openmoat/pull/838)).

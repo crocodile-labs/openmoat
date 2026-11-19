@@ -8,6 +8,15 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-11-19
+
+**Upgrading:** if every call is denied with `kernel-error` and "the audit key … is missing" after an upgrade from a release before 0.22.0, run `openmoat init` in your terminal: it makes the key and keeps the log. Upgrading to this release first avoids it.
+
+### Fixed
+- A `\$` the shell passes as a plain `$` (unquoted, in double quotes or in an unquoted here-document) no longer counts as a variable the shell expands, so `awk "{print \$2}" f.txt` is decided as `awk '{print $2}' f.txt` is, instead of being held for review; a `$`, `$(…)` or backticks the shell still expands in the program keep it held, and an inner shell (`sh -c "… \$X"`) still reads the variable ([#835](https://github.com/crocodile-labs/openmoat/pull/835)).
+- After an upgrade from a release before 0.22.0, a long session's first call could leave the audit log upgraded to keyed events without its key: the guard's taint cache and the `PostToolUse` record opened the log beside the audit key's module, so the key was never made and every later call was denied with `kernel-error` (audit key missing). Every writable open now goes through that module, which makes the key in the call that upgrades the log, and an architecture test keeps it so. Where the key is missing over a log with no keyed event yet, the error now says that `openmoat init` makes the key and keeps the log ([#837](https://github.com/crocodile-labs/openmoat/pull/837)).
+- `openmoat audit verify --against` put the newest anchored event's id, which prints in hexadecimal as every event id does, beside the log's decimal event count, so `event 10442; 66626 events now` read as an anchor far behind the log when it was the newest event. It now prints the log's newest id beside the anchored one, and the count apart ([#838](https://github.com/crocodile-labs/openmoat/pull/838)).
+
 ## [0.23.0] - 2026-11-18
 
 **Upgrading:** if you run the GitHub Action with `fail-on: deny` or `fail-on: never`, move its pin to this release: before it, any finding failed the step whatever `fail-on` said. Request rules for allowed hosts are on by default for GitHub's gist endpoints and need nothing to run; proxy-held rules need `openmoat proxy ca init` (see INSTALL, Teams).
@@ -1361,7 +1370,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.23.1...HEAD
+[0.23.1]: https://github.com/crocodile-labs/openmoat/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/crocodile-labs/openmoat/compare/v0.22.1...v0.23.0
 [0.22.1]: https://github.com/crocodile-labs/openmoat/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/crocodile-labs/openmoat/compare/v0.21.0...v0.22.0
