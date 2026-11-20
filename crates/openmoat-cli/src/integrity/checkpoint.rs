@@ -86,7 +86,7 @@ impl Drift {
 pub fn repin_after(
     home: &Home,
     binary: &Path,
-    hooks: HookPins,
+    hooks: HookPins<'_>,
     checkpoint: &Checkpoint,
     written: &[PathBuf],
 ) -> Result<Lock> {

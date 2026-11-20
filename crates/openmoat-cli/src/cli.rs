@@ -213,6 +213,10 @@ pub struct InitArgs {
     #[arg(long)]
     pub dry_run: bool,
 
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = Format::Text)]
+    pub format: Format,
+
     /// Also print each file written and its hook entries, the backups and the
     /// files the lock pins.
     #[arg(long)]
@@ -225,7 +229,7 @@ pub struct InitArgs {
     pub mcp: InitMcpArgs,
 }
 
-/// `init`'s managed hook flag (ADR-098).
+/// `init`'s managed hook flag (ADR-098) and hooks-only cohort flag.
 #[derive(Debug, Args)]
 pub struct InitManagedArgs {
     /// Also write OpenMoat's hook where an administrator's hooks live, for each
@@ -235,6 +239,11 @@ pub struct InitManagedArgs {
     /// the command that installs it instead.
     #[arg(long)]
     pub managed: bool,
+
+    /// Install and pin hooks only: skip agent sandboxes, MCP proxy wrapping,
+    /// and repinning hosts or sandboxes outside `--hosts`.
+    #[arg(long, conflicts_with_all = ["mcp_proxy", "mcp_no_sandbox"])]
+    pub hooks_only: bool,
 }
 
 /// `init`'s MCP proxy flags.
