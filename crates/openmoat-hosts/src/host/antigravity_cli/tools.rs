@@ -56,11 +56,17 @@ pub(super) fn map_on(
         "view_file" => Action::FsRead {
             path: field("AbsolutePath")?,
         },
+        "read_file" => Action::FsRead {
+            path: field("Path")?,
+        },
         "write_to_file" | "replace_file_content" | "multi_replace_file_content" => {
             Action::FsWrite {
                 path: field("TargetFile")?,
             }
         }
+        "write_file" | "edit_file" => Action::FsWrite {
+            path: field("Path")?,
+        },
         "list_dir" => Action::FsRead {
             path: field("DirectoryPath")?,
         },

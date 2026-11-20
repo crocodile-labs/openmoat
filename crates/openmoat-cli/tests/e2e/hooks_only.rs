@@ -129,7 +129,9 @@ fn hooks_only_preserves_sandbox_mcp_and_other_hosts_and_is_idempotent() {
         "expected claude settings in lock entries: {entries:?}"
     );
     assert!(
-        entries.keys().any(|k| Path::new(k).ends_with(&codex_suffix)),
+        entries
+            .keys()
+            .any(|k| Path::new(k).ends_with(&codex_suffix)),
         "expected codex hooks in lock entries: {entries:?}"
     );
 
