@@ -120,6 +120,31 @@ fn uv_run_classifies_the_wrapped_command() {
 }
 
 #[test]
+fn rtk_and_direnv_exec_classify_the_wrapped_command() {
+    let rtk_atoms = parsed("rtk git reset --hard");
+    assert!(has_shell(&rtk_atoms, "git reset --hard"));
+    assert!(has_shell(&parsed("rtk proxy bash -c 'id'"), "bash -c id"));
+    assert!(has_shell(
+        &parsed("direnv exec . git reset --hard"),
+        "git reset --hard"
+    ));
+    assert!(has_shell(
+        &parsed("rtk direnv exec /p pytest -x"),
+        "pytest -x"
+    ));
+    assert!(has_read(
+        &parsed("rtk cat ~/.ssh/id_rsa"),
+        "/Users/me/.ssh/id_rsa"
+    ));
+    assert!(has_read(
+        &parsed("direnv exec . cat ~/.ssh/id_rsa"),
+        "/Users/me/.ssh/id_rsa"
+    ));
+    // `direnv status` runs no command of its own.
+    assert!(!has_shell(&parsed("direnv status"), "status"));
+}
+
+#[test]
 fn pkexec_and_runuser_classify_the_wrapped_command() {
     assert!(has_shell(&parsed("pkexec --user me id -u"), "id -u"));
     assert!(has_shell(&parsed("runuser -u me -- id -u"), "id -u"));
