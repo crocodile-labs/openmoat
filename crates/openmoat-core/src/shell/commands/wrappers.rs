@@ -14,7 +14,8 @@ mod xargs;
 
 use super::super::options;
 use super::super::tables::{
-    WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS, WRAPPERS, WRAPPERS_WITH_VALUE,
+    WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS, WRAPPER_SUBCOMMANDS_WITH_VALUE, WRAPPERS,
+    WRAPPERS_WITH_VALUE,
 };
 use super::super::tokens::assignment_name;
 use super::super::{ClassifyError, ShellContext, Sink};
@@ -174,6 +175,33 @@ fn quote(word: &str) -> String {
 /// For `sudo -u x cmd …`, `env A=1 cmd …`, `xargs -0 cmd …`, `timeout 5 cmd …`
 /// return the wrapped argv.
 pub(crate) fn wrapped_command<'a>(argv: &'a [String], program: &str) -> Option<&'a [String]> {
+    if let Some((_, subcommands)) = WRAPPER_SUBCOMMANDS_WITH_VALUE
+        .iter()
+        .find(|(name, _)| *name == program)
+    {
+        if !subcommands.contains(&argv.get(1)?.as_str()) {
+            return None;
+        }
+        let mut i = 2;
+        let mut value_pending = true;
+        while let Some(arg) = argv.get(i) {
+            if arg == "--" {
+                i += 1;
+                break;
+            }
+            if arg.starts_with('-') {
+                i += 1;
+                continue;
+            }
+            if value_pending {
+                value_pending = false;
+                i += 1;
+                continue;
+            }
+            break;
+        }
+        return argv.get(i..).filter(|rest| !rest.is_empty());
+    }
     if let Some((_, subcommands)) = WRAPPER_SUBCOMMANDS
         .iter()
         .find(|(name, _)| *name == program)
@@ -232,6 +260,15 @@ pub(crate) fn wrapped_command<'a>(argv: &'a [String], program: &str) -> Option<&
             continue;
         }
         break;
+    }
+    if program == "rtk"
+        && matches!(
+            argv.get(i).map(String::as_str),
+            Some("proxy" | "err" | "summary" | "test")
+        )
+        && argv.get(i + 1).is_some()
+    {
+        i += 1;
     }
     argv.get(i..).filter(|rest| !rest.is_empty())
 }
