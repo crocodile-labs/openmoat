@@ -1204,7 +1204,7 @@ A deny or review from one of OpenMoat's own checks that reaches the agent (`unpa
 `unchecked`, `executables`, `kernel-integrity`, `kernel-error`, `mcp-server-changed`,
 `ungoverned`, `project-settings`, `session-taint`, `injected-input`, `mcp-cross-server`,
 `protected-contents`, `session-written-code`, `push-secret`, `push-runs-later`,
-`push-unchecked`, `protection-required`, `unattended`, `request-rule`) carries the block message as a titled rule does (§2), with OpenMoat's
+`push-unchecked`, `protection-required`, `unattended`, `request-rule`, `canary`) carries the block message as a titled rule does (§2), with OpenMoat's
 own title and `why` (ADR-059, amended); a rule of your policy with one of these ids keeps
 your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat proxy` and
 `policy check-diff` keep their own output.
@@ -1233,6 +1233,7 @@ your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat prox
 | `session-written-code` | review | the call runs a file the same host session wrote (`python3 x.py`, `bash x.sh`, `./x`) and no OS sandbox from OpenMoat holds it (§4.3, ADR-039) |
 | `unattended` | review | the policy says `unattended: review`, the call would be a `defer`, and the agent runs in a mode in which it runs such a call with no person asked (§5.4, ADR-102); the agent receives it as a deny that says how to approve it |
 | `request-rule` | deny, review | a request to a `requests:` host its rules refuse, read in a shell command or a fetch tool's URL (deny), or one the hook cannot read in full (a URL, host or method made at run time, options from a file) where a rule could refuse it (review); at `openmoat proxy`, a request refused inside a terminated tunnel or as plain HTTP, and a connection to such a host it cannot terminate under `requests_untrusted: refuse` (deny) (§2.3, ADR-062) |
+| `canary` | deny | the call reads or changes one of the decoy key files `openmoat init` planted at your request, or carries one of their values in a command, a path, a URL, a query, a file it writes or an MCP call's arguments; at `openmoat proxy`, a request to any host that carries one. The decoys' paths are the first deny group the guard decides with, so a decoy in `~/.aws` is `canary`, not `secrets-paths`; no other call's verdict changes (ADR-106) |
 | `push-secret` | deny | a commit a `git push` or `gh pr create` would publish adds a known token format or a brokered secret's value (§4.2) |
 | `push-runs-later` | review | the session read untrusted content or a secret, and the push changes a file `runs-later` names (§4.2) |
 | `push-unchecked` | review | what a push would publish could not be checked within 10 s or 8 MiB, or where it runs is not known (§4.2) |

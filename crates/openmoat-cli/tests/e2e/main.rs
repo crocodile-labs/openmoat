@@ -64,6 +64,7 @@ mod mcp_status;
 mod moatbench;
 mod openclaw;
 mod opencode;
+mod opt_in;
 #[cfg(unix)]
 mod packs;
 mod paths;

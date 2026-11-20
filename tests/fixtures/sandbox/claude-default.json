@@ -164,6 +164,7 @@
         "/**/.moat/delivery",
         "/**/.moat/delivery/**",
         "/Users/me/.moat/remote",
+        "/Users/me/.moat/canaries.json",
         "/**/.moat/audit.db*",
         "/**/.moat/audit.key*",
         "/**/.moat/policy.lock",

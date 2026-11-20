@@ -92,6 +92,7 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     }
     let audit = audit(&mut shown, &home)?;
     healthy &= audit.is_some();
+    opt_in(&mut shown, &home);
 
     // Only when a policy asks for it, so nothing changes without the setting.
     mcp_servers(&mut shown, &home, &binary);
@@ -170,7 +171,21 @@ fn report(home: &Home, binary: &Path, update: Option<&String>) -> Result<serde_j
             .map(|warning| warning.text)
             .collect::<Vec<_>>(),
         "repo_git_config": crate::project_settings::git_config::warnings_here(),
+        "opt_in": crate::opt_in::rows(home, time::now_ms()),
     }))
+}
+
+/// The opt-in choices of `openmoat init` (ADR-106): a decoy touched is an
+/// alert first in the list, an agent that starts outside its shim a warning;
+/// neither changes the exit code, which says whether OpenMoat is set up.
+fn opt_in(shown: &mut Shown, home: &Home) {
+    for row in crate::opt_in::rows(home, time::now_ms()) {
+        match (row.alert, row.attention) {
+            (true, _) => shown.needs(Mark::Broken, row.label, row.text),
+            (false, true) => shown.needs(Mark::Attention, row.label, row.text),
+            (false, false) => shown.state(Mark::Ok, row.label, row.text),
+        }
+    }
 }
 
 /// Advisory trust diagnostics, separate from protection levels and exit codes.

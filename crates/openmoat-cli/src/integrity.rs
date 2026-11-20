@@ -197,7 +197,7 @@ pub fn repin_with(
 
 /// OpenMoat's own files, pinned by every lock whatever the environment.
 fn state_files(home: &Home) -> Vec<PathBuf> {
-    vec![
+    let mut files = vec![
         home.policy_path(),
         home.environment_path(),
         home.grants_path(),
@@ -207,7 +207,14 @@ fn state_files(home: &Home) -> Vec<PathBuf> {
         // Where the audit log is sent (ADR-081): a changed file could send it
         // to another place, so it is pinned as the policy is.
         home.delivery_config_path(),
-    ]
+        // The person's opt-in choices (ADR-106): the decoys the guard checks
+        // for, the sandboxed-start record and each shim it lists, which runs
+        // whenever the person types the agent's command.
+        crate::canary::record_path(home),
+        crate::start::record_path(home),
+    ];
+    files.extend(crate::start::pinned_files(home));
+    files
 }
 
 /// The signing files only `moat policy trust-key`, `install` and `remove` pin

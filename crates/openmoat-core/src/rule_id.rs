@@ -77,6 +77,10 @@ pub const SESSION_START: &str = "session-start";
 /// (`integrity/relaxed.rs`).
 pub const SETTINGS_DRIFT: &str = "settings-drift";
 
+/// A call that reads, changes or sends one of the decoy credentials `openmoat
+/// init` planted at a person's request (ADR-106): no real work touches them.
+pub const CANARY: &str = "canary";
+
 /// A push of commits that hold a secret.
 pub const PUSH_SECRET: &str = "push-secret";
 /// A push that changes what CI runs, after the session read untrusted content
@@ -282,6 +286,7 @@ pub const BUILTIN_RULES: &[BuiltinRule] = &[
     quiet(CONFIG_CHANGE),
     quiet(SESSION_START),
     quiet(SETTINGS_DRIFT),
+    worded(CANARY, &words::CANARY),
     worded(PUSH_SECRET, &words::PUSH_SECRET),
     worded(PUSH_RUNS_LATER, &words::PUSH_RUNS_LATER),
     worded(PUSH_UNCHECKED, &words::PUSH_UNCHECKED),

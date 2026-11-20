@@ -157,6 +157,41 @@ out), and pins each tool's description, schemas and annotations
 `init` also pins every MCP server definition the agents load; the tool calls of a server
 that changes later, or of a new one, are refused until you run `openmoat mcp accept`.
 
+### Two choices `init` offers: decoy keys and sandboxed start
+
+After the agents, `openmoat init` at a terminal asks two more questions. Both default to
+no (Enter), `d` shows every file the yes would write, and `openmoat uninstall` takes them
+back. `--yes`, `--dry-run` and a run without a terminal never ask and change nothing here
+(ADR-106).
+
+```
+  Decoy keys       plant 3 fake key file(s) (~/.aws/credentials.bak, ~/.git-credentials.bak, ~/.npmrc.bak) so that any attempt to read or send them is caught? No real file is touched  [y/N/d] y
+✔ decoy keys       3 planted: ~/.aws/credentials.bak, ~/.git-credentials.bak, ~/.npmrc.bak; reading or sending one is denied (rule canary)
+  Sandboxed start  make typing gemini, opencode start it in `openmoat run`'s sandbox? It writes 2 shim(s) to ~/.moat/bin and 2 lines to ~/.zshrc  [y/N/d] y
+✔ sandboxed start  gemini, opencode: shims in ~/.moat/bin; ~/.zshrc puts it first on PATH (backup ~/.zshrc.moat-backup); open a new shell to use it
+```
+
+- **Decoy keys.** Fake keys at names no program loads, beside the files a key hunter
+  looks for: `~/.aws/credentials.bak` (only when `~/.aws` exists), `~/.git-credentials.bak`
+  and `~/.npmrc.bak`. Each is created only where nothing is at that name, owner-only; no
+  real file is read, changed or replaced. The keys look like real ones to a scanner and
+  carry `OpenMoatDecoy`, so you can tell them apart. No real work touches them: a call
+  that reads or changes one, or carries one of their values in a command, a URL, a file it
+  writes or a request through `openmoat proxy`, is denied with rule `canary`, and
+  `openmoat status`, `openmoat doctor` and `openmoat report` flag it. Which files are
+  decoys is recorded in `~/.moat/canaries.json`, which agents may not read.
+- **Sandboxed start.** Offered where `openmoat run` works (macOS 13 and later, Linux) for
+  each hook-only agent it can start (Gemini CLI, OpenCode, Hermes Agent, …; the agents
+  with an OS sandbox of their own already have one). It writes a shim per agent in
+  `~/.moat/bin` that runs `openmoat run` around the real program, both by absolute path,
+  and, on the same yes, two lines at the end of your shell's start-up file (`~/.zshrc`;
+  `~/.bash_profile` on macOS or `~/.bashrc` for bash) that put `~/.moat/bin` first on
+  `PATH`, after backing the file up. For another shell it prints the line to add. Nothing
+  changes how an agent starts until a new shell reads that line. `openmoat status` and
+  `openmoat doctor` say whether typing each agent's command starts it sandboxed in the
+  current shell. Outside a project `openmoat run` refuses to start, as always; the shim
+  names the real program if you need it there.
+
 Hooks run the `openmoat` you ran `openmoat init` with, by its stable path (ADR-016). After
 moving or reinstalling the binary somewhere else, run `openmoat init` again; `openmoat doctor`
 names a hook whose binary is missing or is a different `openmoat`.
@@ -368,7 +403,10 @@ the backup `init` took is written back byte for byte; a file `init` created is
 deleted; a file you changed since keeps your changes and only loses OpenMoat's
 entries (its backup stays next to it). The lock stops pinning those files, the proxy
 service is removed if you installed it, and wrapped MCP servers are pointed back at their
-own commands. `~/.moat`
+own commands. The sandboxed-start shims of the agents it uninstalls go, and with the
+last one the two `PATH` lines (the start-up file given back from its backup when the rest
+is unchanged); uninstalling every agent deletes the decoy keys. A shim or decoy you
+changed since `init` wrote it stays, and is named. `~/.moat`
 stays unless you pass `--purge`. Like `openmoat allow`, it runs only from a terminal, and
 the default policy denies it to agents (`kernel-self`).
 

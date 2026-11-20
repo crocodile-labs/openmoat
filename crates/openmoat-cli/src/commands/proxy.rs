@@ -400,7 +400,8 @@ impl Exit {
             state: home.root(),
             writable: &writable,
         };
-        let (broker, refresher) = secrets::broker(&user, &place)?;
+        let decoys = crate::canary::values(home)?;
+        let (broker, refresher) = secrets::broker(&user, &place, decoys)?;
         let store = crate::audit_key::open_existing(home)?.with_secrets(refresher.known()?);
         let masks = refresher.masks();
         let session = credential.as_ref().map_or_else(

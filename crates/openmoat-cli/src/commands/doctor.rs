@@ -154,6 +154,14 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
             crate::managed::Row::Warn(text) => report.warn(&text),
         }
     }
+    // The opt-in choices of `init` (ADR-106): a decoy touched, sandboxed start.
+    for row in crate::opt_in::rows(&home, crate::time::now_ms()) {
+        if row.attention {
+            report.warn(&row.doctor_line());
+        } else {
+            report.note(&row.doctor_line());
+        }
+    }
     // Run by the agent's own git when a session starts, before any hook.
     for warning in crate::project_settings::git_config::warnings_here() {
         report.warn(&format!("{:<16} git config {warning}", "Repository"));

@@ -1021,6 +1021,17 @@ these takes one command in your own terminal (agents are denied all of them):
 - **Every call is denied** with rule `kernel-integrity`: a pinned file (the policy, a hook, an
   agent's settings) changed behind OpenMoat's back. Run `openmoat`; it shows the change and
   asks whether to accept it (`openmoat doctor --accept` does the same).
+- **A call is denied** with rule `canary`: it read, changed or sent one of the decoy keys
+  you had `openmoat init` plant ([INSTALL.md](INSTALL.md#two-choices-init-offers-decoy-keys-and-sandboxed-start)).
+  No real work does, so this is not OpenMoat in your way: something in that session went
+  looking for keys, often an instruction in a page, a file or a tool result the agent read.
+  `openmoat why --last` shows the call and `openmoat watch` the session; `openmoat status`
+  keeps flagging it for a week. Nothing real was exposed. To stop planting decoys,
+  `openmoat uninstall` deletes them.
+- **Typing an agent's name says `openmoat run` confines the agent to a project**: you
+  chose sandboxed start at `openmoat init`, and the shell is in your home folder. Start the
+  agent in a project, or run the program the shim in `~/.moat/bin` names to start it
+  without the sandbox there. `openmoat uninstall --hosts <agent>` removes its shim.
 - **An MCP server's tools are denied** with rule `mcp-server-changed`: its definition (in
   `~/.claude.json`, a project's `.mcp.json`, Cursor's `mcp.json`, Codex's `config.toml`;
   every agent's files are in [POLICY.md](POLICY.md) §8) changed or was added since you

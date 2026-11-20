@@ -19,6 +19,7 @@
 mod action;
 pub mod attribution;
 pub mod boundary;
+pub mod canary;
 pub mod diffscan;
 mod engine;
 mod expand;

@@ -347,6 +347,15 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
     written
 }
 
+/// [`write_private`] for a program only its owner runs (a sandboxed-start
+/// shim, ADR-106): owner read, write and execute (Unix).
+pub fn write_private_program(path: &Path, bytes: &[u8]) -> Result<()> {
+    write_private(path, bytes)?;
+    #[cfg(unix)]
+    restrict(path, 0o700)?;
+    Ok(())
+}
+
 /// Which permission bits of a file [`write_like`] carries over.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeepMode {
@@ -483,7 +492,7 @@ pub fn create_private_dir(path: &Path) -> Result<()> {
 }
 
 /// Options for a new file that is owner-only from the moment it exists (Unix).
-fn private_file_options() -> fs::OpenOptions {
+pub fn private_file_options() -> fs::OpenOptions {
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]

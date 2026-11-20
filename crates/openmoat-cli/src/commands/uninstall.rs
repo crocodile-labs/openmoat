@@ -26,6 +26,8 @@ use crate::render::Deferred;
 use crate::sandbox::backend::{SandboxBackend, Undo};
 use crate::sandbox::install as host_sandbox;
 
+mod opt_in;
+
 pub fn run(args: &UninstallArgs) -> Result<Code> {
     crate::terminal::refuse_agent("openmoat uninstall")?;
     if !crate::terminal::interactive() {
@@ -132,6 +134,9 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
             }
         }
     }
+    // The opt-in choices of `init` (ADR-106): shims, the PATH lines, decoys.
+    let chosen = opt_in::undo(&home, &hosts, args.hosts.is_none(), &mut out)?;
+    undone.extend(chosen.deleted);
     // The files are undone first: until then the record says where they are.
     let before = recorded.dirs.len();
     recorded
@@ -155,6 +160,7 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
         recorded.save(&home)?;
         rewritten.push(home.hosts_path());
     }
+    rewritten.extend(chosen.rewritten);
     integrity::unpin(&home, &undone, &rewritten)?;
     // If the proxy service or the approvals listener's was installed, stop
     // and remove it alongside the hooks: leaving it behind would keep running

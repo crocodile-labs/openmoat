@@ -2912,3 +2912,21 @@
   why: "`$/` starts no shell parameter, so the shell leaves `$` as sed's end of line; the script only substitutes."
   action: { shell: "sed \"s/[[:space:]]*$//\" src/lib.rs" }
   expect: { verdict: allow, rules: [text-tools, project-fs] }
+# Decoy keys planted (ADR-106) change nothing for calls that do not name them,
+# the word they carry included; the suite also decides every other fixture again
+# with decoys planted and fails if a verdict loosens.
+- id: benign-canary-git-status-with-decoys-planted
+  why: "an ordinary command names no decoy; its verdict is the one it has without them."
+  action: { shell: "git status" }
+  decoys: &decoys { paths: ["~/.aws/credentials.bak", "~/.git-credentials.bak", "~/.npmrc.bak"], values: ["OpenMoatDecoy-fixture-value-7Kq2Lm9Pz4"] }
+  expect: { verdict: allow }
+- id: benign-canary-grep-for-the-mark-with-decoys-planted
+  why: "the word every decoy carries is not a decoy's value."
+  action: { shell: "grep -rn OpenMoatDecoy src" }
+  decoys: *decoys
+  expect: { verdict: allow }
+- id: benign-canary-project-file-with-decoys-planted
+  why: "a project file is read as it always is."
+  action: { fs_read: "/p/README.md" }
+  decoys: *decoys
+  expect: { verdict: allow }

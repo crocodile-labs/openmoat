@@ -120,6 +120,16 @@ pub(super) const EXECUTABLES: Words = Words {
     )),
 };
 
+pub(super) const CANARY: Words = Words {
+    title: "touching a decoy key OpenMoat planted",
+    why: "no real work reads or sends a decoy, so whatever asked for it was looking for keys to \
+          take",
+    next: Some((
+        Verdict::Deny,
+        "find out what in this session went looking for keys: `openmoat watch`, `openmoat report`",
+    )),
+};
+
 pub(super) const PUSH_SECRET: Words = Words {
     title: "pushing commits that hold a secret",
     why: "a push publishes every commit it sends, and a published secret cannot be taken back",

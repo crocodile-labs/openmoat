@@ -25,6 +25,7 @@ use crate::sandbox::{self, Plan};
 mod ask;
 mod managed;
 pub(super) mod mcp;
+mod opt_in;
 mod preview;
 mod refuse;
 mod summary;
@@ -131,6 +132,15 @@ pub fn run(args: &InitArgs) -> Result<Code> {
         )?;
         let wrap = mcp::Wrap::of(args, unattended);
         mcp::servers(&home, &binary, wrap, &hosts, unattended, &mut files)?;
+        // The opt-in choices (ADR-106), last, for a person only; the lock then
+        // pins what they wrote.
+        if !unattended
+            && !args.yes
+            && crate::terminal::person_for("openmoat init")
+            && opt_in::ask(&home, &binary, &hosts, files.out)?
+        {
+            integrity::repin(&home, &binary, integrity::HookPins::Adopt)?;
+        }
         let backups = if hosts.is_empty() {
             0
         } else {

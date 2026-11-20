@@ -7,6 +7,7 @@
 mod anchor;
 mod approvals;
 mod audit_key;
+mod canary;
 mod cli;
 mod commands;
 mod compliance;
@@ -26,6 +27,7 @@ mod key_file;
 mod managed;
 mod mcp;
 mod notice;
+mod opt_in;
 mod os_version;
 mod packs;
 mod plugin_record;
@@ -47,6 +49,7 @@ mod secrets;
 mod session_code;
 mod signing;
 mod snapshot;
+mod start;
 // Read and set only on Windows; its parsing is tested on every system.
 #[cfg_attr(
     all(not(windows), not(test)),

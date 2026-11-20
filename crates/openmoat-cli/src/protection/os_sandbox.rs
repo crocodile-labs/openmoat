@@ -45,7 +45,7 @@ impl OsSandbox {
 /// What `openmoat run` can do on this system, found once per report: on Linux
 /// finding it starts `bwrap`.
 #[derive(Debug, Clone)]
-pub(super) struct RunHere {
+pub(crate) struct RunHere {
     /// Why `openmoat run` has no sandbox here.
     unavailable: Option<String>,
     /// Why it would refuse a `--write` path outside the project: Linux
@@ -56,19 +56,60 @@ pub(super) struct RunHere {
 }
 
 impl RunHere {
-    pub(super) fn detect() -> Self {
+    pub(crate) fn detect() -> Self {
         Self {
             unavailable: crate::commands::run_unavailable(),
             no_namespace: crate::commands::run_port_only_network().is_some(),
             start: crate::commands::sandboxing_words(),
         }
     }
+
+    /// A system where `openmoat run` works, with a network namespace.
+    #[cfg(test)]
+    pub(crate) fn for_test() -> Self {
+        Self {
+            unavailable: None,
+            no_namespace: false,
+            start: "openmoat run",
+        }
+    }
+}
+
+/// The `openmoat run` command that starts a host here, in parts: what
+/// `openmoat status` prints and what a sandboxed-start shim runs (ADR-106).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RunCommand {
+    /// `openmoat run`, with `--isolate` where plain `run` leaves the project open.
+    pub start: &'static str,
+    /// Each `--write` path.
+    pub writes: Vec<PathBuf>,
+    /// The host's program, by name.
+    pub program: &'static str,
+    /// The arguments it needs before the person's own.
+    pub args: &'static [&'static str],
 }
 
 /// The way to an OS sandbox for `host` on this system.
 pub(super) fn of(home: &Home, host: Host, here: &RunHere) -> Result<OsSandbox> {
+    let run = match command(home, host, here)? {
+        Ok(run) => run,
+        Err(none) => return Ok(none),
+    };
+    let user = crate::home::user_home()?;
+    let command = line(run.start, &run.writes, run.program, run.args, &user);
+    let note = (wrapped_servers(home, host)? > 0)
+        .then(|| "its wrapped MCP servers do not start inside `openmoat run`".to_owned());
+    Ok(OsSandbox::Command { command, note })
+}
+
+/// The `openmoat run` command for `host` here, or why there is none.
+pub(crate) fn command(
+    home: &Home,
+    host: Host,
+    here: &RunHere,
+) -> Result<std::result::Result<RunCommand, OsSandbox>> {
     if let Some(why) = &here.unavailable {
-        return Ok(OsSandbox::Unavailable { why: why.clone() });
+        return Ok(Err(OsSandbox::Unavailable { why: why.clone() }));
     }
     let (program, args, writes) = match host.spec().run {
         RunFacts::Known {
@@ -76,27 +117,29 @@ pub(super) fn of(home: &Home, host: Host, here: &RunHere) -> Result<OsSandbox> {
             args,
             writes,
         } => (program, args, writes),
-        RunFacts::Unknown { why } => return Ok(OsSandbox::Unknown { why }),
+        RunFacts::Unknown { why } => return Ok(Err(OsSandbox::Unknown { why })),
     };
     if here.no_namespace && !writes.is_empty() {
-        return Ok(OsSandbox::Unavailable {
+        return Ok(Err(OsSandbox::Unavailable {
             why: format!(
                 "`openmoat run` has no network namespace here, so it refuses a `--write` path \
                  outside the project, which {} needs; install bubblewrap and allow unprivileged \
                  user namespaces",
                 host.display_name()
             ),
-        });
+        }));
     }
     let user = crate::home::user_home()?;
     let mut paths = Vec::with_capacity(writes.len());
     for write in writes {
         paths.push(path_of(home, host, *write, &user)?);
     }
-    let command = line(here.start, &paths, program, args, &user);
-    let note = (wrapped_servers(home, host)? > 0)
-        .then(|| "its wrapped MCP servers do not start inside `openmoat run`".to_owned());
-    Ok(OsSandbox::Command { command, note })
+    Ok(Ok(RunCommand {
+        start: here.start,
+        writes: paths,
+        program,
+        args,
+    }))
 }
 
 /// Where `write` is for `host` here.

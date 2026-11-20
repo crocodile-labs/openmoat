@@ -22,6 +22,7 @@ use openmoat_core::{
 };
 use serde::Deserialize;
 
+mod decoys;
 mod evidence;
 mod owasp;
 mod stateful;
@@ -62,6 +63,8 @@ struct Fixture {
     session: Vec<FixtureAction>,
     /// A repository policy merged into the default policy (ADR-022).
     repo: Option<RepoFixture>,
+    /// Decoy keys planted for this fixture (ADR-106).
+    decoys: Option<decoys::Planted>,
 }
 
 /// `repo: { policy: "<yaml>", trusted: true }`: the project's
@@ -286,6 +289,8 @@ fn default_policy_conformance() {
     };
 
     let compiled = CompiledPolicy::compile(&policy, &ctx).expect("default policy must compile");
+    let with_decoys = decoys::standard_policy(&policy);
+    let with_decoys = decoys::compile(&with_decoys, &ctx);
 
     let fixtures = load_fixtures(&root.join("tests/conformance"));
     let total = fixtures.len();
@@ -307,7 +312,9 @@ fn default_policy_conformance() {
                 .and_then(|repo| repo.merge(&policy, r.trusted))
                 .unwrap_or_else(|e| panic!("{}: repo policy: {e}", fixture.id))
         });
-        let own = (fixture.context.is_some() || merged.is_some()).then(|| {
+        let guarded = decoys::guarded(merged.as_ref().unwrap_or(&policy), fixture.decoys.as_ref());
+        let shared = fixture.context.is_none() && merged.is_none() && guarded.is_none();
+        let own = (!shared).then(|| {
             let ctx = fixture.context.as_ref().map_or_else(
                 || ctx.clone(),
                 |c| EvalContext {
@@ -320,11 +327,20 @@ fn default_policy_conformance() {
                     ..ctx.clone()
                 },
             );
-            CompiledPolicy::compile(merged.as_ref().unwrap_or(&policy), &ctx)
-                .expect("default policy must compile")
+            let used = guarded.as_ref().or(merged.as_ref()).unwrap_or(&policy);
+            CompiledPolicy::compile(used, &ctx).expect("default policy must compile")
         });
         let compiled = own.as_ref().unwrap_or(&compiled);
         let plain = compiled.decide_with(&action, &resolver, &links);
+        if shared {
+            decoys::never_widens(
+                &with_decoys,
+                &action,
+                &plain,
+                (&resolver, &links),
+                &fixture.id,
+            );
+        }
         // Taint only tightens: the worst session there is never loosens a verdict.
         let worst = compiled.with_taint(plain.clone(), &action, &links, &worst_taint());
         assert!(
@@ -349,9 +365,10 @@ fn default_policy_conformance() {
         }
         let decision = compiled.with_taint(plain, &action, &links, &taint);
         let decision = compiled.with_injected(decision, &action, &links, &seen);
+        let decision = decoys::checked(fixture.decoys.as_ref(), &action, decision);
         // Every rule a decision carries is the policy's or one of OpenMoat's
         // own (`openmoat_core::rule_id`), never an id written somewhere else.
-        let policy_used = merged.as_ref().unwrap_or(&policy);
+        let policy_used = guarded.as_ref().or(merged.as_ref()).unwrap_or(&policy);
         for rule in decision.rules.iter().chain(&worst.rules) {
             assert!(
                 rule_id::resolves(rule, policy_used),
