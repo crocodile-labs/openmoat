@@ -120,11 +120,13 @@ pub fn plan(plan: Plan<'_>) -> EffectiveBoundary {
             plan.kernel,
         ),
         launch: None,
+        environment: None,
     }
 }
 
 /// `openmoat run --print-boundary`: the record a run would start with,
-/// from the same choices, on standard output as JSON or text; nothing starts.
+/// from the same choices, on standard output as JSON or text, with which
+/// inherited variables it would pass on (ADR-105); nothing starts.
 /// The refusals a run makes before it builds its sandbox are made here too,
 /// with the same words and exit: no sandbox on this system, a kernel below
 /// Landlock's floor, a port-only network under `--netns=require` or a policy
@@ -158,7 +160,8 @@ pub fn print_plan(
         .cloned()
         .chain(args.writes.iter().map(|w| super::resolved(w)))
         .collect();
-    let record = plan(Plan {
+    let policy = home.load_policy()?;
+    let mut record = plan(Plan {
         asked: Asked::of(args),
         tier,
         port_only: port_only.clone(),
@@ -166,9 +169,14 @@ pub fn print_plan(
         token: tool_shell::token(agent_host, tool_shell::would_wrap(&roots)?),
         port: None,
         // Only the Lightweight tier without a namespace reads the setting.
-        project_top_open: port_only.is_some()
-            && home.load_policy()?.project_top() == ProjectTop::Writable,
+        project_top_open: port_only.is_some() && policy.project_top() == ProjectTop::Writable,
     });
+    record.environment = Some(super::planned_environment(
+        &policy,
+        agent_host,
+        args,
+        (strict, ctx.project.as_deref()),
+    )?);
     match args.format {
         Format::Json => render::json(&record)?,
         Format::Text => render::boundary::write(&mut std::io::stdout().lock(), &record)?,

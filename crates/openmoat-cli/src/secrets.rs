@@ -48,8 +48,13 @@ pub fn writable(ctx: &openmoat_core::EvalContext, granted: &[String]) -> Vec<Str
 /// A broker holding the value of every secret of `policy`, and what renews
 /// those from `command` sources (ADR-087), which also holds every value for
 /// the audit log to mask. Any secret that cannot be read stops the proxy
-/// from starting.
-pub fn broker(policy: &Policy, place: &Place<'_>) -> Result<(Broker, Refresher)> {
+/// from starting. `decoys` are the decoy keys' values (ADR-106): the broker
+/// refuses a request to any host that carries one, and the log masks them.
+pub fn broker(
+    policy: &Policy,
+    place: &Place<'_>,
+    decoys: Vec<Zeroizing<String>>,
+) -> Result<(Broker, Refresher)> {
     let home = place.home;
     let mut held = Vec::with_capacity(policy.secrets.len());
     let mut fixed = Vec::new();
@@ -73,7 +78,8 @@ pub fn broker(policy: &Policy, place: &Place<'_>) -> Result<(Broker, Refresher)>
         };
         held.push((secret.clone(), value));
     }
-    let broker = Broker::new(held)?;
+    fixed.extend(decoys.iter().cloned());
+    let broker = Broker::new(held)?.with_decoys(decoys);
     let mut programs = Vec::with_capacity(started.len());
     for (program, until, value) in started {
         let rotation = broker
@@ -97,6 +103,16 @@ pub fn broker(policy: &Policy, place: &Place<'_>) -> Result<(Broker, Refresher)>
 pub fn known(secrets: &[Secret], home: &str) -> Result<KnownSecrets> {
     let values = known_values(secrets, home);
     Ok(KnownSecrets::new(values.iter().map(|v| v.as_str()))?)
+}
+
+/// [`known`], masking `more` besides: the decoy keys' values (ADR-106).
+pub fn known_with(secrets: &[Secret], home: &str, more: &[String]) -> Result<KnownSecrets> {
+    let values = known_values(secrets, home);
+    let all = values
+        .iter()
+        .map(|v| v.as_str())
+        .chain(more.iter().map(String::as_str));
+    Ok(KnownSecrets::new(all)?)
 }
 
 /// The values [`known`] masks, for a caller that masks more besides (audit

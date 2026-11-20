@@ -328,7 +328,9 @@ It names the tier asked for and the tier that started, every downgrade (the tier
 network, and the project's top when `sandbox.project_top: writable` opened it) with why
 and whether the person chose it, how the network is held
 (`namespace`, `port_only`, or Seatbelt's `profile`), the Landlock ABI, whether tool
-commands get the hook relay token, and for each restriction whether the system has it
+commands get the hook relay token, the environment (`environment`: whether it is
+scrubbed and what chose that, the inherited names that pass, the names withheld and the
+names that hold a brokered placeholder, names only, ADR-105), and for each restriction whether the system has it
 (`available`), the run asks for it (`configured`), it is in force (`applied`) and a
 check after the agent started confirmed it (`tested`).
 
@@ -449,6 +451,20 @@ bubblewrap.
   start there instead (exit 64); the default, `--netns=auto`, is the behaviour above.
   A policy with `require.run: full-boundary` ([POLICY.md §9.3](POLICY.md#93-requiring-openmoat-runs-full-boundary-requirerun))
   refuses there too, whatever `--netns` says.
+- **The environment.** With `sandbox.env: scrubbed`, `--scrub-env` or `require.run:
+  full-boundary`, the agent and everything it starts get only an allowlist of the
+  environment `openmoat run` was started from: what programs and builds need, the
+  agent's own variables from its spec, and the names you add
+  ([POLICY.md §9.6](POLICY.md#96-the-environment-openmoat-run-passes-on-sandboxenv),
+  ADR-105). The variables are gone from the process, so no spelling reads them, and the
+  environment of `openmoat run` itself, which still has them, is out of reach: the macOS
+  profile denies `kern.procargs*` and on Linux no grant covers `/proc` (the Isolated tier
+  also has its own process namespace). A brokered secret's variable holds its placeholder
+  in every mode. Off by default for now; `openmoat run --print-boundary` names what would
+  pass. The agents' own sandboxes are not scrubbed: Claude Code's settings can set a
+  variable but not remove one, and its `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` and Codex's
+  `shell_environment_policy` are documented but not yet tried against OpenMoat's hook,
+  so `openmoat init` writes neither (ADR-105 lists what they do).
 - **Files the launcher left open.** Landlock and Seatbelt check a path when it is
   opened, not a descriptor opened before, so a file, socket or directory that the
   shell, IDE or CI runner starting `openmoat run` left open (`exec 3<~/.ssh/id_rsa`)

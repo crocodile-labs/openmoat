@@ -174,13 +174,22 @@ fn installed(report: &mut Report, home: &Home, config: &HostConfig, hook_files: 
             config.settings_path.display()
         ),
     );
-    // Whether the host loaded the plugin (ADR-042).
+    // Whether the host loaded the plugin (ADR-042) or still runs the hook
+    // (ADR-104).
     if let Some(loaded) = crate::heartbeat::check(home, config) {
-        let (mark, text) = crate::heartbeat::line(name, &loaded);
-        let text = format!("{name:<16} {text}");
-        match mark {
-            crate::heartbeat::Mark::Note => report.note(&text),
-            crate::heartbeat::Mark::Warning => report.warn(&text),
+        let (mark, line) = crate::heartbeat::line(host, &loaded);
+        let text = format!("{name:<16} {line}");
+        match (mark, crate::heartbeat::fix(host, &loaded)) {
+            (crate::heartbeat::Mark::Note | crate::heartbeat::Mark::Detail, _) => {
+                report.note(&text);
+            }
+            (crate::heartbeat::Mark::Warning, Some(fix)) => {
+                report.warn_as(
+                    &format!("{text}. Fix: {fix}"),
+                    Row::new(Mark::Attention, name, line).fix(fix),
+                );
+            }
+            (crate::heartbeat::Mark::Warning, None) => report.warn(&text),
         }
     }
     if config.runs_calls_when_hook_fails() {

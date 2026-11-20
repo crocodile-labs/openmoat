@@ -398,8 +398,12 @@ fn evaluate(
         .context("resolving working directory")?;
     hangs::enter(Phase::Context);
     let ctx = context::eval_context(&home, Some(&cwd), None)?;
-    let policy = crate::repo::effective_policy(&home, &ctx)?;
-    out.known = secrets::known(&policy.secrets, &ctx.home)?;
+    // The decoy keys a person had `init` plant (ADR-106): their paths are the
+    // first deny rule, their values masked and refused below.
+    let decoys = crate::canary::Record::load(&home)?.decoys();
+    let mut policy = crate::repo::effective_policy(&home, &ctx)?;
+    decoys.guard(&mut policy);
+    out.known = secrets::known_with(&policy.secrets, &ctx.home, &decoys.values)?;
     out.unattended = policy.unattended();
     // An agent below the level the policy requires gets no decision but this
     // deny, on every call (ADR-064); nothing to read when none is required.
@@ -547,6 +551,8 @@ fn evaluate(
     let tainted = session.taint.untrusted.is_some() || !session.taint.secrets.is_empty();
     let pushes = compiled.pushes(action);
     let decision = push::check(&pushes, &snapshot, &out.known, tainted, decision);
+    // A decoy's value anywhere in the call, content and arguments included.
+    let decision = decoys.checked_text(payload, decoys.checked(action, decision));
     out.titles = notice::Titles::of(compiled.policy(), &decision);
     Ok((Some(request), decision))
 }

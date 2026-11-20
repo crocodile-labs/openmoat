@@ -157,3 +157,106 @@ fn doctor_names_what_is_withheld() {
     assert!(off.contains("nothing here"), "{off}");
     assert!(off.contains("would withhold"), "{off}");
 }
+
+/// The requirement scrubs whatever the policy says, the flag only raises,
+/// the policy's choice comes next and the default last (ADR-105).
+#[test]
+fn the_mode_is_chosen_strictest_first() {
+    use openmoat_core::RunEnv::{Inherited, Scrubbed};
+    let required = Mode::choose(Some(Inherited), Some("your policy"), false);
+    assert!(required.scrubbed);
+    assert!(required.why.contains("full-boundary"), "{}", required.why);
+    let flagged = Mode::choose(Some(Inherited), None, true);
+    assert!(flagged.scrubbed);
+    assert!(flagged.why.contains("--scrub-env"), "{}", flagged.why);
+    assert!(Mode::choose(Some(Scrubbed), None, false).scrubbed);
+    let kept = Mode::choose(Some(Inherited), None, false);
+    assert!(!kept.scrubbed);
+    assert!(kept.why.contains("sandbox.env: inherited"), "{}", kept.why);
+    let default = Mode::choose(None, None, false);
+    assert_eq!(default.scrubbed, RunEnv::DEFAULT == Scrubbed);
+    assert!(default.why.contains("default"), "{}", default.why);
+}
+
+/// Nothing on the base list looks like a credential, so a widening of it can
+/// never let one through by name; nor does the platform's own list.
+#[test]
+fn no_base_name_looks_like_a_credential() {
+    for name in BASE {
+        assert!(!looks_like_credential(name), "{name}");
+    }
+    for name in super::super::platform::BASE_ENV {
+        assert!(!looks_like_credential(name), "{name}");
+    }
+}
+
+/// The toolchain locations a build reads pass a scrubbed run; a token beside
+/// them does not.
+#[test]
+fn toolchain_locations_pass_and_a_token_beside_them_does_not() {
+    let list = allowed(None, &policy(""), &[]);
+    let left = withheld(
+        names(&[
+            "JAVA_HOME",
+            "GOPATH",
+            "CARGO_HOME",
+            "VIRTUAL_ENV",
+            "NPM_TOKEN",
+        ]),
+        &list,
+        &nothing_set,
+    );
+    assert_eq!(left, names(&["NPM_TOKEN"]));
+}
+
+/// A brokered secret read from the environment gets its placeholder; one read
+/// from a file sets no variable.
+#[test]
+fn a_brokered_env_secret_gets_its_placeholder() {
+    let with_secrets = policy(
+        "secrets:\n  - id: gh\n    host: api.github.com\n    header: Authorization\n    \
+         source: { env: GITHUB_TOKEN }\n  - id: other\n    host: example.com\n    \
+         header: X-Key\n    source: { file: /etc/hostname }\n",
+    );
+    assert_eq!(
+        brokered(&with_secrets),
+        vec![(
+            "GITHUB_TOKEN".to_owned(),
+            "moat-secret:gh:placeholder".to_owned()
+        )]
+    );
+    assert_eq!(brokered(&policy("")), Vec::new());
+}
+
+/// The record names what passes and what is withheld when scrubbed, and
+/// neither when inherited; a brokered name is never among what passed.
+#[test]
+fn the_record_lists_names_only_when_scrubbed() {
+    let scrubbed = Mode::choose(None, None, true);
+    let brokered = [(
+        "GITHUB_TOKEN".to_owned(),
+        "moat-secret:gh:placeholder".to_owned(),
+    )];
+    let record = record(
+        &scrubbed,
+        names(&["PATH", "HOME", "GITHUB_TOKEN", SECRET_NAME]),
+        &names(&[SECRET_NAME]),
+        &brokered,
+    );
+    assert!(record.scrubbed);
+    assert_eq!(record.passed, ["HOME", "PATH"]);
+    assert_eq!(record.withheld, [SECRET_NAME]);
+    assert_eq!(record.brokered, ["GITHUB_TOKEN"]);
+    let inherited = Mode::choose(Some(RunEnv::Inherited), None, false);
+    let record = super::record(&inherited, names(&["PATH"]), &names(&[SECRET_NAME]), &[]);
+    assert!(!record.scrubbed);
+    assert!(record.passed.is_empty() && record.withheld.is_empty());
+}
+
+#[test]
+fn the_warning_points_at_the_scrubbed_environment() {
+    let line = notice(&names(&[SECRET_NAME]), false).unwrap();
+    assert!(line.contains("sandbox.env: scrubbed"), "{line}");
+    assert!(line.contains("--scrub-env"), "{line}");
+    assert!(doctor_line(&names(&[]), false).contains("sandbox.env: scrubbed"));
+}

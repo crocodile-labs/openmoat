@@ -127,6 +127,17 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         // as Claude Code's do; left out of the digest as every lock before
         // this field did for a file of this name, so those locks still verify.
         unpinned_keys: &["theme"],
+        // Each session is recorded as `tmp/<project>/chats/session-<time>-<id>.json`,
+        // which `/chat` and `--resume` read back.
+        liveness: Some(crate::Liveness {
+            settings: &[],
+            sessions: crate::Sessions::Known(&[crate::Activity::new(&[
+                "tmp",
+                crate::Activity::ANY,
+                "chats",
+            ])
+            .ending(".json")]),
+        }),
         ..InstallSpec::BASE
     }),
     // <https://geminicli.com/docs/tools/mcp-server/>: `mcpServers` in the user

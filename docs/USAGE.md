@@ -234,6 +234,45 @@ that commands loading no plugin write too, so for them the line stays a note.
 cannot write its report; the run's decisions for the agent count instead. The report
 is information for you, not a check: nothing is decided from it.
 
+### Does the agent still run OpenMoat's hook?
+
+Every other agent runs a hook command, and can stop running it without saying so: an
+update reads its hooks elsewhere, a setting turns hooks off, an edit loses the entry, or
+a session started before `openmoat init` keeps the hooks it read at start. Such an agent
+has nothing to report, but each call it sends is in the audit log, and most agents write
+a file for each session they run. So `openmoat status` and `openmoat doctor` compare the
+newest call the guard recorded for the agent with the last change that could have
+stopped the hook (OpenMoat writing it, the hook file or a settings file that turns hooks
+off changing, or the agent's program on the search path changing) and with the agent's
+session files written since (ADR-104):
+
+| Line | Shown by | Means |
+|---|---|---|
+| `· hook runs: last call <time>` | `doctor` | a call reached OpenMoat after the last change |
+| `· no call since OpenMoat wrote its hook (<time>); <agent> has not run a session since, as far as OpenMoat can tell` (or `since its settings changed`, `since <agent> was updated`) | `doctor` | nothing to check yet: start the agent |
+| `· no call since …; OpenMoat cannot tell whether <agent> ran since (<why>)` | `doctor` | an agent whose session files OpenMoat does not know (Cline, goose, Hermes Agent, Antigravity CLI, Crush) |
+| `! <agent> ran 3 sessions since … (last <time>), and OpenMoat saw no call from it: if they used tools, the hook did not run and the calls were not checked` | `status`, `doctor`, `watch` | sessions at least ten minutes old were written since the change, and no call came |
+
+The warning's fix: restart the agent (a session from before the change may not run the
+new hook); if the line stays, run `openmoat init` and check what turns the agent's hook
+off (the "Turned off" column in [LIMITS.md](LIMITS.md#if-the-hook-fails)), and for Codex
+trust OpenMoat's hooks in `/hooks`. It is a warning, never a lower protection level, and
+nothing is decided from it: a session that used no tool, or ran on another machine that
+shares the directory, looks the same. `openmoat watch` looks every thirty seconds and
+prints one line when an agent's plugin or hook turns missing and one when its calls come
+back. `openmoat status --format json` lists every set-up hook agent under `hooks`, in
+the form of `plugins` (`change` is also `hook-written` or `settings-changed`; `missing`
+adds `sessions`).
+
+| Agent | Session files OpenMoat looks at, in its configuration directory |
+|---|---|
+| Claude Code | `projects/*/*.jsonl` |
+| Codex | `sessions/<year>/<month>/<day>/*.jsonl`; `config.toml` changing counts as a change |
+| Cursor | `chats/*/*/store.db` (the Cursor CLI; the editor's chats are not seen) |
+| GitHub Copilot CLI | `session-state/*/events.jsonl` |
+| Gemini CLI | `tmp/*/chats/*.json` |
+| Qwen Code | `projects/*/chats/*.jsonl`, `tmp/*/chats/*.json` |
+
 ## A call is denied
 
 The agent gets what was stopped and why, and usually tells you (since 0.17.0, ADR-059):
@@ -473,6 +512,13 @@ OpenMoat 0.17.0 · watching Claude Code, Codex · policy 16 deny · 10 allow · 
   verdict column; the mark still shows it. The width is read from `COLUMNS`.
 - It only reads the audit log, a short read twice a second that never waits on the hook
   nor makes it wait. Ctrl-C exits 0.
+- At the start and every thirty seconds it also checks whether each agent still runs
+  OpenMoat ([plugin](#did-the-agent-load-openmoats-plugin),
+  [hook](#does-the-agent-still-run-openmoats-hook)), and prints one red line when an
+  agent turns missing ("✗ Claude Code: Claude Code ran 2 sessions since …, and OpenMoat
+  saw no call from it: … Run `openmoat doctor` for the fix") and one when its calls reach
+  OpenMoat again ("✔ Claude Code: OpenMoat sees its calls again"); nothing
+  while that stays the same. `--host` limits it to that agent.
 
 ### Why was this blocked?
 
@@ -975,6 +1021,17 @@ these takes one command in your own terminal (agents are denied all of them):
 - **Every call is denied** with rule `kernel-integrity`: a pinned file (the policy, a hook, an
   agent's settings) changed behind OpenMoat's back. Run `openmoat`; it shows the change and
   asks whether to accept it (`openmoat doctor --accept` does the same).
+- **A call is denied** with rule `canary`: it read, changed or sent one of the decoy keys
+  you had `openmoat init` plant ([INSTALL.md](INSTALL.md#two-choices-init-offers-decoy-keys-and-sandboxed-start)).
+  No real work does, so this is not OpenMoat in your way: something in that session went
+  looking for keys, often an instruction in a page, a file or a tool result the agent read.
+  `openmoat why --last` shows the call and `openmoat watch` the session; `openmoat status`
+  keeps flagging it for a week. Nothing real was exposed. To stop planting decoys,
+  `openmoat uninstall` deletes them.
+- **Typing an agent's name says `openmoat run` confines the agent to a project**: you
+  chose sandboxed start at `openmoat init`, and the shell is in your home folder. Start the
+  agent in a project, or run the program the shim in `~/.moat/bin` names to start it
+  without the sandbox there. `openmoat uninstall --hosts <agent>` removes its shim.
 - **An MCP server's tools are denied** with rule `mcp-server-changed`: its definition (in
   `~/.claude.json`, a project's `.mcp.json`, Cursor's `mcp.json`, Codex's `config.toml`;
   every agent's files are in [POLICY.md](POLICY.md) §8) changed or was added since you
@@ -1154,9 +1211,9 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat sandbox show` · `openmoat sandbox sync` | see the host sandbox settings the policy compiles to · write and re-pin them for the agents whose hook is installed |
 | `openmoat bench [--host …] [--hook <command>] [--verbose] [--format json]` | send the bundled MoatBench scenarios to OpenMoat in a throwaway home, or to any hook command with `--hook` and `--host`, and print the scorecard; the scenarios' commands never run ([MOATBENCH.md](MOATBENCH.md#reproduce-it-openmoat-bench)) |
 | `openmoat bench --report [--host …] [--scratch-dir DIR] [--format json\|markdown]` | the proof report: each security promise per layer (policy decision, host model from OpenMoat's golden payloads, real host, OS sandbox, network boundary) as PASS, FAIL or NOT TESTED HERE with the reason; the OS rows run the attacks under `openmoat run` in the throwaway home; exits 1 when an exercised layer fails ([MOATBENCH.md](MOATBENCH.md#proof-report-openmoat-bench---report)) |
-| `openmoat run [--isolate\|--no-isolate] [--write PATH]… [--netns auto\|require] [--env NAME]… [--verbose] -- <agent> [args]` | run an agent in a sandbox generated from the policy; `--env NAME` passes one inherited variable on for this run under `require.run: full-boundary` ([POLICY.md §9.3](POLICY.md#93-requiring-openmoat-runs-full-boundary-requirerun)) (macOS, Linux); on Linux the Isolated tier (bubblewrap: only the project, the read roots and temp) is the default where bubblewrap works, and elsewhere it says why and starts the Lightweight tier, which covers less of the project (without bubblewrap it is granted entry by entry and nothing can be created at its top, ADR-090); `--isolate` refuses instead of falling back, `--no-isolate` starts the Lightweight tier and records it in the audit log ([SANDBOX.md](SANDBOX.md#which-tier-openmoat-run-starts)); `--netns=require` refuses to start on Linux where the agent cannot get a network namespace of its own, instead of restricting its network by port only ([SANDBOX.md](SANDBOX.md)) |
+| `openmoat run [--isolate\|--no-isolate] [--write PATH]… [--netns auto\|require] [--scrub-env] [--env NAME]… [--verbose] -- <agent> [args]` | run an agent in a sandbox generated from the policy; `--scrub-env` passes on only an allowlist of your environment for this run, as `sandbox.env: scrubbed` does for every run, and `--env NAME` passes one more inherited variable on when the environment is scrubbed ([POLICY.md §9.6](POLICY.md#96-the-environment-openmoat-run-passes-on-sandboxenv)) (macOS, Linux); on Linux the Isolated tier (bubblewrap: only the project, the read roots and temp) is the default where bubblewrap works, and elsewhere it says why and starts the Lightweight tier, which covers less of the project (without bubblewrap it is granted entry by entry and nothing can be created at its top, ADR-090); `--isolate` refuses instead of falling back, `--no-isolate` starts the Lightweight tier and records it in the audit log ([SANDBOX.md](SANDBOX.md#which-tier-openmoat-run-starts)); `--netns=require` refuses to start on Linux where the agent cannot get a network namespace of its own, instead of restricting its network by port only ([SANDBOX.md](SANDBOX.md)) |
 | `openmoat run … --no-snapshot` | take no snapshot of the project before the agent starts and after it exits (recorded in the audit log) |
-| `openmoat run … --print-boundary [--format json] -- <agent>` | print the sandbox boundary this run would start with and start nothing: the tier asked for and the one that starts, each downgrade with why, the network mode, the Landlock ABI, whether tool commands get the relay token, and each restriction's available / configured / applied / tested; every run writes the same record, completed by the check after the agent started, to the audit log (`run-boundary`), and on Linux stops an agent whose `/proc` status lacks `NoNewPrivs: 1` or `Seccomp: 2` ([SANDBOX.md](SANDBOX.md#the-runs-boundary-record), [ADR-089](adr/ADR-089-run-boundary-record.md)) |
+| `openmoat run … --print-boundary [--format json] -- <agent>` | print the sandbox boundary this run would start with and start nothing: the tier asked for and the one that starts, each downgrade with why, the network mode, the Landlock ABI, whether tool commands get the relay token, which inherited variables pass and which are withheld (names only, ADR-105), and each restriction's available / configured / applied / tested; every run writes the same record, completed by the check after the agent started, to the audit log (`run-boundary`), and on Linux stops an agent whose `/proc` status lacks `NoNewPrivs: 1` or `Seccomp: 2` ([SANDBOX.md](SANDBOX.md#the-runs-boundary-record), [ADR-089](adr/ADR-089-run-boundary-record.md)) |
 | `openmoat snapshot` · `--list [--format json]` · `--prune` | take a snapshot of the project's files · list them with what each left out · remove those past the retention (50 per project, 14 days); refused when an agent started it ([Put the project's files back](#put-the-projects-files-back)) |
 | `openmoat restore [<id>] [--patch] [-- <path>…]` | put the project's files back as a snapshot holds them, by default the newest one `openmoat run` took before its agent started: takes an undo snapshot, shows each change and asks first; person-only ([ADR-085](adr/ADR-085-workspace-snapshot-and-restore.md)) |
 | `openmoat proxy [--listen 127.0.0.1:<port>]` | run the egress proxy on its own; it serves only requests with a session credential (Claude Code's sessions get one from their `SessionStart` hook) unless `sandbox.proxy_serve_without_credential` is set; an allowed host is reached on ports 443 and 80 unless a `net` or `fetch` rule names `host:port`, and a plain-HTTP secret goes to port 80 unless it sets `port` ([POLICY.md](POLICY.md#52-openmoat-proxy)) |

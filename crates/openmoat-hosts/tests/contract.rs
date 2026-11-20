@@ -8,7 +8,7 @@ use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::bench::{Call, Exit, Place};
 use openmoat_hosts::{
     Activity, GUARD_BUDGET_S, HEARTBEAT_FLAG, HOME_FLAG, HookLayout, Host, HostError, KeyShape,
-    RelaxedCheck, RunFacts, ToolToken, reason_line,
+    RelaxedCheck, RunFacts, Sessions, ToolToken, reason_line,
 };
 use serde_json::json;
 
@@ -268,6 +268,67 @@ fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
     }
 }
 
+fn assert_activity_shape(host: Host, activity: &Activity) {
+    assert!(
+        activity.dir.first().is_some_and(|d| *d != Activity::ANY),
+        "{host:?}: an activity directory starts with a name"
+    );
+    assert!(
+        activity
+            .dir
+            .iter()
+            .all(|d| !d.is_empty() && !d.contains(['/', '\\'])),
+        "{host:?}"
+    );
+    assert!(!activity.ending.contains(['/', '\\']), "{host:?}");
+}
+
+/// Every host that runs a hook command says how `status` and `doctor` tell
+/// that it still runs it (ADR-104): where it writes its sessions, or why that
+/// is unknown; a host that runs a plugin has its heartbeat instead.
+#[test]
+fn every_hook_host_declares_its_sessions_or_why_not() {
+    for host in Host::ALL {
+        let Some(install) = host.spec().install.as_ref() else {
+            continue;
+        };
+        assert_ne!(
+            install.heartbeat.is_some(),
+            install.liveness.is_some(),
+            "{host:?}: a heartbeat or a liveness, exactly one"
+        );
+        let Some(liveness) = &install.liveness else {
+            continue;
+        };
+        // Its program on the search path is the first of its process names.
+        assert!(
+            host.spec()
+                .process
+                .names
+                .first()
+                .is_some_and(|n| !n.is_empty()),
+            "{host:?}"
+        );
+        for file in liveness.settings {
+            assert!(!file.is_empty() && !file.contains(['/', '\\']), "{host:?}");
+        }
+        match liveness.sessions {
+            Sessions::Known(activity) => {
+                assert!(!activity.is_empty(), "{host:?}: Known names a place");
+                for one in activity {
+                    assert_activity_shape(host, one);
+                    // A session is a file of its own, told by its name.
+                    assert!(!one.ending.is_empty(), "{host:?}");
+                }
+            }
+            Sessions::Unknown(why) => {
+                assert!(why.len() > 20, "{host:?}: say why");
+                assert!(!why.ends_with('.'), "{host:?}");
+            }
+        }
+    }
+}
+
 /// A host that runs OpenMoat through a plugin it loads says how the plugin
 /// reports that it loaded, and the plugin runs `guard --heartbeat --host
 /// <id> --home <state directory>` (ADR-042, ADR-071); a host that runs a hook
@@ -302,16 +363,7 @@ fn every_plugin_reports_that_it_loaded() {
         );
         assert!(!heartbeat.program.is_empty(), "{host:?}");
         for activity in heartbeat.activity {
-            assert!(
-                activity.dir.first().is_some_and(|d| *d != Activity::ANY),
-                "{host:?}: an activity directory starts with a name"
-            );
-            assert!(
-                activity
-                    .dir
-                    .iter()
-                    .all(|d| !d.is_empty() && !d.contains(['/', '\\']))
-            );
+            assert_activity_shape(host, activity);
         }
     }
 }

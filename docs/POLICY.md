@@ -42,7 +42,8 @@ sandbox:                            # optional: what the host sandboxes may read
   proxy_port: 18080                 # optional, opt-in: send host sandbox traffic through `openmoat proxy` (§9)
   proxy_allow_ech: false            # optional: let `openmoat proxy` forward encrypted server names (ECH) (§9)
   proxy_serve_without_credential: false  # optional: let `openmoat proxy` serve requests with no session credential (§9)
-  env_allow: []                     # optional, your own policy only: variables `openmoat run` passes on under `require.run` (§9.3)
+  env: inherited                    # optional, your own policy only: `scrubbed` passes `openmoat run` only an allowlist of your environment (§9.6)
+  env_allow: []                     # optional, your own policy only: variables `openmoat run` passes on when it scrubs the environment (§9.3, §9.6)
   package_min_release_age_days: 7   # optional: `openmoat run` keeps npm and uv off versions newer than this; 0 is off (§9.1)
   project_top: protected            # optional, your own policy only: `writable` opens the project's top without bubblewrap on Linux (§9.4)
   project_hook_off: refuse          # optional, your own policy only: `start` lets `openmoat run` start an agent whose project turns its hook off (§9.5)
@@ -1203,7 +1204,7 @@ A deny or review from one of OpenMoat's own checks that reaches the agent (`unpa
 `unchecked`, `executables`, `kernel-integrity`, `kernel-error`, `mcp-server-changed`,
 `ungoverned`, `project-settings`, `session-taint`, `injected-input`, `mcp-cross-server`,
 `protected-contents`, `session-written-code`, `push-secret`, `push-runs-later`,
-`push-unchecked`, `protection-required`, `unattended`, `request-rule`) carries the block message as a titled rule does (§2), with OpenMoat's
+`push-unchecked`, `protection-required`, `unattended`, `request-rule`, `canary`) carries the block message as a titled rule does (§2), with OpenMoat's
 own title and `why` (ADR-059, amended); a rule of your policy with one of these ids keeps
 your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat proxy` and
 `policy check-diff` keep their own output.
@@ -1232,6 +1233,7 @@ your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat prox
 | `session-written-code` | review | the call runs a file the same host session wrote (`python3 x.py`, `bash x.sh`, `./x`) and no OS sandbox from OpenMoat holds it (§4.3, ADR-039) |
 | `unattended` | review | the policy says `unattended: review`, the call would be a `defer`, and the agent runs in a mode in which it runs such a call with no person asked (§5.4, ADR-102); the agent receives it as a deny that says how to approve it |
 | `request-rule` | deny, review | a request to a `requests:` host its rules refuse, read in a shell command or a fetch tool's URL (deny), or one the hook cannot read in full (a URL, host or method made at run time, options from a file) where a rule could refuse it (review); at `openmoat proxy`, a request refused inside a terminated tunnel or as plain HTTP, and a connection to such a host it cannot terminate under `requests_untrusted: refuse` (deny) (§2.3, ADR-062) |
+| `canary` | deny | the call reads or changes one of the decoy key files `openmoat init` planted at your request, or carries one of their values in a command, a path, a URL, a query, a file it writes or an MCP call's arguments; at `openmoat proxy`, a request to any host that carries one. The decoys' paths are the first deny group the guard decides with, so a decoy in `~/.aws` is `canary`, not `secrets-paths`; no other call's verdict changes (ADR-106) |
 | `push-secret` | deny | a commit a `git push` or `gh pr create` would publish adds a known token format or a brokered secret's value (§4.2) |
 | `push-runs-later` | review | the session read untrusted content or a secret, and the push changes a file `runs-later` names (§4.2) |
 | `push-unchecked` | review | what a push would publish could not be checked within 10 s or 8 MiB, or where it runs is not known (§4.2) |
@@ -2115,8 +2117,9 @@ on but cannot add a name. A brokered secret (§2.1) never reaches the agent even
 it. Cloud account credentials are not on any agent's list: if you run an agent through
 Amazon Bedrock or Google Cloud, add those names yourself.
 
-Without the setting everything is inherited, as before, and one line says how many
-variables look like credentials and names the first few.
+Without the setting the environment is what `sandbox.env` says (§9.6): by default
+everything is inherited, and one line says how many variables look like credentials and
+names the first few.
 
 **MCP servers.** `openmoat status` and `openmoat doctor` show every MCP server OpenMoat can
 read as protected or unprotected, with why, whether or not the setting is on. Under the
@@ -2176,6 +2179,54 @@ holds that session. The key counts only while the policy lock matches the policy
 when the agent's option kept the hook on), and `openmoat policy check` warns while the
 key is set. Only your own policy can set it: a repository policy or a pack has no
 `sandbox:` section.
+
+### 9.6 The environment `openmoat run` passes on (`sandbox.env`)
+
+A program reads its whole environment, and so does everything it starts. The hook denies
+the commands that print it (`env-secrets`, `env-dump`, §6), but a script, an alias or a
+test runner that prints its environment on failure is not a command the hook can read
+that way. A scrubbed environment removes the variables instead: what `openmoat run`
+starts gets only an allowlist of the environment it was started from (ADR-105).
+
+```yaml
+sandbox:
+  env: scrubbed               # default: inherited
+  env_allow: [MY_TOOL_HOME]   # optional: more names to pass on (§9.3)
+```
+
+```bash
+openmoat run --scrub-env -- claude                     # scrub this run only
+openmoat run --scrub-env --env NPM_TOKEN -- claude     # and pass one name on
+openmoat run --print-boundary -- claude                # what would pass, names only
+```
+
+| Reaches the program when scrubbed | Where it comes from |
+|---|---|
+| `PATH`, `HOME`, `USER`, `SHELL`, `TERM`, locale, `TZ`, temp directories, `EDITOR`, `VISUAL`, `PAGER`, the XDG directories | built in |
+| Toolchain locations: `JAVA_HOME`, `GOPATH`, `GOROOT`, `GOBIN`, `CARGO_HOME`, `RUSTUP_HOME`, `RUSTUP_TOOLCHAIN`, `NVM_DIR`, `NVM_BIN`, `PYENV_ROOT`, `VIRTUAL_ENV`, `CONDA_PREFIX`, `CONDA_DEFAULT_ENV`, `HOMEBREW_PREFIX`, `HOMEBREW_CELLAR`, `HOMEBREW_REPOSITORY`, `MANPATH`, `INFOPATH`, `LESS`, `GPG_TTY` | built in; none holds a secret |
+| The platform's own (`__CF_USER_TEXT_ENCODING`, `XPC_*` on macOS; `HOSTNAME`, `DISPLAY`, `WAYLAND_DISPLAY` on Linux) | built in |
+| The agent's own API key and configuration directory variables | the agent's spec (ADR-077 lists them and their sources) |
+| Names you add | `sandbox.env_allow`, or `--env NAME` for one run |
+| What `openmoat run` sets itself | the proxy, the hook relay, the temp directory, git's settings, the CA files |
+
+Everything else is withheld: cloud credentials, tokens, database URLs, and any variable
+the list does not name. The run says how many it withheld, `--verbose` names them, and
+`openmoat doctor` lists what a run here withholds, or would. None of these shows a value.
+
+- **What chooses it.** `require.run: full-boundary` (§9.3) scrubs whatever `sandbox.env`
+  says; then `--scrub-env`; then `sandbox.env`; then the default, `inherited` for now. No
+  flag inherits when your policy scrubs: pass a name on with `--env NAME`.
+- **Brokered secrets.** A secret with `source: { env: NAME }` (§2.1) never reaches the
+  program, scrubbed or not: `NAME` holds its placeholder, `moat-secret:<id>:placeholder`,
+  which the run's proxy replaces with the value for the secret's host only.
+- **Only your own policy** can set `env` or `env_allow`: a repository policy or a pack has
+  no `sandbox:` section.
+- **What it does not reach.** Only what `openmoat run` starts is scrubbed. An agent started
+  without it, and its commands, get the shell's whole environment; the hook's rules are all
+  that holds there. The agent's own key is on the list for that agent, so its commands can
+  read it.
+- **A tool that stops working** under `--scrub-env` needs a variable no list names: add it
+  with `--env NAME` once, or `sandbox.env_allow` for good.
 
 ## 10. Repository policy
 

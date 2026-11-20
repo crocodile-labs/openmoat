@@ -1,4 +1,5 @@
-//! A plugin's report that its host loaded it (ADR-042).
+//! Whether a host still runs OpenMoat: a plugin's report that its host loaded
+//! it (ADR-042), and a hook host's calls (ADR-104).
 //!
 //! OpenClaw, pi and OpenCode run OpenMoat through a plugin they load, and each
 //! keeps running when it cannot load one, so its tool calls then run
@@ -9,27 +10,35 @@
 //! that could have stopped the plugin loading: OpenMoat writing the plugin
 //! file, or a newer host program on the search path. A decision the guard
 //! recorded for the host since then counts as a report too: the plugin sent
-//! the call. Nothing decides on it; it only says what OpenMoat can tell.
+//! the call.
+//!
+//! A host that runs a hook command stops running it as quietly (an update, a
+//! setting, a lost entry), and has nothing to report but its calls: there
+//! the last change is OpenMoat writing the hook, the host's settings changing
+//! or a newer program, and the host's own session files since tell whether it
+//! ran ([`hook`]). Nothing decides on either; it only says what OpenMoat can
+//! tell.
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
 
 use anyhow::{Result, bail};
-use openmoat_hosts::{Activity, Heartbeat, Host};
+use openmoat_hosts::{Heartbeat, Host};
 use serde::{Deserialize, Serialize};
 
 use crate::home::{Home, write_private};
 use crate::install::HostConfig;
 
+mod hook;
+mod scan;
+mod wording;
+
+pub use wording::{Mark, fix, line, not_loaded};
+
 /// The state directory's folder of reports.
 const DIR: &str = "loaded";
 /// A report is a few dozen bytes; anything longer is not one.
 const MAX_BYTES: u64 = 4096;
-/// How many directories an [`Activity::ANY`] level and how many files in all
-/// are looked at, so a huge sessions folder costs `status` little.
-const MAX_DIRS: usize = 256;
-const MAX_FILES: usize = 4096;
 
 /// What `loaded/<id>.json` holds.
 #[derive(Debug, Serialize, Deserialize)]
@@ -78,7 +87,8 @@ fn last(home: &Home, host: Host) -> Option<i64> {
     (record.host == host.id()).then_some(record.reported_ms)
 }
 
-/// The last change the plugin has to have loaded after.
+/// The last change the plugin has to have loaded after, or the hook has to
+/// have run after.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Change {
@@ -86,6 +96,11 @@ pub enum Change {
     PluginWritten,
     /// The host's program on the search path is newer: an update.
     HostUpdated,
+    /// OpenMoat wrote the hook file (`openmoat init`), as the lock pinned it.
+    HookWritten,
+    /// The hook file, or a settings file that can turn hooks off, changed
+    /// after OpenMoat last pinned it.
+    SettingsChanged,
 }
 
 /// A [`Change`] and when it happened.
@@ -95,7 +110,8 @@ pub struct Since {
     pub at_ms: i64,
 }
 
-/// Whether the host has loaded OpenMoat's plugin since it last changed.
+/// Whether the host has loaded OpenMoat's plugin, or run its hook, since it
+/// last changed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(tag = "state", rename_all = "kebab-case")]
 pub enum Loaded {
@@ -103,9 +119,24 @@ pub enum Loaded {
     Reported { since: Since, at_ms: i64 },
     /// Neither, and the host has not run since, as far as OpenMoat can tell.
     NotYet { since: Since },
-    /// Neither, though the host wrote its sessions at `active_ms`: it ran
-    /// without loading the plugin, or a process from before still runs.
-    Missing { since: Since, active_ms: i64 },
+    /// Neither, though the host wrote `sessions` of its sessions since, the
+    /// last at `active_ms`: it ran without loading the plugin or running the
+    /// hook, a process from before still runs, or (for a hook) those
+    /// sessions made no tool call.
+    Missing {
+        since: Since,
+        active_ms: i64,
+        sessions: usize,
+    },
+}
+
+/// The host's sessions written since the change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Active {
+    /// The newest write.
+    pub last_ms: i64,
+    /// How many session files were written.
+    pub sessions: usize,
 }
 
 /// What [`judge`] decides from.
@@ -116,13 +147,14 @@ pub struct Facts {
     pub reported_ms: Option<i64>,
     /// The newest decision the guard recorded for the host at or after `since`.
     pub decided_ms: Option<i64>,
-    /// The newest file the host wrote where it works; `None` when unknown.
-    pub active_ms: Option<i64>,
+    /// The host's sessions written at or after `since`; `None` when none, or
+    /// when where it writes them is unknown.
+    pub active: Option<Active>,
 }
 
 /// The state the facts show. A report or a decision since the change means
-/// the plugin loaded after it; without either, the host's own writes since
-/// the change mean it ran without the plugin.
+/// the plugin loaded (or the hook ran) after it; without either, the host's
+/// own writes since the change mean it ran without them.
 pub fn judge(facts: &Facts) -> Loaded {
     let since = facts.since;
     let sign = [facts.reported_ms, facts.decided_ms]
@@ -130,36 +162,49 @@ pub fn judge(facts: &Facts) -> Loaded {
         .flatten()
         .filter(|at| *at >= since.at_ms)
         .max();
-    match (sign, facts.active_ms) {
+    match (sign, facts.active) {
         (Some(at_ms), _) => Loaded::Reported { since, at_ms },
-        (None, Some(active_ms)) if active_ms >= since.at_ms => Loaded::Missing { since, active_ms },
+        (None, Some(active)) if active.last_ms >= since.at_ms && active.sessions > 0 => {
+            Loaded::Missing {
+                since,
+                active_ms: active.last_ms,
+                sessions: active.sessions,
+            }
+        }
         (None, _) => Loaded::NotYet { since },
     }
 }
 
-/// Whether `config`'s host has loaded OpenMoat's plugin since it last
-/// changed; `None` for a host that runs a hook command, or when the plugin
-/// file cannot be read.
-pub fn check(home: &Home, config: &HostConfig) -> Option<Loaded> {
-    let heartbeat = spec(config.host)?;
-    let since = since(config, heartbeat)?;
-    let decided_ms = openmoat_audit::Store::open_read_only(&home.audit_path())
+/// The newest decision the guard recorded for `host` at or after `since_ms`.
+fn decided_since(home: &Home, host: Host, since_ms: i64) -> Option<i64> {
+    openmoat_audit::Store::open_read_only(&home.audit_path())
         .ok()
-        .and_then(|store| store.host_seen_since(config.host.id(), since.at_ms).ok())
-        .flatten();
+        .and_then(|store| store.host_seen_since(host.id(), since_ms).ok())
+        .flatten()
+}
+
+/// Whether `config`'s host has loaded OpenMoat's plugin, or run its hook,
+/// since it last changed; `None` for a host with neither fact in its spec,
+/// or when the plugin or hook file cannot be read.
+pub fn check(home: &Home, config: &HostConfig) -> Option<Loaded> {
+    let Some(heartbeat) = spec(config.host) else {
+        return hook::check(home, config);
+    };
+    let since = since(config, heartbeat)?;
     Some(judge(&Facts {
         since,
         reported_ms: last(home, config.host),
-        decided_ms,
-        active_ms: newest_activity(config.dir(), heartbeat.activity),
+        decided_ms: decided_since(home, config.host, since.at_ms),
+        // A plugin reports as it loads, so a session counts at once.
+        active: scan::sessions(config.dir(), heartbeat.activity, since.at_ms, i64::MAX),
     }))
 }
 
 /// The last change `config`'s plugin has to have loaded after: OpenMoat
 /// writing it, or a newer host program; `None` when the file cannot be read.
 fn since(config: &HostConfig, heartbeat: &Heartbeat) -> Option<Since> {
-    let written = modified_ms(&fs::metadata(config.plugin_file()?).ok()?)?;
-    Some(match program_ms(heartbeat.program) {
+    let written = scan::modified_ms(&fs::metadata(config.plugin_file()?).ok()?)?;
+    Some(match scan::program_ms(heartbeat.program) {
         Some(at_ms) if at_ms > written => Since {
             change: Change::HostUpdated,
             at_ms,
@@ -186,15 +231,19 @@ pub fn reported_since_change(home: &Home, config: &HostConfig) -> bool {
     }
 }
 
-/// One host's [`Loaded`], for `openmoat status --format json` (`plugins`).
-#[derive(Debug, Serialize)]
+/// One host's [`Loaded`], for `openmoat status --format json` (`plugins`
+/// and `hooks`).
+#[derive(Debug, Clone, Serialize)]
 pub struct HostLoaded {
     pub host: &'static str,
+    #[serde(skip)]
+    pub of: Host,
     #[serde(flatten)]
     pub loaded: Loaded,
 }
 
-/// [`check`] for every host whose plugin OpenMoat installed for `binary`.
+/// [`check`] for every host whose hook or plugin OpenMoat installed for
+/// `binary`.
 pub fn all(home: &Home, binary: &Path) -> Vec<HostLoaded> {
     Host::ALL
         .into_iter()
@@ -205,122 +254,16 @@ pub fn all(home: &Home, binary: &Path) -> Vec<HostLoaded> {
             }
             Some(HostLoaded {
                 host: host.id(),
+                of: host,
                 loaded: check(home, &config)?,
             })
         })
         .collect()
 }
 
-/// When `program` on the search path last changed: the newer of the entry
-/// there (a link a package manager made) and the file it names.
-fn program_ms(program: &str) -> Option<i64> {
-    let found = crate::environment::find_on_path(program)?;
-    let link = fs::symlink_metadata(&found)
-        .ok()
-        .and_then(|m| modified_ms(&m));
-    let file = fs::metadata(&found).ok().and_then(|m| modified_ms(&m));
-    link.max(file)
-}
-
-/// The newest modification time of a file in the directories `activity`
-/// names under `dir`; links are not followed.
-fn newest_activity(dir: &Path, activity: &[Activity]) -> Option<i64> {
-    let mut files = 0;
-    activity
-        .iter()
-        .flat_map(|a| expand(dir, a.dir))
-        .filter_map(|folder| fs::read_dir(folder).ok())
-        .flatten()
-        .take_while(|_| {
-            files += 1;
-            files <= MAX_FILES
-        })
-        .filter_map(|entry| entry.ok()?.metadata().ok())
-        .filter(fs::Metadata::is_file)
-        .filter_map(|meta| modified_ms(&meta))
-        .max()
-}
-
-/// The directories `parts` names under `dir`, each [`Activity::ANY`] every
-/// directory at its level (at most [`MAX_DIRS`]).
-fn expand(dir: &Path, parts: &[&str]) -> Vec<PathBuf> {
-    let mut dirs = vec![dir.to_path_buf()];
-    for part in parts {
-        dirs = if *part == Activity::ANY {
-            dirs.iter()
-                .filter_map(|d| fs::read_dir(d).ok())
-                .flatten()
-                .filter_map(Result::ok)
-                .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
-                .map(|e| e.path())
-                .take(MAX_DIRS)
-                .collect()
-        } else {
-            dirs.iter().map(|d| d.join(part)).collect()
-        };
-    }
-    dirs
-}
-
-fn modified_ms(meta: &fs::Metadata) -> Option<i64> {
-    let since_epoch = meta.modified().ok()?.duration_since(UNIX_EPOCH).ok()?;
-    i64::try_from(since_epoch.as_millis()).ok()
-}
-
-/// How a [`Loaded`] reads in `status` and `doctor`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mark {
-    /// `·`: information.
-    Note,
-    /// `!`: the plugin may not be loaded.
-    Warning,
-}
-
-/// The line `status` and `doctor` print for `loaded` under `name`'s hook line.
-pub fn line(name: &str, loaded: &Loaded) -> (Mark, String) {
-    let ts = crate::time::timestamp;
-    let what = |since: &Since| match since.change {
-        Change::PluginWritten => format!("OpenMoat wrote it ({})", ts(since.at_ms)),
-        Change::HostUpdated => format!("{name} was updated ({})", ts(since.at_ms)),
-    };
-    match loaded {
-        Loaded::Reported { at_ms, .. } => (
-            Mark::Note,
-            format!("plugin loaded: last report or call {}", ts(*at_ms)),
-        ),
-        Loaded::NotYet { since } => (
-            Mark::Note,
-            format!(
-                "plugin not loaded yet since {}; {name} reports it the next time it starts",
-                what(since)
-            ),
-        ),
-        Loaded::Missing { since, active_ms } => (
-            Mark::Warning,
-            format!(
-                "plugin has not reported loading since {}, but {name} has run since (last {}): \
-                 its tool calls may run unchecked. Restart {name}; if this stays, look for a \
-                 plugin error in its log",
-                what(since),
-                ts(*active_ms)
-            ),
-        ),
-    }
-}
-
-/// Why a [`Loaded::Missing`] host is not protected; `None` otherwise.
-pub fn not_loaded(name: &str, loaded: &Loaded) -> Option<String> {
-    match loaded {
-        Loaded::Missing { since, .. } => Some(format!(
-            "plugin not loaded since {} {}, though {name} has run since",
-            match since.change {
-                Change::PluginWritten => "it was written",
-                Change::HostUpdated => "the update",
-            },
-            crate::time::timestamp(since.at_ms)
-        )),
-        Loaded::Reported { .. } | Loaded::NotYet { .. } => None,
-    }
+/// Whether `host` runs OpenMoat through a plugin that reports loading.
+pub fn has_plugin(host: Host) -> bool {
+    spec(host).is_some()
 }
 
 #[cfg(test)]

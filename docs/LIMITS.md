@@ -68,10 +68,16 @@ Each agent's gaps and the reasons are in
   sandbox or, on Linux, without the Isolated tier (ADR-080). An agent started without
   `openmoat run` is not refused
   ([POLICY.md §9.3](POLICY.md#93-requiring-openmoat-runs-full-boundary-requirerun)).
-- **`openmoat run` keeps an inherited variable from the agent only under
-  `require.run: full-boundary`.** Otherwise every variable reaches it except brokered
-  secrets, and one line warns. Under the setting an agent's own key stays on the list, so
-  its commands can read that key, and a value kept in a file or keychain is outside it.
+- **`openmoat run` scrubs the environment only when asked.** With `sandbox.env: scrubbed`,
+  `--scrub-env` or `require.run: full-boundary`, only an allowlist of variables reaches the
+  agent ([POLICY.md §9.6](POLICY.md#96-the-environment-openmoat-run-passes-on-sandboxenv),
+  ADR-105). It is off by default for now, so otherwise every variable reaches the agent
+  (a brokered secret's holds its placeholder) and one line warns. Scrubbed, an agent's
+  own key stays on the list, so its commands can read that key; a value kept in a file or
+  keychain is outside it; a tool that needs a variable no list names stops working until
+  you add the name. An agent started without `openmoat run`, and its commands, get your
+  whole environment: Claude Code's and Codex's own switches for this are not set by
+  OpenMoat yet.
 - **A required protection level is checked where the hook runs.** With `require:`
   ([POLICY.md §9.2](POLICY.md#92-required-protection-level-require)) the guard denies every
   call of an agent below the level, but it only sees what it can tell from inside one
@@ -273,6 +279,19 @@ when an agent runs a call this table says it blocks (ADR-079). Generated from ea
 docs`); do not edit the table. [PROTECTION.md](PROTECTION.md) puts these facts beside the
 rest of each agent's protection on each OS, with the runs that back them.
 
+When a hook is turned off, or an update stops running it, the agent says nothing and
+neither does the hook. `openmoat status`, `openmoat doctor` and `openmoat watch` warn
+when an agent wrote sessions since its hook, settings or program last changed and no
+call of its reached OpenMoat ([USAGE.md](USAGE.md#does-the-agent-still-run-openmoats-hook),
+ADR-104). That warning has limits: it comes only after a session is ten minutes old; it
+needs the agent's session files, which OpenMoat does not know for Cline, goose, Hermes
+Agent, Antigravity CLI and Crush (a note there says no call came) nor for Cursor's
+editor; a session that used no tool looks the same as one whose calls went unchecked,
+so the warning says "if they used tools"; sessions synced from another machine count
+here though their calls were checked there; and it compares file times with the audit
+log's on this machine, so a restored or wrongly dated file can raise it until the next
+call.
+
 <!-- generated:hosts-hook-failure -->
 | Agent | Hook cannot start, crashes or exits non-zero | Hook times out | Time limit | Turned off (every call runs unchecked) | Fails open | Source |
 |---|---|---|---|---|---|---|
@@ -336,6 +355,23 @@ rest of each agent's protection on each OS, with the runs that back them.
   usually runs.
 
 ## Limits of single checks
+
+- **A decoy key's value is caught as exact text.** The `canary` check finds a decoy's value
+  in a call or a proxied request in any letter case, but not encoded (base64, hex), split
+  across calls or rebuilt by a program before it is sent, as for brokered secrets. A
+  decoy read where the hook does not see it (by a program the agent started, by a sweep
+  such as `grep -r` over the home folder) is caught only when its value goes out through
+  a checked call or `openmoat proxy`. Inside `openmoat run` the OS sandbox does not deny
+  the decoy files themselves; their values are refused at the run's proxy (ADR-106).
+- **Sandboxed start depends on your shell's `PATH`.** The shims start an agent in
+  `openmoat run` only from a shell that read the line `openmoat init` added (open a new
+  one), and only when it is typed by name: a program started by its full path, by an
+  editor or by another tool's own lookup starts outside, as before. `openmoat status`
+  says which happens in the current shell. A shim starts the program it found at `init`:
+  after the agent moves, or its configuration directory changes, run `openmoat init`
+  again. An agent that starts itself again from inside its sandbox finds the shim there
+  and cannot start, since the sandbox hides OpenMoat's directory; outside a project
+  `openmoat run` refuses to start (ADR-106).
 
 - **DNS exfiltration is seen only in a name with a fixed domain.** A name a resolver or
   client looks up that is built at run time is decided as the domain it ends in

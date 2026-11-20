@@ -82,7 +82,7 @@ mod require;
 mod schema;
 mod text;
 
-pub use env_name::env_name_problem;
+pub use env_name::{RunEnv, env_name_problem};
 pub use error::PolicyError;
 pub use require::{Require, RequiredBy, RequiredLevel, Requirement, RunBoundary};
 pub(crate) use schema::check as check_version;
@@ -387,9 +387,16 @@ pub struct SandboxSettings {
     /// absent is 7 days ([`Policy::package_min_release_age_days`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_min_release_age_days: Option<u16>,
+    /// Whether `openmoat run` passes on the whole environment it is started
+    /// from or only its allowlist (ADR-105); absent, [`RunEnv::DEFAULT`].
+    /// `require.run: full-boundary` scrubs whatever this says. Read from the
+    /// person's own policy alone: a repository policy or a pack has no
+    /// `sandbox:`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<RunEnv>,
     /// Names of inherited environment variables `openmoat run` passes on
-    /// under `require.run: full-boundary`, beyond its own list and the
-    /// agent's (ADR-077). Names only, never a pattern. Read from the person's
+    /// when it scrubs the environment, beyond its own list and the agent's
+    /// (ADR-077, ADR-105). Names only, never a pattern. Read from the person's
     /// own policy alone: a repository policy or a pack has no `sandbox:`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub env_allow: Vec<String>,
@@ -513,6 +520,15 @@ impl Policy {
             .as_ref()
             .and_then(|s| s.package_min_release_age_days)
             .unwrap_or(DEFAULT_PACKAGE_MIN_RELEASE_AGE_DAYS)
+    }
+
+    /// What the person's own policy says `openmoat run` passes on of its
+    /// environment (`sandbox.env`, ADR-105); `None` when it says nothing,
+    /// which means [`RunEnv::DEFAULT`]. `require.run: full-boundary` scrubs
+    /// whatever this says.
+    #[must_use]
+    pub fn run_env(&self) -> Option<RunEnv> {
+        self.sandbox.as_ref().and_then(|s| s.env)
     }
 
     /// What `openmoat run` without a network namespace grants at the project's

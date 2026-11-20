@@ -85,16 +85,26 @@ pub(super) fn hooks(shown: &mut Shown, home: &Home, binary: &Path) -> Result<boo
             };
             shown.attention.push(row);
         }
-        // Whether the host loaded the plugin (ADR-042): a warning, like the
-        // protection level it changes, that leaves `healthy` alone.
+        // Whether the host loaded the plugin (ADR-042) or still runs the hook
+        // (ADR-104): a warning, like the protection level it changes, that
+        // leaves `healthy` alone.
         if let Some(loaded) = installed
             .then(|| crate::heartbeat::check(home, &config))
             .flatten()
         {
-            let (mark, text) = crate::heartbeat::line(name, &loaded);
+            let (mark, text) = crate::heartbeat::line(host, &loaded);
             match mark {
                 crate::heartbeat::Mark::Note => shown.agents.push(Row::new(Mark::Info, name, text)),
-                crate::heartbeat::Mark::Warning => shown.needs(Mark::Attention, name, text),
+                crate::heartbeat::Mark::Detail => {}
+                crate::heartbeat::Mark::Warning => {
+                    let row = Row::new(Mark::Attention, name, text);
+                    shown
+                        .attention
+                        .push(match crate::heartbeat::fix(host, &loaded) {
+                            Some(fix) => row.fix(fix),
+                            None => row,
+                        });
+                }
             }
         }
     }

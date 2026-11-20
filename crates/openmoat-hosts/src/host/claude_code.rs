@@ -123,6 +123,17 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         relaxed_keys: settings::RELAXED_KEYS,
         relaxed_check: crate::RelaxedCheck::ByKey,
         unpinned_keys: settings::UNPINNED_KEYS,
+        // Each session's transcript is `projects/<the project's path, dashed>/
+        // <session id>.jsonl`, the `transcript_path` its hooks receive;
+        // sign-in, `claude mcp` and `--help` write none.
+        liveness: Some(crate::Liveness {
+            settings: &[],
+            sessions: crate::Sessions::Known(&[crate::Activity::new(&[
+                "projects",
+                crate::Activity::ANY,
+            ])
+            .ending(".jsonl")]),
+        }),
         ..InstallSpec::BASE
     }),
     mcp: Some(McpSpec {

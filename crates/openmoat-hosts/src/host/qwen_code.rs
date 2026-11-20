@@ -118,6 +118,18 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hooks: HOOKS,
         hook_file: HookLayout::Entries(&hook_file::Qwen),
         versions: Some(VERSIONS),
+        // Each session is recorded as `projects/<project>/chats/<session id>.jsonl`,
+        // which `--resume` reads back; releases on Gemini CLI's layout wrote
+        // `tmp/<project>/chats/session-*.json`. A place a release does not use
+        // stays empty and only means fewer warnings.
+        liveness: Some(crate::Liveness {
+            settings: &[],
+            sessions: crate::Sessions::Known(&[
+                crate::Activity::new(&["projects", crate::Activity::ANY, "chats"])
+                    .ending(".jsonl"),
+                crate::Activity::new(&["tmp", crate::Activity::ANY, "chats"]).ending(".json"),
+            ]),
+        }),
         ..InstallSpec::BASE
     }),
     // `mcpServers` in the user and the project `settings.json` (the settings

@@ -354,6 +354,9 @@ deny:
       # remote approvals (ADR-078): the channel's credential and the key every
       # request, answer and approver list is signed with
       - "~/.moat/remote/**"
+      # the decoy keys `openmoat init` planted (ADR-106): which files are decoys
+      # and what they hold, which an agent hunting for keys would read first
+      - "~/.moat/canaries.json"
       - "**/.moat/audit.db*"
       - "**/.moat/audit.key*"
       - "**/.moat/policy.lock"

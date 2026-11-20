@@ -92,6 +92,7 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     }
     let audit = audit(&mut shown, &home)?;
     healthy &= audit.is_some();
+    opt_in(&mut shown, &home);
 
     // Only when a policy asks for it, so nothing changes without the setting.
     mcp_servers(&mut shown, &home, &binary);
@@ -141,6 +142,9 @@ fn report(home: &Home, binary: &Path, update: Option<&String>) -> Result<serde_j
     let drift: Vec<String> = Lock::load(&home.lock_path())
         .map(|lock| lock.verify().iter().map(ToString::to_string).collect())
         .unwrap_or_default();
+    let (plugins, hooks): (Vec<_>, Vec<_>) = crate::heartbeat::all(home, binary)
+        .into_iter()
+        .partition(|one| crate::heartbeat::has_plugin(one.of));
     Ok(serde_json::json!({
         "agents": protection::report(home, binary)?,
         "run_boundary": protection::run_boundary(home, binary),
@@ -151,7 +155,8 @@ fn report(home: &Home, binary: &Path, update: Option<&String>) -> Result<serde_j
         )
         .map(|found| found.servers)
         .unwrap_or_default(),
-        "plugins": crate::heartbeat::all(home, binary),
+        "plugins": plugins,
+        "hooks": hooks,
         "hook_warnings": hook_warnings(home, binary)?,
         "policy_update": update,
         "lock_drift": drift,
@@ -166,7 +171,21 @@ fn report(home: &Home, binary: &Path, update: Option<&String>) -> Result<serde_j
             .map(|warning| warning.text)
             .collect::<Vec<_>>(),
         "repo_git_config": crate::project_settings::git_config::warnings_here(),
+        "opt_in": crate::opt_in::rows(home, time::now_ms()),
     }))
+}
+
+/// The opt-in choices of `openmoat init` (ADR-106): a decoy touched is an
+/// alert first in the list, an agent that starts outside its shim a warning;
+/// neither changes the exit code, which says whether OpenMoat is set up.
+fn opt_in(shown: &mut Shown, home: &Home) {
+    for row in crate::opt_in::rows(home, time::now_ms()) {
+        match (row.alert, row.attention) {
+            (true, _) => shown.needs(Mark::Broken, row.label, row.text),
+            (false, true) => shown.needs(Mark::Attention, row.label, row.text),
+            (false, false) => shown.state(Mark::Ok, row.label, row.text),
+        }
+    }
 }
 
 /// Advisory trust diagnostics, separate from protection levels and exit codes.

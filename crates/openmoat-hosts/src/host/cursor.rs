@@ -81,6 +81,18 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         config_file: "hooks.json",
         hooks: HOOKS,
         hook_file: HookLayout::Entries(&hook_file::Cursor),
+        // The Cursor CLI keeps each chat in `chats/<workspace hash>/<chat id>/
+        // store.db`. The editor keeps its chats in its own application data,
+        // so an editor session is not seen here: fewer warnings, never more.
+        liveness: Some(crate::Liveness {
+            settings: &[],
+            sessions: crate::Sessions::Known(&[crate::Activity::new(&[
+                "chats",
+                crate::Activity::ANY,
+                crate::Activity::ANY,
+            ])
+            .ending("store.db")]),
+        }),
         ..InstallSpec::BASE
     }),
     mcp: Some(McpSpec {

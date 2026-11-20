@@ -42,6 +42,7 @@ mod guard;
 mod heartbeat;
 mod hermes;
 mod home_screen;
+mod hook_liveness;
 mod hook_off;
 mod hook_only;
 mod host_failures;
@@ -63,6 +64,7 @@ mod mcp_status;
 mod moatbench;
 mod openclaw;
 mod opencode;
+mod opt_in;
 #[cfg(unix)]
 mod packs;
 mod paths;

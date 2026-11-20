@@ -55,7 +55,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_core::{Policy, SecretSource};
+use openmoat_core::Policy;
 use openmoat_proxy::Credential;
 use zeroize::Zeroizing;
 
@@ -190,13 +190,16 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         agent.command().args(*args);
     }
     agent.command().args(rest);
-    let allowed = env::Allowed::new(platform::BASE_ENV, agent_host, &policy, &args.envs);
+    let asked_env = &args.environment;
+    let allowed = env::Allowed::new(platform::BASE_ENV, agent_host, &policy, &asked_env.envs);
+    let env_mode = env::Mode::choose(policy.run_env(), strict.as_deref(), asked_env.scrub_env);
     let release_age = package_release_age(&policy, ctx.project.as_deref());
     agent.command().envs(release_age.vars);
     // The proxy reads a brokered secret from this process's environment; the
-    // agent gets only the placeholder, never the variable that holds the value.
-    for name in env_secrets(&policy) {
-        agent.command().env_remove(name);
+    // agent gets only the placeholder in that variable, never the value.
+    let brokered = env::brokered(&policy);
+    for (name, placeholder) in &brokered {
+        agent.command().env(name, placeholder);
     }
     // The proxy serves this session alone (ADR-027): each request must carry
     // the credential in the proxy URL, and the run's id ties the agent's
@@ -282,29 +285,11 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         agent.command().env(var, path);
     }
     // After every setting above: what the run set or removed is its own.
-    let set_by_run: Vec<OsString> = agent
-        .command()
-        .get_envs()
-        .map(|(name, _)| name.to_owned())
-        .collect();
-    let withheld = env::withheld(
-        std::env::vars_os().map(|(name, _)| name),
-        &allowed,
-        &|name| set_by_run.iter().any(|set| set == name),
-    );
-    if strict.is_some() {
-        for name in &withheld {
-            agent.command().env_remove(name);
-        }
-    }
-    if let Some(line) = env::notice(&withheld, strict.is_some()) {
-        eprintln!("{line}");
-    }
-    if args.verbose
-        && let Some(line) = env::list(&withheld, strict.is_some())
-    {
-        eprintln!("{line}");
-    }
+    record.environment = Some(env::apply(
+        agent.command(),
+        (&allowed, &env_mode, &brokered),
+        args.verbose,
+    ));
     // Ctrl-C at the terminal reaches the agent and OpenMoat alike. The agent decides
     // what it means; OpenMoat keeps running, or the proxy would die under the agent.
     signal_hook::flag::register(
@@ -388,16 +373,47 @@ fn package_release_age(policy: &Policy, project: Option<&str>) -> release_age::R
     )
 }
 
-/// The environment variables the policy's brokered secrets are read from.
-fn env_secrets(policy: &Policy) -> Vec<String> {
-    policy
-        .secrets
+/// What `--print-boundary` says of the environment (ADR-105): what a run
+/// started now in the project `project` would pass on. The names a run sets
+/// itself are never withheld; those are counted here as a run sets them (the
+/// proxy, the hook relay, the temp directory, git's and the package
+/// managers'), except the CA files' variables, set only with a terminating
+/// proxy, and the tool-shell wrapper's, which no shell has already.
+fn planned_environment(
+    policy: &Policy,
+    host: Option<openmoat_hosts::Host>,
+    args: &RunArgs,
+    (strict, project): (Option<&str>, Option<&str>),
+) -> Result<openmoat_core::boundary::RunEnvironment> {
+    let mode = env::Mode::choose(policy.run_env(), strict, args.environment.scrub_env);
+    let allowed = env::Allowed::new(platform::BASE_ENV, host, policy, &args.environment.envs);
+    let brokered = env::brokered(policy);
+    let git = git_env::add(&|var| std::env::var(var).ok())?;
+    let own: Vec<String> = PROXY_VARS
         .iter()
-        .filter_map(|s| match &s.source {
-            SecretSource::Env(name) => Some(name.clone()),
-            _ => None,
-        })
-        .collect()
+        .chain(&[
+            "NO_PROXY",
+            "no_proxy",
+            temp::TMPDIR,
+            RUN_SESSION_ENV,
+            guard_relay::SOCKET_ENV,
+            guard_relay::TOKEN_ENV,
+        ])
+        .map(|name| (*name).to_owned())
+        .chain(git.into_iter().map(|(name, _)| name))
+        .chain(
+            package_release_age(policy, project)
+                .vars
+                .into_iter()
+                .map(|(name, _)| name.to_owned()),
+        )
+        .chain(brokered.iter().map(|(name, _)| name.clone()))
+        .collect();
+    let inherited = || std::env::vars_os().map(|(name, _)| name);
+    let withheld = env::withheld(inherited(), &allowed, &|name| {
+        own.iter().any(|set| name == set.as_str())
+    });
+    Ok(env::record(&mode, inherited(), &withheld, &brokered))
 }
 
 /// The executable `name` starts, symlinks resolved. A bare name is looked up
@@ -454,20 +470,29 @@ pub fn project_open(policy: &Policy, ctx: &openmoat_core::EvalContext) -> Option
 
 /// What `openmoat run` would withhold here under the allowlist (ADR-077), for
 /// `openmoat doctor`: names only, given what `policy` adds and with `hosts`'
-/// own names kept.
+/// own names kept. A brokered secret's variable is not counted: the run puts
+/// its placeholder there.
 pub fn withheld_names(policy: &Policy, hosts: &[openmoat_hosts::Host]) -> Vec<OsString> {
     let mut allowed = env::Allowed::new(platform::BASE_ENV, None, policy, &[]);
     for host in hosts {
         allowed.add_host(*host);
     }
-    env::withheld(std::env::vars_os().map(|(name, _)| name), &allowed, &|_| {
-        false
-    })
+    let brokered = env::brokered(policy);
+    env::withheld(
+        std::env::vars_os().map(|(name, _)| name),
+        &allowed,
+        &|name| brokered.iter().any(|(set, _)| name == set.as_str()),
+    )
 }
 
-/// `openmoat doctor`'s row for [`withheld_names`].
-pub fn withheld_line(names: &[OsString], strict: bool) -> String {
-    env::doctor_line(names, strict)
+/// `openmoat doctor`'s row for [`withheld_names`]: whether a run here scrubs
+/// the environment comes from `policy` and from the policy that requires the
+/// full boundary (`strict`), if one does (ADR-105).
+pub fn withheld_line(names: &[OsString], policy: &Policy, strict: Option<&str>) -> String {
+    env::doctor_line(
+        names,
+        env::Mode::choose(policy.run_env(), strict, false).scrubbed,
+    )
 }
 
 /// What this system lacks for the run's full boundary (ADR-077): no sandbox at
@@ -574,33 +599,4 @@ fn notice(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{Netns, refuse_port_only};
-
-    #[test]
-    fn require_refuses_a_port_only_network() {
-        let why = "moat run: the network is restricted by port only";
-        let refused = refuse_port_only(Netns::Require, None, Some(why)).unwrap_err();
-        assert!(format!("{refused:#}").contains("--netns=require"));
-        assert!(format!("{refused:#}").contains(why));
-        assert!(refuse_port_only(Netns::Require, None, None).is_ok());
-        assert!(
-            refuse_port_only(Netns::Auto, None, Some(why)).is_ok(),
-            "the default"
-        );
-        assert!(refuse_port_only(Netns::Auto, None, None).is_ok());
-    }
-
-    #[test]
-    fn a_policy_that_requires_the_boundary_refuses_whatever_the_flag_says() {
-        let why = "moat run: the network is restricted by port only";
-        for netns in [Netns::Auto, Netns::Require] {
-            let refused = refuse_port_only(netns, Some("your policy"), Some(why)).unwrap_err();
-            let shown = format!("{refused:#}");
-            assert!(shown.contains("your policy"), "{shown}");
-            assert!(shown.contains("require.run: full-boundary"), "{shown}");
-            assert!(shown.contains(why), "{shown}");
-            assert!(refuse_port_only(netns, Some("your policy"), None).is_ok());
-        }
-    }
-}
+mod tests;

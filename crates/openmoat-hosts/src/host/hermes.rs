@@ -136,6 +136,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         // used with `hermes -p <name>`, where OpenMoat's hook does not run
         // unless that profile's `config.yaml` has it
         also_dirs: &[crate::contract::AlsoDir::EachIn("profiles")],
+        liveness: Some(crate::Liveness {
+            settings: &[],
+            sessions: crate::Sessions::Unknown(
+                "gateway, cron and ACP sessions are kept with the rest but never run the shell \
+                 hook, so a session there is no sign the hook should have run",
+            ),
+        }),
         ..InstallSpec::BASE
     }),
     // `mcp_servers` in the profile's `config.yaml`

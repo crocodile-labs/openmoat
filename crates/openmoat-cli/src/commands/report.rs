@@ -16,14 +16,23 @@ use crate::render;
 use crate::time;
 
 pub fn run(args: &ReportArgs) -> Result<Code> {
-    let (summary, staging) = build(args)?;
+    let (summary, staging, touched) = build(args)?;
     match args.format {
         Format::Json => render::json(&Report {
             summary: &summary,
             staging: &staging,
+            decoys_touched: touched,
         })?,
         Format::Text => {
             render::report(&summary, &args.since)?;
+            if touched > 0 {
+                writeln!(
+                    io::stdout().lock(),
+                    "! decoy keys: {touched} call(s) touched a decoy key OpenMoat planted (rule \
+                     canary): something went looking for keys; `openmoat watch` and `openmoat \
+                     why` show the calls"
+                )?;
+            }
             if staging.sends > 0 {
                 let centi = staging.per_active_hour_centi;
                 writeln!(
@@ -45,22 +54,25 @@ pub fn run(args: &ReportArgs) -> Result<Code> {
     Ok(Code::Ok)
 }
 
-/// The window's summary and staging counts, from the audit log read-only.
-fn build(args: &ReportArgs) -> Result<(Summary, StagingCounts)> {
+/// The window's summary, staging counts and calls that touched a decoy
+/// key, from the audit log read-only.
+fn build(args: &ReportArgs) -> Result<(Summary, StagingCounts, u64)> {
     let since = time::parse_since(&args.since, time::now_ms())?;
     let store = Home::locate()?.open_audit()?;
     let host = args.host.map(Host::id);
     let summary = store.summary(since, host)?;
     let staging = staging(&store, since, host, summary.active_hours)?;
-    Ok((summary, staging))
+    let touched = decoys_touched(&store, since, host)?;
+    Ok((summary, staging, touched))
 }
 
 /// The report `--format json` prints, which `openmoat serve` sends too.
 pub(super) fn json(args: &ReportArgs) -> Result<serde_json::Value> {
-    let (summary, staging) = build(args)?;
+    let (summary, staging, touched) = build(args)?;
     Ok(serde_json::to_value(Report {
         summary: &summary,
         staging: &staging,
+        decoys_touched: touched,
     })?)
 }
 
@@ -70,6 +82,24 @@ struct Report<'a> {
     #[serde(flatten)]
     summary: &'a Summary,
     staging: &'a StagingCounts,
+    /// Calls of the window that touched a decoy key (ADR-106).
+    decoys_touched: u64,
+}
+
+/// How many calls of the window rule `canary` decided (of `host` only, when
+/// given): each one touched a decoy key, which no real work does.
+fn decoys_touched(store: &Store, since_ms: i64, host: Option<&str>) -> Result<u64> {
+    let events = store.export(&ExportFilter {
+        since_ms,
+        host,
+        session_id: None,
+    })?;
+    let canary = openmoat_core::rule_id::CANARY;
+    let touched = events.iter().filter(|event| {
+        let rules: Vec<String> = serde_json::from_str(event.rules.get()).unwrap_or_default();
+        rules.iter().any(|r| r == canary)
+    });
+    Ok(u64::try_from(touched.count()).unwrap_or(u64::MAX))
 }
 
 /// The calls of the window that carried `@staging-egress` (ADR-061, proposed),

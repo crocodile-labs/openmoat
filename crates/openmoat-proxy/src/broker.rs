@@ -13,12 +13,16 @@
 //! across requests (`docs/THREAT_MODEL.md`). What keeps a secret safe is that
 //! the agent never holds the value.
 //!
+//! Decoy keys `openmoat init` planted (ADR-106) are watched for the same
+//! way, towards every host: no request has a reason to carry one, so one that
+//! does is refused with rule `canary` ([`Broker::with_decoys`]).
+//!
 //! Values are zeroed when dropped and never formatted: [`Debug`] and every
 //! reason this module writes name the secret's id and host only.
 
 use std::sync::{Arc, RwLock};
 
-use openmoat_core::rule_id::PROXY_SECRET;
+use openmoat_core::rule_id::{CANARY, PROXY_SECRET};
 use openmoat_core::{Decision, Secret, Verdict};
 use zeroize::Zeroizing;
 
@@ -75,6 +79,8 @@ impl Held {
 #[derive(Default)]
 pub struct Broker {
     held: Vec<Held>,
+    /// The decoy values no request may carry, to any host.
+    decoys: Vec<Zeroizing<String>>,
 }
 
 impl std::fmt::Debug for Broker {
@@ -105,6 +111,8 @@ pub enum Carried {
     Placeholder,
     /// The value itself.
     Value,
+    /// A decoy key's value (ADR-106), which no host may receive.
+    Decoy,
 }
 
 /// A brokered secret found in a request to another host.
@@ -125,6 +133,16 @@ impl Leak<'_> {
         let what = match self.carried {
             Carried::Placeholder => "placeholder",
             Carried::Value => "value",
+            Carried::Decoy => {
+                return Decision::single(
+                    Verdict::Deny,
+                    CANARY,
+                    format!(
+                        "request to {host} carries the value of a decoy key OpenMoat planted; \
+                         nothing real was sent, but whatever sent it read a decoy"
+                    ),
+                );
+            }
         };
         Decision::single(
             Verdict::Deny,
@@ -150,7 +168,24 @@ impl Broker {
                 slot: Slot::fixed(value),
             });
         }
-        Ok(Self { held })
+        Ok(Self {
+            held,
+            decoys: Vec::new(),
+        })
+    }
+
+    /// This broker, also refusing any request that carries one of `values`
+    /// (the decoy keys of ADR-106), whatever its host. A value shorter than
+    /// [`openmoat_core::canary::MIN_VALUE_LEN`] is not looked for: it would
+    /// occur in ordinary traffic.
+    #[must_use]
+    pub fn with_decoys(mut self, values: impl IntoIterator<Item = Zeroizing<String>>) -> Self {
+        self.decoys.extend(
+            values
+                .into_iter()
+                .filter(|v| v.len() >= openmoat_core::canary::MIN_VALUE_LEN),
+        );
+        self
     }
 
     /// The handle that renews secret `id`'s value while the proxy runs, and
@@ -163,10 +198,10 @@ impl Broker {
             .map(|h| Rotation::new(id, &h.slot))
     }
 
-    /// True when no secret is brokered.
+    /// True when no secret is brokered and no decoy watched for.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.held.is_empty()
+        self.held.is_empty() && self.decoys.is_empty()
     }
 
     /// Whether a secret of `host` says `tls: terminate`.
@@ -177,9 +212,21 @@ impl Broker {
     }
 
     /// The first secret whose placeholder or value occurs in `bytes`, sent
-    /// towards `host`, that `host` may not receive.
+    /// towards `host`, that `host` may not receive; first of all a decoy,
+    /// which no host may.
     #[must_use]
     pub fn leak(&self, host: &str, bytes: &[u8]) -> Option<Leak<'_>> {
+        if self
+            .decoys
+            .iter()
+            .any(|v| contains_any_case(bytes, v.as_bytes()))
+        {
+            return Some(Leak {
+                id: "decoy",
+                owner: "",
+                carried: Carried::Decoy,
+            });
+        }
         self.held
             .iter()
             .filter(|h| h.secret.host != host)
@@ -284,9 +331,11 @@ impl Broker {
     /// keeps one byte less than this from the previous chunk, so a secret
     /// split across two reads is still found.
     fn longest(&self) -> usize {
+        let decoys = self.decoys.iter().map(|v| v.len());
         self.held
             .iter()
             .map(|h| h.placeholder.len().max(h.longest_value()))
+            .chain(decoys)
             .max()
             .unwrap_or(0)
     }
@@ -361,6 +410,15 @@ fn header_name(line: &[u8]) -> Option<&[u8]> {
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
     !needle.is_empty() && haystack.windows(needle.len()).any(|w| w == needle)
+}
+
+/// [`contains`] in any ASCII letter case: a host name reaches the proxy
+/// lowercased, or in whatever case the client chose.
+fn contains_any_case(haystack: &[u8], needle: &[u8]) -> bool {
+    !needle.is_empty()
+        && haystack
+            .windows(needle.len())
+            .any(|w| w.eq_ignore_ascii_case(needle))
 }
 
 mod echo;

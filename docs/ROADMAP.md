@@ -111,6 +111,11 @@ What exists:
   (ADR-046, [SDK.md](SDK.md)). `openmoat-sdk` is on crates.io from 0.12.0; from
   0.16.0 `@openmoat/sdk` is published to npm by the release workflow, at the same version.
 
+- **Opt-in choices of `openmoat init`.** Decoy keys that catch any session going looking
+  for keys (rule `canary`), and sandboxed start: typing a hook-only agent's command starts
+  it in `openmoat run` (ADR-106). Both default to no, show their files first and are
+  undone by `openmoat uninstall`.
+
 What it does not do: confine every call. Only commands inside the host sandboxes or
 `openmoat run` are confined by the operating system. Elsewhere an allowed call runs with
 your permissions and the hook's decision is the only check
@@ -131,11 +136,17 @@ Making what exists solid in daily use, in the order of
   has measured real sessions (ADR-061); method and path rules (`requests:`) for allowed
   hosts (ADR-062); after-call hooks of more agents, each once a real payload is captured
   (ADR-063).
+- Hook liveness (ADR-104) for the agents whose session files are not known yet (Cline,
+  goose, Hermes Agent, Antigravity CLI, Crush), each once its session place is checked
+  against a real run, and the session places the specs name checked by the weekly
+  latest-agent job.
 
 ## Later
 
 Planned for 1.0 or after, not yet scheduled:
 
+- Sandboxed start for Claude Code, Codex and Cursor as well, once each one's write facts
+  for `openmoat run` are in its spec (ADR-106 §4).
 - Windows enforcement: an OS sandbox on Windows (#135).
 - A user service for `openmoat proxy` on Windows (#272).
 - The Isolated tier on macOS: `openmoat run --isolate` in an Apple Virtualization guest (#175, ADR-023).
@@ -143,7 +154,9 @@ Planned for 1.0 or after, not yet scheduled:
   inside a terminated tunnel; `openmoat run` has both injection and the method and path
   rules (ADR-043, #247).
 - A conservative PowerShell tokenizer; until then PowerShell is `unparseable` and defers.
-- A scrubbed environment for agent commands (THREAT_MODEL T3).
+- A scrubbed environment by default for `openmoat run`, once real agent runs show its lists
+  complete, and in the agents' own sandboxes once Claude Code's and Codex's switches are
+  tried against OpenMoat's hook (ADR-105; `sandbox.env: scrubbed` turns it on today).
 
 ## More agents
 
