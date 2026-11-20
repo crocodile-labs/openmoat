@@ -2,6 +2,8 @@
 //! selected host hooks without touching agent sandboxes, MCP wrapping, or
 //! unrelated hosts in `moat.lock`.
 
+use std::path::Path;
+
 use serde_json::Value;
 
 use crate::common::{OK, Sandbox, text};
@@ -37,7 +39,11 @@ fn hooks_only_dry_run_json_writes_nothing_and_plans_selected_host() {
     assert_eq!(hosts[0]["changed"], true);
     assert_eq!(
         hosts[0]["settings_path"],
-        sb.home.join(".codex/hooks.json").display().to_string()
+        sb.home
+            .join(".codex")
+            .join("hooks.json")
+            .display()
+            .to_string()
     );
 
     assert!(!sb.home.join(".moat/policy.lock").exists());
@@ -113,10 +119,19 @@ fn hooks_only_preserves_sandbox_mcp_and_other_hosts_and_is_idempotent() {
             .unwrap();
     assert_eq!(lock_after["mcp_servers"], mcp_pins_before);
     assert!(lock_after.get("codex_profiles").is_none());
-    let claude_settings = sb.home.join(".claude/settings.json").display().to_string();
-    let codex_hooks = sb.home.join(".codex/hooks.json").display().to_string();
-    assert!(lock_after["entries"].get(&claude_settings).is_some());
-    assert!(lock_after["entries"].get(&codex_hooks).is_some());
+    let entries = lock_after["entries"].as_object().unwrap();
+    let claude_suffix = Path::new(".claude").join("settings.json");
+    let codex_suffix = Path::new(".codex").join("hooks.json");
+    assert!(
+        entries
+            .keys()
+            .any(|k| Path::new(k).ends_with(&claude_suffix)),
+        "expected claude settings in lock entries: {entries:?}"
+    );
+    assert!(
+        entries.keys().any(|k| Path::new(k).ends_with(&codex_suffix)),
+        "expected codex hooks in lock entries: {entries:?}"
+    );
 
     // Re-running with the same flags is a no-op (idempotent).
     let second = sb.moat(&[
