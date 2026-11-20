@@ -29,10 +29,14 @@ For a hook host, `heartbeat::check` judges as ADR-042 does (`Loaded::{Reported, 
 Missing}`), from these facts:
 
 - **Since**: the newest of
-  - OpenMoat writing the hook file (`HookWritten`: the hook file is no newer than
-    `policy.lock`, which `init` writes after it);
-  - the hook file changing after that, or a settings file the spec names whose change can
-    turn hooks off (`SettingsChanged`; Codex's `config.toml`);
+  - OpenMoat writing the hook file (`HookWritten`: the lock pins the file and it still has
+    the pinned contents, whatever its time; `init` may write it after the lock or in the
+    same instant, and for Claude Code, Gemini CLI, Qwen Code and Hermes Agent the hook
+    file is the settings file);
+  - the hook file, or a settings file the spec names whose change can turn hooks off
+    (Codex's `config.toml`), no longer matching its pin (`SettingsChanged`). A file the
+    lock does not pin is OpenMoat's when it is no newer than `policy.lock`, someone
+    else's otherwise;
   - the host's program on the search path changing (`HostUpdated`; the first of the
     spec's process names, the link and the file it names, as ADR-042).
 - **Signal**: a decision the guard recorded for the host at or after that time

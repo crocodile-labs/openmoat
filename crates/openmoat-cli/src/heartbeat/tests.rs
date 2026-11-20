@@ -328,3 +328,45 @@ fn a_hook_host_with_a_session_and_no_call_is_missing() {
     });
     assert!(matches!(loaded, Loaded::Missing { sessions: 1, .. }));
 }
+
+/// OpenMoat's own write of a hook file that is also the settings file
+/// (Claude Code's `settings.json`) is told by the lock's pin, not by its time:
+/// written after the lock, or rewritten unchanged, it is still OpenMoat's; a
+/// changed file is a settings change. Only an unpinned file goes by time.
+#[test]
+fn the_lock_pin_tells_openmoats_write_from_a_settings_change() {
+    use hook::{Pinned, origin};
+    assert_eq!(
+        origin(Pinned::Pinned { intact: true }, 900),
+        Change::HookWritten
+    );
+    assert_eq!(
+        origin(Pinned::Pinned { intact: false }, 10),
+        Change::SettingsChanged
+    );
+    let unpinned = |lock_ms| Pinned::Unpinned { lock_ms };
+    assert_eq!(origin(unpinned(Some(100)), 100), Change::HookWritten);
+    assert_eq!(origin(unpinned(Some(100)), 101), Change::SettingsChanged);
+    assert_eq!(origin(unpinned(None), 1), Change::SettingsChanged);
+
+    // A pinned file whose time is after the lock's, contents unchanged.
+    let dir = tempfile::tempdir().unwrap();
+    let settings = dir.path().join("settings.json");
+    fs::write(&settings, r#"{"hooks": {}}"#).unwrap();
+    let lock = crate::integrity::Lock::pin(
+        std::path::Path::new("/x/moat"),
+        std::slice::from_ref(&settings),
+    )
+    .unwrap();
+    let later = std::time::SystemTime::now() + std::time::Duration::from_secs(60);
+    fs::File::options()
+        .write(true)
+        .open(&settings)
+        .unwrap()
+        .set_modified(later)
+        .unwrap();
+    assert!(lock.pins(&settings));
+    assert!(lock.verify_one(&settings).is_none());
+    fs::write(&settings, r#"{"hooks": {}, "disableAllHooks": true}"#).unwrap();
+    assert!(lock.verify_one(&settings).is_some());
+}

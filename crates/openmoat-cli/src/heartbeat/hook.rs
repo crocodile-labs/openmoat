@@ -7,7 +7,11 @@
 //! hook file, the hook file or a settings file of the spec's changing after
 //! that, and a newer program on the search path; a call the guard recorded
 //! for the host since then shows the hook runs, and the host's own session
-//! files written since without one show it ran without it.
+//! files written since without one show it ran without it. Whether OpenMoat
+//! or someone else last wrote a hook or settings file is told by the lock's
+//! pin of it, not by the file's time ([`origin`]).
+
+use std::path::Path;
 
 use openmoat_hosts::{Liveness, Sessions};
 
@@ -49,24 +53,24 @@ pub(super) fn check(home: &Home, config: &HostConfig) -> Option<Loaded> {
 
 /// The newest change that could have stopped `config`'s hook running.
 fn since(home: &Home, config: &HostConfig, liveness: &Liveness) -> Option<Since> {
-    let hook = scan::file_ms(&config.settings_path)?;
-    // `init` writes the hook file (and any settings it sets), then the lock
-    // that pins it: a file newer than the lock was changed by someone else.
-    let pinned = scan::file_ms(&home.lock_path());
-    let written = |at: i64| {
-        if pinned.is_some_and(|lock| at <= lock) {
-            (Change::HookWritten, at)
-        } else {
-            (Change::SettingsChanged, at)
-        }
+    let lock = crate::integrity::Lock::load(&home.lock_path()).ok();
+    let lock_ms = scan::file_ms(&home.lock_path());
+    let written = |path: &Path| {
+        let at = scan::file_ms(path)?;
+        let pinned = match &lock {
+            Some(lock) if lock.pins(path) => Pinned::Pinned {
+                intact: lock.verify_one(path).is_none(),
+            },
+            _ => Pinned::Unpinned { lock_ms },
+        };
+        Some((origin(pinned, at), at))
     };
-    let (change, at_ms) = written(hook);
+    let (change, at_ms) = written(&config.settings_path)?;
     let mut since = Since { change, at_ms };
     let settings = liveness
         .settings
         .iter()
-        .filter_map(|file| scan::file_ms(&config.dir().join(file)))
-        .map(written);
+        .filter_map(|file| written(&config.dir().join(file)));
     let program = config
         .host
         .spec()
@@ -81,6 +85,34 @@ fn since(home: &Home, config: &HostConfig, liveness: &Liveness) -> Option<Since>
         }
     }
     Some(since)
+}
+
+/// What the lock says of a hook or settings file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Pinned {
+    /// The lock pins it; `intact` when it still has the pinned contents.
+    Pinned { intact: bool },
+    /// The lock does not pin it (or there is no lock); `lock_ms` is when the
+    /// lock was last written, if there is one.
+    Unpinned { lock_ms: Option<i64> },
+}
+
+/// Who last changed a file written at `at_ms`. A file the lock pins is
+/// OpenMoat's own write while it still has the pinned contents, whatever its
+/// time says: `init` and the other commands that re-pin may write it after
+/// the lock, in the same instant, or rewrite it unchanged, and the lock
+/// leaves out keys its host rewrites for display alone. Only for a file the
+/// lock does not pin is the time compared, with the lock's.
+pub(super) fn origin(pinned: Pinned, at_ms: i64) -> Change {
+    let own = match pinned {
+        Pinned::Pinned { intact } => intact,
+        Pinned::Unpinned { lock_ms } => lock_ms.is_some_and(|lock| at_ms <= lock),
+    };
+    if own {
+        Change::HookWritten
+    } else {
+        Change::SettingsChanged
+    }
 }
 
 /// Why OpenMoat cannot tell whether `host` ran, for a hook host whose spec

@@ -481,7 +481,7 @@ the host's own writes since: a host that ran without the plugin reporting is not
 protected; one that has not run since is a note. A host that runs a hook command gets
 the same judgement from its calls alone (ADR-104, `heartbeat/hook.rs`): the last change
 is the newest of OpenMoat writing the hook file, it or a settings file its spec names
-(`InstallSpec::liveness`) changing after the lock was written, and its program changing;
+(`InstallSpec::liveness`) no longer matching the lock's pin, and its program changing;
 its session files written since (`Sessions::Known`, or `Sessions::Unknown` with why)
 without a call are a warning in `status`, `doctor` and `watch`, never a lower protection
 level. The plugins' JavaScript is written
