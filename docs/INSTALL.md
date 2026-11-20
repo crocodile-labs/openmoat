@@ -140,8 +140,9 @@ it is safe to run again. The backups it creates are listed in `~/.moat/hosts.jso
 a file of yours that already has one of those names is left alone, and
 `openmoat uninstall` never deletes it.
 
-To choose without questions, name the agents: `openmoat init --hosts claude-code` (or
-`codex`, `cursor`, `openclaw`, `copilot-cli`, `pi`, `gemini-cli`, `opencode`, `hermes`, `cline`, `goose`; comma-separated). `openmoat init --yes` sets up every agent found, for
+To choose without questions, name the agents: `openmoat init --hosts claude-code`, or
+several comma-separated (each agent's id is in [FEATURES.md](FEATURES.md#each-agent) and
+the README's agent table). `openmoat init --yes` sets up every agent found, for
 scripts. Without a terminal and without `--yes` or `--hosts`, `init` changes no agent's
 files and says how to go on. `openmoat init --dry-run` prints what would change first.
 At a terminal, `openmoat init` lists the stdio MCP servers in the agents' user
