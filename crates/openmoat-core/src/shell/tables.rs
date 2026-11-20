@@ -31,6 +31,8 @@ pub const WRAPPERS: &[&str] = &[
     "setsid",
     // `flock FILE cmd…`: runs the command holding a lock on FILE
     "flock",
+    // `rtk cmd…` / `rtk proxy cmd…`: token-filtering CLI wrapper
+    "rtk",
     "npx",
     "bunx",
 ];
@@ -48,6 +50,10 @@ pub const WRAPPER_SUBCOMMANDS: &[(&str, &[&str])] = &[
     ("bun", &["x"]),
     ("uv", &["run"]),
 ];
+
+/// Subcommand wrappers that take one positional value before the wrapped
+/// command (`direnv exec DIR cmd…`).
+pub const WRAPPER_SUBCOMMANDS_WITH_VALUE: &[(&str, &[&str])] = &[("direnv", &["exec"])];
 
 /// Package runners that accept a shell string via `-c`/`--call`.
 pub const PACKAGE_RUNNERS: &[&str] = &["npx", "bunx", "npm", "pnpm", "yarn", "bun"];
