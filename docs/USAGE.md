@@ -5,7 +5,24 @@
 > [!NOTE]
 > **Read this when** an agent was stopped or held for review, you want to review what it did, change the policy or share rules with a team. Every command and exit code is here.
 
-**On this page:** [What the default policy does](#what-the-default-policy-does) · [Run openmoat when something needs you](#run-openmoat-when-something-needs-you) · [How each agent is protected](#how-each-agent-is-protected) · [A call is denied](#a-call-is-denied) · [A call needs review](#a-call-needs-review) · [Session taint](#session-taint) · [Review what the agent did](#review-what-the-agent-did) · [Change the policy](#change-the-policy) · [Share rules with your team](#share-rules-with-your-team) · [If OpenMoat gets in your way](#if-openmoat-gets-in-your-way) · [Report a bug](#report-a-bug) · [Commands](#commands)
+**On this page:** [Where to use it](#where-to-use-it) · [What the default policy does](#what-the-default-policy-does) · [Run openmoat when something needs you](#run-openmoat-when-something-needs-you) · [How each agent is protected](#how-each-agent-is-protected) · [A call is denied](#a-call-is-denied) · [A call needs review](#a-call-needs-review) · [Session taint](#session-taint) · [Review what the agent did](#review-what-the-agent-did) · [Change the policy](#change-the-policy) · [Share rules with your team](#share-rules-with-your-team) · [If OpenMoat gets in your way](#if-openmoat-gets-in-your-way) · [Report a bug](#report-a-bug) · [Commands](#commands)
+
+## Where to use it
+
+Each situation has a short guide on openmoat.dev: the problem, the commands, what they
+stop and what they do not.
+
+| Situation | Start with | Guide |
+|---|---|---|
+| An agent on your laptop | `openmoat init` | [On a laptop](https://openmoat.dev/docs/solutions/on-a-laptop/) |
+| Agents running unattended | `openmoat run -- <agent>` | [Unattended agents](https://openmoat.dev/docs/solutions/unattended-agents/) |
+| MCP servers | `openmoat mcp wrap <server>` | [MCP servers](https://openmoat.dev/docs/solutions/mcp-servers/) |
+| A team that wants one policy | a committed `.moat/policy.yaml` | [One policy for a team](https://openmoat.dev/docs/solutions/team-policy/) |
+| CI and pull requests | `openmoat policy check-diff` | [CI and pull requests](https://openmoat.dev/docs/solutions/ci-and-pull-requests/) |
+| Audit and compliance evidence | `openmoat audit evidence` | [Audit evidence](https://openmoat.dev/docs/solutions/audit-evidence/) |
+| Your own agent product | `@openmoat/sdk`, `openmoat-sdk` | [Agent products (SDK)](https://openmoat.dev/docs/solutions/agent-products/) |
+
+Which agents and operating systems each feature works with: [FEATURES.md](FEATURES.md).
 
 ## What the default policy does
 

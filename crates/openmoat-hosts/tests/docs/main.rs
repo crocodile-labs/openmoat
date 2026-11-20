@@ -6,6 +6,7 @@
 //! "When the hook fails" table of `docs/THREAT_MODEL.md` §5) stay hand-written.
 //! `docs/PROTECTION.md` is built from the specs and the evidence behind each
 //! claim (`protection.rs`, ADR-079 decision 5).
+//! The agent tables of `README.md` and `docs/FEATURES.md` are in `features.rs`.
 //!
 //! Regenerate with `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs`.
 
@@ -17,6 +18,7 @@ use std::path::{Path, PathBuf};
 use openmoat_hosts::{Host, HostSpec, SessionDir};
 
 mod cfg;
+mod features;
 mod marks;
 mod matrix;
 mod protection;
@@ -168,27 +170,6 @@ fn workdir_list() -> Vec<String> {
         .collect()
 }
 
-/// `README.md` "Supported agents": how each agent is hooked, what checks its
-/// calls, and its `--hosts` id (none for an agent with no hook to install).
-fn agents_table() -> Vec<String> {
-    let mut lines = vec![
-        "| Agent | How OpenMoat is hooked | Protection | `openmoat init --hosts` |".to_owned(),
-        "|---|---|---|---|".to_owned(),
-    ];
-    for host in hosts() {
-        let spec = host.spec();
-        let id = match spec.install {
-            Some(_) => format!("`{}`", spec.id),
-            None => "none".to_owned(),
-        };
-        lines.push(format!(
-            "| {} | {} | {} | {id} |",
-            spec.display_name, spec.docs.hooked_by, spec.docs.protection
-        ));
-    }
-    lines
-}
-
 /// `docs/ARCHITECTURE.md` §3 "Host tool mapping": each agent's rows.
 fn tools_table() -> Vec<String> {
     let mut lines = vec![
@@ -275,16 +256,12 @@ fn limits_lists_what_each_agent_does_when_the_hook_fails() {
 }
 
 #[test]
-fn readme_lists_each_agent_and_how_it_is_hooked() {
-    check("README.md", &[("hosts-agents", agents_table())]);
-}
-
-#[test]
 fn architecture_lists_each_agents_tool_mapping() {
     check("docs/ARCHITECTURE.md", &[("hosts-tools", tools_table())]);
 }
 
-/// What the README says protects an agent's calls follows from its sandbox:
+/// What the README and `docs/FEATURES.md` say protects an agent's calls
+/// follows from its sandbox:
 /// "hook + OS sandbox" exactly when OpenMoat writes one, with where it runs
 /// when it is not written on native Windows.
 #[test]

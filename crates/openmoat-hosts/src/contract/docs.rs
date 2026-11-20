@@ -1,8 +1,9 @@
 //! What the generated host tables in the docs say about a host beyond the
 //! other spec facts (`tests/docs/` writes and checks them).
 
-/// A host's lines in the generated tables of `README.md` ("Supported agents")
-/// and `docs/ARCHITECTURE.md` §3 ("Host tool mapping").
+/// A host's lines in the generated tables of `README.md` ("Agents"),
+/// `docs/FEATURES.md` ("Each agent", "How each agent is hooked") and
+/// `docs/ARCHITECTURE.md` §3 ("Host tool mapping").
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct HostDocs {

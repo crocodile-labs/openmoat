@@ -104,7 +104,7 @@ The full guide is `docs/ADDING_AN_AGENT.md`.
 2. Golden payloads in `crates/openmoat-hosts/src/host/<module>/fixtures/`; tests cover every tool kind the host exposes, a malformed payload, and an ungoverned tool.
 3. Hook entries (`InstallSpec.hooks`, `hook_file`: a `HookLayout`), the config directory and its variable in the host's `SPEC`; `crates/openmoat-cli/src/install.rs` needs code only for a new hook-file layout. If the host is fail-open by default, its entries must set its fail-closed flag. A host without a command hook gets a plugin that runs `openmoat guard --host <id>` and blocks on every failure (OpenClaw, ADR-033; pi, whose hook file is the extension itself); the script goes in `host/<module>/integration/` as an `OwnedFile`.
 4. End-to-end tests in a module per agent (`crates/openmoat-cli/tests/e2e/cursor.rs` is the model, registered in `e2e/main.rs`) running the real binary against the fixture.
-5. Document the coverage honestly: the README, INSTALL, ARCHITECTURE §3 and THREAT_MODEL §5 rows are generated from `doc.rs` and the spec (`OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs`); write `host/<module>/HOST.md` and the agent's "When the hook fails" entry in `docs/THREAT_MODEL.md` §5 by hand.
+5. Document the coverage honestly: the README, FEATURES, INSTALL, ARCHITECTURE §3 and THREAT_MODEL §5 rows are generated from `doc.rs` and the spec (`OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs`); write `host/<module>/HOST.md` and the agent's "When the hook fails" entry in `docs/THREAT_MODEL.md` §5 by hand.
 
 ### Add a CLI command
 1. Grammar in `cli.rs` (clap derive, `///` doc on every arg), dispatch in `commands.rs`, implementation in `commands/<name>.rs`.
