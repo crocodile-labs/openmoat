@@ -1,5 +1,6 @@
-//! How a host that runs OpenMoat through a plugin of its own loading tells
-//! OpenMoat that it loaded it ([`super::InstallSpec::heartbeat`], ADR-042).
+//! How OpenMoat tells that a host still runs its hook or plugin
+//! ([`super::InstallSpec::heartbeat`], ADR-042; [`super::InstallSpec::liveness`],
+//! ADR-104).
 //!
 //! A host that cannot load a plugin (a syntax error after an update, an API
 //! the host dropped, a broken Node) logs it and keeps running, and the tool
@@ -9,6 +10,12 @@
 //! `openmoat guard --heartbeat --host <id>` as it loads ([`HEARTBEAT_FLAG`]),
 //! and `openmoat status` and `openmoat doctor` say when it has not done so
 //! since its file was written or the host's program changed.
+//!
+//! A host that runs a hook command has no plugin to report, and stops running
+//! it just as quietly: an update that reads its hooks elsewhere, a setting
+//! that turns hooks off, an entry lost in an edit. There the calls the guard
+//! decided are the only sign, and the host's own session files tell whether
+//! it ran since ([`Liveness`]).
 
 /// The flag a plugin runs `openmoat guard` with to say that it loaded.
 pub const HEARTBEAT_FLAG: &str = "--heartbeat";
@@ -31,6 +38,34 @@ pub struct Heartbeat {
     pub activity: &'static [Activity],
 }
 
+/// What `openmoat status`, `openmoat doctor` and `openmoat watch` need to tell
+/// whether a host that runs a hook command still runs OpenMoat's (ADR-104).
+/// The host's program on the search path is the first of its process names
+/// ([`super::ProcessSpec::names`]); its hook file is the install's.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct Liveness {
+    /// Files in the configuration directory besides the hook file whose
+    /// change may stop the host running the hook (Codex's `config.toml`,
+    /// whose `[features]` turn hooks off): after one, a call has to reach the
+    /// guard again before the hook counts as running.
+    pub settings: &'static [&'static str],
+    /// Where the host writes its sessions.
+    pub sessions: Sessions,
+}
+
+/// Where a host writes its sessions ([`Liveness::sessions`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sessions {
+    /// One file per session in these directories of the configuration
+    /// directory, written only while a session runs, which is where the hook
+    /// would have run.
+    Known(&'static [Activity]),
+    /// No such place is known for sure; why, in a few words. OpenMoat then
+    /// only notes that no call came since the change.
+    Unknown(&'static str),
+}
+
 /// The directories of the host's configuration directory where it writes
 /// files only while it does work it loads the plugin for (a session's
 /// transcript), never for a command that loads no plugin (setup, sign-in).
@@ -41,6 +76,9 @@ pub struct Activity {
     /// level; [`Activity::ANY`] stands for every directory at its level
     /// (OpenClaw's `agents/<agent>/sessions`).
     pub dir: &'static [&'static str],
+    /// The end of the name of a session's file there (`.jsonl`); empty for
+    /// every file.
+    pub ending: &'static str,
 }
 
 impl Activity {
@@ -50,6 +88,12 @@ impl Activity {
     /// The files directly in the directories `dir` names.
     #[must_use]
     pub const fn new(dir: &'static [&'static str]) -> Self {
-        Self { dir }
+        Self { dir, ending: "" }
+    }
+
+    /// Only the files whose names end in `ending`, one per session.
+    #[must_use]
+    pub const fn ending(self, ending: &'static str) -> Self {
+        Self { ending, ..self }
     }
 }

@@ -141,6 +141,9 @@ fn report(home: &Home, binary: &Path, update: Option<&String>) -> Result<serde_j
     let drift: Vec<String> = Lock::load(&home.lock_path())
         .map(|lock| lock.verify().iter().map(ToString::to_string).collect())
         .unwrap_or_default();
+    let (plugins, hooks): (Vec<_>, Vec<_>) = crate::heartbeat::all(home, binary)
+        .into_iter()
+        .partition(|one| crate::heartbeat::has_plugin(one.of));
     Ok(serde_json::json!({
         "agents": protection::report(home, binary)?,
         "run_boundary": protection::run_boundary(home, binary),
@@ -151,7 +154,8 @@ fn report(home: &Home, binary: &Path, update: Option<&String>) -> Result<serde_j
         )
         .map(|found| found.servers)
         .unwrap_or_default(),
-        "plugins": crate::heartbeat::all(home, binary),
+        "plugins": plugins,
+        "hooks": hooks,
         "hook_warnings": hook_warnings(home, binary)?,
         "policy_update": update,
         "lock_drift": drift,

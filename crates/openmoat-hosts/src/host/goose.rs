@@ -111,6 +111,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hooks: HOOKS,
         hook_file: HookLayout::Entries(&hook_file::Goose),
         location: Location::Custom(&location::LOCATE),
+        liveness: Some(crate::Liveness {
+            settings: &[],
+            sessions: crate::Sessions::Unknown(
+                "goose keeps its sessions in one database in its data directory, which \
+                 commands that run no session open too",
+            ),
+        }),
         ..InstallSpec::BASE
     }),
     // `extensions` in `config.yaml` (`config/extensions.rs`); goose reads no

@@ -234,6 +234,45 @@ that commands loading no plugin write too, so for them the line stays a note.
 cannot write its report; the run's decisions for the agent count instead. The report
 is information for you, not a check: nothing is decided from it.
 
+### Does the agent still run OpenMoat's hook?
+
+Every other agent runs a hook command, and can stop running it without saying so: an
+update reads its hooks elsewhere, a setting turns hooks off, an edit loses the entry, or
+a session started before `openmoat init` keeps the hooks it read at start. Such an agent
+has nothing to report, but each call it sends is in the audit log, and most agents write
+a file for each session they run. So `openmoat status` and `openmoat doctor` compare the
+newest call the guard recorded for the agent with the last change that could have
+stopped the hook (OpenMoat writing it, the hook file or a settings file that turns hooks
+off changing, or the agent's program on the search path changing) and with the agent's
+session files written since (ADR-104):
+
+| Line | Shown by | Means |
+|---|---|---|
+| `· hook runs: last call <time>` | `doctor` | a call reached OpenMoat after the last change |
+| `· no call since OpenMoat wrote its hook (<time>); <agent> has not run a session since, as far as OpenMoat can tell` (or `since its settings changed`, `since <agent> was updated`) | `doctor` | nothing to check yet: start the agent |
+| `· no call since …; OpenMoat cannot tell whether <agent> ran since (<why>)` | `doctor` | an agent whose session files OpenMoat does not know (Cline, goose, Hermes Agent, Antigravity CLI, Crush) |
+| `! <agent> ran 3 sessions since … (last <time>), and OpenMoat saw no call from it: if they used tools, the hook did not run and the calls were not checked` | `status`, `doctor`, `watch` | sessions at least ten minutes old were written since the change, and no call came |
+
+The warning's fix: restart the agent (a session from before the change may not run the
+new hook); if the line stays, run `openmoat init` and check what turns the agent's hook
+off (the "Turned off" column in [LIMITS.md](LIMITS.md#if-the-hook-fails)), and for Codex
+trust OpenMoat's hooks in `/hooks`. It is a warning, never a lower protection level, and
+nothing is decided from it: a session that used no tool, or ran on another machine that
+shares the directory, looks the same. `openmoat watch` looks every thirty seconds and
+prints one line when an agent's plugin or hook turns missing and one when its calls come
+back. `openmoat status --format json` lists every set-up hook agent under `hooks`, in
+the form of `plugins` (`change` is also `hook-written` or `settings-changed`; `missing`
+adds `sessions`).
+
+| Agent | Session files OpenMoat looks at, in its configuration directory |
+|---|---|
+| Claude Code | `projects/*/*.jsonl` |
+| Codex | `sessions/<year>/<month>/<day>/*.jsonl`; `config.toml` changing counts as a change |
+| Cursor | `chats/*/*/store.db` (the Cursor CLI; the editor's chats are not seen) |
+| GitHub Copilot CLI | `session-state/*/events.jsonl` |
+| Gemini CLI | `tmp/*/chats/*.json` |
+| Qwen Code | `projects/*/chats/*.jsonl`, `tmp/*/chats/*.json` |
+
 ## A call is denied
 
 The agent gets what was stopped and why, and usually tells you (since 0.17.0, ADR-059):
@@ -473,6 +512,13 @@ OpenMoat 0.17.0 · watching Claude Code, Codex · policy 16 deny · 10 allow · 
   verdict column; the mark still shows it. The width is read from `COLUMNS`.
 - It only reads the audit log, a short read twice a second that never waits on the hook
   nor makes it wait. Ctrl-C exits 0.
+- At the start and every thirty seconds it also checks whether each agent still runs
+  OpenMoat ([plugin](#did-the-agent-load-openmoats-plugin),
+  [hook](#does-the-agent-still-run-openmoats-hook)), and prints one red line when an
+  agent turns missing ("✗ Claude Code: Claude Code ran 2 sessions since …, and OpenMoat
+  saw no call from it: … Run `openmoat doctor` for the fix") and one when its calls reach
+  OpenMoat again ("✔ Claude Code: OpenMoat sees its calls again"); nothing
+  while that stays the same. `--host` limits it to that agent.
 
 ### Why was this blocked?
 

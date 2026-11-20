@@ -161,6 +161,13 @@ Hooks run the `openmoat` you ran `openmoat init` with, by its stable path (ADR-0
 moving or reinstalling the binary somewhere else, run `openmoat init` again; `openmoat doctor`
 names a hook whose binary is missing or is a different `openmoat`.
 
+An agent can stop running the hook without a word: an update, a setting that turns hooks
+off, or a session started before `init`. When Claude Code, Codex, the Cursor CLI, GitHub
+Copilot CLI, Gemini CLI or Qwen Code wrote sessions since its hook, settings or program
+last changed and none of its calls reached OpenMoat, `openmoat status` and `openmoat
+doctor` warn and say what to do; restart the agent first
+([USAGE.md](USAGE.md#does-the-agent-still-run-openmoats-hook)).
+
 On native Windows, `init` does not turn on Claude Code's sandbox: it runs on macOS,
 Linux and WSL2 only, and Claude Code would not start with it required. The hook still
 applies the policy to Claude Code's tool calls, and `init`, `doctor` and `status` say so. For OS

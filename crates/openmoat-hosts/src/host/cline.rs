@@ -127,6 +127,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         // the same script as Cline's `PostToolUse` file, for injected input
         // (ADR-057); the lock pins it with the hook file
         extra_files: &[ExtraFile::InConfigDir(&["hooks", "PostToolUse"])],
+        liveness: Some(crate::Liveness {
+            settings: &[],
+            sessions: crate::Sessions::Unknown(
+                "where the CLI writes a task under `data/` was not checked, and \
+                 `CLINE_DATA_DIR` moves it",
+            ),
+        }),
         ..InstallSpec::BASE
     }),
     // `<data dir>/settings/cline_mcp_settings.json`, `{"mcpServers": {…}}`,

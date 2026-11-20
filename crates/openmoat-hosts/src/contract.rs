@@ -37,7 +37,7 @@ pub use bundle::Bundle;
 pub use consent::ConsentFile;
 pub use convention::{AGENT_SKILLS, Convention, every_runs_later};
 pub use docs::{HostDocs, ToolRow};
-pub use heartbeat::{Activity, HEARTBEAT_FLAG, Heartbeat};
+pub use heartbeat::{Activity, HEARTBEAT_FLAG, Heartbeat, Liveness, Sessions};
 pub use hook_failure::{FailureOutcome, HookFailure};
 pub use hook_file::HookLayout;
 pub use hook_off::{
@@ -454,6 +454,10 @@ pub struct InstallSpec {
     /// runs OpenMoat through a plugin it loads ([`HookLayout::Owned`] and
     /// [`HookLayout::Plugin`]); `None` for a host that runs a hook command.
     pub heartbeat: Option<Heartbeat>,
+    /// How `openmoat status` and `openmoat doctor` tell that a host running a
+    /// hook command still runs OpenMoat's (ADR-104); `None` for a host that
+    /// runs a plugin, which has [`Self::heartbeat`].
+    pub liveness: Option<Liveness>,
 }
 
 /// Where to find a further directory a host reads laid out like its

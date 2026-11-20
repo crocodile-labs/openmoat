@@ -114,6 +114,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hook_file: HookLayout::Entries(&hook_file::Crush),
         location: Location::Custom(&location::LOCATE),
         versions: Some(VERSIONS),
+        liveness: Some(crate::Liveness {
+            settings: &[],
+            sessions: crate::Sessions::Unknown(
+                "Crush keeps its sessions in a database in each project's `.crush` directory, \
+                 not in its configuration directory",
+            ),
+        }),
         ..InstallSpec::BASE
     }),
     // `mcp` in each `crush.json` Crush merges (`MCPConfig` in

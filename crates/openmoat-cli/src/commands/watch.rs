@@ -22,10 +22,12 @@ use crate::exit::Code;
 use crate::home::Home;
 use crate::report::{Paths, Style};
 
+mod liveness;
 mod row;
 #[cfg(test)]
 mod tests;
 
+use liveness::Liveness;
 use row::View;
 
 /// How long to wait between looks at the audit log.
@@ -66,13 +68,24 @@ pub fn run(args: &WatchArgs) -> Result<Code> {
     for event in earlier(&store, &filter, args.recent)? {
         print(&mut out, &event, &view)?;
     }
+    let mut liveness = Liveness::default();
+    for line in liveness.look(&home, filter.host, view.style) {
+        writeln!(out, "{line}")?;
+    }
     out.flush()?;
     if args.no_follow {
         return Ok(Code::Ok);
     }
+    let mut looks = 0u32;
     loop {
         if wait(&stop) {
             return Ok(Code::Ok);
+        }
+        looks += 1;
+        if looks.is_multiple_of(liveness::EVERY) {
+            for line in liveness.look(&home, filter.host, view.style) {
+                writeln!(out, "{line}")?;
+            }
         }
         for event in store.after(last, PAGE)? {
             last = Some(event.id);

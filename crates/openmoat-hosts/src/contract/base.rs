@@ -72,5 +72,6 @@ impl InstallSpec {
         consent: None,
         also_dirs: &[],
         heartbeat: None,
+        liveness: None,
     };
 }

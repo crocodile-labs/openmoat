@@ -192,9 +192,8 @@ fn protection(home: &Home, binary: &Path, inputs: &Inputs, host: Host) -> Result
                     .map(|off| format!("hook turned off by {off}"))
                     .or_else(|| crate::project_settings::replaced_here(host, &config.settings_path))
                     .or_else(|| {
-                        crate::heartbeat::check(home, &config).and_then(|loaded| {
-                            crate::heartbeat::not_loaded(host.display_name(), &loaded)
-                        })
+                        crate::heartbeat::check(home, &config)
+                            .and_then(|loaded| crate::heartbeat::not_loaded(host, &loaded))
                     })
             },
             || sandbox(home, host, inputs.plan.as_ref(), inputs.lock.as_ref()),

@@ -131,6 +131,10 @@ Making what exists solid in daily use, in the order of
   has measured real sessions (ADR-061); method and path rules (`requests:`) for allowed
   hosts (ADR-062); after-call hooks of more agents, each once a real payload is captured
   (ADR-063).
+- Hook liveness (ADR-104) for the agents whose session files are not known yet (Cline,
+  goose, Hermes Agent, Antigravity CLI, Crush), each once its session place is checked
+  against a real run, and the session places the specs name checked by the weekly
+  latest-agent job.
 
 ## Later
 

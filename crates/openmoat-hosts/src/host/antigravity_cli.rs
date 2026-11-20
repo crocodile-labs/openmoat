@@ -133,6 +133,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_variable_is_home: true,
         hook_file: HookLayout::Entries(&hook_file::Named),
         location: Location::Custom(&location::LOCATE),
+        liveness: Some(crate::Liveness {
+            settings: &[],
+            sessions: crate::Sessions::Unknown(
+                "its documentation does not say where `agy` writes a conversation",
+            ),
+        }),
         ..InstallSpec::BASE
     }),
     // `~/.gemini/config/mcp_config.json` and `<workspace>/.agents/mcp_config.json`

@@ -101,6 +101,19 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         trust_step: Some(
             "open Codex and trust OpenMoat's hooks in /hooks; Codex runs a changed hook only then",
         ),
+        // `[features] hooks = false` in `config.toml` turns hooks off. Each
+        // session's rollout is `sessions/<yyyy>/<mm>/<dd>/rollout-<time>-<id>.jsonl`,
+        // the `transcript_path` its hooks receive; `codex login` writes none.
+        liveness: Some(crate::Liveness {
+            settings: &["config.toml"],
+            sessions: crate::Sessions::Known(&[crate::Activity::new(&[
+                "sessions",
+                crate::Activity::ANY,
+                crate::Activity::ANY,
+                crate::Activity::ANY,
+            ])
+            .ending(".jsonl")]),
+        }),
         ..InstallSpec::BASE
     }),
     mcp: Some(McpSpec {

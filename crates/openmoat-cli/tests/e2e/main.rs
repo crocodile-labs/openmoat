@@ -42,6 +42,7 @@ mod guard;
 mod heartbeat;
 mod hermes;
 mod home_screen;
+mod hook_liveness;
 mod hook_off;
 mod hook_only;
 mod host_failures;
