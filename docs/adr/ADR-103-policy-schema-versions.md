@@ -76,6 +76,11 @@ current schema, on its text (comments, order and rules stay as written):
 - A file for a newer OpenMoat now says so; one without `version:` says how to fix it.
 - Breaking the schema now has a cost written down: a new version, a migration step and a
   release that reads both. That is the stability 1.0 needs from ADR-013.
-- What is left for #136: a machine-readable schema (JSON Schema) generated from the
-  model and checked against `docs/POLICY.md` §1, so editors can validate a policy; and the
-  first real version step, which will come with schema 2.
+- What was left for #136: a machine-readable schema (JSON Schema) checked against the
+  model and `docs/POLICY.md` §1, so editors can validate a policy. Done:
+  `crates/openmoat-core/policies/policy-v1.schema.json` (the person's policy) and
+  `repo-policy-v1.schema.json` (repository policies and packs), written by hand rather
+  than generated, so the core takes no schema crate, and held to the model by
+  `crates/openmoat-core/tests/policy_schema/`, which fails on any key, variant or required
+  field the two disagree on (POLICY.md §1.1). Still to come: the first real version step,
+  with schema 2.

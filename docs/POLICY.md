@@ -148,6 +148,53 @@ person at a terminal, and never with an agent among its parent processes; the in
 policy is not rewritten over a drifted lock. A repository policy a person trusted needs
 `openmoat trust` again once its file changes (§10).
 
+#### JSON Schema for editors
+
+Schema version 1 is also a JSON Schema (draft 2020-12), so an editor can complete keys
+and flag a misspelt one as you type. There are two files, because a repository policy
+accepts fewer keys than yours:
+
+| File | For | `$id` |
+|---|---|---|
+| [`policy-v1.schema.json`](../crates/openmoat-core/policies/policy-v1.schema.json) | your policy, `~/.moat/policy.yaml` | `https://raw.githubusercontent.com/crocodile-labs/openmoat/main/crates/openmoat-core/policies/policy-v1.schema.json` |
+| [`repo-policy-v1.schema.json`](../crates/openmoat-core/policies/repo-policy-v1.schema.json) | a repository policy, `<project>/.moat/policy.yaml` (§10), and a pack (§11) | `https://raw.githubusercontent.com/crocodile-labs/openmoat/main/crates/openmoat-core/policies/repo-policy-v1.schema.json` |
+
+Editors that use the YAML language server (VS Code's YAML extension, Neovim, Zed, …) read
+a first-line comment naming the schema:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/crocodile-labs/openmoat/main/crates/openmoat-core/policies/policy-v1.schema.json
+version: 1
+```
+
+OpenMoat ignores the comment, and neither `openmoat init` nor `openmoat policy upgrade`
+writes it: the file is yours. Your installed policy is pinned by the lock (§8), so add
+the line with `openmoat edit`, which re-pins it; written straight into the file, it is
+drift, and every call is denied (`kernel-integrity`) until `openmoat doctor --accept`. For a repository policy, VS Code can map the file
+instead, in the project's `.vscode/settings.json`:
+
+```json
+{
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/crocodile-labs/openmoat/main/crates/openmoat-core/policies/repo-policy-v1.schema.json": ".moat/policy.yaml"
+  }
+}
+```
+
+The URLs follow `main`, which only ever adds optional keys to version 1 (above); to
+match the release you run, put its tag (`v<version>`) in place of `main`, from the first
+release that has the files.
+
+The schema checks the shape: keys, types, verdicts and the other fixed words, the old
+`ask` marked deprecated. `openmoat policy lint` stays the check that counts. It also
+checks what a schema of shapes does not say: patterns, unique rule ids, a rule group
+with no pattern, and the rules between keys (`hook_only` on `deny` groups only, a
+secret's `port` only with `plain_http`). One difference goes the other way: OpenMoat
+reads a key with no value (`taint:` with every line under it commented out) as absent,
+where the schema asks for a value. The schemas are written by hand and tested against
+the policy model, the default policy, the packs and the examples on this page
+(`crates/openmoat-core/tests/policy_schema/`).
+
 ## 2. Rule groups
 
 ```yaml

@@ -22,9 +22,10 @@ platform and false positives from daily use turned into fixtures, then enforceme
 (`openmoat run` with Seatbelt and Landlock + seccomp, the egress proxy, session taint,
 the MCP proxy with description pinning) shown by the executing fixtures in
 [EVIDENCE.md](EVIDENCE.md), where exfiltration fails at the OS level. What 1.0 still
-needs, as ADR-013 sets it: a stable policy schema with `openmoat policy migrate` (#136;
-the versioning rules, the version-first errors and the command are built, ADR-103; a
-machine-readable schema for editors is left) and MoatBench meeting a 1.0 gate; the third, `openmoat serve` (#320), is built (ADR-066). [MOATBENCH.md](MOATBENCH.md)
+needs, as ADR-013 sets it: MoatBench meeting a 1.0 gate. Its other two needs are built:
+a stable policy schema with `openmoat policy migrate` (#136: the versioning rules, the
+version-first errors, the command and a JSON Schema for editors; ADR-103, POLICY.md
+§1.1), and `openmoat serve` (#320, ADR-066). [MOATBENCH.md](MOATBENCH.md)
 defines the gate CI applies today (every bundled scenario decided as expected, with no
 false positive, on every platform); the threshold 1.0 asks beyond that is not yet set.
 What exists:
@@ -39,7 +40,8 @@ What exists:
   Cursor's Tab reads through `beforeTabFileRead` (ADR-060, [IDE.md](IDE.md)).
 - **Policy.** Kinds `shell`, `fs.read`, `fs.write`, `net`, `fetch`, `env.read`, `env.set`,
   `mcp`, `web.search` and `tool.unknown`; verdicts `allow`, `defer` (the default for
-  anything no rule names, ADR-025), `review` and `deny`.
+  anything no rule names, ADR-025), `review` and `deny`. Policy schema version 1 is
+  stable and has a JSON Schema editors can validate against (ADR-103, POLICY.md §1.1).
 - **Shell parsing.** OpenMoat's own POSIX lexer and classifier, executable pins
   (ADR-008) and symlink resolution (ADR-009).
 - **Audit.** A redacted, hash-chained local log with `show`, `replay` and `report`;
@@ -136,9 +138,6 @@ Planned for 1.0 or after, not yet scheduled:
 
 - Windows enforcement: an OS sandbox on Windows (#135).
 - A user service for `openmoat proxy` on Windows (#272).
-- The rest of the stable policy schema (#136): a JSON Schema generated from the policy
-  model and checked against [POLICY.md](POLICY.md) §1, so editors can validate a policy.
-  The versioning rules and `openmoat policy migrate` are built (ADR-103, POLICY.md §1.1).
 - The Isolated tier on macOS: `openmoat run --isolate` in an Apple Virtualization guest (#175, ADR-023).
 - HTTPS injection of brokered secrets in the standalone `openmoat proxy`, and keep-alive
   inside a terminated tunnel; `openmoat run` has both injection and the method and path
