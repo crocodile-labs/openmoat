@@ -1,0 +1,384 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/crocodile-labs/openmoat/main/crates/openmoat-core/policies/policy-v1.schema.json",
+  "title": "OpenMoat policy, schema version 1",
+  "description": "The person's policy (~/.moat/policy.yaml), docs/POLICY.md §1. Checks the shape only: `openmoat policy lint` also checks patterns, unique rule ids and the rules between keys. Unknown keys are rejected.",
+  "$comment": "Hand-written; crates/openmoat-core/tests/policy_schema/ keeps it equal to the Rust model (Policy and every section). A key added to the model needs a property here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "not": {
+    "description": "A file with both `ask:` and `review:` is an error.",
+    "required": ["ask", "review"]
+  },
+  "properties": {
+    "version": {
+      "description": "The policy schema version (ADR-103); only 1 exists.",
+      "const": 1
+    },
+    "defaults": { "$ref": "#/$defs/defaults" },
+    "scope": {
+      "description": "Reserved: accepted so older files stay valid, no effect yet (`policy lint` says so).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "project_roots": {
+          "description": "Reserved; the project root is the git root of the call's working directory.",
+          "$ref": "#/$defs/strings"
+        }
+      }
+    },
+    "deny": {
+      "description": "Evaluated first; a match here is final.",
+      "$ref": "#/$defs/ruleGroups"
+    },
+    "allow": {
+      "description": "Evaluated second.",
+      "$ref": "#/$defs/ruleGroups"
+    },
+    "review": {
+      "description": "Evaluated third: OpenMoat holds the call for the person to review.",
+      "$ref": "#/$defs/ruleGroups"
+    },
+    "ask": {
+      "description": "The name of `review:` before 0.14.0 (ADR-053): still read, never written. `openmoat policy migrate` renames it.",
+      "deprecated": true,
+      "$ref": "#/$defs/ruleGroups"
+    },
+    "defer": {
+      "description": "Evaluated fourth: the agent's own permission prompt decides (ADR-025).",
+      "$ref": "#/$defs/ruleGroups"
+    },
+    "approval": {
+      "description": "Reserved: accepted so older files stay valid, no effect yet (`policy lint` says so). Approvals are made with `openmoat allow`.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "channel": { "enum": ["terminal", "telegram"] },
+        "remember": { "enum": ["once", "session", "permanent"] },
+        "timeout_s": { "$ref": "#/$defs/u32" }
+      }
+    },
+    "executables": {
+      "description": "Pin program names to absolute paths (§8.1).",
+      "type": "object",
+      "additionalProperties": {
+        "description": "The absolute paths this program may run from.",
+        "$ref": "#/$defs/strings"
+      }
+    },
+    "sandbox": { "$ref": "#/$defs/sandbox" },
+    "secrets": {
+      "description": "Values OpenMoat keeps from the agent and `openmoat proxy` puts into one header of requests to one host (§2.1).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/secret" }
+    },
+    "requests": {
+      "description": "Method and path rules for allowed hosts (§2.3, ADR-062); they only narrow what `net` and `fetch` allow.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/requestEntry" }
+    },
+    "requests_untrusted": {
+      "description": "Your own policy only: what `openmoat proxy` does with a connection to a `requests:` host it cannot terminate. Default `refuse`.",
+      "enum": ["refuse", "relay"]
+    },
+    "taint": { "$ref": "#/$defs/taint" },
+    "staging": { "$ref": "#/$defs/staging" },
+    "require_signed_repo_policy": {
+      "description": "Trust a repository policy only when signed by a key you trusted (§10). Default false.",
+      "type": "boolean"
+    },
+    "mcp": { "$ref": "#/$defs/mcp" },
+    "check_diff": { "$ref": "#/$defs/checkDiff" },
+    "require": { "$ref": "#/$defs/require" },
+    "unattended": {
+      "description": "Your own policy only: what a `defer` becomes when the agent asks no one (§5.4, ADR-102). Default `defer`; `review` holds it.",
+      "enum": ["defer", "review"]
+    }
+  },
+  "$defs": {
+    "strings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "u16": { "type": "integer", "minimum": 0, "maximum": 65535 },
+    "u32": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "verdict": {
+      "anyOf": [
+        { "enum": ["allow", "defer", "review", "deny"] },
+        {
+          "description": "The name of `review` before 0.14.0 (ADR-053): still read, never written.",
+          "deprecated": true,
+          "const": "ask"
+        }
+      ]
+    },
+    "defaults": {
+      "description": "The verdict when no rule matches: one verdict for everything, or a map per kind with \"*\" as the fallback. Default `review`.",
+      "anyOf": [
+        { "$ref": "#/$defs/verdict" },
+        {
+          "type": "object",
+          "description": "Keys other than the ten kinds and \"*\" are accepted but never consulted.",
+          "properties": {
+            "*": { "description": "Every kind without its own entry.", "$ref": "#/$defs/verdict" },
+            "shell": { "$ref": "#/$defs/verdict" },
+            "fs.read": { "$ref": "#/$defs/verdict" },
+            "fs.write": { "$ref": "#/$defs/verdict" },
+            "net": { "$ref": "#/$defs/verdict" },
+            "fetch": { "description": "Unset, a fetch takes the `net` default.", "$ref": "#/$defs/verdict" },
+            "web.search": { "description": "Only `defaults` decide a web search; unset, it takes \"*\".", "$ref": "#/$defs/verdict" },
+            "tool.unknown": { "description": "Only `defaults` decide a tool the adapter cannot classify; unset, it takes \"*\".", "$ref": "#/$defs/verdict" },
+            "env.read": { "$ref": "#/$defs/verdict" },
+            "env.set": { "$ref": "#/$defs/verdict" },
+            "mcp": { "$ref": "#/$defs/verdict" }
+          },
+          "additionalProperties": { "$ref": "#/$defs/verdict" }
+        }
+      ]
+    },
+    "ruleGroups": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ruleGroup" }
+    },
+    "ruleGroup": {
+      "description": "A named group of patterns (§2); it matches when any pattern matches an atomic action of its kind. `policy lint` needs at least one pattern and ids unique across the lists.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "description": "Stable id; shown to the agent and stored in the audit log.", "type": "string" },
+        "reason": { "description": "Prefixed to the explanation.", "type": "string" },
+        "title": { "description": "One line, at most 80 characters: heads the block message (ADR-059).", "type": "string" },
+        "why": { "description": "One line, at most 160 characters: why the rule exists.", "type": "string" },
+        "shell": { "description": "Shell patterns: token prefixes, `*`, `!`, trailing `$` (§3.1).", "$ref": "#/$defs/strings" },
+        "fs.read": { "description": "Path globs for file reads (§3.2).", "$ref": "#/$defs/strings" },
+        "fs.write": { "description": "Path globs for file writes (§3.2).", "$ref": "#/$defs/strings" },
+        "net": { "description": "Host globs for any network access, fetches included.", "$ref": "#/$defs/strings" },
+        "fetch": { "description": "Host globs for a host's own fetch tool only.", "$ref": "#/$defs/strings" },
+        "env.read": { "description": "Variable-name globs for reads.", "$ref": "#/$defs/strings" },
+        "env.set": { "description": "Variable-name globs for sets.", "$ref": "#/$defs/strings" },
+        "mcp": { "description": "MCP tool-name globs (`mcp__<server>__<tool>`).", "$ref": "#/$defs/strings" },
+        "hook_only": {
+          "description": "`deny` groups with `fs.read` or `fs.write` only: the hook applies it, the OS layers leave its paths to the other rules (ADR-034).",
+          "type": "boolean"
+        }
+      }
+    },
+    "sandbox": {
+      "description": "What the operating-system layers need beyond the rules (§9, ADR-018). Your own policy only.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "read_roots": {
+          "description": "Paths the OS layers let commands read although no allow rule covers them; absolute or `~/…`, never a glob.",
+          "$ref": "#/$defs/strings"
+        },
+        "proxy_port": {
+          "description": "Opt-in: the loopback port `openmoat proxy` listens on for host sandbox traffic.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "proxy_allow_ech": {
+          "description": "Let `openmoat proxy` forward encrypted server names (ECH). Default false.",
+          "type": "boolean"
+        },
+        "proxy_serve_without_credential": {
+          "description": "Let `openmoat proxy` serve requests with no session credential (ADR-044). Default false.",
+          "type": "boolean"
+        },
+        "package_min_release_age_days": {
+          "description": "`openmoat run` keeps npm and uv off versions newer than this many days (§9.1); 0 is off. Default 7.",
+          "$ref": "#/$defs/u16"
+        },
+        "env_allow": {
+          "description": "Variables `openmoat run` passes on under `require.run: full-boundary` (§9.3); names only, never a pattern.",
+          "$ref": "#/$defs/strings"
+        },
+        "project_top": {
+          "description": "What `openmoat run` without bubblewrap on Linux grants at the project's top (§9.4). Default `protected`.",
+          "enum": ["protected", "writable"]
+        },
+        "project_hook_off": {
+          "description": "What `openmoat run` does when a project's file would turn the agent's hook off (§9.5). Default `refuse`.",
+          "enum": ["refuse", "start"]
+        }
+      }
+    },
+    "secret": {
+      "description": "One brokered secret (§2.1).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "host", "header", "source"],
+      "properties": {
+        "id": { "description": "Lowercase letters, digits and `-`; unique. Names the placeholder.", "type": "string" },
+        "host": { "description": "One host, exact: a lowercase DNS name or IPv4 literal, no pattern or port.", "type": "string" },
+        "header": { "description": "The request header the value goes in.", "type": "string" },
+        "source": { "$ref": "#/$defs/secretSource" },
+        "plain_http": { "description": "Also inject into plain-HTTP (clear-text) requests. Default false.", "type": "boolean" },
+        "port": {
+          "description": "With `plain_http` only: the port those requests go to. Default 80.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "tls": {
+          "description": "`terminate`: inside `openmoat run`, decrypt HTTPS to the host and inject there (ADR-043).",
+          "enum": ["terminate"]
+        },
+        "allow": {
+          "description": "With `tls` or `plain_http`: the only requests that get the value, `METHOD /path` each.",
+          "$ref": "#/$defs/strings"
+        }
+      }
+    },
+    "secretSource": {
+      "description": "Where OpenMoat reads the value: exactly one of `file`, `env`, `keychain`, `command`.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file"],
+          "properties": { "file": { "description": "A file, absolute or under `~/`.", "type": "string" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["env"],
+          "properties": { "env": { "description": "An environment variable of the `openmoat proxy` process.", "type": "string" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["keychain"],
+          "properties": {
+            "keychain": {
+              "description": "An item in the operating system's keychain.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["service", "account"],
+              "properties": {
+                "service": { "type": "string" },
+                "account": { "type": "string" }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["command"],
+          "properties": { "command": { "$ref": "#/$defs/commandSource" } }
+        }
+      ]
+    },
+    "commandSource": {
+      "description": "A program `openmoat proxy` runs for a short-lived value (§2.2, ADR-087; preview).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run", "lifetime"],
+      "properties": {
+        "run": { "description": "The program, absolute or under `~/`, then its arguments; run without a shell.", "$ref": "#/$defs/strings" },
+        "lifetime": { "description": "The longest one value is used: `90s`, `15m` or `1h`, from 1m to 12h.", "type": "string" },
+        "refresh_before": { "description": "How long before expiry a new value is asked for; a fifth of `lifetime` when unset (at least 10s).", "type": "string" },
+        "home": { "description": "The program's `HOME`: an empty folder of its own (`private`, the default) or yours (`user`).", "enum": ["private", "user"] }
+      }
+    },
+    "requestEntry": {
+      "description": "One host's request rules (§2.3).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "host"],
+      "properties": {
+        "id": { "description": "Lowercase letters, digits and `-`.", "type": "string" },
+        "host": { "description": "One lowercase DNS name: no address, port or pattern.", "type": "string" },
+        "allow": { "description": "Your own policy only: requests that may be sent, `METHOD /path` each; empty, every request `deny` does not name.", "$ref": "#/$defs/strings" },
+        "deny": { "description": "Requests that are refused, whatever `allow` or a secret's rules say.", "$ref": "#/$defs/strings" },
+        "hook_only": { "description": "The hook holds the rules, the proxy does not. Default false.", "type": "boolean" }
+      }
+    },
+    "taint": {
+      "description": "What session taint protects beyond the built-in list (§4.1).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protected_writes": { "description": "Path globs whose writes need review once the session read untrusted content; no `!`.", "$ref": "#/$defs/strings" },
+        "metadata_tools": { "description": "More MCP tools, by full name, whose results are metadata, not content (ADR-057).", "$ref": "#/$defs/strings" },
+        "defined_servers": { "description": "MCP servers a configuration defines; the built-in metadata tools never belong to one.", "$ref": "#/$defs/strings" },
+        "provenance": { "description": "Taint follows written files (§4.1.1, ADR-029). Default true.", "type": "boolean" }
+      }
+    },
+    "staging": {
+      "description": "Since 0.17.0: when a session counts as collecting outside the project (§4.5, ADR-061).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "outside_reads": { "description": "Distinct files read outside the project; default 25, 0 turns this trigger off.", "$ref": "#/$defs/u32" },
+        "outside_folders": { "description": "Distinct folders read outside the project; default 2, 0 turns this trigger off.", "$ref": "#/$defs/u32" },
+        "ignore": { "description": "Path globs whose reads never count, beside the built-in caches; no `!`.", "$ref": "#/$defs/strings" }
+      }
+    },
+    "mcp": {
+      "description": "How `openmoat mcp proxy` treats servers and tools (§8).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trust_first_sight": { "description": "Pin a new server's first tool listing unseen (ADR-032). Default false.", "type": "boolean" },
+        "browser_open": { "description": "A browser MCP page open is a `fetch` (the default) or a `net` connection (ADR-047).", "enum": ["fetch", "net"] },
+        "flow_trusted": { "description": "Since 0.16.0: servers whose results may reach other servers' acting tools unreviewed (ADR-058).", "$ref": "#/$defs/strings" }
+      }
+    },
+    "checkDiff": {
+      "description": "Since 0.16.0: levels of `openmoat policy check-diff`'s content checks (ADR-055, MERGE_CHECK.md).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "levels": {
+          "description": "Content rule id → `deny`, `review` or `off`.",
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "diff-package-near-miss",
+              "diff-install-script",
+              "diff-package-source",
+              "diff-lock-integrity",
+              "diff-ci-pr-target",
+              "diff-ci-permissions",
+              "diff-ci-unpinned",
+              "diff-ci-injection",
+              "diff-ci-secret-out",
+              "diff-pipe-to-shell",
+              "diff-decode-exec",
+              "diff-python-startup",
+              "diff-docker-remote-add",
+              "diff-encoded-blob",
+              "diff-private-key",
+              "diff-env-secret",
+              "diff-new-host"
+            ]
+          },
+          "additionalProperties": { "enum": ["off", "review", "deny"] }
+        }
+      }
+    },
+    "require": {
+      "description": "The least protection level of each agent; below it every call is denied (§9.2, ADR-064). A repository policy or pack can only raise it.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protection": { "description": "Every agent.", "$ref": "#/$defs/requiredLevel" },
+        "run": {
+          "description": "`openmoat run` starts only with its full boundary (§9.3, ADR-077).",
+          "enum": ["full-boundary"]
+        },
+        "agents": {
+          "description": "Per agent, by host id (as `openmoat status` names it), in place of `protection` for it.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/requiredLevel" }
+        }
+      }
+    },
+    "requiredLevel": { "enum": ["hook-only", "hook-and-os-sandbox"] }
+  }
+}

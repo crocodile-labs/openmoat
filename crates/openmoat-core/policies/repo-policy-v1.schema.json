@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/crocodile-labs/openmoat/main/crates/openmoat-core/policies/repo-policy-v1.schema.json",
+  "title": "OpenMoat repository policy or policy pack, schema version 1",
+  "description": "A project's <project>/.moat/policy.yaml (docs/POLICY.md §10) or a signed policy pack (§11): rules that can only make the person's policy stricter until trusted. `defaults`, `executables`, `sandbox` and the person's other settings are not accepted here.",
+  "$comment": "Hand-written; crates/openmoat-core/tests/policy_schema/ keeps it equal to RepoPolicy. Its sections are those of policy-v1.schema.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "not": {
+    "description": "A file with both `ask:` and `review:` is an error.",
+    "required": ["ask", "review"]
+  },
+  "properties": {
+    "version": {
+      "description": "The policy schema version (ADR-103); only 1 exists.",
+      "const": 1
+    },
+    "deny": {
+      "description": "Joins the person's deny rules, under `repo:` (or `pack:<name>:`) ids.",
+      "$ref": "policy-v1.schema.json#/$defs/ruleGroups"
+    },
+    "allow": {
+      "description": "Applies only once the file is trusted (`openmoat trust`, or a signature), after the person's allow rules.",
+      "$ref": "policy-v1.schema.json#/$defs/ruleGroups"
+    },
+    "review": {
+      "description": "Tried after the person's deny rules and before their allow rules.",
+      "$ref": "policy-v1.schema.json#/$defs/ruleGroups"
+    },
+    "ask": {
+      "description": "The name of `review:` before 0.14.0 (ADR-053): still read, never written.",
+      "deprecated": true,
+      "$ref": "policy-v1.schema.json#/$defs/ruleGroups"
+    },
+    "require": {
+      "description": "Raises the protection level an agent must be at in the project, trusted or not; never lowers it.",
+      "$ref": "policy-v1.schema.json#/$defs/require"
+    },
+    "requests": {
+      "description": "Request rules (§2.3): `deny` lists only, which narrow, trusted or not.",
+      "type": "array",
+      "items": {
+        "$ref": "policy-v1.schema.json#/$defs/requestEntry",
+        "not": {
+          "description": "An `allow` list belongs in the person's own policy.",
+          "required": ["allow"]
+        }
+      }
+    }
+  }
+}
