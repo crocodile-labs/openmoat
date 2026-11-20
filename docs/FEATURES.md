@@ -39,7 +39,6 @@ behind each claim, agent by agent and OS by OS: [PROTECTION.md](PROTECTION.md).
 | **SDK** | The same decisions for your own agent product; it decides, your code enforces. | Rust (`openmoat-sdk`), JavaScript (`@openmoat/sdk`: Node 20 or later, or any runtime with WebAssembly); adapters for the Claude Agent SDK, OpenAI Agents, the AI SDK, Mastra and LangChain.js. | `cargo add openmoat-sdk`, `npm install @openmoat/sdk` | [SDK.md](SDK.md) |
 | **Plugin packages** (preview) | A package for an agent's own plugin channel that runs the `openmoat` your policy lock pins. | The [Plugin package](#each-agent) column. | the channel's install step | [INSTALL.md](INSTALL.md#install-from-an-agents-plugin-channel-preview) |
 | **Editors** | Claude Code's VS Code extension and JetBrains plugin use the same hook as the CLI; Cursor's Tab is refused secret files. | VS Code, JetBrains, Cursor. | `openmoat init` | [IDE.md](IDE.md) |
-| **OpenMoat Bar** | Shows each agent's protection and today's blocks in the menu bar or tray. Read-only: it never allows anything. | macOS 12 or later; Linux and Windows (Qt 6). A separate app. | [openmoat-bar releases](https://github.com/crocodile-labs/openmoat-bar/releases) | [openmoat-bar](https://github.com/crocodile-labs/openmoat-bar) |
 
 ## Each agent
 
