@@ -387,7 +387,9 @@ pub mod confined {
     }
 
     /// The proxy reads a brokered secret from `moat run`'s environment; the agent
-    /// and its commands never see that variable, only the placeholder.
+    /// and its commands never see its value: the variable holds the
+    /// placeholder (ADR-105), which the proxy swaps for the value on the
+    /// secret's own host only.
     #[test]
     fn an_env_brokered_secret_is_not_in_the_agents_environment() {
         let (sb, project) = installed_with_secret();
@@ -408,7 +410,10 @@ pub mod confined {
             return;
         }
         let shown = text(&out);
-        assert!(stdout(&out).contains("token=unset"), "{shown}");
+        assert!(
+            stdout(&out).contains("token=moat-secret:gh:placeholder"),
+            "{shown}"
+        );
         assert!(!shown.contains(value), "{shown}");
     }
 
