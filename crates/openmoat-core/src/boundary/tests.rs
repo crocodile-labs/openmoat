@@ -41,6 +41,7 @@ fn port_only() -> EffectiveBoundary {
             Restriction::planned(IsolatedView, false, false),
         ],
         launch: None,
+        environment: None,
     }
 }
 
@@ -181,6 +182,30 @@ fn the_json_form_names_the_tier_and_the_downgrade() {
     let kept = serde_json::to_value(ToolToken::NotWithheld("no wrapper".into())).unwrap();
     assert_eq!(kept["state"], "not_withheld");
     assert_eq!(kept["why"], "no wrapper");
+}
+
+/// A record written before the environment part existed still reads, and
+/// one with it keeps names only through a round trip.
+#[test]
+fn the_environment_part_is_optional_and_round_trips() {
+    let mut json = serde_json::to_value(port_only()).unwrap();
+    assert!(json.get("environment").is_none(), "{json}");
+    json.as_object_mut().unwrap().remove("environment");
+    let old: EffectiveBoundary = serde_json::from_value(json).unwrap();
+    assert_eq!(old.environment, None);
+    let mut record = port_only();
+    record.environment = Some(RunEnvironment {
+        scrubbed: true,
+        why: "`sandbox.env: scrubbed` in your policy".to_owned(),
+        passed: vec!["HOME".to_owned(), "PATH".to_owned()],
+        withheld: vec!["AWS_SECRET_ACCESS_KEY".to_owned()],
+        brokered: vec!["GITHUB_TOKEN".to_owned()],
+    });
+    let json = serde_json::to_value(&record).unwrap();
+    assert_eq!(json["environment"]["scrubbed"], true);
+    assert_eq!(json["environment"]["withheld"][0], "AWS_SECRET_ACCESS_KEY");
+    let back: EffectiveBoundary = serde_json::from_value(json).unwrap();
+    assert_eq!(back, record);
 }
 
 #[test]

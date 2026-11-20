@@ -147,7 +147,9 @@ Planned for 1.0 or after, not yet scheduled:
   inside a terminated tunnel; `openmoat run` has both injection and the method and path
   rules (ADR-043, #247).
 - A conservative PowerShell tokenizer; until then PowerShell is `unparseable` and defers.
-- A scrubbed environment for agent commands (THREAT_MODEL T3).
+- A scrubbed environment by default for `openmoat run`, once real agent runs show its lists
+  complete, and in the agents' own sandboxes once Claude Code's and Codex's switches are
+  tried against OpenMoat's hook (ADR-105; `sandbox.env: scrubbed` turns it on today).
 
 ## More agents
 

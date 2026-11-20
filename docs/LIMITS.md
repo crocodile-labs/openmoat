@@ -68,10 +68,16 @@ Each agent's gaps and the reasons are in
   sandbox or, on Linux, without the Isolated tier (ADR-080). An agent started without
   `openmoat run` is not refused
   ([POLICY.md §9.3](POLICY.md#93-requiring-openmoat-runs-full-boundary-requirerun)).
-- **`openmoat run` keeps an inherited variable from the agent only under
-  `require.run: full-boundary`.** Otherwise every variable reaches it except brokered
-  secrets, and one line warns. Under the setting an agent's own key stays on the list, so
-  its commands can read that key, and a value kept in a file or keychain is outside it.
+- **`openmoat run` scrubs the environment only when asked.** With `sandbox.env: scrubbed`,
+  `--scrub-env` or `require.run: full-boundary`, only an allowlist of variables reaches the
+  agent ([POLICY.md §9.6](POLICY.md#96-the-environment-openmoat-run-passes-on-sandboxenv),
+  ADR-105). It is off by default for now, so otherwise every variable reaches the agent
+  (a brokered secret's holds its placeholder) and one line warns. Scrubbed, an agent's
+  own key stays on the list, so its commands can read that key; a value kept in a file or
+  keychain is outside it; a tool that needs a variable no list names stops working until
+  you add the name. An agent started without `openmoat run`, and its commands, get your
+  whole environment: Claude Code's and Codex's own switches for this are not set by
+  OpenMoat yet.
 - **A required protection level is checked where the hook runs.** With `require:`
   ([POLICY.md §9.2](POLICY.md#92-required-protection-level-require)) the guard denies every
   call of an agent below the level, but it only sees what it can tell from inside one

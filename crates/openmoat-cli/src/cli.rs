@@ -525,11 +525,9 @@ pub struct RunArgs {
     #[arg(long, value_enum, default_value_t = Netns::Auto, value_name = "MODE")]
     pub netns: Netns,
 
-    /// A variable of this environment to pass on for this run under
-    /// `require.run: full-boundary`. A name, never `NAME=value` or a pattern.
-    /// Repeatable.
-    #[arg(long = "env", value_name = "NAME", value_parser = parse_env_name)]
-    pub envs: Vec<String>,
+    // `--env NAME`… and `--scrub-env`.
+    #[command(flatten)]
+    pub environment: RunEnvArgs,
 
     /// Take no snapshot of the project before the agent starts and after it exits
     /// (recorded in the audit log).
@@ -548,6 +546,21 @@ pub struct RunArgs {
     /// The agent and its arguments, after `--`.
     #[arg(required = true, last = true, value_name = "AGENT")]
     pub command: Vec<std::ffi::OsString>,
+}
+
+/// What `openmoat run` passes on of the environment it starts from (ADR-077, ADR-105).
+#[derive(Debug, Args)]
+pub struct RunEnvArgs {
+    /// A variable of this environment to pass on for this run when the environment is
+    /// scrubbed. A name, never `NAME=value` or a pattern. Repeatable.
+    #[arg(long = "env", value_name = "NAME", value_parser = parse_env_name)]
+    pub envs: Vec<String>,
+
+    /// Pass on only the allowlist of this environment for this run (ADR-105): what every
+    /// program needs, the agent's own variables, `sandbox.env_allow` and `--env` names.
+    /// What `sandbox.env: scrubbed` in your policy does on every run.
+    #[arg(long)]
+    pub scrub_env: bool,
 }
 
 /// Which tier `openmoat run` starts, when the person names one.

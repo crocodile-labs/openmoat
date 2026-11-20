@@ -39,6 +39,9 @@ mod mcp_boundary;
 /// (ADR-090).
 #[cfg(target_os = "linux")]
 mod project_paths;
+/// The scrubbed environment: only the allowlist reaches the program (ADR-105).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod scrubbed_env;
 /// Linux without bubblewrap: the port-only path a stock system takes.
 #[cfg(target_os = "linux")]
 mod stock_linux;

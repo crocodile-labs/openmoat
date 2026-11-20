@@ -1,6 +1,27 @@
-//! The form of an environment variable name a person may add to
-//! `openmoat run`'s allowlist (ADR-077): a name, never a value or a pattern,
-//! so nothing can be written that lets every variable through.
+//! `openmoat run`'s environment settings: whether it passes on the whole
+//! environment it is started from or only an allowlist (`sandbox.env`,
+//! ADR-105), and the form of a name a person may add to that allowlist
+//! (ADR-077): a name, never a value or a pattern, so nothing can be written
+//! that lets every variable through.
+
+use serde::{Deserialize, Serialize};
+
+/// `sandbox.env` (ADR-105): what `openmoat run` passes on of the environment
+/// it is started from. Absent, the default, which is [`RunEnv::DEFAULT`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RunEnv {
+    /// Every inherited variable, a brokered secret's excepted.
+    Inherited,
+    /// Only the allowlist: a base every program needs, the agent's own names
+    /// from its spec, `sandbox.env_allow` and `--env`.
+    Scrubbed,
+}
+
+impl RunEnv {
+    /// What `openmoat run` does when no policy says and no flag asks.
+    pub const DEFAULT: Self = Self::Inherited;
+}
 
 /// Why `name` cannot be added to the allowlist; `None` when it can. A name is
 /// a letter or `_`, then letters, digits and `_`.

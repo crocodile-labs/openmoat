@@ -75,8 +75,8 @@ pub use pattern::literal_shell_pattern;
 pub use policy::{
     BrowserOpen, DeclaredVersion, Defaults, McpSettings, OldNames, Policy, PolicyError,
     ProjectHookOff, ProjectTop, Require, RequiredBy, RequiredLevel, Requirement, RuleGroup,
-    RunBoundary, SUPPORTED_VERSION, SandboxSettings, TITLE_MAX_CHARS, Unattended, WHY_MAX_CHARS,
-    declared_version, env_name_problem,
+    RunBoundary, RunEnv, SUPPORTED_VERSION, SandboxSettings, TITLE_MAX_CHARS, Unattended,
+    WHY_MAX_CHARS, declared_version, env_name_problem,
 };
 pub use programs::{MapResolver, NoResolver, ProgramResolver};
 pub use realpath::{MapPathResolver, PathResolver};

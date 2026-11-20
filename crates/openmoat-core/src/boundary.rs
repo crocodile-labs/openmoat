@@ -38,6 +38,29 @@ pub struct EffectiveBoundary {
     /// What the check after the agent started found; `None` before the
     /// agent starts (`--print-boundary`) or where no report came back.
     pub launch: Option<LaunchCheck>,
+    /// Which inherited variables reach the agent (ADR-105), names only;
+    /// absent from records written before it was added.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<RunEnvironment>,
+}
+
+/// What of the environment `openmoat run` was started from reaches the
+/// program it starts (ADR-105). Names only: a value is never in the record.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunEnvironment {
+    /// Whether only the allowlist passes, rather than every inherited name.
+    pub scrubbed: bool,
+    /// What chose it, in the words the run notice uses.
+    pub why: String,
+    /// Scrubbed: the inherited names that pass, sorted. Inherited: empty,
+    /// since every name passes, a brokered secret's excepted.
+    pub passed: Vec<String>,
+    /// The inherited names the program does not get, sorted; empty when the
+    /// environment is inherited.
+    pub withheld: Vec<String>,
+    /// The names that hold a brokered secret's placeholder instead of its
+    /// value (ADR-020), sorted.
+    pub brokered: Vec<String>,
 }
 
 /// The tier asked for on the command line.

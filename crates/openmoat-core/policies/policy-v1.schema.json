@@ -192,8 +192,12 @@
           "description": "`openmoat run` keeps npm and uv off versions newer than this many days (§9.1); 0 is off. Default 7.",
           "$ref": "#/$defs/u16"
         },
+        "env": {
+          "description": "What `openmoat run` passes on of the environment it starts from (§9.6, ADR-105): `scrubbed` passes only its allowlist, `inherited` everything. Default `inherited`; `require.run: full-boundary` scrubs whatever this says.",
+          "enum": ["inherited", "scrubbed"]
+        },
         "env_allow": {
-          "description": "Variables `openmoat run` passes on under `require.run: full-boundary` (§9.3); names only, never a pattern.",
+          "description": "Variables `openmoat run` passes on when it scrubs the environment (§9.3, §9.6); names only, never a pattern.",
           "$ref": "#/$defs/strings"
         },
         "project_top": {

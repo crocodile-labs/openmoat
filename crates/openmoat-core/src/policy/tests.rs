@@ -219,6 +219,32 @@ fn the_project_top_is_protected_unless_the_policy_says_writable() {
     assert!(!written.contains("project_top"), "{written}");
 }
 
+/// `sandbox.env` (ADR-105): unsaid unless the person's own policy says
+/// `scrubbed` or `inherited`; any other value is an error, the default policy
+/// leaves it unsaid, and so does one written back out.
+#[test]
+fn the_run_environment_is_unsaid_unless_the_policy_names_one() {
+    let env = |yaml: &str| Policy::parse(yaml).map(|p| p.run_env());
+    assert_eq!(env("version: 1\n").unwrap(), None);
+    assert_eq!(env(crate::DEFAULT_POLICY).unwrap(), None);
+    assert_eq!(
+        env("version: 1\nsandbox: { env: scrubbed }\n").unwrap(),
+        Some(RunEnv::Scrubbed)
+    );
+    assert_eq!(
+        env("version: 1\nsandbox: { env: inherited }\n").unwrap(),
+        Some(RunEnv::Inherited)
+    );
+    for bad in ["clean", "true", "Scrubbed", "[PATH]"] {
+        assert!(
+            env(&format!("version: 1\nsandbox: {{ env: {bad} }}\n")).is_err(),
+            "{bad}"
+        );
+    }
+    let written = crate::yaml::to_string(&SandboxSettings::default()).unwrap();
+    assert!(!written.contains("env"), "{written}");
+}
+
 /// `sandbox.project_hook_off` (ADR-098): `openmoat run` refuses unless the
 /// person's own policy says `start`; any other value is an error, and the
 /// default policy and one written back out leave it unsaid.
