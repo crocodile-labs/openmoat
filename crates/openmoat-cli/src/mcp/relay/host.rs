@@ -98,7 +98,12 @@ impl Relay {
             "tools/call" => self.tool_call(params, request),
             "resources/read" => {
                 let uri = params.and_then(|p| p.get("uri")).and_then(Value::as_str);
-                self.gated(Method::Resource, uri.unwrap_or(""), (None, request), None)
+                self.gated(
+                    Method::Resource,
+                    uri.unwrap_or(""),
+                    (None, request, None),
+                    None,
+                )
             }
             "prompts/get" => {
                 let name = params.and_then(|p| p.get("name")).and_then(Value::as_str);
@@ -107,7 +112,7 @@ impl Relay {
                 self.gated(
                     Method::Prompt,
                     name.unwrap_or(""),
-                    (arguments, request),
+                    (arguments, request, None),
                     held,
                 )
             }
@@ -174,7 +179,8 @@ impl Relay {
             ));
         }
         let held = self.refusal(tool);
-        self.gated(Method::Tool, tool, (arguments, request), held)
+        let metadata = params.and_then(|p| p.get("_meta"));
+        self.gated(Method::Tool, tool, (arguments, request, metadata), held)
     }
 
     /// The gate's answer: `None` to pass the call on, else the error to answer.
@@ -183,13 +189,14 @@ impl Relay {
         &self,
         method: Method,
         name: &str,
-        (arguments, request): (Option<&Value>, Option<&str>),
+        (arguments, request, metadata): (Option<&Value>, Option<&str>, Option<&Value>),
         held: Option<String>,
     ) -> Option<(i64, String)> {
         let call = Call {
             method,
             name,
             arguments,
+            metadata,
             request,
         };
         let code = if held.is_some() {

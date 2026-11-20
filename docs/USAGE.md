@@ -1163,6 +1163,11 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat proxy install` · `uninstall` · `status [--format json]` | run `openmoat proxy` as a user service (macOS launchd user agent, Linux systemd user unit) so it stays up; `status` reports not installed / stopped / running / drift-blocked / crashlooping. `install` and `uninstall` are person-only: run them in a terminal of your own. Not supported on Windows yet (#272) |
 | `openmoat guard --host <id> --home <dir>` | the hook entry point; agents call it, you do not. `--home` is the state directory `openmoat init` wrote into the hook; a `MOAT_HOME` that names another one makes it deny. OpenMoat's plugins also run it with `--heartbeat` as they load ([above](#did-the-agent-load-openmoats-plugin)) |
 
+The stdio MCP proxy gives its upstream a bounded shutdown window when either
+side closes. If the upstream does not finish, the proxy stops and reaps it and
+reports the timeout. On Unix the upstream has its own process group so
+descendants that remain in that group do not keep the relay open.
+
 Exit codes: 0 allow or success, 1 the program `openmoat run` or `openmoat mcp proxy` started
 exited non-zero, or `openmoat mcp proxy` refused to start the server, or a layer `openmoat bench
 --report` exercised failed, 2 deny,
