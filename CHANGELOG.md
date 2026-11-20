@@ -8,6 +8,15 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-11-20
+
+### Added
+- `openmoat policy migrate` rewrites a policy file in the current policy schema without changing a rule: it adds a missing `version:` and renames the old `ask`, shows the diff, applies only for a person at a terminal, keeps `<file>.before-migrate` and re-pins the installed policy (docs/POLICY.md §1.1, ADR-103) ([#839](https://github.com/crocodile-labs/openmoat/pull/839)).
+- JSON Schemas for policy schema version 1, so an editor can complete keys and flag a misspelt one as you type: `crates/openmoat-core/policies/policy-v1.schema.json` for your policy and `repo-policy-v1.schema.json` for repository policies and packs, with the old `ask` marked deprecated. Point the YAML language server at one with a `# yaml-language-server: $schema=…` first line (added through `openmoat edit`, since the installed policy is pinned) or VS Code's `yaml.schemas`; `openmoat policy lint` stays the check that counts. A test holds both schemas to the policy model, the default policy, the bundled pack and the examples in docs/POLICY.md (docs/POLICY.md §1.1, ADR-103) ([#840](https://github.com/crocodile-labs/openmoat/pull/840)).
+
+### Changed
+- A policy's `version:` is read before anything else: a file for a newer schema says it needs a newer OpenMoat, one without `version:` says to add `version: 1` (or run `openmoat policy migrate`), and a field error names the policy schema version it was read against (ADR-103) ([#839](https://github.com/crocodile-labs/openmoat/pull/839)).
+
 ## [0.23.1] - 2026-11-19
 
 **Upgrading:** if every call is denied with `kernel-error` and "the audit key … is missing" after an upgrade from a release before 0.22.0, run `openmoat init` in your terminal: it makes the key and keeps the log. Upgrading to this release first avoids it.
@@ -1370,7 +1379,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.23.1...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/crocodile-labs/openmoat/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/crocodile-labs/openmoat/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/crocodile-labs/openmoat/compare/v0.22.1...v0.23.0
 [0.22.1]: https://github.com/crocodile-labs/openmoat/compare/v0.22.0...v0.22.1

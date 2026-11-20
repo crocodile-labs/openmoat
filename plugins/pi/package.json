@@ -25,5 +25,5 @@
     "url": "git+https://github.com/crocodile-labs/openmoat.git"
   },
   "type": "module",
-  "version": "0.23.1"
+  "version": "0.24.0"
 }
