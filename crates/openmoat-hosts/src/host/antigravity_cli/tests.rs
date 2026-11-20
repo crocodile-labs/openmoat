@@ -45,7 +45,15 @@ fn every_documented_file_tool_maps_to_what_it_touches() {
         path: path.to_owned(),
     };
     assert_eq!(action("view_file", &json!({"AbsolutePath": "/p/a"})), Some(read("/p/a")));
+    assert_eq!(action("read_file", &json!({"Path": "/p/a"})), Some(read("/p/a")));
     assert_eq!(action("list_dir", &json!({"DirectoryPath": "/p"})), Some(read("/p")));
+    for tool in ["write_file", "edit_file"] {
+        assert_eq!(
+            action(tool, &json!({"Path": "/p/b"})),
+            Some(Action::FsWrite { path: "/p/b".to_owned() }),
+            "{tool}"
+        );
+    }
     for tool in ["write_to_file", "replace_file_content", "multi_replace_file_content"] {
         assert_eq!(
             action(tool, &json!({"TargetFile": "/p/a"})),
