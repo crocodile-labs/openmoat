@@ -64,8 +64,9 @@ impl RunHere {
         }
     }
 
-    /// A system where `openmoat run` works, with a network namespace.
-    #[cfg(test)]
+    /// A system where `openmoat run` works, with a network namespace; for
+    /// the shim tests, which run where `openmoat run` does (Unix).
+    #[cfg(all(test, unix))]
     pub(crate) fn for_test() -> Self {
         Self {
             unavailable: None,

@@ -12,8 +12,10 @@ use crate::common::{OK, Sandbox, output, squash, stdout, text, verdict_and_reaso
 use crate::hosts::dir_of;
 use openmoat_hosts::Host;
 
-const DECOYS: &str = "Decoy keys       plant";
-const START: &str = "Sandboxed start  make typing";
+/// The questions' openings, as [`squash`] leaves them: one space between
+/// words, whatever the padding of the label column.
+const DECOYS: &str = "Decoy keys plant";
+const START: &str = "Sandboxed start make typing";
 
 /// `openmoat init` as a person at a terminal answering `answers`.
 fn init_answering(sb: &Sandbox, answers: &str) -> Output {
@@ -96,7 +98,11 @@ fn decoys_are_planted_only_on_a_yes_caught_when_touched_and_removed_by_uninstall
 
     // A second `init` has nothing left to plant, so it does not ask.
     let again = init_answering(&sb, "");
-    assert!(!stdout(&again).contains(DECOYS), "{}", text(&again));
+    assert!(
+        !squash(&stdout(&again)).contains(DECOYS),
+        "{}",
+        text(&again)
+    );
 
     let out = sb.moat_as_person(&["uninstall"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
@@ -110,14 +116,14 @@ fn no_answer_a_script_or_yes_plants_nothing() {
     let sb = Sandbox::bare(&[&dir_of(Host::ClaudeCode)]);
     let out = init_answering(&sb, "\n\n");
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert!(stdout(&out).contains(DECOYS), "{}", text(&out));
+    assert!(squash(&stdout(&out)).contains(DECOYS), "{}", text(&out));
     assert!(!sb.home.join(".npmrc.bak").exists());
     assert!(!sb.home.join(".git-credentials.bak").exists());
 
     let scripted = Sandbox::bare(&[&dir_of(Host::ClaudeCode)]);
     let out = scripted.moat(&["init", "--yes"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert!(!stdout(&out).contains(DECOYS), "{}", text(&out));
+    assert!(!squash(&stdout(&out)).contains(DECOYS), "{}", text(&out));
     assert!(!scripted.home.join(".npmrc.bak").exists());
     let out = output(
         scripted
@@ -126,7 +132,7 @@ fn no_answer_a_script_or_yes_plants_nothing() {
             .env("MOAT_ASSUME_TTY", "1"),
         Some("y\ny\n"),
     );
-    assert!(!stdout(&out).contains(DECOYS), "{}", text(&out));
+    assert!(!squash(&stdout(&out)).contains(DECOYS), "{}", text(&out));
     assert!(!scripted.home.join(".npmrc.bak").exists());
 }
 
