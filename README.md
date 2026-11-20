@@ -1,9 +1,4 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
-    <img src="docs/assets/banner-light.svg" width="880" alt="OpenMoat: security for AI coding agents">
-  </picture>
-</p>
+<h1 align="center">OpenMoat</h1>
 
 <p align="center">
   <b>OpenMoat checks each tool call your AI coding agents make, before it runs, against one policy on your machine.</b><br>
