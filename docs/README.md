@@ -11,6 +11,7 @@ protect) are on [openmoat.dev/docs](https://openmoat.dev/docs/).
 | Document | What it covers |
 |---|---|
 | [README](../README.md) | What OpenMoat is, the quick start, supported agents and the main limits |
+| [FEATURES.md](FEATURES.md) | Every feature, what it does, which agents and operating systems it works with, how to turn it on and its page; per agent: own sandbox, `openmoat run`, reviews, MCP servers, managed hooks, plugin packages, what happens when the hook fails (agent tables generated) |
 | [INSTALL.md](INSTALL.md) | Install and upgrade on macOS, Linux and Windows; `openmoat init`; what each agent's hook covers (Cursor's `beforeTabFileRead`, the Cline CLI's `PostToolUse` file); other config directories |
 | [IDE.md](IDE.md) | Claude Code in VS Code and JetBrains, and Cursor's editor and Tab: what the hook covers there (`getDiagnostics`, `executeCode`, the editors' project files), the setup and checks, what is not covered (a repository's git configuration, the editor selection) |
 | [DEMO.md](DEMO.md) | The launch demo, run in a throwaway home |

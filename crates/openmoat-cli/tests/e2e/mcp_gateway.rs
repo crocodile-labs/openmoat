@@ -36,17 +36,22 @@ fn server_script() -> PathBuf {
 struct Gateway {
     sb: Sandbox,
     record: PathBuf,
+    host: Option<&'static str>,
 }
 
 impl Gateway {
     fn new() -> Self {
+        Self::for_host(None)
+    }
+
+    fn for_host(host: Option<&'static str>) -> Self {
         let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
         let record = sb.home.join("record.jsonl");
-        let gateway = Self { sb, record };
+        let gateway = Self { sb, record, host };
         // `openmoat mcp proxy` starts only a definition a person accepted
         // (ADR-049): one per mode, each starting the proxy as `docs`.
         for mode in [
-            "answer", "silent", "rug", "inject", "fail", "instruct", "sample",
+            "answer", "silent", "rug", "inject", "fail", "instruct", "sample", "stubborn",
         ] {
             let line = gateway.proxy_line(mode);
             let args: Vec<&str> = line.iter().map(String::as_str).collect();
@@ -70,9 +75,12 @@ impl Gateway {
     fn proxy_line(&self, mode: &str) -> Vec<String> {
         let script = server_script().to_string_lossy().into_owned();
         let record = self.record.to_string_lossy().into_owned();
-        ["--server", "docs", "--", "python3", &script, &record, mode]
-            .map(str::to_owned)
-            .to_vec()
+        let mut args = vec!["--server", "docs"];
+        if let Some(host) = self.host {
+            args.extend(["--host", host]);
+        }
+        args.extend(["--", "python3", &script, &record, mode]);
+        args.into_iter().map(str::to_owned).collect()
     }
 
     fn proxy(&self, mode: &str) -> std::process::Command {
@@ -181,6 +189,146 @@ fn answer(host: &str, id: u64) -> Value {
         .filter_map(|l| serde_json::from_str::<Value>(l).ok())
         .find(|m| m["id"] == id)
         .unwrap_or_else(|| panic!("no answer to {id}: {host}"))
+}
+
+#[test]
+fn closing_stdin_reaps_an_upstream_that_ignores_eof() {
+    let gateway = Gateway::new();
+    let mut proxy = Live::start(&gateway, "stubborn");
+    let ready = Instant::now() + Duration::from_secs(5);
+    let pid = loop {
+        if let Some(pid) = gateway
+            .received()
+            .first()
+            .and_then(|row| row["pid"].as_u64())
+        {
+            break pid;
+        }
+        assert!(Instant::now() < ready, "server never started");
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    drop(proxy.stdin.take());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Some(status) = proxy.child.try_wait().unwrap() {
+            assert!(!status.success(), "forced shutdown must not report success");
+            break;
+        }
+        if Instant::now() >= deadline {
+            let _ = proxy.child.kill();
+            let _ = proxy.child.wait();
+            panic!("upstream {pid} prevented the proxy from exiting after EOF");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let pid = rustix::process::Pid::from_raw(i32::try_from(pid).unwrap()).unwrap();
+    assert_eq!(
+        rustix::process::test_kill_process(pid),
+        Err(rustix::io::Errno::SRCH)
+    );
+}
+
+#[test]
+fn attributed_codex_requests_reach_stdio_only_with_their_own_exact_ticket() {
+    let gw = Gateway::for_host(Some("codex"));
+    let policy_path = gw.sb.home.join(".moat/policy.yaml");
+    let policy = std::fs::read_to_string(&policy_path).unwrap();
+    assert!(policy.contains("\nallow:\n"));
+    std::fs::write(
+        &policy_path,
+        policy.replacen(
+            "\nallow:\n",
+            "\nallow:\n  - id: witness-search\n    mcp: [mcp__docs__search]\n",
+            1,
+        ),
+    )
+    .unwrap();
+    let accepted = gw.sb.moat_as_person(&["doctor", "--accept"]);
+    assert!(text(&accepted).contains("re-pinned"), "{}", text(&accepted));
+
+    let arguments = json!({"q": "same query"});
+    for session in ["thread-a", "thread-b"] {
+        let output = gw.sb.guard(
+            "codex",
+            &json!({
+                "session_id": session, "cwd": gw.sb.project(),
+                "hook_event_name": "PreToolUse", "tool_name": "mcp__docs__search",
+                "tool_use_id": "same-call", "tool_input": arguments,
+            })
+            .to_string(),
+        );
+        assert_eq!(output.status.code(), Some(OK), "{}", text(&output));
+    }
+    let request = |id: u64, thread: &str, call_id: &str, args: &Value| {
+        json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": {"name": "search", "arguments": args,
+                "_meta": {"threadId": thread, "callId": call_id}}
+        })
+        .to_string()
+    };
+    // Induce a late audit failure in the isolated database, after the call's
+    // decision row can be written but before the guard can answer the host.
+    let fault = output(
+        std::process::Command::new("python3").args([
+            "-I",
+            "-c",
+            "import sqlite3, sys\nwith sqlite3.connect(sys.argv[1]) as db:\n db.execute(\"CREATE TRIGGER reject_run_link BEFORE INSERT ON events WHEN NEW.host = 'moat-run' BEGIN SELECT RAISE(ABORT, 'isolated audit write failure'); END\")",
+            gw.sb.home.join(".moat/audit.db").to_str().unwrap(),
+        ]),
+        None,
+    );
+    assert!(fault.status.success(), "{}", text(&fault));
+    let failed = output(
+        gw.sb
+            .command()
+            .env("MOAT_RUN_SESSION", "run-mcp-audit-test")
+            .args(["guard", "--host", "codex"]),
+        Some(
+            &json!({
+                "session_id": "thread-failed", "cwd": gw.sb.project(),
+                "hook_event_name": "PreToolUse", "tool_name": "mcp__docs__search",
+                "tool_use_id": "same-call", "tool_input": arguments,
+            })
+            .to_string(),
+        ),
+    );
+    assert_eq!(failed.status.code(), Some(2), "{}", text(&failed));
+    assert!(
+        text(&failed).contains("isolated audit write failure"),
+        "{}",
+        text(&failed)
+    );
+    let response = gw.session(
+        "answer",
+        &[
+            request(1, "thread-unseen", "same-call", &arguments),
+            request(2, "thread-b", "wrong-call", &arguments),
+            request(3, "thread-b", "same-call", &json!({"q": "changed"})),
+            request(4, "thread-b", "same-call", &arguments),
+            request(5, "thread-b", "same-call", &arguments),
+            request(6, "thread-a", "same-call", &arguments),
+            request(7, "thread-failed", "same-call", &arguments),
+        ],
+    );
+    for id in [1, 2, 3, 5, 7] {
+        assert_eq!(
+            answer(&response, id)["error"]["code"],
+            -32001,
+            "request {id} must be refused"
+        );
+    }
+    for id in [4, 6] {
+        assert_eq!(
+            answer(&response, id)["result"]["content"][0]["text"],
+            "called search"
+        );
+    }
+    let calls = gw.calls();
+    assert_eq!(
+        calls.iter().map(|v| v["id"].as_u64()).collect::<Vec<_>>(),
+        [Some(4), Some(6)]
+    );
 }
 
 #[test]

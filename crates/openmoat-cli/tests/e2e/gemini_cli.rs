@@ -67,7 +67,7 @@ fn init_adds_one_named_before_tool_entry() {
         "{hook}"
     );
     let before = fs::read_to_string(settings(&sb)).unwrap();
-    let again = sb.moat(&["init", "--yes"]);
+    let again = sb.moat_as_person(&["init", "--yes"]);
     assert_eq!(again.status.code(), Some(OK), "{}", text(&again));
     assert_eq!(fs::read_to_string(settings(&sb)).unwrap(), before);
 }

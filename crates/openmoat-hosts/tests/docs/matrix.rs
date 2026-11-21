@@ -155,7 +155,7 @@ pub fn sandbox(host: Host, os: Os, ev: &Evidence<'_>) -> Cell {
 }
 
 /// Whether `openmoat run` can start the agent on `os`.
-fn runs(spec: &HostSpec, os: Os) -> Result<(), String> {
+pub fn runs(spec: &HostSpec, os: Os) -> Result<(), String> {
     if os == Os::Windows {
         return Err(
             "`openmoat run` refuses on Windows, where OpenMoat generates no OS sandbox".into(),

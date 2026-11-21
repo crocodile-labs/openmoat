@@ -13,7 +13,7 @@ Host adapters: each supported agent's `HostSpec` (`host/<module>.rs`) and `HostA
 
 ## Test
 - `cargo test -p openmoat-hosts`: unit tests in `host/<module>/tests.rs`, `tests/contract.rs`, `tests/docs/`, `tests/protect.rs`, `tests/architecture/`, `tests/consistency/` (one intent, one verdict, whichever host sends it) and `tests/js_plugins/` (the JavaScript plugins under Node; skips without `node`).
-- `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs` regenerates the README, INSTALL, ARCHITECTURE §3 and THREAT_MODEL §5 blocks from the specs, and `docs/PROTECTION.md` from them, the e2e tests' `// protection: <claim> <agents> <oses>` marks and the weekly records' `proves` (ADR-079 decision 5): a claim with no evidence reads `no evidence yet`, never more; `OPENMOAT_TEST_UPDATE_PROTECT=1 cargo test -p openmoat-hosts --test protect` regenerates the policy and taint blocks. Review the diff.
+- `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs` regenerates the README, FEATURES, INSTALL, ARCHITECTURE §3 and THREAT_MODEL §5 blocks from the specs, and `docs/PROTECTION.md` from them, the e2e tests' `// protection: <claim> <agents> <oses>` marks and the weekly records' `proves` (ADR-079 decision 5): a claim with no evidence reads `no evidence yet`, never more; `OPENMOAT_TEST_UPDATE_PROTECT=1 cargo test -p openmoat-hosts --test protect` regenerates the policy and taint blocks. Review the diff.
 - Payloads come from `host/<module>/fixtures/` with a README naming each one's source. End-to-end tests are in `crates/openmoat-cli/tests/e2e/` (`hosts/` runs one table-driven suite over every host).
 
 ## Do not

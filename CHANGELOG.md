@@ -8,6 +8,16 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.24.0-dc2] - 2026-11-20
+
+### Added
+- `openmoat init --hooks-only --format json` for scoped hook planning and installation ([#846](https://github.com/crocodile-labs/openmoat/pull/846)).
+- Shell wrapper unwrapping for `rtk` and `direnv exec` ([#845](https://github.com/crocodile-labs/openmoat/pull/845)).
+
+### Fixed
+- Map Antigravity 2.0 `read_file`, `write_file`, and `edit_file` (`Path`) in `antigravity-cli` ([#844](https://github.com/crocodile-labs/openmoat/pull/844)).
+- Correlate attributed Codex MCP calls with exact hook tickets, issue tickets only after audit writes, and bound stdio MCP upstream shutdown ([#847](https://github.com/crocodile-labs/openmoat/pull/847)).
+
 ## [0.24.0] - 2026-11-20
 
 ### Added
