@@ -2930,3 +2930,47 @@
   action: { fs_read: "/p/README.md" }
   decoys: *decoys
   expect: { verdict: allow }
+# `ps` listing processes, without their environments: `-e` is "every process"
+# on Linux and macOS, and `x`/`o` cluster letters are not the BSD `e` modifier
+- id: benign-ps
+  action: { shell: "ps" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ps-aux
+  action: { shell: "ps aux" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ps-ef
+  action: { shell: "ps -ef" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ps-e
+  action: { shell: "ps -e" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ps-o-pid-comm
+  action: { shell: "ps -o pid,comm" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ps-p
+  action: { shell: "ps -p 123" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ps-axo
+  action: { shell: "ps axo pid,ppid,command" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ps-eo-user
+  why: "`user` and `etime` are values of `-o`, not option letters, so their `e` is no environment modifier."
+  action: { shell: "ps -eo pid,user,etime,command" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ps-axo-user
+  action: { shell: "ps axo user,pid" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ps-u-user
+  why: "`-u` takes the next word as a user name, whatever its letters."
+  action: { shell: "ps -u Edward" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ps-sort
+  action: { shell: "ps -eo pid,rss --sort=-rss" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-pgrep
+  action: { shell: "pgrep node" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-top-once
+  action: { shell: "top -l 1" }
+  expect: { verdict: defer, rules: [default] }
+

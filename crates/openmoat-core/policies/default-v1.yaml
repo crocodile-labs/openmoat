@@ -244,6 +244,10 @@ deny:
       - "typeset -x $"
       # `@proc-environ <path>` atoms: a read of `/proc/<pid>/environ`
       - "@proc-environ *"
+      # `@process-environ <program> <word>` atoms: `ps` or `pargs` asked to print
+      # other processes' environments (`ps eww`, `ps -E`, `pargs -e`; not
+      # `ps -e`, every process; shell/process_env.rs)
+      - "@process-environ *"
       # `@env-dump <expression>` atoms: inline interpreter code that reads the
       # whole environment (`print(os.environ)`, `console.log(process.env)`)
       - "@env-dump *"

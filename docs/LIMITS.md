@@ -372,6 +372,14 @@ call.
   again. An agent that starts itself again from inside its sandbox finds the shim there
   and cannot start, since the sandbox hides OpenMoat's directory; outside a project
   `openmoat run` refuses to start (ADR-106).
+- **Other processes' environments are seen through `ps`, `pargs` and `/proc` only.**
+  `env-dump` denies `ps` with the BSD `e` modifier or macOS's `-E`, `pargs -e` and reads of
+  `/proc/<pid>/environ`. Not seen: FreeBSD's `ps -e`, which prints the environment there
+  but means every process on Linux and macOS and stays allowed; options the line does not
+  show (`ps $opts`, `ps $(cat f)`); a program or script that reads them through a system
+  call (`sysctl` `KERN_PROCARGS2` on macOS, `psutil`); other tools (`gdb -p`, `lldb`). Under
+  `openmoat run` the OS keeps the agent from reading other processes' environments
+  whatever the command; outside it, the hook's decision is the only check.
 
 - **DNS exfiltration is seen only in a name with a fixed domain.** A name a resolver or
   client looks up that is built at run time is decided as the domain it ends in

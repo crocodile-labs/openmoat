@@ -73,6 +73,7 @@ mod make;
 mod operands;
 mod options;
 mod path_options;
+mod process_env;
 pub(crate) mod push;
 pub(crate) mod replaced;
 mod sed;
