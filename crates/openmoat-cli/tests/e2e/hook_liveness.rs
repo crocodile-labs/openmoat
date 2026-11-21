@@ -38,6 +38,28 @@ fn age(path: &Path, minutes: u64) {
         .unwrap();
 }
 
+/// Make every file `init` wrote that liveness reads for `host` (the hook file
+/// and the spec's settings files, such as Codex's `config.toml`) look written
+/// `minutes` ago, and the lock `minutes - 10` ago, as if `init` ran then and
+/// pinned them after. Ageing the hook file alone would leave a settings file
+/// newer than the lock, which reads as a change after OpenMoat's write.
+fn install_aged(sb: &Sandbox, host: Host, minutes: u64) {
+    age(&hook_file(sb, host), minutes);
+    let settings = host
+        .spec()
+        .install
+        .as_ref()
+        .and_then(|install| install.liveness.as_ref())
+        .map_or(&[][..], |liveness| liveness.settings);
+    for file in settings {
+        let path = sb.home.join(dir_of(host)).join(file);
+        if path.exists() {
+            age(&path, minutes);
+        }
+    }
+    age(&sb.home.join(".moat/policy.lock"), minutes - 10);
+}
+
 /// Where `host` writes its sessions; `None` for a host that runs a plugin.
 fn liveness(host: Host) -> Option<Sessions> {
     host.spec()
@@ -73,8 +95,7 @@ fn a_session_without_a_call_warns_and_a_call_clears_it() {
     for (host, activity) in known() {
         let sb = Sandbox::installed(&[&dir_of(host)]);
         // OpenMoat wrote the hook two hours ago and pinned it after.
-        age(&hook_file(&sb, host), 120);
-        age(&sb.home.join(".moat/policy.lock"), 110);
+        install_aged(&sb, host, 120);
         let doc = status(&sb);
         assert_eq!(entry(&doc, "hooks", host)["state"], "not-yet", "{doc}");
         assert_eq!(
@@ -129,8 +150,7 @@ fn a_session_without_a_call_warns_and_a_call_clears_it() {
 fn a_session_too_new_for_a_call_is_no_warning() {
     let (host, activity) = known().next().expect("a hook host with known sessions");
     let sb = Sandbox::installed(&[&dir_of(host)]);
-    age(&hook_file(&sb, host), 120);
-    age(&sb.home.join(".moat/policy.lock"), 110);
+    install_aged(&sb, host, 120);
     session_file(&sb.home.join(dir_of(host)), &activity[0]);
     let doc = status(&sb);
     assert_eq!(entry(&doc, "hooks", host)["state"], "not-yet", "{doc}");
