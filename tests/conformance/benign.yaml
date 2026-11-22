@@ -2974,3 +2974,17 @@
   action: { shell: "top -l 1" }
   expect: { verdict: defer, rules: [default] }
 
+# rtk and direnv exec of plain project work: left to the host, as any program
+# OpenMoat has no rule for (rtk and direnv themselves are not on an allow list).
+- id: defer-rtk-git-status
+  action: { shell: "rtk git status" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-rtk-test-cargo-test
+  action: { shell: "rtk test cargo test" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-rtk-read-project-file
+  action: { shell: "rtk read src/main.rs" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-direnv-exec-cargo-test
+  action: { shell: "direnv exec . cargo test" }
+  expect: { verdict: defer, rules: [default] }

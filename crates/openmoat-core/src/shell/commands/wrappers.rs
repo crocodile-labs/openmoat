@@ -7,15 +7,17 @@
 //! input the command line shows to the command it runs (`xargs.rs`). The
 //! launchers of `launchers.rs` (`taskset`, `unshare`, `systemd-run`, …) are
 //! read the same way. `at` and `batch` run the text on their stdin later, as a
-//! shell would run it now, and read `-f FILE` instead.
+//! shell would run it now, and read `-f FILE` instead. `rtk` (`rtk.rs`) and
+//! `direnv exec` (`direnv.rs`) have rules of their own.
 
+mod direnv;
 mod launchers;
+mod rtk;
 mod xargs;
 
 use super::super::options;
 use super::super::tables::{
-    WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS, WRAPPER_SUBCOMMANDS_WITH_VALUE, WRAPPERS,
-    WRAPPERS_WITH_VALUE,
+    WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS, WRAPPERS, WRAPPERS_WITH_VALUE,
 };
 use super::super::tokens::assignment_name;
 use super::super::{ClassifyError, ShellContext, Sink};
@@ -40,13 +42,32 @@ pub(super) fn classify(
     if matches!(program, "at" | "batch") {
         return Some(later(cmd, argv, ctx, sink, depth));
     }
+    if program == "rtk" {
+        let run = rtk::command(argv)?;
+        let outer: Vec<Vec<String>> = run
+            .from
+            .iter()
+            .map(|from| from.map_or_else(Vec::new, |i| substitutions_of(cmd, argv, i)))
+            .collect();
+        return Some(classify_wrapped(&run.words, &outer, ctx, sink, depth));
+    }
     let inner = wrapped_command(argv, program);
     let start = inner.map(|inner| argv.len() - inner.len());
-    let more = launchers::runs(argv, program, start);
+    let mut more = launchers::runs(argv, program, start);
+    let direnv_dir = (program == "direnv").then(|| direnv::dir(argv)).flatten();
+    if program == "direnv"
+        && let Some(file) = direnv::file_command(argv)
+    {
+        more.push(file.to_vec());
+    }
     if inner.is_none() && more.is_empty() {
         return None;
     }
     let mut classify = || {
+        // direnv reads the directory's `.envrc` before the command runs
+        if let Some(dir) = direnv_dir {
+            sink.read(ctx, dir)?;
+        }
         // a launcher's own options are checked as any other program's are
         if launchers::is_launcher(program) {
             options::classify(argv, &[], program, ctx, sink, depth)?;
@@ -74,6 +95,13 @@ pub(super) fn classify(
         classify_wrapped(inner, &outer, ctx, sink, depth)
     };
     Some(classify())
+}
+
+/// The command substitutions of word `i` of `argv` (`cmd`'s words).
+fn substitutions_of(cmd: &SimpleCommand, argv: &[String], i: usize) -> Vec<String> {
+    cmd.substitutions_of_last(argv.len() - i)
+        .first()
+        .map_or_else(Vec::new, |subs| subs.to_vec())
 }
 
 /// `echo cmd | at now`, `at now <<< cmd`, `at -f FILE now`: the job is the
@@ -175,32 +203,8 @@ fn quote(word: &str) -> String {
 /// For `sudo -u x cmd …`, `env A=1 cmd …`, `xargs -0 cmd …`, `timeout 5 cmd …`
 /// return the wrapped argv.
 pub(crate) fn wrapped_command<'a>(argv: &'a [String], program: &str) -> Option<&'a [String]> {
-    if let Some((_, subcommands)) = WRAPPER_SUBCOMMANDS_WITH_VALUE
-        .iter()
-        .find(|(name, _)| *name == program)
-    {
-        if !subcommands.contains(&argv.get(1)?.as_str()) {
-            return None;
-        }
-        let mut i = 2;
-        let mut value_pending = true;
-        while let Some(arg) = argv.get(i) {
-            if arg == "--" {
-                i += 1;
-                break;
-            }
-            if arg.starts_with('-') {
-                i += 1;
-                continue;
-            }
-            if value_pending {
-                value_pending = false;
-                i += 1;
-                continue;
-            }
-            break;
-        }
-        return argv.get(i..).filter(|rest| !rest.is_empty());
+    if program == "direnv" {
+        return direnv::command(argv);
     }
     if let Some((_, subcommands)) = WRAPPER_SUBCOMMANDS
         .iter()
@@ -260,15 +264,6 @@ pub(crate) fn wrapped_command<'a>(argv: &'a [String], program: &str) -> Option<&
             continue;
         }
         break;
-    }
-    if program == "rtk"
-        && matches!(
-            argv.get(i).map(String::as_str),
-            Some("proxy" | "err" | "summary" | "test")
-        )
-        && argv.get(i + 1).is_some()
-    {
-        i += 1;
     }
     argv.get(i..).filter(|rest| !rest.is_empty())
 }

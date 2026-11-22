@@ -238,6 +238,20 @@ Each agent's gaps and the reasons are in
   scripts, links and redirects lead next, nor where its name resolves. What the page says
   marks the session as untrusted, so writes to files that run later need review; installs
   and later pages do not.
+- **`direnv exec` runs an `.envrc` OpenMoat does not read.** `direnv exec DIR cmd`
+  loads the first `.envrc` (or, with `load_dotenv`, `.env`) found from `DIR` upwards,
+  which can be above the project, and runs it with bash before `cmd`. The command and
+  `DIR` are checked; the `.envrc`'s code and the variables it sets are not. direnv runs
+  only an `.envrc` a person approved with `direnv allow` (by its content), and an agent's
+  write of an `.envrc` or `.env` is denied (`secrets-paths`); `direnv allow` itself is
+  left to the agent's own prompt, as any program no rule names.
+- **rtk's subcommands are read from one release's command table.** `rtk` (Rust Token
+  Killer) is read as its command table at commit `d0f0399a` (2026-11-19) says: its own
+  file readers as reads, `env` as an environment dump, the ones that run a command as
+  that command, and any other name as that program. A subcommand a later rtk adds is read
+  as a program of that name until this list knows it. `rtk init` is not read as the
+  write of an agent's hook file it makes; where OpenMoat pins that file, the lock then
+  finds the change (`kernel-integrity`).
 
 ## When an agent skips or changes the check
 

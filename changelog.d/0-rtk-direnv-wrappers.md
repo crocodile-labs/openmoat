@@ -1,0 +1,2 @@
+### Added
+- Commands run through `rtk` (Rust Token Killer) and `direnv exec DIR` are classified as the command they run: `rtk git reset --hard` is denied as `git reset --hard`, and `rtk err --shell bash '…'` and `rtk run -c '…'` as the script they run; rtk's own subcommands are read as what they do (`rtk read F` as a read of `F`, `rtk env` as an environment dump), and `direnv exec` checks its directory and a file named in its place (from a contribution by Marlon Costa, #845) ([#0](https://github.com/crocodile-labs/openmoat/pull/0)).
