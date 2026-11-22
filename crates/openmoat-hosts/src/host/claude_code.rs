@@ -125,7 +125,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         unpinned_keys: settings::UNPINNED_KEYS,
         // Each session's transcript is `projects/<the project's path, dashed>/
         // <session id>.jsonl`, the `transcript_path` its hooks receive;
-        // sign-in, `claude mcp` and `--help` write none.
+        // sign-in, `claude mcp` and `--help` write none. Source: "Application
+        // data" in https://code.claude.com/docs/en/claude-directory (under
+        // `CLAUDE_CONFIG_DIR` when it is set); a subagent's transcript, one
+        // level down, is not counted.
         liveness: Some(crate::Liveness {
             settings: &[],
             sessions: crate::Sessions::Known(&[crate::Activity::new(&[

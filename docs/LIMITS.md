@@ -299,9 +299,9 @@ neither does the hook. `openmoat status`, `openmoat doctor` and `openmoat watch`
 when an agent wrote sessions since its hook, settings or program last changed and no
 call of its reached OpenMoat ([USAGE.md](USAGE.md#does-the-agent-still-run-openmoats-hook),
 ADR-104). That warning has limits: it comes only after a session is ten minutes old; it
-needs the agent's session files, which OpenMoat does not know for Cline, goose, Hermes
-Agent, Antigravity CLI and Crush (a note there says no call came) nor for Cursor's
-editor; a session that used no tool looks the same as one whose calls went unchecked,
+needs the agent's session files, which OpenMoat does not know for goose, Hermes Agent,
+Antigravity CLI and Crush (a note there says no call came) nor for Cursor's editor or
+the Cline VS Code extension; a session that used no tool looks the same as one whose calls went unchecked,
 so the warning says "if they used tools"; sessions synced from another machine count
 here though their calls were checked there; and it compares file times with the audit
 log's on this machine, so a restored or wrongly dated file can raise it until the next

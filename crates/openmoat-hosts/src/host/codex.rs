@@ -104,6 +104,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         // `[features] hooks = false` in `config.toml` turns hooks off. Each
         // session's rollout is `sessions/<yyyy>/<mm>/<dd>/rollout-<time>-<id>.jsonl`,
         // the `transcript_path` its hooks receive; `codex login` writes none.
+        // Source: `precompute_new_rollout_path` in
+        // https://github.com/openai/codex/blob/main/codex-rs/rollout/src/recorder.rs
+        // (`$CODEX_HOME/sessions/YYYY/MM/DD`); rollouts a week old may later be
+        // compressed to `.jsonl.zst`, long after they could count.
         liveness: Some(crate::Liveness {
             settings: &["config.toml"],
             sessions: crate::Sessions::Known(&[crate::Activity::new(&[

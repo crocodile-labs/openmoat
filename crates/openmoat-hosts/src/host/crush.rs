@@ -114,6 +114,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hook_file: HookLayout::Entries(&hook_file::Crush),
         location: Location::Custom(&location::LOCATE),
         versions: Some(VERSIONS),
+        // Its data is in each project's `.crush` directory, which
+        // `CRUSH_DATA_DIR` overrides (https://github.com/charmbracelet/crush#readme).
         liveness: Some(crate::Liveness {
             settings: &[],
             sessions: crate::Sessions::Unknown(

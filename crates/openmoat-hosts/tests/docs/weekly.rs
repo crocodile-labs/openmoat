@@ -14,7 +14,8 @@ use std::fs;
 use std::path::Path;
 
 use openmoat_hosts::{
-    ConfigFormat, Host, HostSpec, Location, Proves, WeeklyInstall, WeeklyRun, WeeklyRuns,
+    ConfigFormat, Host, HostSpec, Liveness, Location, Proves, Sessions, WeeklyInstall, WeeklyRun,
+    WeeklyRuns,
 };
 use serde_json::{Value, json};
 
@@ -45,7 +46,10 @@ const COMMENT: &str = "Generated from each host's spec (`weekly`, crates/openmoa
     passing run asserts against the real agent (hook: a call decided by OpenMoat's hook and \
     held; hook-failure: the hook-failure step's comparison; mcp: an MCP call decided by the \
     hook), which docs/PROTECTION.md shows as evidence per runner; why says why a record \
-    proves no hook call; values are what a record's script reads.";
+    proves no hook call; values are what a record's script reads. sessions is where a hook \
+    host writes a file per session under dir (each level a name, * for every directory; the \
+    end of the file's name; ADR-104), which `check.py sessions` looks in after the real \
+    agent ran; sessions_unknown says why no such place is known.";
 
 /// Each host's weekly records, in [`Host::EVERY`] order.
 fn runs() -> Vec<(&'static HostSpec, &'static WeeklyRun)> {
@@ -97,6 +101,25 @@ fn env() -> Vec<(String, String)> {
     out
 }
 
+/// Where a hook host writes its sessions (ADR-104, [`Liveness::sessions`]),
+/// for `check.py sessions`: `sessions`, each place's directories under the
+/// configuration directory (`*` for every directory at a level) and the end
+/// of a session file's name; or `sessions_unknown`, why no place is known.
+/// Nothing for a plugin host.
+fn sessions(spec: &HostSpec) -> Option<(&'static str, Value)> {
+    let liveness: &Liveness = spec.install.as_ref()?.liveness.as_ref()?;
+    Some(match liveness.sessions {
+        Sessions::Known(places) => {
+            let places: Vec<Value> = places
+                .iter()
+                .map(|a| json!({"dir": a.dir, "ending": a.ending}))
+                .collect();
+            ("sessions", Value::Array(places))
+        }
+        Sessions::Unknown(why) => ("sessions_unknown", json!(why)),
+    })
+}
+
 /// One record as `agents.json` holds it, its fields in a fixed order.
 fn record(spec: &HostSpec, run: &WeeklyRun) -> Vec<(&'static str, Value)> {
     let mut fields = vec![
@@ -120,6 +143,9 @@ fn record(spec: &HostSpec, run: &WeeklyRun) -> Vec<(&'static str, Value)> {
     fields.push(("checked", checked));
     if let Some(dir) = run.dir.map(str::to_owned).or_else(|| one_dir(spec)) {
         fields.push(("dir", json!(dir)));
+    }
+    if let Some(field) = sessions(spec) {
+        fields.push(field);
     }
     if !run.config.is_empty() {
         let config: Vec<Value> = run
@@ -332,6 +358,36 @@ fn every_host_is_run_weekly_or_says_why_not() {
     }
     let agents: BTreeSet<&str> = records.iter().map(|r| r.agent.as_str()).collect();
     assert_eq!(agents.len(), records.len(), "two records share a name");
+}
+
+/// A record of a hook host carries its session place, or why none is known,
+/// and the directory the place is under, so `check.py sessions` can look
+/// where `openmoat status` looks after the real agent ran.
+#[test]
+fn a_hook_host_record_names_its_session_place_under_its_directory() {
+    for (spec, run) in runs() {
+        let fields = record(spec, run);
+        let field = |key: &str| fields.iter().find(|(k, _)| *k == key).map(|(_, v)| v);
+        let Some(liveness) = spec.install.as_ref().and_then(|i| i.liveness.as_ref()) else {
+            assert!(field("sessions").is_none(), "{}", run.agent);
+            continue;
+        };
+        match liveness.sessions {
+            Sessions::Known(places) => {
+                assert!(field("dir").is_some(), "{}: sessions but no dir", run.agent);
+                let listed = field("sessions").and_then(Value::as_array).unwrap();
+                assert_eq!(listed.len(), places.len(), "{}", run.agent);
+            }
+            Sessions::Unknown(why) => {
+                assert_eq!(
+                    field("sessions_unknown"),
+                    Some(&json!(why)),
+                    "{}",
+                    run.agent
+                );
+            }
+        }
+    }
 }
 
 /// The shell functions `script` defines (`name() {` at the start of a line).

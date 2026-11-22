@@ -127,12 +127,22 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         // the same script as Cline's `PostToolUse` file, for injected input
         // (ADR-057); the lock pins it with the hook file
         extra_files: &[ExtraFile::InConfigDir(&["hooks", "PostToolUse"])],
+        // Each session's messages are `data/sessions/<id>/<id>.messages.json`
+        // (`resolveSessionDataDir` in `sdk/packages/shared/src/storage/paths.ts`,
+        // `sessionMessagesPath` in
+        // https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/services/session-artifacts.ts;
+        // "One folder of messages per session" in https://docs.cline.bot/cli/configuration).
+        // A subagent's messages share its session's folder and count as one
+        // more; `CLINE_DATA_DIR` or `CLINE_SESSION_DATA_DIR` moves them out of
+        // the configuration directory, which means fewer warnings, never more.
         liveness: Some(crate::Liveness {
             settings: &[],
-            sessions: crate::Sessions::Unknown(
-                "where the CLI writes a task under `data/` was not checked, and \
-                 `CLINE_DATA_DIR` moves it",
-            ),
+            sessions: crate::Sessions::Known(&[crate::Activity::new(&[
+                "data",
+                "sessions",
+                crate::Activity::ANY,
+            ])
+            .ending(".messages.json")]),
         }),
         ..InstallSpec::BASE
     }),

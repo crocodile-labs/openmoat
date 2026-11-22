@@ -119,16 +119,19 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hook_file: HookLayout::Entries(&hook_file::Qwen),
         versions: Some(VERSIONS),
         // Each session is recorded as `projects/<project>/chats/<session id>.jsonl`,
-        // which `--resume` reads back; releases on Gemini CLI's layout wrote
-        // `tmp/<project>/chats/session-*.json`. A place a release does not use
-        // stays empty and only means fewer warnings.
+        // which `--resume` reads back, from 0.13.0 (the first release with
+        // `PreToolUse`) on: `ensureConversationFile` in
+        // https://github.com/QwenLM/qwen-code/blob/v0.13.0/packages/core/src/services/chatRecordingService.ts
+        // and `getProjectDir` in `config/storage.ts`. `QWEN_RUNTIME_DIR` moves
+        // `projects/` out of the configuration directory: fewer warnings there.
         liveness: Some(crate::Liveness {
             settings: &[],
-            sessions: crate::Sessions::Known(&[
-                crate::Activity::new(&["projects", crate::Activity::ANY, "chats"])
-                    .ending(".jsonl"),
-                crate::Activity::new(&["tmp", crate::Activity::ANY, "chats"]).ending(".json"),
-            ]),
+            sessions: crate::Sessions::Known(&[crate::Activity::new(&[
+                "projects",
+                crate::Activity::ANY,
+                "chats",
+            ])
+            .ending(".jsonl")]),
         }),
         ..InstallSpec::BASE
     }),

@@ -26,7 +26,8 @@
 #      against a local fake model API (or the agent's own hook test command),
 #      and requires the audit log to hold that call denied by secrets-paths and
 #      the fake key never to appear in what the agent printed (the script's
-#      `load_hook`);
+#      `load_hook`); then looks for a session file where the host spec says
+#      the agent writes one (ADR-104), warning, never failing, on a miss;
 #   5. sends one allowed (`git status`) and one denied (`cat ~/.ssh/id_rsa`)
 #      payload, in the agent's own format (its golden fixture), through
 #      `openmoat guard`, and checks the reply;
@@ -381,9 +382,14 @@ audit "$out/audit-before.json"
 # the variable. Only this step: the payloads below are OpenMoat's own fixtures.
 mkdir -p "$out/captured"
 export OPENMOAT_CAPTURE_DIR="$out/captured"
+# Its time is when the run started, for the session files below.
+: >"$out/sessions-since"
 load_hook
 stop_fake
 unset OPENMOAT_CAPTURE_DIR
+# A session file where the host spec says the agent writes one (ADR-104); a
+# miss is a warning for a person to read, never a failure.
+check sessions "$agent" "$out/sessions-since" || true
 check scrub "$host" "$version" "$out/captured" "$root" "$HOME" "$project" "$out/captured/scrubbed"
 
 # ---- payloads in the agent's own format ------------------------------------

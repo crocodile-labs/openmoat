@@ -127,16 +127,18 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         // as Claude Code's do; left out of the digest as every lock before
         // this field did for a file of this name, so those locks still verify.
         unpinned_keys: &["theme"],
-        // Each session is recorded as `tmp/<project>/chats/session-<time>-<id>.json`,
-        // which `/chat` and `--resume` read back.
+        // Each session is recorded in `tmp/<project>/chats/`, which `/chat` and
+        // `--resume` read back (https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/session-management.md).
+        // The file is `session-<time>-<id>.jsonl`; earlier releases wrote
+        // `.json`, which the recorder now converts (`chatRecordingService.ts`,
+        // https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/services/chatRecordingService.ts).
+        // A subagent's file, one level down, is not counted.
         liveness: Some(crate::Liveness {
             settings: &[],
-            sessions: crate::Sessions::Known(&[crate::Activity::new(&[
-                "tmp",
-                crate::Activity::ANY,
-                "chats",
-            ])
-            .ending(".json")]),
+            sessions: crate::Sessions::Known(&[
+                crate::Activity::new(&["tmp", crate::Activity::ANY, "chats"]).ending(".jsonl"),
+                crate::Activity::new(&["tmp", crate::Activity::ANY, "chats"]).ending(".json"),
+            ]),
         }),
         ..InstallSpec::BASE
     }),

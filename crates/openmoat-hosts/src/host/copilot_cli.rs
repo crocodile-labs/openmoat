@@ -98,7 +98,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hooks: HOOKS,
         hook_file: HookLayout::Entries(&hook_file::Copilot),
         // Each session's events are `session-state/<session id>/events.jsonl`,
-        // which `copilot --resume` reads back.
+        // which `copilot --resume` reads back. Source: `session-state/` in
+        // https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference
+        // (under `COPILOT_HOME` when it is set).
         liveness: Some(crate::Liveness {
             settings: &[],
             sessions: crate::Sessions::Known(&[crate::Activity::new(&[

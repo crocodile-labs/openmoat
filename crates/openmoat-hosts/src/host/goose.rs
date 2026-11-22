@@ -111,6 +111,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hooks: HOOKS,
         hook_file: HookLayout::Entries(&hook_file::Goose),
         location: Location::Custom(&location::LOCATE),
+        // goose 1.10.0 and later keep every session in
+        // `<data dir>/sessions/sessions.db`, not a file each
+        // (https://block.github.io/goose/docs/guides/sessions/session-management).
         liveness: Some(crate::Liveness {
             settings: &[],
             sessions: crate::Sessions::Unknown(

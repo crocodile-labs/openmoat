@@ -57,6 +57,10 @@ read JSON, and the agent records they come from (agents.json beside this file).
                                              ran where the fact says the agent blocks
     check.py hook-failure-skip <agent> <mode> <fact> <why> <out.json>
                                              records a case not run, and why
+    check.py sessions <agent> <start file>   after the real agent ran: a session file written
+                                             since <start file> was made, where the record's
+                                             `sessions` (the host spec, ADR-104) says; a miss
+                                             warns and never fails
 
 Every failure prints why and exits 1; usage errors exit 64.
 """
@@ -187,6 +191,7 @@ def cmd_records():
             if runner not in ("ubuntu-latest", "macos-15"):
                 problems.append(f"{agent}: unknown runner {runner}")
         problems.extend(f"{agent}: {p}" for p in proves_problems(rec))
+        problems.extend(f"{agent}: {p}" for p in sessions_problems(rec))
     for line in problems:
         print(f"agents.json: {line}")
     if problems:
@@ -828,7 +833,105 @@ def cmd_hook_failure(agent, mode, fact, marker, ran_file, calls_log, agent_out, 
     return 0
 
 
+# ---- session files where the host spec says (ADR-104) ----------------------
+#
+# `openmoat status` tells an agent that stopped running OpenMoat's hook from
+# one that has not run by the session files the agent wrote since the change
+# (the spec's `InstallSpec::liveness`, a record's `sessions`). A place that is
+# wrong fails quiet there, so after the real agent ran, this looks in the same
+# place, matching as crates/openmoat-cli/src/heartbeat/scan.rs does, and warns
+# when no session file appeared. Never a failure: the job learns of drift.
+
+
+def sessions_problems(rec):
+    """Why a record's `sessions` is wrong: a list of places, each the
+    directories under `dir` (`*` for every directory at a level) and the end
+    of a session file's name, under a record that names its `dir`."""
+    places = rec.get("sessions")
+    if places is None:
+        return []
+    if not isinstance(places, list) or not places:
+        return ["`sessions` is not a list of places"]
+    problems = []
+    for place in places:
+        if (not isinstance(place, dict) or not isinstance(place.get("ending"), str)
+                or not isinstance(place.get("dir"), list)
+                or not all(isinstance(p, str) and p and "/" not in p for p in place["dir"])):
+            problems.append(f"`sessions` holds a malformed place {place!r}")
+    if not rec.get("dir"):
+        problems.append("`sessions` without a `dir` to look under")
+    if "sessions_unknown" in rec:
+        problems.append("both `sessions` and `sessions_unknown`")
+    return problems
+
+
+def place_text(base, place):
+    """A place as a person reads it: `{CLAUDE_CONFIG_DIR}/projects/*/*.jsonl`."""
+    return "/".join([base, *place["dir"], "*" + place["ending"]])
+
+
+def session_files(base, place, since):
+    """The regular files (links not followed) in the directories `place`
+    names under `base` whose names end as it says, written at or after
+    `since` (seconds since the epoch)."""
+    dirs = [base]
+    for part in place["dir"]:
+        if part == "*":
+            dirs = [entry for d in dirs if d.is_dir() and not d.is_symlink()
+                    for entry in sorted(d.iterdir())
+                    if entry.is_dir() and not entry.is_symlink()]
+        else:
+            dirs = [d / part for d in dirs]
+    found = []
+    for d in dirs:
+        try:
+            entries = sorted(d.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            if (entry.name.endswith(place["ending"]) and not entry.is_symlink()
+                    and entry.is_file() and entry.stat().st_mtime >= since):
+                found.append(entry)
+    return found
+
+
+def cmd_sessions(agent, since_file):
+    """After the real agent ran: a session file written since `since_file`
+    was made, in a place the record's `sessions` names. A miss is a `warn`
+    line and a workflow warning naming the spec's place; exit 0 either way."""
+    rec = record(agent)
+    places = rec.get("sessions")
+    if places is None:
+        why = rec.get("sessions_unknown")
+        print(f"skip  {agent}: session files: "
+              + (f"the spec knows no place ({why})" if why else "not a hook host"))
+        return 0
+    if "hook" not in (rec.get("proves") or []):
+        print(f"skip  {agent}: session files: the job runs no session of this agent")
+        return 0
+    wanted = " or ".join(place_text(rec["dir"], p) for p in places)
+    try:
+        since = Path(since_file).stat().st_mtime
+    except OSError:
+        print(f"warn  {agent}: session files: no start time ({since_file}); not looked for")
+        return 0
+    base = Path(expand(rec["dir"]))
+    found = [f for p in places for f in session_files(base, p, since)]
+    if found:
+        names = ", ".join(str(f.relative_to(base)) for f in found[:5])
+        print(f"ok    {agent}: {len(found)} session file(s) where the spec says ({wanted}): {names}")
+        return 0
+    words = (f"{agent} ran a session and wrote no file at {wanted}, where its host spec "
+             f"(`liveness`, ADR-104) says it does: `openmoat status` would not warn when "
+             f"this agent stops running the hook. Check the agent's own documentation "
+             f"or source and correct the spec")
+    annotate("warning", f"{agent}: no session file where its spec says", words)
+    print(f"warn  {words}")
+    return 0
+
+
 COMMANDS = {
+    "sessions": (cmd_sessions, 2),
     "hook-failure-fact": (cmd_hook_failure_fact, 3), "hook-failure-skip": (cmd_hook_failure_skip, 5),
     "hook-failure": (cmd_hook_failure, 9),
     "opencode-active": (cmd_opencode_active, 1), "opencode-settled": (cmd_opencode_settled, 1),

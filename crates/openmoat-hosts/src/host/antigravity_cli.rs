@@ -133,6 +133,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_variable_is_home: true,
         hook_file: HookLayout::Entries(&hook_file::Named),
         location: Location::Custom(&location::LOCATE),
+        // https://antigravity.google/docs/cli/conversations and
+        // https://antigravity.google/docs/cli/commands/resume name only the
+        // resume cache, `cache/last_conversations.json`, one file for every
+        // conversation.
         liveness: Some(crate::Liveness {
             settings: &[],
             sessions: crate::Sessions::Unknown(

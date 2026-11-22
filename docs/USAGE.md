@@ -278,7 +278,7 @@ session files written since (ADR-104):
 |---|---|---|
 | `· hook runs: last call <time>` | `doctor` | a call reached OpenMoat after the last change |
 | `· no call since OpenMoat wrote its hook (<time>); <agent> has not run a session since, as far as OpenMoat can tell` (or `since its settings changed`, `since <agent> was updated`) | `doctor` | nothing to check yet: start the agent |
-| `· no call since …; OpenMoat cannot tell whether <agent> ran since (<why>)` | `doctor` | an agent whose session files OpenMoat does not know (Cline, goose, Hermes Agent, Antigravity CLI, Crush) |
+| `· no call since …; OpenMoat cannot tell whether <agent> ran since (<why>)` | `doctor` | an agent whose session files OpenMoat does not know (goose, Hermes Agent, Antigravity CLI, Crush) |
 | `! <agent> ran 3 sessions since … (last <time>), and OpenMoat saw no call from it: if they used tools, the hook did not run and the calls were not checked` | `status`, `doctor`, `watch` | sessions at least ten minutes old were written since the change, and no call came |
 
 The warning's fix: restart the agent (a session from before the change may not run the
@@ -292,14 +292,23 @@ back. `openmoat status --format json` lists every set-up hook agent under `hooks
 the form of `plugins` (`change` is also `hook-written` or `settings-changed`; `missing`
 adds `sessions`).
 
-| Agent | Session files OpenMoat looks at, in its configuration directory |
-|---|---|
-| Claude Code | `projects/*/*.jsonl` |
-| Codex | `sessions/<year>/<month>/<day>/*.jsonl`; `config.toml` changing counts as a change |
-| Cursor | `chats/*/*/store.db` (the Cursor CLI; the editor's chats are not seen) |
-| GitHub Copilot CLI | `session-state/*/events.jsonl` |
-| Gemini CLI | `tmp/*/chats/*.json` |
-| Qwen Code | `projects/*/chats/*.jsonl`, `tmp/*/chats/*.json` |
+| Agent | Session files OpenMoat looks at, in its configuration directory | Source |
+|---|---|---|
+| Claude Code | `projects/*/*.jsonl` | [Claude Code: application data](https://code.claude.com/docs/en/claude-directory#application-data) |
+| Codex | `sessions/<year>/<month>/<day>/*.jsonl`; `config.toml` changing counts as a change | [Codex source: `precompute_new_rollout_path`](https://github.com/openai/codex/blob/main/codex-rs/rollout/src/recorder.rs) |
+| Cursor | `chats/*/*/store.db` (the Cursor CLI; the editor's chats are not seen) | not in Cursor's documentation: Cursor staff on its forum ([chats folder](https://forum.cursor.com/t/cursor-agent-create-chat-and-how-to-delete-old-chats/156640), [`store.db`](https://forum.cursor.com/t/local-ide-agent-chats-and-the-agent-cli-still-use-separate-session-stores/165486)) |
+| GitHub Copilot CLI | `session-state/*/events.jsonl` | [Copilot CLI configuration directory](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference) |
+| Gemini CLI | `tmp/*/chats/*.jsonl`, and `*.json` from earlier releases | [Gemini CLI session management](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/session-management.md), [`chatRecordingService.ts`](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/services/chatRecordingService.ts) |
+| Qwen Code | `projects/*/chats/*.jsonl` (`QWEN_RUNTIME_DIR` moves `projects/`) | [Qwen Code source: `chatRecordingService.ts`](https://github.com/QwenLM/qwen-code/blob/v0.13.0/packages/core/src/services/chatRecordingService.ts) |
+| Cline CLI | `data/sessions/*/*.messages.json` (`CLINE_DATA_DIR` and `CLINE_SESSION_DATA_DIR` move it) | [Cline CLI configuration](https://docs.cline.bot/cli/configuration), [Cline source: `sessionMessagesPath`](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/services/session-artifacts.ts) |
+
+Not known, so only the note is given: goose and Hermes Agent keep every session in one
+database ([goose](https://block.github.io/goose/docs/guides/sessions/session-management),
+[Hermes Agent](https://hermes-agent.nousresearch.com/docs/developer-guide/session-storage)),
+Crush keeps its data in each project's `.crush` directory, and Antigravity CLI's
+documentation names no conversation file. The weekly latest-agent check looks for a new
+session file in the places above after each real agent run and warns when none appeared
+([scripts/ci/latest-agents/README.md](../scripts/ci/latest-agents/README.md#session-files)).
 
 ## A call is denied
 

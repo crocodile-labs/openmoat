@@ -160,6 +160,33 @@ agents, whose event a plugin or script of OpenMoat's would have to send.
 redaction, the notice and each `NOT CAPTURED` reason; only a run of this job can show what
 an agent sends.
 
+## Session files
+
+`openmoat status` and `doctor` tell an agent that stopped running OpenMoat's hook from one
+that has not run since a change by the session files the agent wrote since (ADR-104; the
+places and their sources are in `docs/USAGE.md` "Does the agent still run OpenMoat's
+hook?"). A wrong place fails quiet there: the directory stays empty and no warning is
+ever given. So each record of a hook agent carries its spec's place (`sessions` in
+`agents.json`, written from `InstallSpec::liveness` with the rest; the directories under
+`dir`, `*` for every directory at a level, and the end of a session file's name), or why
+none is known (`sessions_unknown`).
+
+Right after the real agent's run, `check.py sessions <agent> <start file>` looks there,
+as `openmoat status` does (regular files, no links, written at or after the step
+started):
+
+- **`ok`**: the files found.
+- **`warn`** and a workflow `::warning`: the agent ran a session and wrote no file in the
+  place its spec names. Never a failure: read the agent's documentation or source and
+  correct the spec (and its source link).
+- **`skip`**: no place is known, or the record runs no session (`proves` has no `hook`).
+
+`check.py records` refuses a malformed place, and one without a `dir` to look under.
+`python3 -I scripts/ci/latest-agents/test_check.py` (run by hand) tests the matching;
+only a run of this job shows where an agent writes. Cursor's place cannot be checked
+here (every `cursor-agent` run needs an account), nor Qwen Code's (its record runs no
+session).
+
 ## When the hook fails
 
 Each agent's host spec says what it does with a call when OpenMoat's hook fails

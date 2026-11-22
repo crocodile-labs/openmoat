@@ -2,8 +2,9 @@
 """Tests of check.py's hook-failure commands (ADR-079), the part of the weekly
 job's hook-failure step that can be proved without an agent, how a failed audit
 check lists the new rows, `tool-failures`, the records' `proves` (ADR-079
-decision 5), and the record data latest-agents.sh reads (`dir`, `proves`,
-`env`). Run by hand:
+decision 5), the record data latest-agents.sh reads (`dir`, `proves`,
+`env`), and `sessions`, the session files the host spec names (ADR-104). Run
+by hand:
 
     python3 -I scripts/ci/latest-agents/test_check.py
 """
@@ -12,6 +13,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -348,6 +350,93 @@ class Data(unittest.TestCase):
             name, value = line.split("\t")
             self.assertRegex(name, r"^[A-Z_]+$")
             self.assertRegex(value, r"^\{(HOME|ROOT)\}")
+
+
+class SessionFiles(unittest.TestCase):
+    """`check.py sessions`: a session file where the record's `sessions`
+    (the host spec's `liveness`, ADR-104) says, after the real agent ran."""
+
+    PLACES = [{"dir": ["projects", "*"], "ending": ".jsonl"},
+              {"dir": ["tmp", "*", "chats"], "ending": ".json"}]
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self.tmp.name) / "conf"
+        self.base.mkdir()
+        self.since = Path(self.tmp.name) / "since"
+        self.since.write_text("", encoding="utf-8")
+        self.records = check.records
+        self.env = unittest.mock.patch.dict("os.environ", {"MOAT_TEST_DIR": str(self.base)})
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+        check.records = self.records
+        self.tmp.cleanup()
+
+    def use(self, **rec):
+        full = {"dir": "{MOAT_TEST_DIR}", "proves": ["hook"], **rec}
+        check.records = lambda: {"a": full}
+
+    def write(self, relative, age=0):
+        path = self.base / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+        if age:
+            stamp = self.since.stat().st_mtime - age
+            os.utime(path, (stamp, stamp))
+        return path
+
+    def run_cmd(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = check.main(["sessions", "a", str(self.since)])
+        return code, out.getvalue()
+
+    def test_a_new_file_in_a_named_place_passes(self):
+        self.use(sessions=self.PLACES)
+        self.write("tmp/hash/chats/session-1.json")
+        code, printed = self.run_cmd()
+        self.assertEqual(code, 0)
+        self.assertIn("ok    a: 1 session file(s)", printed)
+        self.assertIn("tmp/hash/chats/session-1.json", printed)
+
+    def test_a_miss_warns_with_the_spec_place_and_never_fails(self):
+        self.use(sessions=self.PLACES)
+        # The wrong ending, one level too deep, older than the run, a link.
+        self.write("projects/p/s.json")
+        self.write("projects/p/sub/s.jsonl")
+        self.write("projects/p/old.jsonl", age=60)
+        target = self.write("elsewhere.jsonl")
+        (self.base / "projects" / "p" / "link.jsonl").symlink_to(target)
+        code, printed = self.run_cmd()
+        self.assertEqual(code, 0)
+        self.assertIn("::warning title=a: no session file where its spec says::", printed)
+        self.assertIn("warn  a ran a session and wrote no file at "
+                      "{MOAT_TEST_DIR}/projects/*/*.jsonl or {MOAT_TEST_DIR}/tmp/*/chats/*.json",
+                      printed)
+
+    def test_an_unknown_place_or_no_session_run_is_skipped(self):
+        self.use(sessions_unknown="one database")
+        self.assertEqual(self.run_cmd(), (0, "skip  a: session files: the spec knows no place "
+                                             "(one database)\n"))
+        self.use(sessions=self.PLACES, proves=[], why="no model call")
+        code, printed = self.run_cmd()
+        self.assertEqual(code, 0)
+        self.assertIn("the job runs no session", printed)
+
+    def test_a_malformed_place_is_a_records_problem(self):
+        self.assertEqual(check.sessions_problems({"dir": "x", "sessions": self.PLACES}), [])
+        for rec in ({"dir": "x", "sessions": []}, {"dir": "x", "sessions": [{"dir": ["a/b"],
+                                                                             "ending": ""}]},
+                    {"sessions": self.PLACES},
+                    {"dir": "x", "sessions": self.PLACES, "sessions_unknown": "y"}):
+            self.assertNotEqual(check.sessions_problems(rec), [], rec)
+
+    def test_every_record_in_the_file_has_well_formed_places(self):
+        check.records = self.records
+        for agent, rec in check.records().items():
+            self.assertEqual(check.sessions_problems(rec), [], agent)
 
 
 if __name__ == "__main__":

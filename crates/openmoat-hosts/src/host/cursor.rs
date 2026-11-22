@@ -84,6 +84,14 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         // The Cursor CLI keeps each chat in `chats/<workspace hash>/<chat id>/
         // store.db`. The editor keeps its chats in its own application data,
         // so an editor session is not seen here: fewer warnings, never more.
+        // Not verified from documentation: Cursor's CLI docs do not say where
+        // chats go. Cursor staff on its forum name `~/.cursor/chats/
+        // <workspace hash>/<chat id>/`
+        // (https://forum.cursor.com/t/cursor-agent-create-chat-and-how-to-delete-old-chats/156640)
+        // and a CLI session's `store.db`
+        // (https://forum.cursor.com/t/local-ide-agent-chats-and-the-agent-cli-still-use-separate-session-stores/165486); whether
+        // `CURSOR_CONFIG_DIR` moves them is not stated. The weekly job cannot
+        // check it: every `cursor-agent` run needs an account.
         liveness: Some(crate::Liveness {
             settings: &[],
             sessions: crate::Sessions::Known(&[crate::Activity::new(&[
