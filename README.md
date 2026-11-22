@@ -288,7 +288,7 @@ The full list: [docs/LIMITS.md](docs/LIMITS.md). Per agent:
 
 ## Status
 
-**Usable daily.** The latest release is `0.24.0`. The policy format and the commands can
+**Usable daily.** The latest release is `0.25.0`. The policy format and the commands can
 still change before 1.0; every such change has a CHANGELOG line. What comes next:
 [docs/ROADMAP.md](docs/ROADMAP.md). To upgrade, update the binary the way you installed
 it, then run `openmoat doctor` and `openmoat policy upgrade` in your own terminal
