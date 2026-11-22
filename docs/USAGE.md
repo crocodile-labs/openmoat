@@ -689,6 +689,38 @@ Event ids print in hexadecimal, the form `openmoat show` and `openmoat why` take
 (`git -C ~/notes push origin refs/moat/anchors`) or copy the file somewhere else.
 `openmoat doctor` shows when you last anchored.
 
+An anchor can be checked only on this machine. A signed checkpoint can be checked by
+anyone you give its public key, without the audit key: it states how many events the log
+held and a Merkle root over them, signed with a key of its own, `~/.moat/audit.key.ed25519`
+([ADR-110](adr/ADR-110-signed-audit-checkpoints.md)). `openmoat audit anchor` writes one
+beside each anchor, the guard writes one every 1000 events, and you can sign one now:
+
+```bash
+openmoat audit checkpoint                    # signs one; prints it, its file and the public key
+openmoat doctor                              # shows the public key and checks the newest checkpoint
+openmoat audit export > audit.jsonl          # the whole log, no filter
+# on any machine, with the public key `doctor` shows:
+openmoat audit verify audit.jsonl --checkpoint ~/.moat/checkpoints/000000001000-3f2a9c1e.txt \
+  --pubkey 'openmoat.dev/audit/3f2a…+…+…'
+```
+
+It fails when an event the checkpoint covers was edited, deleted or rewritten, or the log
+was cut below it; events after the checkpoint are covered by the chain only. The checkpoint
+is in the format transparency logs use (C2SP `tlog-checkpoint` in a `signed-note`), so it
+can be kept where others can see it: give the file and public key to a reviewer, commit
+it with your anchors, or have a [transparency-dev witness](https://github.com/transparency-dev/witness)
+cosign it, which needs a consistency proof from the size it saw last. Nothing is sent
+anywhere by OpenMoat. Like the audit key, the signing key is a file that code running as
+you outside any sandbox can read; a checkpoint already copied elsewhere still shows a
+later rewrite. `openmoat audit checkpoint --new-key` starts a new key and keeps the old
+one: each checkpoint verifies with the public key of the key that signed it.
+
+When an agent's call is held for review, its row records the exact text the agent's
+prompt showed you (`shown:` in `openmoat show`). Where the agent reports a call after it
+ran (Claude Code), a `ran-after-review` row beside it says whether what ran is the action
+you were shown (`review-ran-as-shown`) or something else (`review-ran-changed`, with what
+ran).
+
 When a reviewer asks how you control what the agent does, `openmoat audit evidence --since 30d`
 lists, per framework control, the rules that fired and sample events from the log. It is
 evidence, not a certification: [COMPLIANCE.md](COMPLIANCE.md).
@@ -1251,6 +1283,8 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat audit verify <file> [--anchor <hash>] [--require-anchor]` | check an export without the database; print its head hash; without `--anchor` the result says "not anchored", and `--require-anchor` fails it; on the machine whose audit key made the lines, also check each line's MAC |
 | `openmoat audit anchor --git <repo>` · `--file <path>` | record the log's head outside it: a commit on `refs/moat/anchors` in that repository, or a line appended to that file; nothing is sent anywhere (terminal only) |
 | `openmoat audit verify --against <repo or file>` | check the log against every anchor recorded there; fails, naming the first anchor whose event is gone or changed |
+| `openmoat audit checkpoint [--new-key] [--format json]` | sign a checkpoint of the log now (C2SP signed note: tree size, Merkle root) with the audit signing key, made when missing; `--new-key` starts a new key and keeps the old one (terminal only) |
+| `openmoat audit verify [<file>] --checkpoint <file> --pubkey <key or file>` | check a signed checkpoint without the audit key: its signature, then that the export (or, with no file, this machine's log) still holds the events it covers, unchanged |
 | `openmoat audit report <file>…` | one report over verified exports from several machines |
 | `openmoat audit deliver status` · `test [--sink <id>]` · `flush` (each `[--format json]`) | live delivery to the sinks in `~/.moat/delivery.yaml`: each sink's progress and last failure · one test record to each sink · deliver now, resuming a paused sink; exit 64 when the file is not honoured, a test is not accepted or a flush stopped ([DELIVERY.md](DELIVERY.md)) |
 | `openmoat audit evidence [--since …] [--until …] [--host …] [--samples N] [--format json]` | evidence for a window per control of OWASP Top 10 for LLM Applications 2025, SOC 2 and ISO/IEC 27001:2022 Annex A: rules that fired, decisions by verdict, redacted samples, the chain head, and the policy, lock and protections now; evidence, not a certification ([COMPLIANCE.md](COMPLIANCE.md)) |

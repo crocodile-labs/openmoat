@@ -19,8 +19,8 @@ pub use approvals::{
     ApprovalsCommand, ApprovalsStatusArgs, ApproverArgs, ConnectArgs, ListenArgs, WaitArgs,
 };
 pub use audit::{
-    AnchorArgs, AuditCommand, DeliverCommand, DeliverFlushArgs, DeliverStatusArgs, DeliverTestArgs,
-    EvidenceArgs, ExportArgs, StatsArgs, TeamReportArgs, VerifyArgs,
+    AnchorArgs, AuditCommand, CheckpointArgs, DeliverCommand, DeliverFlushArgs, DeliverStatusArgs,
+    DeliverTestArgs, EvidenceArgs, ExportArgs, StatsArgs, TeamReportArgs, VerifyArgs,
 };
 pub use mcp::{McpAcceptArgs, McpCommand, McpProxyArgs, McpUnwrapArgs, McpWrapArgs};
 pub use policy::{

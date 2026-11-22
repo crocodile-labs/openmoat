@@ -119,6 +119,13 @@ pub const REMOTE_REFUSED: &str = "remote-refused";
 /// A remote approval request nobody answered in time.
 pub const REMOTE_EXPIRED: &str = "remote-expired";
 
+/// The row beside a call held for review that ran as it was held: the
+/// action the host reports ran is the one shown (OWASP ASI09, ADR-110).
+pub const REVIEW_RAN_AS_SHOWN: &str = "review-ran-as-shown";
+/// The row beside a call held for review whose action, when it ran, was not
+/// the one shown: its input changed after the person saw it (ADR-110).
+pub const REVIEW_RAN_CHANGED: &str = "review-ran-changed";
+
 /// The row `openmoat run` links its audit session with.
 pub const RUN_SESSION: &str = "run-session";
 /// The row of a run started with `--no-isolate`.
@@ -305,6 +312,8 @@ pub const BUILTIN_RULES: &[BuiltinRule] = &[
     quiet(REMOTE_DENIED),
     quiet(REMOTE_REFUSED),
     quiet(REMOTE_EXPIRED),
+    quiet(REVIEW_RAN_AS_SHOWN),
+    quiet(REVIEW_RAN_CHANGED),
     quiet(RUN_SESSION),
     quiet(RUN_NO_ISOLATE),
     quiet(RUN_ISOLATION_UNAVAILABLE),

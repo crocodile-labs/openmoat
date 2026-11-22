@@ -109,9 +109,12 @@ const ASI: [Risk; 10] = [
         id: "ASI09",
         name: "Human-Agent Trust Exploitation",
         status: Status::Partial,
-        reason: "Reviews name the rule and reason, and commands that change protection need a \
-                 person at a terminal. Not covered: what the agent tells the person, and \
-                 auto-approve modes, which run deferred calls and on some agents approve reviews.",
+        reason: "Reviews name the rule and reason, commands that change protection need a \
+                 person at a terminal, and a held call's row records the prompt's exact text, \
+                 with a row saying whether what ran is what was shown where the agent reports \
+                 calls after they run (Claude Code). Not covered: what the agent tells the \
+                 person, and auto-approve modes, which run deferred calls and on some agents \
+                 approve reviews.",
     },
     Risk {
         id: "ASI10",

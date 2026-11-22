@@ -9,6 +9,7 @@
 // A library reports to its caller; only the `moat` binary prints.
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
+mod checkpoint;
 pub mod delivery;
 mod key;
 mod query;
@@ -17,14 +18,18 @@ mod store;
 #[cfg(any(test, feature = "test-support"))]
 pub mod testing;
 
+pub use checkpoint::{
+    Checkpoint, CheckpointCheck, CheckpointError, Frontier, ORIGIN_PREFIX, SigningKey, VerifierKey,
+    check_export,
+};
 pub use key::{ChainKey, hmac_sha256};
 pub use query::{SessionSummary, Summary};
 pub use redact::{KnownSecrets, MIN_SECRET_LEN, TOKEN_SHAPES, redact, redact_value, token_shape};
 pub use store::{
     AnchorCheck, BreakKind, Cached, ChainBreak, ChainHead, ChainReport, Event, EventId,
     ExportBreak, ExportFilter, ExportFormat, ExportReport, ExportedEvent, Exposure, FileProvenance,
-    GENESIS, MAX_INJECTED_PER_SESSION, MCP_FLOW_MAX_AGE_MS, MCP_FLOW_SESSION_ROWS,
+    GENESIS, HeldForReview, MAX_INJECTED_PER_SESSION, MCP_FLOW_MAX_AGE_MS, MCP_FLOW_SESSION_ROWS,
     MCP_TICKET_MAX_AGE_MS, NewEvent, NewInjected, NewProvenance, NewTicket, ProvenanceKind,
-    RecordedWrite, RuleSeen, SessionWrite, StartedSession, Store, StoreError, Ticket, Written,
-    verify_export, verify_export_keyed,
+    RAN_AFTER_REVIEW_TOOL, RecordedWrite, RuleSeen, SHOWN_PREFIX, SessionWrite, StartedSession,
+    Store, StoreError, Ticket, Written, verify_export, verify_export_keyed,
 };

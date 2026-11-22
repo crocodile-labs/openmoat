@@ -1583,7 +1583,15 @@ something OpenMoat claims to stop.
   hash, so a log cut below that point, or one whose events before the key were
   rewritten after the keyed ones were dropped, fails and is refused, nothing later.
   Whoever can delete the key and also set the schema back and drop the MAC column can
-  pass the log off as never upgraded, which only an anchor shows. On Windows the key
+  pass the log off as never upgraded, which only an anchor shows. Signed checkpoints
+  (ADR-110) let anyone with the public key check an export without the audit key: an
+  edit, a deletion or a rewrite among the first `size` events of a checkpoint, or a log
+  cut below it, fails `openmoat audit verify --checkpoint`. They protect only as well as
+  where the checkpoint is kept: the signing key is a file beside the audit key, under
+  the same limits (not the OS keychain, since the guard signs from hooks; ADR-110 §2),
+  so code running as the user outside any sandbox can sign checkpoints of a rewritten
+  log from then on, and can delete those kept in `~/.moat/checkpoints/`. A copy kept off
+  the machine, or handed to a witness, still shows the rewrite. On Windows the key
   file is guarded by the state directory's access list, not mode bits. Keeping
   the head hash or count elsewhere on the same machine would need a second write on
   every `guard` call and could be rewritten by the same attacker, so it is not done.

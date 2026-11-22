@@ -3,8 +3,10 @@
 //! fingerprints of its distinctive parts are kept for the session, so a later
 //! call that acts on one of them needs review (`taint::injected`).
 //!
-//! Nothing is decided and no audit row is written: the call already ran, and
-//! its `PreToolUse` row is its record. The hook then reads on through the
+//! Nothing is decided: the call already ran, and its `PreToolUse` row is its
+//! record. The one row written here is for a call that row held for review:
+//! whether what ran is the action the person was shown (`shown.rs`, ADR-110).
+//! The hook then reads on through the
 //! session's earlier calls for its taint (`taint::catch_up`), so a long
 //! session's next `PreToolUse` does not spend its time budget catching up. The lock is checked first, as for any
 //! call, and what cannot be kept fails the hook (exit 2, which the host shows
@@ -96,5 +98,12 @@ fn kept(host: Host, request: HookRequest, output: &str) -> Result<Decision> {
         &ctx.cwd,
         deadline,
     );
+    // A call a person approved at a review: what ran, beside what they were
+    // shown (OWASP ASI09, ADR-110). Last, on this handle: it masks the
+    // guard's known secrets from here on.
+    super::shown::ran(store, host, &request, Some(action), || {
+        let decoys = crate::canary::Record::load(&home)?.decoys();
+        crate::secrets::known_with(&policy.secrets, &ctx.home, &decoys.values)
+    })?;
     Ok(Decision::new(Verdict::Allow))
 }

@@ -41,6 +41,7 @@ mod record;
 mod relayed;
 mod required;
 mod session_start;
+mod shown;
 mod unattended;
 mod unseen;
 

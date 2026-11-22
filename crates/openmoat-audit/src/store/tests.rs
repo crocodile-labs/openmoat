@@ -1,4 +1,5 @@
 mod chain;
+mod checkpoint;
 mod export;
 mod injected_inputs;
 mod keyed;

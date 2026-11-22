@@ -72,9 +72,13 @@ pub fn problem(path: &Path) -> Option<String> {
 /// alone: the events it keyed would no longer verify, and no writer makes a
 /// new one over them (ADR-101).
 fn remake(path: &Path) -> &'static str {
-    if path.file_name().and_then(|n| n.to_str()) == Some(crate::audit_key::KEY_FILE) {
+    let name = path.file_name().and_then(|n| n.to_str());
+    if name == Some(crate::audit_key::KEY_FILE) {
         "move the audit log aside as evidence and run `openmoat init`, which starts a new log \
          with a new key (never remove the key alone)"
+    } else if name == Some(crate::audit_signing::KEY_FILE) {
+        "run `openmoat audit checkpoint --new-key` in your terminal, and give the new public key \
+         `openmoat doctor` shows to whoever checks your checkpoints"
     } else {
         "make a new one (remove the file; `openmoat proxy ca init` for the CA)"
     }

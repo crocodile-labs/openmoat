@@ -33,6 +33,12 @@ pub enum AuditCommand {
     /// file. Nothing is sent anywhere; push the ref yourself. Refused unless run from an
     /// interactive terminal.
     Anchor(AnchorArgs),
+    /// Sign a checkpoint of the log now: its count of chained events and the Merkle
+    /// root over them, as a C2SP signed note, with the audit signing key (made when
+    /// missing). Anyone with the public key `openmoat doctor` shows can check it
+    /// against an export with `openmoat audit verify --checkpoint`, without the
+    /// audit key. Refused unless run from an interactive terminal.
+    Checkpoint(CheckpointArgs),
     /// Live delivery of the audit log to a SIEM or log collector (OTLP/HTTP logs
     /// or a signed HTTPS webhook), configured in `delivery.yaml` in the state
     /// directory: status, a test request, or a delivery now.
@@ -142,8 +148,9 @@ pub struct StatsArgs {
 
 #[derive(Debug, Args)]
 pub struct VerifyArgs {
-    /// The file `openmoat audit export` wrote.
-    #[arg(required_unless_present = "against")]
+    /// The file `openmoat audit export` wrote. With --checkpoint and no file, this
+    /// machine's audit log is checked.
+    #[arg(required_unless_present_any = ["against", "checkpoint"])]
     pub file: Option<PathBuf>,
 
     /// A head hash recorded earlier (`openmoat audit verify` or `openmoat doctor` printed it);
@@ -162,6 +169,22 @@ pub struct VerifyArgs {
     #[arg(long, value_name = "GIT_REPO_OR_FILE", conflicts_with = "file")]
     pub against: Option<PathBuf>,
 
+    /// A checkpoint `openmoat audit checkpoint` signed: fail unless its signature
+    /// verifies with --pubkey and the export (or this machine's log) still holds
+    /// the events it covers, unchanged. Needs no audit key.
+    #[arg(
+        long,
+        value_name = "FILE",
+        conflicts_with = "against",
+        requires = "pubkey"
+    )]
+    pub checkpoint: Option<PathBuf>,
+
+    /// The public key to check --checkpoint with, as `openmoat doctor` shows it
+    /// (`openmoat.dev/audit/…+…+…`), or a file that holds it.
+    #[arg(long, value_name = "KEY_OR_FILE", requires = "checkpoint")]
+    pub pubkey: Option<String>,
+
     /// Output format.
     #[arg(long, value_enum, default_value_t = Format::Text)]
     pub format: Format,
@@ -178,6 +201,19 @@ pub struct AnchorArgs {
     /// A file you keep: the anchor is appended to it as one line.
     #[arg(long, value_name = "PATH")]
     pub file: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct CheckpointArgs {
+    /// Start a new signing key first, keeping the old one beside it as
+    /// `audit.key.ed25519.<ms>.old`: for a key that may be known. Checkpoints the
+    /// old key signed still verify with its public key.
+    #[arg(long)]
+    pub new_key: bool,
+
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = Format::Text)]
+    pub format: Format,
 }
 
 #[derive(Debug, Args)]

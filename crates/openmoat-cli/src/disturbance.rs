@@ -158,8 +158,9 @@ fn per_100(count: u64, total: u64) -> f64 {
 /// The agent whose tool call `event` records; `None` for any other row.
 fn agent_of(event: &Event) -> Option<Host> {
     let host = Host::EVERY.into_iter().find(|h| h.id() == event.host)?;
-    let bookkeeping =
-        event.tool == crate::remote::ROW_TOOL || event.rules.iter().any(|r| r == RUN_GUARD_OUTSIDE);
+    let bookkeeping = event.tool == crate::remote::ROW_TOOL
+        || event.tool == openmoat_audit::RAN_AFTER_REVIEW_TOOL
+        || event.rules.iter().any(|r| r == RUN_GUARD_OUTSIDE);
     (!bookkeeping).then_some(host)
 }
 

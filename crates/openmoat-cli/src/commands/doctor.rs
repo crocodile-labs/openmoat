@@ -26,6 +26,7 @@ mod kernel;
 mod mcp;
 mod rows;
 mod sandboxes;
+mod signing;
 mod state_files;
 mod warnings;
 
@@ -228,6 +229,7 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         );
         report.note_at(&text, Place::OpenMoat);
     }
+    signing::lines(&mut report, &home);
     if !as_json && args.bundle.is_none() {
         let agents = std::mem::take(&mut report.agents);
         human::sections(&mut report, &agents, args.verbose);

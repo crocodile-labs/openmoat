@@ -1,6 +1,6 @@
 # openmoat-audit
 
-The append-only local audit log: one SQLite database in WAL mode with a busy timeout, safe for several concurrent `guard` processes; queries and export; `redact()`; the SHA-256 hash chain over events (`store/chain.rs`, encoding in docs/ARCHITECTURE.md §7) and each event's audit-key MAC of its hash (`key.rs`, ADR-101) that `Store::verify_chain` and `openmoat doctor` check. Root rules: [AGENTS.md](../../AGENTS.md).
+The append-only local audit log: one SQLite database in WAL mode with a busy timeout, safe for several concurrent `guard` processes; queries and export; `redact()`; the SHA-256 hash chain over events (`store/chain.rs`, encoding in docs/ARCHITECTURE.md §7) and each event's audit-key MAC of its hash (`key.rs`, ADR-101) that `Store::verify_chain` and `openmoat doctor` check; signed checkpoints over the chain (`checkpoint.rs`, ADR-110): an RFC 6962 Merkle root in a C2SP signed note, Ed25519 over `ring`, checked with the public key alone. Root rules: [AGENTS.md](../../AGENTS.md).
 
 ## Rules
 - No secrets in the log (invariant 6): every stored command and reason passes `redact()` first. Never log a secret, not even in an error.

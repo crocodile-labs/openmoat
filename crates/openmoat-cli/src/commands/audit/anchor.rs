@@ -86,6 +86,20 @@ pub fn run(args: &AnchorArgs) -> Result<Code> {
             Place::Git(path) | Place::File(path) => path.display(),
         }
     )?;
+    // A signed checkpoint beside the anchor (ADR-110): it can be checked by
+    // anyone with the public key, not only on this machine. The anchor is
+    // made either way.
+    let signed = crate::audit_signing::ensure(&home)
+        .and_then(|(key, _)| crate::audit_signing::sign_now(&home, &store, &key));
+    match signed {
+        Ok(written) => writeln!(
+            out,
+            "  signed checkpoint of {} events: {}; copy it with the anchor",
+            written.checkpoint.size,
+            written.path.display()
+        )?,
+        Err(error) => writeln!(out, "  no signed checkpoint: {error:#}")?,
+    }
     out.finish()?;
     Ok(Code::Ok)
 }

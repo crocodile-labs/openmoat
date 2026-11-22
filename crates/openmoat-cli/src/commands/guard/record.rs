@@ -86,7 +86,13 @@ pub(super) fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
         Some(r) => drift::noted(&store, &r.session_id, decision, drifted)?,
         None => None,
     };
+    let told = decision;
     let decision = noted.as_ref().unwrap_or(decision);
+    // A call held for a person's review records the exact text the host's
+    // prompt shows with it (OWASP ASI09): what was shown, beside what ran
+    // (`shown.rs`).
+    let shown = request.and_then(|r| super::shown::with_shown(host, &r.event, told, decision));
+    let decision = shown.as_ref().unwrap_or(decision);
     let latency_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
     let event = NewEvent {
         host: host.id(),
@@ -119,6 +125,8 @@ pub(super) fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
         }
         Ok(())
     })?;
+    // Every thousandth event, a signed checkpoint (ADR-110); best effort.
+    crate::audit_signing::periodic(&home, &store, id);
     // A deferred call is the agent's to decide; OpenMoat stays quiet about it.
     if !matches!(decision.verdict, Verdict::Allow | Verdict::Defer) {
         eprintln!("moat: trace {id}  (openmoat show {id})");

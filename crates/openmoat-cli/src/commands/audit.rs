@@ -3,7 +3,7 @@
 use std::io::{self, Write as _};
 
 use anyhow::{Context as _, Result};
-use openmoat_audit::{AnchorCheck, ExportFilter, ExportReport};
+use openmoat_audit::{AnchorCheck, CheckpointCheck, ExportFilter, ExportReport};
 use openmoat_hosts::Host;
 
 use crate::cli::{ExportArgs, Format, VerifyArgs};
@@ -13,11 +13,13 @@ use crate::render;
 use crate::time;
 
 mod anchor;
+mod checkpoint;
 pub mod deliver;
 mod evidence;
 mod stats;
 
 pub use anchor::run as anchor;
+pub use checkpoint::run as checkpoint;
 pub use evidence::run as evidence;
 pub use stats::run as stats;
 
@@ -35,13 +37,26 @@ pub fn export(args: &ExportArgs) -> Result<Code> {
 
 /// Exit 0 when every line verifies and the anchor, if given, is among them, else 64.
 /// `--require-anchor` also fails a verify without an anchor. With `--against`,
-/// the database is checked against the recorded anchors instead.
+/// the database is checked against the recorded anchors instead. With
+/// `--checkpoint`, the export (or, without one, the database) must also hold
+/// what the signed checkpoint states (ADR-110).
 pub fn verify(args: &VerifyArgs) -> Result<Code> {
-    let file = match (&args.against, &args.file) {
-        (Some(against), _) => return anchor::verify_against(against, args.format),
-        (None, Some(file)) => file,
-        (None, None) => anyhow::bail!("give the export file, or --against <git repo or file>"),
+    let signed = match (&args.checkpoint, &args.pubkey) {
+        (Some(file), Some(key)) => Some((file.as_path(), key.as_str())),
+        _ => None,
     };
+    let file = match (&args.against, &args.file, signed) {
+        (Some(against), _, _) => return anchor::verify_against(against, args.format),
+        (None, Some(file), _) => file,
+        (None, None, Some((cp, key))) => return checkpoint::verify_local(cp, key, args.format),
+        (None, None, None) => {
+            anyhow::bail!("give the export file, --checkpoint, or --against <git repo or file>")
+        }
+    };
+    // The signature is checked before anything is read of the export.
+    let checkpoint = signed
+        .map(|(cp, key)| checkpoint::open(cp, key))
+        .transpose()?;
     let text =
         std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
     let anchor = args.anchor.as_deref().map(str::trim);
@@ -51,20 +66,42 @@ pub fn verify(args: &VerifyArgs) -> Result<Code> {
         .ok()
         .and_then(|home| crate::audit_key::read(&home).ok().flatten());
     let report = openmoat_audit::verify_export_keyed(&text, anchor, key.as_ref());
+    let checked = checkpoint
+        .as_ref()
+        .map(|cp| openmoat_audit::check_export(&text, cp));
     match args.format {
-        Format::Json => render::json(&report)?,
-        Format::Text => verify_text(&report, args.require_anchor)?,
+        Format::Json => render::json(&Verified {
+            report: &report,
+            checkpoint: checked,
+        })?,
+        Format::Text => {
+            verify_text(&report, args.require_anchor)?;
+            if let Some(check) = checked {
+                checkpoint::line(&mut io::stdout().lock(), check)?;
+            }
+        }
     }
     let anchored = match report.anchor {
         AnchorCheck::Found => true,
         AnchorCheck::NotAnchored => !args.require_anchor,
         AnchorCheck::Missing => false,
     };
-    Ok(if report.broken.is_none() && anchored {
+    let signed_holds = checked.is_none_or(CheckpointCheck::holds);
+    Ok(if report.broken.is_none() && anchored && signed_holds {
         Code::Ok
     } else {
         Code::Usage
     })
+}
+
+/// The export's report, and the checkpoint's check beside it when one was
+/// given; without one the JSON is the report alone, as before.
+#[derive(serde::Serialize)]
+struct Verified<'a> {
+    #[serde(flatten)]
+    report: &'a ExportReport,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    checkpoint: Option<CheckpointCheck>,
 }
 
 fn verify_text(report: &ExportReport, require_anchor: bool) -> Result<()> {

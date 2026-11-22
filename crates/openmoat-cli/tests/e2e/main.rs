@@ -20,6 +20,7 @@ mod binary_path;
 mod blocks;
 mod canary;
 mod check_diff;
+mod checkpoint;
 mod claude_code_plugin;
 mod cli;
 mod cline;

@@ -149,3 +149,55 @@ fn an_upgrade_is_reported_once_whichever_open_does_it() {
         Err(StoreError::KeyMissing)
     ));
 }
+
+/// Signed checkpoints (ADR-110) need nothing of an older log: no schema step,
+/// no key. A log of every older version records on after the upgrade without
+/// a signing key, still verifies by its hashes, and a checkpoint made over it
+/// covers its chained events (none before the chain existed) and holds over
+/// its export.
+#[test]
+fn a_log_of_every_older_version_takes_a_checkpoint_after_the_upgrade() {
+    use crate::{Checkpoint, CheckpointCheck, SigningKey, check_export};
+    let signer = SigningKey::from_seed(&[5; 32]).unwrap();
+    for version in VERSIONS_BEFORE_THE_KEY {
+        let (_dir, path, old) = older_log(version);
+        let store = upgraded(Store::open_existing(&path).unwrap());
+        record(&store, "long", 0);
+        let chained = if version < schema::CHAIN_VERSION {
+            1
+        } else {
+            old + 1
+        };
+        let frontier = store.frontier().unwrap();
+        assert_eq!(frontier.size(), chained, "version {version}");
+        let note = signer
+            .sign(&Checkpoint {
+                origin: signer.verifier().name().to_owned(),
+                size: frontier.size(),
+                root: frontier.root(),
+            })
+            .unwrap();
+        let checkpoint = Checkpoint::open(&note, signer.verifier()).unwrap();
+        let holds = CheckpointCheck::Holds {
+            size: chained,
+            total: chained,
+        };
+        assert_eq!(
+            store.check_checkpoint(&checkpoint).unwrap(),
+            holds,
+            "version {version}"
+        );
+        assert_eq!(
+            store.verify_chain().unwrap().broken,
+            None,
+            "version {version}"
+        );
+        let text: String = store
+            .export(&ExportFilter::default())
+            .unwrap()
+            .iter()
+            .map(|l| serde_json::to_string(l).unwrap() + "\n")
+            .collect();
+        assert_eq!(check_export(&text, &checkpoint), holds, "version {version}");
+    }
+}

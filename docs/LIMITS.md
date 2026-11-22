@@ -175,7 +175,10 @@ Each agent's gaps and the reasons are in
   this protection. The same goes for the audit log: such a program reads the audit key
   (`~/.moat/audit.key`) as easily as it writes the log, so it can rewrite both; the key
   stops only someone who can change the log but not read the key
-  ([ADR-101](adr/ADR-101-keyed-audit-chain.md)). On Windows the key file is guarded by
+  ([ADR-101](adr/ADR-101-keyed-audit-chain.md)). It reads the checkpoint signing key
+  (`~/.moat/audit.key.ed25519`) too, and can sign checkpoints of a rewritten log; a
+  checkpoint copied off the machine before that still shows the rewrite
+  ([ADR-110](adr/ADR-110-signed-audit-checkpoints.md)). On Windows the key file is guarded by
   the state directory's access list, not by mode bits, as the other keys are.
 - **The check and the call are two moments.** OpenMoat decides on what the call names;
   a file or link that changes between the check and the command running, and hard

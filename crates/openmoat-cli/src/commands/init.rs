@@ -339,6 +339,15 @@ fn state(
             kept.display()
         )?;
     }
+    // The key checkpoints are signed with (ADR-110), kept across new logs:
+    // its public key is what others check them with.
+    if !dry_run && crate::audit_signing::ensure(home)?.1 {
+        writeln!(
+            out,
+            "✔ audit signing    {} (its public key: `openmoat doctor`)",
+            crate::audit_signing::path(home).display()
+        )?;
+    }
 
     if dry_run {
         writeln!(

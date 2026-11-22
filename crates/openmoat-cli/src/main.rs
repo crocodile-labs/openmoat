@@ -7,6 +7,7 @@
 mod anchor;
 mod approvals;
 mod audit_key;
+mod audit_signing;
 mod canary;
 mod cli;
 mod commands;

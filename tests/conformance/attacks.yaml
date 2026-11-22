@@ -2632,6 +2632,26 @@
   threat: T9
   action: { shell: "openmoat audit anchor --file /tmp/anchors" }
   expect: { verdict: deny, rules: [kernel-self] }
+# a signed checkpoint is the person's statement of the log (ADR-110); a new key
+# would leave the person's verifiers holding the wrong public key
+- id: T9-agent-signs-audit-checkpoint
+  threat: T9
+  action: { shell: "openmoat audit checkpoint --new-key" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-signs-audit-checkpoint-by-path
+  threat: T9
+  action: { shell: "/usr/local/bin/moat audit checkpoint" }
+  expect: { verdict: deny, rules: [kernel-self] }
+# the checkpoint signing key (ADR-110): with it a process could sign a
+# checkpoint of a rewritten log
+- id: T9-read-audit-signing-key
+  threat: T9
+  action: { fs_read: "~/.moat/audit.key.ed25519" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-read-kept-audit-signing-key
+  threat: T9
+  action: { shell: "cat ~/.moat/audit.key.ed25519.1731600000000.old" }
+  expect: { verdict: deny, rules: [kernel-self] }
 # a provenance note is the person's record of what agents wrote (ADR-056)
 - id: T9-agent-writes-provenance-notes
   threat: T9

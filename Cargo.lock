@@ -718,6 +718,7 @@ version = "0.25.0"
 dependencies = [
  "openmoat-core",
  "regex",
+ "ring",
  "rusqlite",
  "serde",
  "serde_json",

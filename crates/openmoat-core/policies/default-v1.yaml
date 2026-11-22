@@ -605,9 +605,10 @@ deny:
       # a channel, an approver or an answer from another device is the person's (ADR-078)
       - "{moat,openmoat} approvals*"
       - "*/{moat,openmoat} approvals*"
-      # an audit anchor is the person's record of the log, kept outside it (ADR-031)
-      - "{moat,openmoat} audit anchor*"
-      - "*/{moat,openmoat} audit anchor*"
+      # an audit anchor is the person's record of the log, kept outside it (ADR-031),
+      # and a signed checkpoint the person's signed statement of it (ADR-110)
+      - "{moat,openmoat} audit {anchor,checkpoint}*"
+      - "*/{moat,openmoat} audit {anchor,checkpoint}*"
       # a provenance note is the person's record of what agents wrote (ADR-056)
       - "{moat,openmoat} provenance * --write-notes*"
       - "*/{moat,openmoat} provenance * --write-notes*"

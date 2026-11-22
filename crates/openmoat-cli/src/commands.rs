@@ -101,6 +101,7 @@ pub fn run(cli: Cli) -> Result<Code> {
             AuditCommand::Evidence(args) => audit::evidence(&args),
             AuditCommand::Stats(args) => audit::stats(&args),
             AuditCommand::Anchor(args) => audit::anchor(&args),
+            AuditCommand::Checkpoint(args) => audit::checkpoint(&args),
             AuditCommand::Deliver { command } => match command {
                 DeliverCommand::Status(args) => audit::deliver::status(&args),
                 DeliverCommand::Test(args) => audit::deliver::test(&args),

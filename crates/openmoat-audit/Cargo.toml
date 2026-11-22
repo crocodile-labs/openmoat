@@ -14,6 +14,8 @@ categories.workspace = true
 openmoat-core.workspace = true
 rusqlite.workspace = true
 regex.workspace = true
+# Ed25519 signatures on checkpoints (ADR-110); already in the build through rustls.
+ring.workspace = true
 serde.workspace = true
 # `raw_value` embeds stored JSON cells in an export byte for byte (export.rs).
 serde_json = { workspace = true, features = ["raw_value"] }
