@@ -1206,7 +1206,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 |---|---|
 | `openmoat` | see which agents are protected and today's decisions; answer drift, a policy update or the last review (terminal only) |
 | `openmoat demo [--format json]` | see what your policy (or the default one) decides for a fixed list of example agent calls; nothing runs, no hook or file is touched |
-| `openmoat init [--hosts …] [--yes] [--dry-run] [--verbose] [--mcp-proxy [--mcp-no-sandbox] \| --no-mcp-proxy]` | install policy, lock and audit log, and pin the agents' MCP server definitions; asks before hooking each agent found (`--hosts`, `--yes` skip the questions), but not about an agent whose files already have everything; at a terminal also offers to run the stdio MCP servers through OpenMoat, showing the change first ([ADR-076](adr/ADR-076-hook-only-os-sandbox-and-mcp-startup.md)); `--no-mcp-proxy` opts out; `--verbose` also prints each file written with its hook entries, the backups and the files the lock pins. Over an existing lock without a person at a terminal, new and changed MCP servers are listed and left for `openmoat mcp accept`, the recorded binary, agent directories and search path are kept, and drift is refused |
+| `openmoat init [--hosts …] [--yes] [--dry-run] [--hooks-only] [--format text\|json] [--verbose] [--mcp-proxy [--mcp-no-sandbox] \| --no-mcp-proxy]` | install policy, lock and audit log, and pin the agents' MCP server definitions; asks before hooking each agent found (`--hosts`, `--yes` skip the questions), but not about an agent whose files already have everything; at a terminal also offers to run the stdio MCP servers through OpenMoat, showing the change first ([ADR-076](adr/ADR-076-hook-only-os-sandbox-and-mcp-startup.md)); `--no-mcp-proxy` opts out; `--verbose` also prints each file written with its hook entries, the backups and the files the lock pins. Over an existing lock without a person at a terminal, new and changed MCP servers are listed and left for `openmoat mcp accept`, the recorded binary, agent directories and search path are kept, and drift is refused. `--hooks-only` and `--format json`: [below](#init-for-scripts-hooks-only-and-json) |
 | `openmoat uninstall [--hosts …] [--purge]` | remove OpenMoat's hooks and sandbox settings, restoring the backups (`--purge` also deletes `~/.moat`) |
 | `openmoat status [--format json]` · `openmoat doctor [--accept] [--verbose]` | check the installation and each agent's protection level · list drift and re-pin (`--verbose` lists every check with its paths, each agent's known gaps and where each sandbox is stricter or wider than the policy) |
 | `openmoat doctor --bundle <file> [--bundle-events N]` | write one local file for a bug report: version, system, agents, policy findings, the checks and the last N decisions without their commands or paths; nothing is sent ([Report a bug](#report-a-bug)) |
@@ -1257,10 +1257,54 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat proxy install` · `uninstall` · `status [--format json]` | run `openmoat proxy` as a user service (macOS launchd user agent, Linux systemd user unit) so it stays up; `status` reports not installed / stopped / running / drift-blocked / crashlooping. `install` and `uninstall` are person-only: run them in a terminal of your own. Not supported on Windows yet (#272) |
 | `openmoat guard --host <id> --home <dir>` | the hook entry point; agents call it, you do not. `--home` is the state directory `openmoat init` wrote into the hook; a `MOAT_HOME` that names another one makes it deny. OpenMoat's plugins also run it with `--heartbeat` as they load ([above](#did-the-agent-load-openmoats-plugin)) |
 
-The stdio MCP proxy gives its upstream a bounded shutdown window when either
-side closes. If the upstream does not finish, the proxy stops and reaps it and
-reports the timeout. On Unix the upstream has its own process group so
-descendants that remain in that group do not keep the relay open.
+When the agent closes `openmoat mcp proxy`'s input, the server has a second to close
+its output and exit; one that does not, or one whose output can no longer be passed
+on, is sent `SIGTERM` (to its process group, on Unix), killed 5 seconds later if it
+is still running, and the proxy exits 1 with the reason on standard error (ADR-107).
+On Unix the server runs in its own process group, so what it started is stopped
+with it. If you run `openmoat mcp proxy` by hand in a terminal, Ctrl-C stops the
+proxy but does not reach the server: the server sees its input close.
+
+### `init` for scripts: hooks only and JSON
+
+`openmoat init --hooks-only` writes and pins the agents' hooks and nothing else: no
+agent sandbox, no MCP step (the server definitions are neither pinned nor wrapped)
+and no opt-in question. Over a readable lock the other agents' pins, the MCP pins
+and the sandbox pins stay as they are, and the chosen agents' hook files are added;
+without a lock, or with one that cannot be read, every installed hook is pinned, as
+a plain `init` does. A server the lock does not pin yet waits for `openmoat mcp
+accept`. It cannot be combined with `--mcp-proxy`.
+
+`openmoat init --format json` prints one JSON document on standard output instead of
+the text. A script cannot answer a question it does not see, so it asks none: it
+needs `--hosts`, `--yes` or `--dry-run` and is refused (exit 64, nothing written)
+without one, and it never asks about the MCP servers or the opt-in choices.
+
+```
+openmoat init --hooks-only --hosts codex --format json
+```
+
+```json
+{
+  "version": "0.25.0", "dry_run": false, "hooks_only": true,
+  "home": "/Users/you/.moat", "binary": "/usr/local/bin/openmoat",
+  "binary_sha256": "<the hash the lock records>",
+  "lock_path": "/Users/you/.moat/policy.lock", "policy_path": "/Users/you/.moat/policy.yaml",
+  "environment_path": "/Users/you/.moat/environment.json",
+  "changed": true, "lock_entries_count": 14, "policy_update": null,
+  "hosts": [{
+    "host": "codex", "name": "Codex", "config_dir": "/Users/you/.codex",
+    "settings_path": "/Users/you/.codex/hooks.json", "extra_files": [],
+    "managed_files": ["/Users/you/.codex/hooks.json"], "events": ["PreToolUse", "…"],
+    "outcome": "installed", "changed": true, "backup_path": null, "trust_note": "…"
+  }],
+  "protection": [{ "host": "codex", "level": "hook-only", "…": "as `openmoat status --format json`" }]
+}
+```
+
+`outcome` is `installed`, `updated` or `unchanged`; `backup_path` is where your own
+hook file was moved, for an agent that runs one file. A dry run has
+`lock_entries_count: null`, no `protection`, and the hash of the binary as it is now.
 
 Exit codes: 0 allow or success, 1 the program `openmoat run` or `openmoat mcp proxy` started
 exited non-zero, or `openmoat mcp proxy` refused to start the server, or a layer `openmoat bench
