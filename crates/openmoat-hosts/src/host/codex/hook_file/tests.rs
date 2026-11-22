@@ -25,11 +25,10 @@ fn schema_has_only_codex_command_fields_and_round_trips_quoted_paths() {
         );
         let command: Handler = serde_json::from_value(entry["hooks"][0].clone()).unwrap();
         assert_eq!(command.r#type, "command");
-        assert!(
-            command
-                .command
-                .ends_with(" guard --host codex --home /Users/A+20B/.moat")
-        );
+        assert!(command.command.ends_with(&format!(
+            " guard --host codex --home /Users/A+20B/.moat{}",
+            crate::wire::guard_command::SH_TAIL
+        )));
         assert!(
             command
                 .command_windows

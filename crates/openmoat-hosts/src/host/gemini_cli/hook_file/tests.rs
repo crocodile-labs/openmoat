@@ -6,7 +6,10 @@ fn the_binary_is_quoted_for_the_shell_and_read_back() {
     let posix = command_for(&crate::GuardCommand::new("/Users/me/My Tools/it's/openmoat"), id, false);
     assert_eq!(
         posix,
-        r"'/Users/me/My Tools/it'\''s/openmoat' guard --host gemini-cli"
+        format!(
+            r"'/Users/me/My Tools/it'\''s/openmoat' guard --host gemini-cli{}",
+            crate::wire::guard_command::SH_TAIL
+        )
     );
     assert_eq!(
         binary_of(&posix, id).as_deref(),

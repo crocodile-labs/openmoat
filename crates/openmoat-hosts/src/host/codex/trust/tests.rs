@@ -35,7 +35,10 @@ fn digest(bytes: &[u8]) -> String {
     if !cfg!(windows) {
         assert_eq!(
             value["hooks"][0]["command"],
-            "'openmoat' guard --host codex"
+            format!(
+                "'openmoat' guard --host codex{}",
+                crate::wire::guard_command::SH_TAIL
+            )
         );
         value["hooks"][0]["command"] = json!("posix hook");
     }
