@@ -32,6 +32,11 @@ impl HookFile for Named {
         Some("enabled")
     }
 
+    /// Every other named hook of the file is a person's or a plugin's.
+    fn named_sections(&self) -> bool {
+        true
+    }
+
     fn entry(&self, spec: &HookSpec, id: &str, guard: &GuardCommand, _block: bool) -> Value {
         json!({
             "matcher": spec.matcher,

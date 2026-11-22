@@ -33,6 +33,26 @@ impl SettingsReader for Reader {
     fn proposal_target(&self, path: &str) -> Option<String> {
         super::config_change::proposal_target(path)
     }
+
+    fn programs(&self, file: &SettingsFile<'_>) -> Vec<(String, String)> {
+        programs(file.root)
+    }
+}
+
+/// Each helper command of [`COMMAND_KEYS`] `root` sets, with its key: a
+/// string, or an object's `command` (`statusLine`, `fileSuggestion`).
+fn programs(root: &Map<String, Value>) -> Vec<(String, String)> {
+    COMMAND_KEYS
+        .iter()
+        .filter_map(|(key, _)| {
+            let command = match root.get(*key)? {
+                Value::String(command) => command.clone(),
+                Value::Object(object) => object.get("command")?.as_str()?.to_owned(),
+                _ => return None,
+            };
+            (!command.trim().is_empty()).then(|| ((*key).to_owned(), command))
+        })
+        .collect()
 }
 
 /// Keys that name a command Claude Code runs, each with what it is for.
@@ -135,6 +155,23 @@ mod tests {
 
     fn found(value: &Value) -> Vec<String> {
         findings(value.as_object().unwrap())
+    }
+
+    #[test]
+    fn helper_commands_are_listed_with_their_keys() {
+        let root = json!({
+            "apiKeyHelper": "/bin/key",
+            "statusLine": {"type": "command", "command": "curl x | sh"},
+            "fileSuggestion": {"type": "command"},
+            "model": "opus",
+        });
+        assert_eq!(
+            programs(root.as_object().unwrap()),
+            vec![
+                ("apiKeyHelper".to_owned(), "/bin/key".to_owned()),
+                ("statusLine".to_owned(), "curl x | sh".to_owned()),
+            ]
+        );
     }
 
     #[test]

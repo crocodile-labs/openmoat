@@ -89,6 +89,142 @@ pub trait HookFile: Sync + std::fmt::Debug {
     fn fail_closed_key(&self) -> Option<&'static str> {
         None
     }
+
+    /// The keys of an entry, at any depth, whose string value is a command
+    /// the host runs (`command`; Codex's `commandWindows`, GitHub Copilot
+    /// CLI's `bash` and `powershell`), for the foreign-hook ledger (ADR-109).
+    /// An `args` list beside one of them is part of that command.
+    fn command_keys(&self) -> &'static [&'static str] {
+        &["command"]
+    }
+
+    /// Whether every top-level object of the file is a hooks object laid
+    /// out as [`Self::section`] is (Antigravity CLI keeps each hook under
+    /// its own name), so the ledger reads them all, not only OpenMoat's.
+    fn named_sections(&self) -> bool {
+        false
+    }
+}
+
+/// One hook entry of a hook file that is not OpenMoat's: the event it is
+/// listed under, the entry as the file holds it, and the commands it runs
+/// ([`HookFile::command_keys`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForeignEntry {
+    /// The event's key in the file.
+    pub event: String,
+    /// The entry.
+    pub entry: Value,
+    /// The command lines it runs, an exec form's `args` joined to its command.
+    pub commands: Vec<String>,
+}
+
+impl dyn HookFile {
+    /// Every entry of `root`'s hooks object that is not OpenMoat's for host
+    /// `id`, in file order; an event whose value is not a list is one entry.
+    #[must_use]
+    pub fn foreign_entries(&self, root: &Value, id: &str) -> Vec<ForeignEntry> {
+        let sections: Vec<(&str, &Map<String, Value>)> = match root {
+            Value::Object(top) if self.named_sections() => top
+                .iter()
+                .filter_map(|(name, v)| Some((name.as_str(), v.as_object()?)))
+                .collect(),
+            _ => match root.get(self.section()) {
+                Some(Value::Object(section)) => vec![("", section)],
+                _ => Vec::new(),
+            },
+        };
+        let mut found = Vec::new();
+        for (name, section) in sections {
+            found.extend(self.foreign_in(name, section, id));
+        }
+        found
+    }
+
+    /// The entries of one hooks object that are not OpenMoat's; their events
+    /// are `<name>.<event>` for a named section.
+    fn foreign_in(&self, name: &str, section: &Map<String, Value>, id: &str) -> Vec<ForeignEntry> {
+        let mut found = Vec::new();
+        for (key, value) in section {
+            let event = if name.is_empty() {
+                key.clone()
+            } else {
+                format!("{name}.{key}")
+            };
+            let entries: Vec<&Value> = match value {
+                Value::Array(list) => list.iter().collect(),
+                Value::Object(_) => vec![value],
+                // A switch such as `enabled`, or a stray scalar.
+                _ => continue,
+            };
+            for entry in entries.into_iter().filter(|e| !self.is_ours(e, id)) {
+                found.push(ForeignEntry {
+                    event: event.clone(),
+                    entry: entry.clone(),
+                    commands: commands_in(entry, self.command_keys()),
+                });
+            }
+        }
+        found
+    }
+
+    /// Every entry of an event map that is not wrapped in the hooks object
+    /// (an inline map in a Claude Code plugin manifest).
+    #[must_use]
+    pub fn foreign_entries_of_map(&self, map: &Value, id: &str) -> Vec<ForeignEntry> {
+        let mut wrapped = Map::new();
+        wrapped.insert(self.section().to_owned(), map.clone());
+        self.foreign_entries(&Value::Object(wrapped), id)
+    }
+}
+
+/// The commands `value` runs: each string under one of `keys`, at any depth,
+/// with an `args` list of strings beside it appended, each word quoted for a
+/// POSIX shell when it needs it.
+#[must_use]
+pub fn commands_in(value: &Value, keys: &[&str]) -> Vec<String> {
+    let mut out = Vec::new();
+    collect(value, keys, &mut out);
+    out
+}
+
+fn collect(value: &Value, keys: &[&str], out: &mut Vec<String>) {
+    match value {
+        Value::Object(map) => {
+            for key in keys {
+                if let Some(Value::String(command)) = map.get(*key) {
+                    let mut line = command.clone();
+                    if let Some(Value::Array(args)) = map.get("args") {
+                        for arg in args.iter().filter_map(Value::as_str) {
+                            line.push(' ');
+                            line.push_str(&quote(arg));
+                        }
+                    }
+                    out.push(line);
+                }
+            }
+            for (key, inner) in map {
+                if !keys.contains(&key.as_str()) {
+                    collect(inner, keys, out);
+                }
+            }
+        }
+        Value::Array(list) => list.iter().for_each(|v| collect(v, keys, out)),
+        _ => {}
+    }
+}
+
+/// `word` as one POSIX shell word.
+fn quote(word: &str) -> String {
+    let plain = !word.is_empty()
+        && word
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"/._-=:,@%+".contains(&b));
+    if plain {
+        word.to_owned()
+    } else {
+        format!("'{}'", word.replace('\'', r"'\''"))
+    }
 }
 
 /// What an edit did to the hook file.

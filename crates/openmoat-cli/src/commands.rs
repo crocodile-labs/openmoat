@@ -9,6 +9,7 @@ mod demo;
 mod doctor;
 mod edit;
 pub(crate) mod guard;
+mod hooks;
 mod init;
 mod mcp;
 mod miswired_hook;
@@ -36,8 +37,8 @@ mod why;
 use anyhow::Result;
 
 use crate::cli::{
-    ApprovalsCommand, AuditCommand, CaCommand, Cli, Command, DeliverCommand, McpCommand,
-    PolicyCommand, ProxyCommand, SandboxCommand, SecretCommand,
+    ApprovalsCommand, AuditCommand, CaCommand, Cli, Command, DeliverCommand, HooksCommand,
+    McpCommand, PolicyCommand, ProxyCommand, SandboxCommand, SecretCommand,
 };
 use crate::exit::Code;
 
@@ -132,6 +133,10 @@ pub fn run(cli: Cli) -> Result<Code> {
             McpCommand::Proxy(args) => mcp::proxy(&args),
             McpCommand::Wrap(args) => mcp::wrap(&args),
             McpCommand::Unwrap(args) => mcp::unwrap(&args),
+        },
+        Command::Hooks { command } => match command {
+            HooksCommand::List => hooks::list(),
+            HooksCommand::Accept => hooks::accept(),
         },
     }
 }

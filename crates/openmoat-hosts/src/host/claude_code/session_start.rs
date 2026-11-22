@@ -51,6 +51,20 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
     })
 }
 
+/// The tools one line of a Claude Code transcript (`projects/<project>/<session
+/// id>.jsonl`) says the model called: an assistant message's `tool_use`
+/// blocks, by name (ADR-109's faster liveness check; it decides nothing).
+pub(crate) fn tool_uses(line: &serde_json::Value) -> Vec<String> {
+    let Some(serde_json::Value::Array(content)) = line.pointer("/message/content") else {
+        return Vec::new();
+    };
+    content
+        .iter()
+        .filter(|block| block.get("type").and_then(serde_json::Value::as_str) == Some("tool_use"))
+        .filter_map(|block| block.get("name")?.as_str().map(str::to_owned))
+        .collect()
+}
+
 /// Always empty: Claude Code adds a `SessionStart` hook's stdout to the
 /// model's context, and nothing here is for the model. A failure is reported
 /// on stderr with exit 2.

@@ -18,7 +18,9 @@
 //! Gemini CLI has no fail-closed setting. A hook that times out, or is killed
 //! by a signal, or exits 1, is a warning and the call runs; a hook that exits
 //! with any other code and prints something blocks it (a missing binary exits
-//! 127 from the shell). `moat guard` itself turns a panic into a deny.
+//! 127 from the shell). `moat guard` itself turns a panic into a deny, and
+//! the hook command turns a guard that could not run or was killed into exit
+//! 2 (`hook_file.rs`, ADR-109).
 
 use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
@@ -84,18 +86,19 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         defer_is_review_on_no_prompt: false,
         ..Reviews::BASE
     },
-    on_hook_failure: "runs the call when the hook times out, is killed by a signal or exits 1 \
-         (Gemini CLI has no fail-closed setting); blocks it when the hook exits 2, or exits \
-         with any other code and prints something, as a missing `openmoat` does",
+    on_hook_failure: "runs the call when the hook times out (Gemini CLI has no fail-closed \
+         setting; the guard denies on its own after 30 s); blocks it when `openmoat` is \
+         missing or killed, which the hook command turns into exit 2 with a reason (ADR-109)",
     // Exit 1, a signal or a timeout is a warning and the call runs; another
     // non-zero exit with output blocks (`convertPlainTextToHookOutput` in
     // `hookRunner.ts`, 0.65.0; the reference page calls every other code a
     // warning, the source decides). A missing `openmoat` prints one: bash
     // exits 127 with its message, and on Windows the entry exits 2 itself
     // (`hook_file.rs`). A silent crash blocks nothing. Gemini CLI has no
-    // fail-closed setting.
+    // fail-closed setting. So the entry's command turns any status but the
+    // guard's 0 or 2, a signal included, into exit 2 (`hook_file.rs`).
     hook_failure: crate::HookFailure {
-        fails: crate::FailureOutcome::BlocksWhenMissing,
+        fails: crate::FailureOutcome::Blocks,
         times_out: crate::FailureOutcome::Runs,
         timeout_s: Some(600),
         turned_off_by: "`hooks` turned off in the user's or a project's `settings.json`, or a \
@@ -139,6 +142,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
                 crate::Activity::new(&["tmp", crate::Activity::ANY, "chats"]).ending(".jsonl"),
                 crate::Activity::new(&["tmp", crate::Activity::ANY, "chats"]).ending(".json"),
             ]),
+            started: None,
         }),
         ..InstallSpec::BASE
     }),
@@ -235,6 +239,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     weekly: weekly::WEEKLY,
     hook_off: hook_off::HOOK_OFF,
     plugin: crate::contract::Plugin::Package(&plugin::SPEC),
+    // The project's own files that hold hooks laid out as the hook file
+    // (ADR-109).
+    ledger: crate::Ledger {
+        project_hook_files: &["settings.json"],
+        ..crate::Ledger::BASE
+    },
     ..HostSpec::BASE
 };
 

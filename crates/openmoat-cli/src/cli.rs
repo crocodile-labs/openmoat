@@ -166,6 +166,25 @@ pub enum Command {
         #[command(subcommand)]
         command: McpCommand,
     },
+    /// The hook commands, plugin hooks and git programs the agents load besides
+    /// OpenMoat's hook (ADR-109): list them, and accept a new or changed one.
+    Hooks {
+        #[command(subcommand)]
+        command: HooksCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum HooksCommand {
+    /// List every hook command, plugin hook, program-running setting and git program
+    /// the set-up agents load besides OpenMoat's hook, with the shell classifier's
+    /// verdict on each new or changed one. Reads files only.
+    List,
+    /// Show each new or changed one with its verdict and ask before recording it.
+    /// Until then the calls of the agent that loads it are held for review (denied
+    /// when its command is one the policy denies). Refused unless run from an
+    /// interactive terminal, by a person, and over a drifted lock.
+    Accept,
 }
 
 #[derive(Debug, Subcommand)]

@@ -27,6 +27,46 @@ impl Store {
             .query_row(query, params![since_ms, host], |row| row.get(0))
             .optional()?)
     }
+
+    /// Each session of `host` whose start, an event of tool `start_tool`,
+    /// was recorded at or after `since_ms`: when it started and how many other
+    /// events (its calls) the session recorded, for the faster liveness check
+    /// (ADR-109). `host` and the session ids are matched as [`Store::record`]
+    /// stored them, redacted.
+    pub fn sessions_started_since(
+        &self,
+        host: &str,
+        start_tool: &str,
+        since_ms: i64,
+    ) -> Result<Vec<StartedSession>, StoreError> {
+        let host = self.secrets.redact(host);
+        let mut stmt = self.conn.prepare(
+            "SELECT session_id, MIN(CASE WHEN tool = ?3 THEN ts_ms END), \
+             SUM(CASE WHEN tool = ?3 THEN 0 ELSE 1 END) FROM events \
+             WHERE host = ?2 AND session_id IN \
+             (SELECT session_id FROM events WHERE ts_ms >= ?1 AND host = ?2 AND tool = ?3) \
+             GROUP BY session_id ORDER BY 2",
+        )?;
+        let rows = stmt.query_map(params![since_ms, host, start_tool], |row| {
+            Ok(StartedSession {
+                session_id: row.get(0)?,
+                started_ms: row.get(1)?,
+                calls: row.get(2)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+}
+
+/// A session whose start reached the guard ([`Store::sessions_started_since`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StartedSession {
+    /// The session's id, as recorded.
+    pub session_id: String,
+    /// When its first start was recorded.
+    pub started_ms: i64,
+    /// How many of its events are not starts: the calls that reached the guard.
+    pub calls: i64,
 }
 
 #[cfg(test)]
@@ -34,6 +74,7 @@ mod tests {
     use openmoat_core::{Decision, Verdict};
     use rusqlite::Connection;
 
+    use super::StartedSession;
     use crate::{NewEvent, Store};
 
     fn event<'a>(host: &'a str, decision: &'a Decision) -> NewEvent<'a> {
@@ -60,6 +101,45 @@ mod tests {
         assert_eq!(store.host_seen_since("host-a", 200).unwrap(), Some(200));
         assert_eq!(store.host_seen_since("host-a", 201).unwrap(), None);
         assert_eq!(store.host_seen_since("host-c", 0).unwrap(), None);
+    }
+
+    #[test]
+    fn a_started_session_counts_its_calls() {
+        let store = Store::open_in_memory().unwrap();
+        let decision = Decision::new(Verdict::Allow);
+        let at = |session: &'static str, tool: &'static str| NewEvent {
+            session_id: session,
+            tool,
+            ..event("host-a", &decision)
+        };
+        store.record_at(&at("one", "SessionStart"), 100).unwrap();
+        store.record_at(&at("two", "SessionStart"), 150).unwrap();
+        store.record_at(&at("two", "Bash"), 160).unwrap();
+        store.record_at(&at("old", "Bash"), 10).unwrap();
+        let started = store
+            .sessions_started_since("host-a", "SessionStart", 50)
+            .unwrap();
+        assert_eq!(
+            started,
+            vec![
+                StartedSession {
+                    session_id: "one".into(),
+                    started_ms: 100,
+                    calls: 0
+                },
+                StartedSession {
+                    session_id: "two".into(),
+                    started_ms: 150,
+                    calls: 1
+                },
+            ]
+        );
+        assert_eq!(
+            store
+                .sessions_started_since("host-b", "SessionStart", 0)
+                .unwrap(),
+            Vec::new()
+        );
     }
 
     /// A call a package decided is in the log and its chain, but is no sign

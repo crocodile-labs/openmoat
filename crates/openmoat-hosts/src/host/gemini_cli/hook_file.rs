@@ -22,7 +22,9 @@ use crate::wire::guard_command::GuardCommand;
 /// `binary guard --host <id>` for bash, or for PowerShell, and the binary it
 /// runs; Gemini CLI reads the guard's JSON from stdout whatever the exit code,
 /// so an answer the guard printed stands.
-pub(super) use crate::wire::guard_command::{sh_binary as binary_of, shell_command as command_for};
+pub(super) use crate::wire::guard_command::{
+    fail_safe_command as command_for, sh_binary as binary_of,
+};
 use crate::wire::hook_file::HookFile;
 
 /// Gemini CLI's `settings.json` entries.

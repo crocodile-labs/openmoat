@@ -24,20 +24,22 @@ pub use contract::{
     AGENT_SKILLS, Activity, Advisories, Advisory, AlsoDir, AutoStart, BuiltinMcp, Bundle, Checked,
     ConfigFormat, ConsentFile, Convention, Detect, ExtraFile, FailureOutcome, GUARD_BUDGET_S,
     HEARTBEAT_FLAG, Heartbeat, Helper, HookDir, HookFailure, HookLayout, HookOff, HookSpec,
-    HookTrust, HookVersions, HostDocs, HostSpec, InstallSpec, KeyShape, LinuxProgram,
+    HookTrust, HookVersions, HostDocs, HostSpec, InstallSpec, KeyShape, Ledger, LinuxProgram,
     LinuxSandboxNeeds, Liveness, Locate, Located, Location, Managed, ManagedHooks, ManagedShape,
     Marketplace, McpAutoStart, McpCallIds, McpCommandForm, McpFile, McpNames, McpReader, McpServer,
     McpSpec, McpSyntax, Meta, OtherHooks, Paths, Platform, Plugin, PluginDir, PluginFile,
-    PluginSpec, ProcessSpec, ProjectFile, ProjectOff, ProjectSettingsSpec, Protect, Proves,
-    ProxySessions, RelaxedCheck, RelaxedKey, Reviews, RunFacts, RunWrite, Runner, RunsLater,
-    SandboxFormat, SandboxSpec, SessionDir, SessionOverride, Sessions, SettingsFile,
-    SettingsReader, StandAside, SystemFile, SystemSettingsSpec, ToolRow, ToolToken, Unseen,
-    Version, Weekly, WeeklyInstall, WeeklyPayload, WeeklyRun, WeeklyRuns, WindowsSandboxLevel,
-    WindowsSandboxMode, WindowsSandboxReader, WorkspaceSpec, every_runs_later,
+    PluginHooks, PluginSpec, ProcessSpec, ProjectFile, ProjectOff, ProjectSettingsSpec, Protect,
+    Proves, ProxySessions, RelaxedCheck, RelaxedKey, Reviews, RunFacts, RunWrite, Runner,
+    RunsLater, SandboxFormat, SandboxSpec, SessionDir, SessionOverride, Sessions, SettingsFile,
+    SettingsReader, StandAside, Started, SystemFile, SystemSettingsSpec, ToolRow, ToolToken,
+    Unseen, Version, Weekly, WeeklyInstall, WeeklyPayload, WeeklyRun, WeeklyRuns,
+    WindowsSandboxLevel, WindowsSandboxMode, WindowsSandboxReader, WorkspaceSpec, every_runs_later,
 };
 pub use wire::guard_command::{EVENT_FLAG, GuardCommand, HOME_FLAG, decode_home, encode_home};
 pub use wire::hook_file::yaml as yaml_hooks;
-pub use wire::hook_file::{HookFile, HookFileError, HookFileState, HookOutcome};
+pub use wire::hook_file::{
+    ForeignEntry, HookFile, HookFileError, HookFileState, HookOutcome, commands_in,
+};
 pub use wire::mcp_call::{
     canonical_json, mcp_call_action, mcp_call_arguments, mcp_resource_action, mcp_tool_acts,
     mcp_tools_list_request,

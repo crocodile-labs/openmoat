@@ -1,7 +1,7 @@
 //! `moat doctor`: verify the installation and, from a terminal, accept changes.
 
 use std::io::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Result, bail};
 use openmoat_audit::{ChainReport, Store};
@@ -10,7 +10,7 @@ use openmoat_core::Policy;
 use crate::cli::{DoctorArgs, Format};
 use crate::exit::Code;
 use crate::home::Home;
-use crate::integrity::{self, HookPinGap, HookPins, Lock};
+use crate::integrity::{self, HookPins, Lock};
 use crate::protection;
 use crate::render::Deferred;
 use crate::report::{Mark, Row};
@@ -18,6 +18,7 @@ use human::Place;
 use rows::Report;
 
 mod bundle;
+mod foreign_hooks;
 mod hooks;
 mod human;
 mod json;
@@ -43,6 +44,8 @@ enum Area {
     Audit,
     Service,
     Mcp,
+    /// The foreign-hook ledger (ADR-109).
+    Hooks,
 }
 
 /// The `moat doctor` line for the proxy user service (`moat proxy install`,
@@ -91,8 +94,9 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     state_files::rows(&mut report, &home);
     let hook_files = hooks::hooks(&mut report, &home, &binary)?;
     if let Some(lock) = &lock {
-        hook_pins(&mut report, lock, &home, &hook_files);
+        hooks::pins(&mut report, lock, &home, &hook_files);
         mcp::lines(&mut report, &home, lock, &binary);
+        foreign_hooks::lines(&mut report, &home, lock, &binary);
     }
     if let Some(policy) = &policy {
         sandboxes::sandboxes(
@@ -405,31 +409,6 @@ fn environment(report: &mut Report, home: &Home) {
     }
 }
 
-/// Installed hook files the lock does not pin, and pinned ones this shell
-/// does not use.
-fn hook_pins(report: &mut Report, lock: &Lock, home: &Home, hook_files: &[PathBuf]) {
-    let gap = HookPinGap::new(lock, home, hook_files);
-    for path in gap.unpinned {
-        report.line(
-            Area::Hook,
-            false,
-            format!(
-                "hook file        {} is not pinned by the lock; run `openmoat init` to pin it",
-                path.display()
-            ),
-        );
-    }
-    for path in gap.elsewhere {
-        let (path, moved) = (path.display(), HookPinGap::moved_by());
-        report.note_at(
-            &format!(
-                "hook file        {path} is pinned but not this shell's ({moved}); re-pinning keeps it"
-            ),
-            Place::OpenMoat,
-        );
-    }
-}
-
 /// `--accept`: re-pin from a terminal when the policy lints and the lock is
 /// not intact, clearing the problems a re-pin fixes.
 fn accept(
@@ -456,6 +435,7 @@ fn accept(
         // a person has seen each change.
         if home.lock_path().is_file() {
             mcp::accept(report, home, binary)?;
+            foreign_hooks::accept(report, home, binary)?;
         }
         writeln!(report.out, "nothing else to accept: lock is intact")?;
         return Ok(());
@@ -469,7 +449,8 @@ fn accept(
     report
         .problems
         .retain(|(area, _)| !matches!(area, Area::Lock | Area::Binary));
-    mcp::accept(report, home, binary)
+    mcp::accept(report, home, binary)?;
+    foreign_hooks::accept(report, home, binary)
 }
 
 /// The closing line, the output and the exit code.

@@ -142,6 +142,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             sessions: crate::Sessions::Unknown(
                 "its documentation does not say where `agy` writes a conversation",
             ),
+            started: None,
         }),
         ..InstallSpec::BASE
     }),
@@ -195,6 +196,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     // readings; exit 2 blocks only under the observed one. A deny the guard
     // could not write still exits 2, the one signal left (`HOST.md`).
     deny_exit: 0,
+    // The project's own files that hold hooks laid out as the hook file
+    // (ADR-109).
+    ledger: crate::Ledger {
+        project_hook_files: &["hooks.json"],
+        ..crate::Ledger::BASE
+    },
     ..HostSpec::BASE
 };
 

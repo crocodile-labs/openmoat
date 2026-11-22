@@ -144,6 +144,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
                 "Hermes keeps every session in one database, `state.db`, which gateway, cron \
                  and ACP sessions write too, and those never run the shell hook",
             ),
+            started: None,
         }),
         ..InstallSpec::BASE
     }),

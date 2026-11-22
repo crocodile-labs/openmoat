@@ -20,6 +20,7 @@ use crate::sandbox::Plan;
 use crate::{protection, render, time};
 
 mod agents;
+mod foreign_hooks;
 
 /// How many of the newest audit events `status` lists.
 const RECENT_EVENTS: usize = 5;
@@ -63,6 +64,7 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     }
     healthy &= lock(&mut shown, &home, &binary)?;
     healthy &= mcp_line(&mut shown, &home, &binary);
+    healthy &= foreign_hooks::line(&mut shown, &home, &binary);
     // Warnings that leave `healthy` alone: servers that start outside what
     // OpenMoat checks are the person's choice to wrap (ADR-049).
     for line in mcp_outside(&home, &binary) {
@@ -178,6 +180,7 @@ fn report(home: &Home, binary: &Path, update: Option<&String>) -> Result<serde_j
         "lock_drift": drift,
         "mcp_changes": mcp_changes(home, binary).unwrap_or_default(),
         "mcp_outside": mcp_outside(home, binary),
+        "foreign_hooks": foreign_hooks::json(home, binary),
         "project_settings": crate::project_settings::warnings_here(home)
             .into_iter()
             .map(|warning| warning.text)

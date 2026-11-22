@@ -136,6 +136,11 @@ pub(crate) static SPEC: HostSpec = HostSpec {
                 crate::Activity::ANY,
             ])
             .ending(".jsonl")]),
+            started: Some(crate::Started {
+                tool: session_start::EVENT,
+                matcher: TOOL_MATCHER,
+                tool_uses: session_start::tool_uses,
+            }),
         }),
         ..InstallSpec::BASE
     }),
@@ -304,6 +309,31 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     weekly: weekly::WEEKLY,
     hook_off: hook_off::HOOK_OFF,
     plugin: crate::contract::Plugin::Package(&plugin::SPEC),
+    ledger: crate::Ledger {
+        // A project's shared and local settings hold hooks as the user file
+        // does (hooks documentation, "Configuration").
+        project_hook_files: &["settings.json", "settings.local.json"],
+        // An installed marketplace plugin's copy is
+        // `plugins/cache/<marketplace>/<plugin>/<version>/`, a plugin saved
+        // under `skills/` loads in place; each brings `hooks/hooks.json` and
+        // whatever its manifest's `hooks` names or holds (plugins reference,
+        // "Standard layout", "hooks"; plugin loading, "Find plugins on disk").
+        plugin_hooks: &[
+            crate::PluginHooks::new(
+                &[
+                    "plugins",
+                    "cache",
+                    crate::Activity::ANY,
+                    crate::Activity::ANY,
+                    crate::Activity::ANY,
+                ],
+                &["hooks", "hooks.json"],
+            )
+            .manifest(&[".claude-plugin", "plugin.json"], "hooks"),
+            crate::PluginHooks::new(&["skills", crate::Activity::ANY], &["hooks", "hooks.json"])
+                .manifest(&[".claude-plugin", "plugin.json"], "hooks"),
+        ],
+    },
     ..HostSpec::BASE
 };
 

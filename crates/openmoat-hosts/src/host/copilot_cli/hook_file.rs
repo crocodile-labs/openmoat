@@ -44,6 +44,10 @@ impl HookFile for Copilot {
     fn has_version(&self) -> bool {
         true
     }
+
+    fn command_keys(&self) -> &'static [&'static str] {
+        &["bash", "powershell", "command"]
+    }
 }
 
 fn bash(entry: &Value) -> Option<&str> {

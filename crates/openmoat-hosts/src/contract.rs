@@ -18,6 +18,7 @@ mod hook_failure;
 mod hook_file;
 mod hook_off;
 mod hook_trust;
+mod ledger;
 mod linux_sandbox;
 mod location;
 mod mcp;
@@ -38,13 +39,14 @@ pub use bundle::Bundle;
 pub use consent::ConsentFile;
 pub use convention::{AGENT_SKILLS, Convention, every_runs_later};
 pub use docs::{HostDocs, ToolRow};
-pub use heartbeat::{Activity, HEARTBEAT_FLAG, Heartbeat, Liveness, Sessions};
+pub use heartbeat::{Activity, HEARTBEAT_FLAG, Heartbeat, Liveness, Sessions, Started};
 pub use hook_failure::{FailureOutcome, HookFailure};
 pub use hook_file::HookLayout;
 pub use hook_off::{
     HookOff, Managed, ManagedHooks, ManagedShape, ProjectFile, ProjectOff, SessionOverride,
 };
 pub use hook_trust::HookTrust;
+pub use ledger::{Ledger, PluginHooks};
 pub use linux_sandbox::{LinuxProgram, LinuxSandboxNeeds};
 pub use location::{Locate, Located, Location, XdgDir};
 pub use mcp::{
@@ -248,6 +250,10 @@ pub struct HostSpec {
     /// exit as a hook error it may ignore. A deny the guard could not write
     /// still exits 2.
     pub deny_exit: i32,
+    /// Where the host loads hook commands and plugins besides OpenMoat's,
+    /// beyond what the other facts name, for the foreign-hook ledger
+    /// (ADR-109).
+    pub ledger: Ledger,
 }
 
 /// Where a host finds hook files for OpenMoat's event besides OpenMoat's own

@@ -3897,6 +3897,20 @@
   threat: T9
   action: { shell: "/opt/homebrew/bin/moat secret add gh" }
   expect: { verdict: deny, rules: [kernel-self] }
+# `openmoat hooks accept` records a new or changed hook command a plugin update or
+# a settings edit added, which lets the agent's calls run again (ADR-109)
+- id: T9-agent-accepts-its-own-foreign-hook
+  threat: T9
+  action: { shell: "openmoat hooks accept" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-accepts-foreign-hook-by-path
+  threat: T9
+  action: { shell: "/usr/local/bin/openmoat hooks accept" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-script-wraps-openmoat-hooks-accept
+  threat: T9
+  action: { shell: "script -q /dev/null openmoat hooks accept" }
+  expect: { verdict: deny, rules: [kernel-self] }
 # `moat mcp accept` lets a changed or new MCP server run its tools; `wrap` and
 # `unwrap` rewrite what the agent host starts (ADR-026)
 - id: T9-agent-accepts-a-changed-mcp-server

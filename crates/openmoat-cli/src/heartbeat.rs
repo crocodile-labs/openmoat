@@ -112,7 +112,7 @@ pub struct Since {
 
 /// Whether the host has loaded OpenMoat's plugin, or run its hook, since it
 /// last changed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "state", rename_all = "kebab-case")]
 pub enum Loaded {
     /// It reported, or sent a call the guard decided, at `at_ms`.
@@ -127,6 +127,16 @@ pub enum Loaded {
         since: Since,
         active_ms: i64,
         sessions: usize,
+    },
+    /// A hook host's session started at `started_ms` (its start reached the
+    /// guard), called `tool`, which OpenMoat's hook entry covers, and no call
+    /// of it reached the guard by its file's last write at `last_ms` and the
+    /// guard's budget after (ADR-109): the tool-call hook did not run.
+    Unchecked {
+        since: Since,
+        started_ms: i64,
+        tool: String,
+        last_ms: i64,
     },
 }
 

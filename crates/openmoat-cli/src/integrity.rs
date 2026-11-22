@@ -83,6 +83,12 @@ pub struct Lock {
     /// lock from before MCP pinning; their drift holds back only that server.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_servers: Option<crate::mcp::Pins>,
+    /// The hook commands, plugin hooks and program-running settings a person
+    /// accepted besides OpenMoat's own hook (`hook_ledger.rs`, ADR-109).
+    /// `None` in a lock from before the ledger, which holds nothing; a new or
+    /// changed entry holds only the calls of the agent that loads it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hook_ledger: Option<crate::hook_ledger::Pins>,
     /// Pinned hook file → id of the host that owns it, for each file the lock
     /// pins in that host's pinned form rather than by its bytes (OpenClaw's
     /// `openclaw.json` without `mcp.servers`; `forms.rs`). `None` in a lock
@@ -148,6 +154,7 @@ pub fn repin_with(
     let lock_path = home.lock_path();
     let had_lock = lock_path.exists();
     let mut mcp_servers = None;
+    let mut hook_ledger = None;
     let mut owners = Vec::new();
     // Whether the pins of a readable lock are carried over.
     let mut kept_old = false;
@@ -173,6 +180,8 @@ pub fn repin_with(
                 owners = old.owners_with(&here);
                 // Only `moat mcp accept` and `moat doctor --accept` change these.
                 mcp_servers = old.mcp_servers;
+                // Only `hooks accept`, `doctor --accept` and `init` change these.
+                hook_ledger = old.hook_ledger;
                 paths.extend(old.entries.into_keys().map(PathBuf::from));
                 profiles.extend(old.codex_profiles.into_keys().map(PathBuf::from));
             }
@@ -218,6 +227,7 @@ pub fn repin_with(
             .or_insert_with(|| kept::ABSENT.to_owned());
     }
     lock.mcp_servers = mcp_servers;
+    lock.hook_ledger = hook_ledger;
     // What the guard compares its own file with (ADR-071); a person's re-pin
     // is what records it.
     (lock.binary_sha256, lock.binary_version) = binary::record(home, binary).unzip();
@@ -513,6 +523,7 @@ impl Lock {
             permission_keys,
             relaxed_rest,
             mcp_servers: None,
+            hook_ledger: None,
             pinned_forms: Some(pinned_forms),
             hook_owners: Some(hook_owners),
         })

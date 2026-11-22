@@ -52,6 +52,57 @@ pub struct Liveness {
     pub settings: &'static [&'static str],
     /// Where the host writes its sessions.
     pub sessions: Sessions,
+    /// How a session start reaches the guard, for a host whose session start
+    /// runs a hook OpenMoat installs (Claude Code's `SessionStart`): a session
+    /// that started, called a tool OpenMoat's tool hook names, and sent no
+    /// call is warned about at once rather than after ten minutes. `None`
+    /// for most hosts.
+    pub started: Option<Started>,
+}
+
+/// What tells that a session that started used a tool whose call never
+/// reached the guard ([`Liveness::started`]). Only `openmoat status`,
+/// `doctor` and `watch` read it; it never decides a call.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct Started {
+    /// The tool name the guard records a session start with.
+    pub tool: &'static str,
+    /// The matcher of OpenMoat's tool-call hook entry: a tool it names is one
+    /// whose call reaches the guard.
+    pub matcher: &'static str,
+    /// The names of the tools one line of a session's file says were
+    /// called. A session's file is `<session id><ending>` in one of the
+    /// directories [`Sessions::Known`] names.
+    pub tool_uses: fn(&serde_json::Value) -> Vec<String>,
+}
+
+impl Started {
+    /// Whether [`Self::matcher`] names `tool`: an alternative equal to it, or
+    /// one ending in `.*` whose start begins it. `None` when the matcher is
+    /// another regular expression, which this does not read.
+    #[must_use]
+    pub fn names(&self, tool: &str) -> Option<bool> {
+        let mut named = false;
+        for alternative in self.matcher.split('|') {
+            let (prefix, any) = match alternative.strip_suffix(".*") {
+                Some(prefix) => (prefix, true),
+                None => (alternative, false),
+            };
+            if !prefix
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            {
+                return None;
+            }
+            named |= if any {
+                tool.starts_with(prefix)
+            } else {
+                tool == prefix
+            };
+        }
+        Some(named)
+    }
 }
 
 /// Where a host writes its sessions ([`Liveness::sessions`]).

@@ -36,12 +36,15 @@ mod differential;
 mod edit;
 mod escapes;
 mod export;
+#[cfg(unix)]
+mod fail_safe;
 mod gemini_cli;
 mod goose;
 mod guard;
 mod heartbeat;
 mod hermes;
 mod home_screen;
+mod hook_ledger;
 mod hook_liveness;
 mod hook_off;
 mod hook_only;

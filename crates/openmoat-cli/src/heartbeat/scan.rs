@@ -82,6 +82,54 @@ pub(super) fn sessions(
     found
 }
 
+/// The file of session `id` (`<id><ending>`) in the directories `activity`
+/// names under `dir`, and its start and last write; `None` when there is
+/// none, the id cannot be a file name, or the system keeps no start time.
+pub(super) fn session_file(
+    dir: &Path,
+    activity: &[Activity],
+    id: &str,
+) -> Option<(PathBuf, i64, i64)> {
+    let plain = !id.is_empty()
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    if !plain {
+        return None;
+    }
+    activity.iter().find_map(|a| {
+        expand(dir, a.dir).into_iter().find_map(|folder| {
+            let path = folder.join(format!("{id}{}", a.ending));
+            let meta = fs::symlink_metadata(&path)
+                .ok()
+                .filter(fs::Metadata::is_file)?;
+            Some((path, created_ms(&meta)?, modified_ms(&meta)?))
+        })
+    })
+}
+
+/// How much of a session's file [`first_tool`] reads.
+const MAX_SESSION_BYTES: u64 = 4 * 1024 * 1024;
+
+/// The first tool `uses` finds in a line of the file at `path` that `named`
+/// says reaches the guard; `None` when there is none in its first
+/// [`MAX_SESSION_BYTES`].
+pub(super) fn first_tool(
+    path: &Path,
+    uses: fn(&serde_json::Value) -> Vec<String>,
+    named: &dyn Fn(&str) -> bool,
+) -> Option<String> {
+    use std::io::{BufRead as _, BufReader, Read as _};
+    let file = fs::File::open(path).ok()?;
+    let reader = BufReader::new(file.take(MAX_SESSION_BYTES));
+    reader
+        .lines()
+        .map_while(Result::ok)
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(&line).ok())
+        .flat_map(|line| uses(&line))
+        .find(|tool| named(tool))
+}
+
 /// The directories `parts` names under `dir`, each [`Activity::ANY`] every
 /// directory at its level (at most [`MAX_DIRS`]).
 fn expand(dir: &Path, parts: &[&str]) -> Vec<PathBuf> {

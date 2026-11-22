@@ -66,12 +66,15 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         defer_is_review_on_no_prompt: false,
         ..Reviews::BASE
     },
-    on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
-         other than 2 (or 2 with nothing on stderr), or times out (default 600 s)",
+    on_hook_failure: "blocks the call when `openmoat` is missing, cannot start or is killed \
+         (the hook command exits 2 with a reason itself then); runs it when the hook times out \
+         (600 s as `openmoat init` writes it; the guard denies on its own after 30 s)",
     // The hooks page does not say what a failed local hook does; the hook
     // runner's source does: only exit 2 with stderr, or a decision, blocks.
+    // So the entry's command turns any status but the guard's 0 or 2 into
+    // exit 2 with a reason (`hook_file.rs`, ADR-109).
     hook_failure: crate::HookFailure {
-        fails: crate::FailureOutcome::Runs,
+        fails: crate::FailureOutcome::Blocks,
         times_out: crate::FailureOutcome::Runs,
         timeout_s: Some(600),
         turned_off_by: "`[features] hooks = false` in `config.toml` (or `requirements.toml`), \
@@ -87,8 +90,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          command that starts a shell, REPL, editor or login without its own commands needs \
          review; reviews become denies; Codex skips a \
          new or changed hook until the person trusts it in `/hooks`, and `[features] hooks = \
-         false` turns hooks off (`openmoat status` and `doctor` report that); calls run \
-         unchecked if the hook binary is missing or crashes",
+         false` turns hooks off (`openmoat status` and `doctor` report that); a call runs \
+         unchecked if the hook times out",
     install: Some(InstallSpec {
         dir_variable: "CODEX_HOME",
         dir_name: ".codex",
@@ -117,6 +120,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
                 crate::Activity::ANY,
             ])
             .ending(".jsonl")]),
+            started: None,
         }),
         ..InstallSpec::BASE
     }),
@@ -241,6 +245,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         why: "Codex's Plugins Directory does not take plugins that carry hooks \
               (https://learn.chatgpt.com/docs/plugins); `openmoat init` writes the hook, which \
               you then trust in Codex's `/hooks`",
+    },
+    // The project's own files that hold hooks laid out as the hook file
+    // (ADR-109).
+    ledger: crate::Ledger {
+        project_hook_files: &["hooks.json"],
+        ..crate::Ledger::BASE
     },
     ..HostSpec::BASE
 };

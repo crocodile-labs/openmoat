@@ -143,6 +143,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
                 crate::Activity::ANY,
             ])
             .ending(".messages.json")]),
+            started: None,
         }),
         ..InstallSpec::BASE
     }),

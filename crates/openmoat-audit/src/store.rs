@@ -42,6 +42,7 @@ pub use provenance::{Exposure, FileProvenance, NewProvenance, ProvenanceKind};
 pub use rules::RuleSeen;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use schema::create_at;
+pub use seen::StartedSession;
 pub use session_cache::Cached;
 pub use session_writes::{RecordedWrite, SessionWrite, Written};
 

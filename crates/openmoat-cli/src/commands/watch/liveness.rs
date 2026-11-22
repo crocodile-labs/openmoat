@@ -45,7 +45,7 @@ impl Liveness {
             if only.is_some_and(|id| id != host.id()) {
                 continue;
             }
-            let missing = matches!(loaded, Loaded::Missing { .. });
+            let missing = matches!(loaded, Loaded::Missing { .. } | Loaded::Unchecked { .. });
             let before = self.missing.insert(host.id(), missing);
             // The first look reports only a missing one; a fine agent is what
             // the header already says.

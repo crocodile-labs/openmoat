@@ -25,6 +25,6 @@ pub use store::{
     ExportBreak, ExportFilter, ExportFormat, ExportReport, ExportedEvent, Exposure, FileProvenance,
     GENESIS, MAX_INJECTED_PER_SESSION, MCP_FLOW_MAX_AGE_MS, MCP_FLOW_SESSION_ROWS,
     MCP_TICKET_MAX_AGE_MS, NewEvent, NewInjected, NewProvenance, NewTicket, ProvenanceKind,
-    RecordedWrite, RuleSeen, SessionWrite, Store, StoreError, Ticket, Written, verify_export,
-    verify_export_keyed,
+    RecordedWrite, RuleSeen, SessionWrite, StartedSession, Store, StoreError, Ticket, Written,
+    verify_export, verify_export_keyed,
 };

@@ -94,7 +94,10 @@ search path is a version with a published advisory (`advisories.rs`).
 
 Gemini CLI has no fail-closed setting. It runs the call when the hook times out, is killed
 by a signal or exits 1; it blocks it when the hook exits 2, or exits with any other code
-and prints something, as a missing `openmoat` does.
+and prints something, as a missing `openmoat` does. OpenMoat's hook command ends in a tail that turns any exit but the guard's own 0 or 2 (a
+missing `openmoat` exits 127, a killed one 128 and the signal) into exit 2 with a reason
+on stderr (ADR-109), so those block the call; a timeout still runs it, and the guard
+denies on its own after 30 s.
 
 ## Known gaps
 

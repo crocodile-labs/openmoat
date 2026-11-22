@@ -92,6 +92,9 @@ pub const PUSH_UNCHECKED: &str = "push-unchecked";
 /// A tool call denied because its MCP server's definition is not the one a
 /// person accepted.
 pub const MCP_SERVER_CHANGED: &str = "mcp-server-changed";
+/// A call of an agent that loads a hook command, plugin or program-running
+/// setting no person accepted since it was added or changed (ADR-109).
+pub const FOREIGN_HOOK: &str = "foreign-hook";
 /// A call `openmoat mcp proxy` passed.
 pub const MCP_PROXY: &str = "mcp-proxy";
 /// A tool `openmoat mcp proxy` holds until a person accepts it.
@@ -291,6 +294,7 @@ pub const BUILTIN_RULES: &[BuiltinRule] = &[
     worded(PUSH_RUNS_LATER, &words::PUSH_RUNS_LATER),
     worded(PUSH_UNCHECKED, &words::PUSH_UNCHECKED),
     worded(MCP_SERVER_CHANGED, &words::MCP_SERVER_CHANGED),
+    worded(FOREIGN_HOOK, &words::FOREIGN_HOOK),
     quiet(MCP_PROXY),
     quiet(MCP_TOOL_HELD),
     quiet(MCP_UNATTRIBUTED),

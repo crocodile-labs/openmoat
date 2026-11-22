@@ -41,9 +41,9 @@ pub(super) fn default_place(status: Status, area: Option<Area>, name: &str) -> P
         Status::Warning | Status::Ok | Status::Note if name == "openmoat run" => Place::OpenMoat,
         Status::Problem | Status::Warning => Place::Attention,
         Status::Ok | Status::Note => match area {
-            Some(Area::Policy | Area::Lock | Area::Audit | Area::Mcp | Area::Service) => {
-                Place::OpenMoat
-            }
+            Some(
+                Area::Policy | Area::Lock | Area::Audit | Area::Mcp | Area::Hooks | Area::Service,
+            ) => Place::OpenMoat,
             _ => Place::Details,
         },
     }

@@ -160,6 +160,34 @@ pub fn decode_home(word: &str) -> Option<String> {
 /// whatever the exit code.
 pub(crate) const POWERSHELL_TAIL: &str = "; if (-not $?) { exit 2 }";
 
+/// What follows the guard in a POSIX shell hook command of a host that runs
+/// the call when its hook exits with anything but a block (ADR-109): the
+/// guard itself exits 0 or 2 on every path it can catch (invariant 4), so any
+/// other status is a guard that could not run (`127`, `openmoat` missing) or
+/// was killed (`128` and the signal). The tail turns that into exit 2 with a
+/// reason on stderr, the block every such host reads (Codex, Gemini CLI,
+/// Qwen Code, Crush). The guard's own answer on stdout stands as it is.
+pub(crate) const SH_TAIL: &str = "; s=$?; [ $s -eq 0 ] || [ $s -eq 2 ] || { echo 'openmoat: \
+     the hook failed (openmoat missing or killed), so the call is blocked; run openmoat \
+     doctor' >&2; s=2; }; exit $s";
+
+/// [`shell_command`] that blocks when the guard cannot answer: followed by
+/// [`SH_TAIL`] for `sh`; PowerShell's already ends in [`POWERSHELL_TAIL`].
+pub(crate) fn fail_safe_command(guard: &GuardCommand, id: &str, powershell: bool) -> String {
+    let command = shell_command(guard, id, powershell);
+    if powershell {
+        command
+    } else {
+        command + SH_TAIL
+    }
+}
+
+/// `command` without a trailing [`SH_TAIL`].
+pub(crate) fn without_sh_tail(command: &str) -> &str {
+    let command = command.trim();
+    command.strip_suffix(SH_TAIL).unwrap_or(command)
+}
+
 /// `'binary' guard --host <id>`, the binary quoted for a POSIX `sh -c`: the
 /// command of a host that runs a hook's `command` string with `sh` or `bash`
 /// (goose, Qwen Code, Crush's embedded POSIX shell).
@@ -183,7 +211,7 @@ pub(crate) fn shell_command(guard: &GuardCommand, id: &str, powershell: bool) ->
 /// The binary a command written by [`shell_command`] runs, for `sh` or for
 /// PowerShell, or `None` when the command is not OpenMoat's guard for `id`.
 pub(crate) fn sh_binary(command: &str, id: &str) -> Option<String> {
-    let command = command.trim();
+    let command = without_sh_tail(command);
     let command = command.strip_suffix(POWERSHELL_TAIL).unwrap_or(command);
     let (quoted, _) = split_guard(command, id)?;
     let (quoted, powershell) = match quoted.strip_prefix("& ") {
@@ -253,6 +281,23 @@ pub(crate) fn is_guard_list(args: &[&str], id: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The fail-safe tail is part of OpenMoat's command: the binary is still
+    /// read from it, and a command with anything else after the guard is not
+    /// OpenMoat's.
+    #[test]
+    fn a_fail_safe_command_is_still_recognised() {
+        let guard = GuardCommand::new("/opt/it's/openmoat").with_home("/h/.moat");
+        let command = fail_safe_command(&guard, "qwen-code", false);
+        assert!(command.ends_with(SH_TAIL), "{command}");
+        assert_eq!(
+            sh_binary(&command, "qwen-code").as_deref(),
+            Some("/opt/it's/openmoat")
+        );
+        assert_eq!(sh_binary(&format!("{command}; curl x"), "qwen-code"), None);
+        let powershell = fail_safe_command(&guard, "qwen-code", true);
+        assert!(powershell.ends_with(POWERSHELL_TAIL), "{powershell}");
+    }
 
     #[test]
     fn plain_paths_are_their_own_word() {

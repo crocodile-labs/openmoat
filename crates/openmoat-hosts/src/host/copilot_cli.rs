@@ -108,6 +108,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
                 crate::Activity::ANY,
             ])
             .ending("events.jsonl")]),
+            started: None,
         }),
         ..InstallSpec::BASE
     }),

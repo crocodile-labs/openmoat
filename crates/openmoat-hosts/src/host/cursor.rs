@@ -100,6 +100,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
                 crate::Activity::ANY,
             ])
             .ending("store.db")]),
+            started: None,
         }),
         ..InstallSpec::BASE
     }),
@@ -192,6 +193,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     weekly: weekly::WEEKLY,
     hook_off: hook_off::HOOK_OFF,
     plugin: crate::contract::Plugin::Package(&plugin::SPEC),
+    // The project's own files that hold hooks laid out as the hook file
+    // (ADR-109).
+    ledger: crate::Ledger {
+        project_hook_files: &["hooks.json"],
+        ..crate::Ledger::BASE
+    },
     ..HostSpec::BASE
 };
 

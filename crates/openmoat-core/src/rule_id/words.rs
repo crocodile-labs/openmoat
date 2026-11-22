@@ -65,6 +65,16 @@ pub(super) const MCP_SERVER_CHANGED: Words = Words {
     )),
 };
 
+pub(super) const FOREIGN_HOOK: Words = Words {
+    title: "a call of an agent that loads a hook or plugin command you have not accepted",
+    why: "a hook a plugin update or a settings change added runs a command with your \
+          permissions, outside what OpenMoat checks",
+    next: Some((
+        Verdict::Deny,
+        "if you added that hook, accept it in your terminal with `openmoat hooks accept`",
+    )),
+};
+
 pub(super) const KERNEL_INTEGRITY: Words = Words {
     title: "any call while OpenMoat's own files differ from their pins",
     why: "a changed policy, hook or setting may not be the one you set up, so nothing runs",

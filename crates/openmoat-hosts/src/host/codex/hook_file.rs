@@ -3,7 +3,7 @@
 
 use serde_json::{Value, json};
 
-use crate::wire::guard_command::split_guard;
+use crate::wire::guard_command::{SH_TAIL, split_guard, without_sh_tail};
 use crate::{GuardCommand, HookFile, HookSpec};
 
 #[derive(Debug)]
@@ -14,11 +14,15 @@ impl HookFile for Codex {
         true
     }
 
+    fn command_keys(&self) -> &'static [&'static str] {
+        &["command", "commandWindows"]
+    }
+
     fn entry(&self, spec: &HookSpec, id: &str, guard: &GuardCommand, _block: bool) -> Value {
         let binary = guard.binary.replace('\'', r"'\''");
         json!({"matcher": spec.matcher, "hooks": [{
             "type": "command",
-            "command": format!("'{binary}'{}", guard.shell_args(id)),
+            "command": format!("'{binary}'{}{SH_TAIL}", guard.shell_args(id)),
             "commandWindows": windows_command(guard, id),
             "timeout": spec.timeout,
             "statusMessage": "OpenMoat",
@@ -36,7 +40,7 @@ impl HookFile for Codex {
         if crate::wire::hook_file::nested::Nested.is_ours(entry, id) {
             return Some(command.to_owned());
         }
-        let (quoted, _) = split_guard(command, id)?;
+        let (quoted, _) = split_guard(without_sh_tail(command), id)?;
         let inner = quoted.strip_prefix('\'')?.strip_suffix('\'')?;
         Some(inner.replace(r"'\''", "'"))
     }
@@ -45,9 +49,14 @@ impl HookFile for Codex {
 fn windows_command(guard: &GuardCommand, id: &str) -> String {
     // Codex defaults to cmd.exe /C. An encoded PowerShell command keeps cmd's
     // percent expansion and metacharacters out of the path, and also works
-    // with a PowerShell command shell. Propagate guard's blocking exit code.
+    // with a PowerShell command shell. Propagate guard's answer (0 or 2);
+    // any other status is a guard that could not run or was killed, which
+    // Codex would read as a hook error and run the call: exit 2 with a
+    // reason on stderr instead (ADR-109).
     let script = format!(
-        "& '{}'{}; if ($null -eq $LASTEXITCODE) {{ exit 2 }}; exit $LASTEXITCODE",
+        "& '{}'{}; if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 2) {{ exit $LASTEXITCODE }}; \
+         [Console]::Error.WriteLine('openmoat: the hook failed (openmoat missing or killed), \
+         so the call is blocked; run openmoat doctor'); exit 2",
         guard.binary.replace('\'', "''"),
         guard.shell_args(id)
     );

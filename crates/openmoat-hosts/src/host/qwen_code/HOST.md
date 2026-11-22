@@ -86,14 +86,17 @@ Qwen Code runs the call. A hook that times out (SIGTERM, then SIGKILL after 2 s)
 start, is killed, exits non-zero other than 2 without JSON on stdout, or prints JSON it
 cannot parse is a non-blocking error, and `toolHookTriggers.ts` lets the call go ahead
 ("Hook errors should not block tool execution"). Qwen Code has no fail-closed setting.
-Every error `openmoat guard` can catch itself is a deny with exit 2. `disableAllHooks`,
+Every error `openmoat guard` can catch itself is a deny with exit 2. OpenMoat's hook command ends in a tail that turns any exit but the guard's own 0 or 2 (a
+missing `openmoat` exits 127, a killed one 128 and the signal) into exit 2 with a reason
+on stderr (ADR-109), so those block the call; a timeout still runs it, and the guard
+denies on its own after 30 s. `disableAllHooks`,
 `--safe-mode` and `--bare` load no hook at all.
 
 ## Known gaps
 
 - Preview: no real `qwen` has run the hook; the fixtures are built from the source. The
   weekly job installs the latest release and checks the hook file and replies only.
-- A failed or timed-out hook lets the call run.
+- A timed-out hook lets the call run.
 - Whether a project's `disableAllHooks` turns the person's hooks off was not verified;
   OpenMoat assumes it does, so `openmoat run` refuses a project that sets it.
 - A project or extension hook can rewrite a call's arguments (`updatedInput`) after

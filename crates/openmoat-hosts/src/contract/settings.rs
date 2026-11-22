@@ -60,6 +60,13 @@ pub trait SettingsReader: Sync + fmt::Debug {
         self.switched_off(file)
     }
 
+    /// The commands the file names that the host runs besides its hooks (a
+    /// key helper, a status line), each with its key, for the foreign-hook
+    /// ledger (ADR-109). Empty for a host whose settings name none.
+    fn programs(&self, _file: &SettingsFile<'_>) -> Vec<(String, String)> {
+        Vec::new()
+    }
+
     /// What a file in the project's hook directory
     /// ([`crate::ProjectSettingsSpec::hook_dir`]) does, for its warning.
     fn hook_dir_effect(&self) -> &'static str {

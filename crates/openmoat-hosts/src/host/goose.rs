@@ -120,6 +120,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
                 "goose keeps its sessions in one database in its data directory, which \
                  commands that run no session open too",
             ),
+            started: None,
         }),
         ..InstallSpec::BASE
     }),

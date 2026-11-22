@@ -82,6 +82,30 @@ pub fn warnings_here() -> Vec<String> {
     warnings(&cwd, &user_home)
 }
 
+/// Each key of the configuration files of the repository `cwd` is in that
+/// makes git run a program, with its file and value, in file order; a file
+/// too large to read is left out (`warnings` names it). For the foreign-hook
+/// ledger (ADR-109).
+#[must_use]
+pub fn programs(cwd: &Path, user_home: &Path) -> Vec<(PathBuf, String, String)> {
+    let mut seen: Vec<PathBuf> = Vec::new();
+    let mut found = Vec::new();
+    for root in super::project_dirs(cwd, user_home) {
+        for file in config_files(&root) {
+            if seen.contains(&file) {
+                continue;
+            }
+            if let Read::Text(text) = read(&file) {
+                for (key, value) in program_values(&text) {
+                    found.push((file.clone(), key, value));
+                }
+            }
+            seen.push(file);
+        }
+    }
+    found
+}
+
 /// The configuration files git reads for the repository at `root`: those in
 /// its `.git` directory, or in the directory a `.git` file names (a linked
 /// worktree or a submodule), with the main repository's for a worktree.
@@ -146,9 +170,22 @@ fn read(path: &Path) -> Read {
 /// The keys of git configuration `text` that make git run a program, as
 /// `section.key` or `section.subsection.key`, each once, in file order.
 fn program_keys(text: &str) -> Vec<String> {
+    let mut keys: Vec<String> = Vec::new();
+    for (key, _) in program_values(text) {
+        if !keys.contains(&key) {
+            keys.push(key);
+        }
+    }
+    keys
+}
+
+/// The keys of git configuration `text` that make git run a program, each
+/// with the value it has there (a key set twice is listed twice), in file
+/// order.
+fn program_values(text: &str) -> Vec<(String, String)> {
     let mut section = String::new();
     let mut subsection: Option<String> = None;
-    let mut keys: Vec<String> = Vec::new();
+    let mut keys: Vec<(String, String)> = Vec::new();
     for line in text.lines() {
         let mut rest = line.trim();
         if let Some(header) = rest.strip_prefix('[') {
@@ -164,14 +201,13 @@ fn program_keys(text: &str) -> Vec<String> {
         // A key without `=` is a boolean set to true.
         let (name, value) = rest.split_once('=').unwrap_or((rest, "true"));
         let name = name.trim().to_ascii_lowercase();
-        if runs_program(&section, subsection.as_deref(), &name, &value_of(value)) {
+        let value = value_of(value);
+        if runs_program(&section, subsection.as_deref(), &name, &value) {
             let key = match &subsection {
                 Some(sub) => format!("{section}.{sub}.{name}"),
                 None => format!("{section}.{name}"),
             };
-            if !keys.contains(&key) {
-                keys.push(key);
-            }
+            keys.push((key, value));
         }
     }
     keys

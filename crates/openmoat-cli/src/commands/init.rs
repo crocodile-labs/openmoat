@@ -25,6 +25,7 @@ use crate::report::Style;
 use crate::sandbox::{self, Plan};
 
 mod ask;
+mod hooks;
 mod json;
 mod managed;
 pub(super) mod mcp;
@@ -148,6 +149,7 @@ pub fn run(args: &InitArgs) -> Result<Code> {
         if !hooks_only {
             let wrap = mcp::Wrap::of(args, unattended);
             mcp::servers(&home, &binary, wrap, &hosts, unattended, &mut files)?;
+            hooks::record(&home, &binary, unattended, &mut files)?;
         }
         // The opt-in choices (ADR-106), last, for a person only; the lock then
         // pins what they wrote.

@@ -66,7 +66,29 @@ fn plugin_line(name: &str, loaded: &Loaded) -> (Mark, String) {
                 ts(*active_ms)
             ),
         ),
+        // Only a hook host's check finds this one.
+        Loaded::Unchecked { .. } => (Mark::Warning, unchecked_line(name, loaded)),
     }
+}
+
+/// The line of a [`Loaded::Unchecked`].
+fn unchecked_line(name: &str, loaded: &Loaded) -> String {
+    let Loaded::Unchecked {
+        started_ms,
+        tool,
+        last_ms,
+        ..
+    } = loaded
+    else {
+        return String::new();
+    };
+    format!(
+        "a {name} session started {} and called {} (last written {}), but no call of it \
+         reached OpenMoat: its tool-call hook did not run, so those calls were not checked",
+        crate::time::timestamp(*started_ms),
+        crate::render::clean(tool),
+        crate::time::timestamp(*last_ms)
+    )
 }
 
 fn hook_line(host: Host, loaded: &Loaded) -> (Mark, String) {
@@ -109,6 +131,7 @@ fn hook_line(host: Host, loaded: &Loaded) -> (Mark, String) {
                 if *sessions == 1 { "it" } else { "they" },
             ),
         ),
+        Loaded::Unchecked { .. } => (Mark::Warning, unchecked_line(name, loaded)),
     }
 }
 
@@ -116,7 +139,7 @@ fn hook_line(host: Host, loaded: &Loaded) -> (Mark, String) {
 /// up again, look for what turns it off, and the host's own trust step;
 /// `None` for anything else.
 pub fn fix(host: Host, loaded: &Loaded) -> Option<String> {
-    if has_plugin(host) || !matches!(loaded, Loaded::Missing { .. }) {
+    if has_plugin(host) || !matches!(loaded, Loaded::Missing { .. } | Loaded::Unchecked { .. }) {
         return None;
     }
     let name = host.display_name();
@@ -149,6 +172,6 @@ pub fn not_loaded(host: Host, loaded: &Loaded) -> Option<String> {
             crate::time::timestamp(since.at_ms),
             host.display_name()
         )),
-        Loaded::Reported { .. } | Loaded::NotYet { .. } => None,
+        Loaded::Reported { .. } | Loaded::NotYet { .. } | Loaded::Unchecked { .. } => None,
     }
 }

@@ -20,6 +20,7 @@ mod guard_relay;
 mod hangs;
 mod heartbeat;
 mod home;
+mod hook_ledger;
 mod install;
 mod integrity;
 mod json5;

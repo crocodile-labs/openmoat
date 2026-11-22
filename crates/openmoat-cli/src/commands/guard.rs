@@ -551,6 +551,11 @@ fn evaluate(
     let tainted = session.taint.untrusted.is_some() || !session.taint.secrets.is_empty();
     let pushes = compiled.pushes(action);
     let decision = push::check(&pushes, &snapshot, &out.known, tainted, decision);
+    // A hook, plugin hook or git program this agent loads that no person
+    // accepted since it was added or changed; only tightens, and after the
+    // grant, which cannot answer it (ADR-109).
+    let hold = crate::hook_ledger::violation(&home, &verified.lock, host, Some(&cwd), &compiled);
+    let decision = crate::hook_ledger::tightened(decision, hold);
     // A decoy's value anywhere in the call, content and arguments included.
     let decision = decoys.checked_text(payload, decoys.checked(action, decision));
     out.titles = notice::Titles::of(compiled.policy(), &decision);

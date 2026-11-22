@@ -10,7 +10,7 @@
 use serde_json::{Value, json};
 
 use crate::HookSpec;
-use crate::wire::guard_command::{GuardCommand, sh_binary, sh_command};
+use crate::wire::guard_command::{GuardCommand, fail_safe_command, sh_binary};
 use crate::wire::hook_file::HookFile;
 
 /// Crush's `crush.json` entries.
@@ -24,7 +24,7 @@ impl HookFile for Crush {
     fn entry(&self, spec: &HookSpec, id: &str, guard: &GuardCommand, _block: bool) -> Value {
         let mut entry = json!({
             "name": NAME,
-            "command": sh_command(guard, id),
+            "command": fail_safe_command(guard, id, false),
             "timeout": spec.timeout,
         });
         if !spec.matcher.is_empty() {

@@ -12,7 +12,7 @@
 use serde_json::{Value, json};
 
 use crate::HookSpec;
-use crate::wire::guard_command::{GuardCommand, sh_binary, shell_command};
+use crate::wire::guard_command::{GuardCommand, fail_safe_command, sh_binary};
 use crate::wire::hook_file::HookFile;
 
 /// Qwen Code's `settings.json` entries.
@@ -50,7 +50,7 @@ pub(super) fn entry(spec: &HookSpec, id: &str, guard: &GuardCommand, powershell:
     let mut hook = json!({
         "name": NAME,
         "type": "command",
-        "command": shell_command(guard, id, powershell),
+        "command": fail_safe_command(guard, id, powershell),
         "timeout": spec.timeout,
     });
     if powershell {

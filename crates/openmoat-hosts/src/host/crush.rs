@@ -77,12 +77,14 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         defer_is_review_on_no_prompt: false,
         ..Reviews::BASE
     },
-    on_hook_failure: "runs the call when the hook is missing, cannot start, crashes, exits \
-         non-zero other than 2 or 49 without a decision, prints output it cannot read, or \
-         times out (600 s as `openmoat init` writes it); Crush has no setting that blocks a \
-         failed hook",
+    on_hook_failure: "blocks the call when `openmoat` is missing, cannot start or is killed \
+         (the hook command exits 2 itself then, ADR-109); runs it when the hook times out \
+         (600 s as `openmoat init` writes it; the guard denies on its own after 30 s); Crush \
+         has no setting that blocks a failed hook",
+    // Exit 2 blocks (hooks README, `runner.go`); the entry's command turns
+    // any status but the guard's 0 or 2 into it (`hook_file.rs`).
     hook_failure: crate::HookFailure {
-        fails: crate::FailureOutcome::Runs,
+        fails: crate::FailureOutcome::Blocks,
         times_out: crate::FailureOutcome::Runs,
         timeout_s: Some(600),
         turned_off_by: "deleting the entry: no setting turns hooks off, and the hooks of every \
@@ -93,8 +95,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         ],
     },
     gaps: "preview: built from Crush's documentation and source, not yet run against a real \
-         `crush`; no OS sandbox from OpenMoat; a hook that fails or times out lets the call \
-         run; reviews become denies; a call OpenMoat defers runs unasked under `--yolo`; the \
+         `crush`; no OS sandbox from OpenMoat; a hook that times out lets the call run; \
+         reviews become denies; a call OpenMoat defers runs unasked under `--yolo`; the \
          tool calls of a subagent (`agent`, `agentic_fetch`) fire no hook, so starting one \
          needs review; a project's `crush.json`, `.crush.json` or `.crushrc` can add a hook \
          that rewrites a call's arguments (`updated_input`), and a `.crushrc` is a Bash script \
@@ -122,6 +124,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
                 "Crush keeps its sessions in a database in each project's `.crush` directory, \
                  not in its configuration directory",
             ),
+            started: None,
         }),
         ..InstallSpec::BASE
     }),
@@ -211,6 +214,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     plugin: crate::contract::Plugin::None {
         why: "Crush has no plugin channel: Agent Skills are its only extensions, and a skill \
               carries no hook",
+    },
+    // The project's own files that hold hooks laid out as the hook file
+    // (ADR-109).
+    ledger: crate::Ledger {
+        project_hook_files: &["crush.json", ".crush.json", ".crush/crush.json"],
+        ..crate::Ledger::BASE
     },
     ..HostSpec::BASE
 };

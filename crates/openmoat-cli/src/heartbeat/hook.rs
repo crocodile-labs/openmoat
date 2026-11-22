@@ -13,7 +13,7 @@
 
 use std::path::Path;
 
-use openmoat_hosts::{Liveness, Sessions};
+use openmoat_hosts::{GUARD_BUDGET_S, Liveness, Sessions, Started};
 
 use super::{Change, Facts, Loaded, Since, decided_since, judge, scan};
 use crate::home::Home;
@@ -34,6 +34,9 @@ fn spec(config: &HostConfig) -> Option<&'static Liveness> {
 pub(super) fn check(home: &Home, config: &HostConfig) -> Option<Loaded> {
     let liveness = spec(config)?;
     let since = since(home, config, liveness)?;
+    if let Some(found) = unchecked(home, config, liveness, since) {
+        return Some(found);
+    }
     let active = match liveness.sessions {
         Sessions::Known(activity) => scan::sessions(
             config.dir(),
@@ -49,6 +52,57 @@ pub(super) fn check(home: &Home, config: &HostConfig) -> Option<Loaded> {
         decided_ms: decided_since(home, config.host, since.at_ms),
         active,
     }))
+}
+
+/// How much earlier than its recorded start a session's file may have been
+/// made and still be that session's own, not a resumed one's.
+const START_SLACK_MS: i64 = 5_000;
+
+/// How long after a session's file was last written a call of a tool it
+/// names must have reached the guard: the guard's own budget.
+const CALL_GRACE_MS: u64 = GUARD_BUDGET_S * 1000;
+
+/// The faster check (ADR-109), for a host whose session start reaches the
+/// guard ([`Liveness::started`]): a session whose start was recorded since
+/// the last change, whose own file (made at that start, so not a resumed
+/// one) names a call of a tool OpenMoat's hook entry covers, written at least
+/// [`CALL_GRACE_MS`] ago, and of which no call reached the guard. A tool
+/// call was made and the hook did not run for it: said at once, not after
+/// ten minutes. `None` when nothing shows that.
+fn unchecked(
+    home: &Home,
+    config: &HostConfig,
+    liveness: &Liveness,
+    since: Since,
+) -> Option<Loaded> {
+    let started: &Started = liveness.started.as_ref()?;
+    let Sessions::Known(activity) = liveness.sessions else {
+        return None;
+    };
+    let store = openmoat_audit::Store::open_read_only(&home.audit_path()).ok()?;
+    let sessions = store
+        .sessions_started_since(config.host.id(), started.tool, since.at_ms)
+        .ok()?;
+    let now = crate::time::now_ms();
+    let named = |tool: &str| started.names(tool).unwrap_or(false);
+    sessions
+        .iter()
+        .filter(|session| session.calls == 0)
+        .find_map(|session| {
+            let (file, made_ms, last_ms) =
+                scan::session_file(config.dir(), activity, &session.session_id)?;
+            let quiet_ms = u64::try_from(now - last_ms).unwrap_or(0);
+            if made_ms + START_SLACK_MS < session.started_ms || quiet_ms < CALL_GRACE_MS {
+                return None;
+            }
+            let tool = scan::first_tool(&file, started.tool_uses, &named)?;
+            Some(Loaded::Unchecked {
+                since,
+                started_ms: session.started_ms,
+                tool,
+                last_ms,
+            })
+        })
 }
 
 /// The newest change that could have stopped `config`'s hook running.

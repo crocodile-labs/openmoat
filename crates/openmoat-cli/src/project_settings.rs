@@ -253,7 +253,7 @@ pub fn candidates(
 /// to the nearest git directory, and Codex reads each `.codex/` layer between
 /// the project root and the working directory (ADR-098). Reading them all is
 /// the safe side for a host that reads fewer.
-fn project_dirs(cwd: &Path, user_home: &Path) -> Vec<PathBuf> {
+pub(crate) fn project_dirs(cwd: &Path, user_home: &Path) -> Vec<PathBuf> {
     let root = crate::project::root_of(cwd, user_home);
     let mut dirs: Vec<PathBuf> = Vec::new();
     for dir in cwd.ancestors() {
