@@ -199,6 +199,10 @@ pub struct StatusArgs {
 }
 
 #[derive(Debug, Args)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "four command-line flags, each of its own: clap reads them as bools"
+)]
 pub struct InitArgs {
     /// Hosts to install hooks for, without asking. Defaults to every supported host
     /// that is present, each confirmed at the terminal.
@@ -213,7 +217,16 @@ pub struct InitArgs {
     #[arg(long)]
     pub dry_run: bool,
 
-    /// Output format.
+    /// Install and pin the agents' hooks only: no agent sandbox, no MCP step
+    /// (pinning or wrapping), no opt-in questions. Over a readable lock the
+    /// other agents' pins stay as they are; without one, every installed hook
+    /// is pinned, as a plain `init` does.
+    #[arg(long, conflicts_with_all = ["mcp_proxy", "mcp_no_sandbox"])]
+    pub hooks_only: bool,
+
+    /// Output format: `text` (the default), or `json`: one document on stdout
+    /// for scripts. `json` asks no question, so it needs `--hosts`, `--yes` or
+    /// `--dry-run`.
     #[arg(long, value_enum, default_value_t = Format::Text)]
     pub format: Format,
 
@@ -229,7 +242,7 @@ pub struct InitArgs {
     pub mcp: InitMcpArgs,
 }
 
-/// `init`'s managed hook flag (ADR-098) and hooks-only cohort flag.
+/// `init`'s managed hook flag (ADR-098).
 #[derive(Debug, Args)]
 pub struct InitManagedArgs {
     /// Also write OpenMoat's hook where an administrator's hooks live, for each
@@ -239,11 +252,6 @@ pub struct InitManagedArgs {
     /// the command that installs it instead.
     #[arg(long)]
     pub managed: bool,
-
-    /// Install and pin hooks only: skip agent sandboxes, MCP proxy wrapping,
-    /// and repinning hosts or sandboxes outside `--hosts`.
-    #[arg(long, conflicts_with_all = ["mcp_proxy", "mcp_no_sandbox"])]
-    pub hooks_only: bool,
 }
 
 /// `init`'s MCP proxy flags.

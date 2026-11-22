@@ -225,3 +225,66 @@ fn saving_a_lock_that_pins_a_file_twice_is_a_bug() {
     lock.codex_profiles.insert(key(&config), "00".to_owned());
     let _ = lock.save(&dir.path().join("policy.lock"));
 }
+
+/// A state directory whose record puts every host's configuration in its own
+/// temp directory, with OpenMoat's hook installed for Claude Code and Codex.
+fn two_agents_installed() -> (tempfile::TempDir, Home, PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let home = Home::at(dir.path().join("state"));
+    let binary = dir.path().join("bin/guard");
+    fs::create_dir_all(binary.parent().unwrap()).unwrap();
+    fs::write(&binary, "#!/bin/sh\n").unwrap();
+    let mut recorded = crate::install::Recorded::default();
+    for host in Host::ALL {
+        let cfg = dir.path().join("agents").join(host.id());
+        fs::create_dir_all(&cfg).unwrap();
+        recorded.dirs.insert(host.id().to_owned(), cfg);
+    }
+    recorded.save(&home).unwrap();
+    for host in [Host::ClaudeCode, Host::Codex] {
+        HostConfig::for_host(&home, host)
+            .unwrap()
+            .install(&home, &binary, false)
+            .unwrap();
+    }
+    (dir, home, binary)
+}
+
+fn pins_hook_of(lock: &Lock, home: &Home, host: Host) -> bool {
+    let hook = HostConfig::for_host(home, host).unwrap().settings_path;
+    lock.entries.contains_key(&key(&hook))
+}
+
+/// `init --hooks-only` writes the chosen agents' hooks; without a lock to keep,
+/// or with one that cannot be read, it still pins every installed hook, so
+/// another agent's hook file cannot change unseen.
+#[test]
+fn a_selected_re_pin_without_a_readable_lock_pins_every_installed_hook() {
+    let (_dir, home, binary) = two_agents_installed();
+    let codex = [Host::Codex];
+
+    let lock = repin(&home, &binary, HookPins::Selected(&codex)).unwrap();
+    assert!(pins_hook_of(&lock, &home, Host::Codex));
+    assert!(pins_hook_of(&lock, &home, Host::ClaudeCode), "no lock yet");
+
+    fs::write(home.lock_path(), "not a lock").unwrap();
+    let lock = repin(&home, &binary, HookPins::Selected(&codex)).unwrap();
+    assert!(
+        pins_hook_of(&lock, &home, Host::ClaudeCode),
+        "unreadable lock"
+    );
+}
+
+/// Over a readable lock, a selected re-pin keeps what the lock pinned and adds
+/// only the chosen agents' hooks.
+#[test]
+fn a_selected_re_pin_over_a_lock_adds_only_the_chosen_hooks() {
+    let (_dir, home, binary) = two_agents_installed();
+    Lock::pin(&binary, &[home.policy_path()])
+        .unwrap()
+        .save(&home.lock_path())
+        .unwrap();
+    let lock = repin(&home, &binary, HookPins::Selected(&[Host::Codex])).unwrap();
+    assert!(pins_hook_of(&lock, &home, Host::Codex));
+    assert!(!pins_hook_of(&lock, &home, Host::ClaudeCode));
+}

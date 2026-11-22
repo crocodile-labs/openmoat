@@ -12,11 +12,23 @@ use anyhow::Result;
 use openmoat_hosts::Host;
 
 use crate::canary::{self, Offer};
+use crate::cli::{Format, InitArgs};
 use crate::home::{Home, user_home};
 use crate::protection::os_sandbox::RunHere;
 use crate::render::Deferred;
 use crate::report::Paths;
 use crate::start::{self, Shim, rc};
+
+/// Whether `init` asks these questions: only of a person at a terminal, never
+/// with `--yes`, `--hooks-only` or `--format json` (which prints no question),
+/// nor with no person over an existing lock (`unattended`).
+pub(super) fn asked(args: &InitArgs, unattended: bool) -> bool {
+    !unattended
+        && !args.yes
+        && !args.hooks_only
+        && args.format != Format::Json
+        && crate::terminal::person_for("openmoat init")
+}
 
 /// Ask both questions and act on the answers; whether anything was written.
 pub(super) fn ask(home: &Home, binary: &Path, hosts: &[Host], out: &mut Deferred) -> Result<bool> {

@@ -9,7 +9,7 @@ use anyhow::Result;
 use openmoat_hosts::Host;
 
 use super::preview::{self, Change};
-use crate::cli::InitArgs;
+use crate::cli::{Format, InitArgs};
 use crate::home::Home;
 use crate::install::Recorded;
 use crate::integrity;
@@ -36,8 +36,10 @@ impl Wrap {
                 sandbox: args.mcp.sandbox(),
             };
         }
+        // A JSON run prints no question, so it asks none.
         let person = !args.yes
             && !args.mcp.no_mcp_proxy
+            && args.format != Format::Json
             && !unattended
             && crate::terminal::person_for("openmoat init");
         if person { Self::Ask } else { Self::Leave }

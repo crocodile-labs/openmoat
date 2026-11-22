@@ -145,6 +145,9 @@ several comma-separated (each agent's id is in [FEATURES.md](FEATURES.md#each-ag
 the README's agent table). `openmoat init --yes` sets up every agent found, for
 scripts. Without a terminal and without `--yes` or `--hosts`, `init` changes no agent's
 files and says how to go on. `openmoat init --dry-run` prints what would change first.
+For provisioning scripts, `openmoat init --hooks-only --hosts <ids> --format json` writes
+and pins only those agents' hooks, asks nothing and prints one JSON document
+([USAGE.md](USAGE.md#init-for-scripts-hooks-only-and-json)).
 At a terminal, `openmoat init` lists the stdio MCP servers in the agents' user
 configuration, shows what would change (`d`) and asks before it runs them through OpenMoat;
 `--no-mcp-proxy` skips the question, `n` is remembered for that definition, and `--yes` or
@@ -161,8 +164,8 @@ that changes later, or of a new one, are refused until you run `openmoat mcp acc
 
 After the agents, `openmoat init` at a terminal asks two more questions. Both default to
 no (Enter), `d` shows every file the yes would write, and `openmoat uninstall` takes them
-back. `--yes`, `--dry-run` and a run without a terminal never ask and change nothing here
-(ADR-106).
+back. `--yes`, `--dry-run`, `--hooks-only`, `--format json` and a run without a terminal
+never ask and change nothing here (ADR-106).
 
 ```
   Decoy keys       plant 3 fake key file(s) (~/.aws/credentials.bak, ~/.git-credentials.bak, ~/.npmrc.bak) so that any attempt to read or send them is caught? No real file is touched  [y/N/d] y
