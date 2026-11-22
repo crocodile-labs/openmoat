@@ -99,7 +99,7 @@ pub struct Lock {
 
 /// Which hook files a re-pin covers, besides OpenMoat's own state files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HookPins {
+pub enum HookPins<'a> {
     /// `moat init`: the hook files already pinned plus every hook file installed
     /// under this shell's environment.
     Adopt,
@@ -108,12 +108,15 @@ pub enum HookPins {
     /// (its spec's `InstallSpec::dir_variable`: `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
     /// …), which need not be this shell's, so a re-pin must not decide again which files those are.
     Keep,
+    /// `moat init --hooks-only`: keep existing pins, MCP pins, and sandbox
+    /// profiles intact, and adopt only the hook files of the selected hosts.
+    Selected(&'a [Host]),
 }
 
 /// Pin everything the kernel trusts: policy, environment snapshot, approval
 /// files and the host hook files `hooks` selects. Used by `init`,
 /// `doctor --accept` and `allow`, which are the only human paths that may re-pin.
-pub fn repin(home: &Home, binary: &Path, hooks: HookPins) -> Result<Lock> {
+pub fn repin(home: &Home, binary: &Path, hooks: HookPins<'_>) -> Result<Lock> {
     repin_with(home, binary, hooks, &[], &[])
 }
 
@@ -122,7 +125,7 @@ pub fn repin(home: &Home, binary: &Path, hooks: HookPins) -> Result<Lock> {
 pub fn repin_with(
     home: &Home,
     binary: &Path,
-    hooks: HookPins,
+    hooks: HookPins<'_>,
     files: &[PathBuf],
     by_part: &[PathBuf],
 ) -> Result<Lock> {
@@ -163,16 +166,35 @@ pub fn repin_with(
                 );
             }
             // `init` is how a person recovers from an unreadable lock.
-            (Err(_), HookPins::Adopt) => {}
+            (Err(_), HookPins::Adopt | HookPins::Selected(_)) => {}
         }
     }
-    // Without a lock there is nothing to keep, so this environment's hooks it is.
-    if hooks == HookPins::Adopt || !had_lock {
-        let installed = installed_hooks(home, binary)?;
-        owners.extend(installed.iter().map(|c| (c.settings_path.clone(), c.host)));
-        paths.extend(installed.iter().flat_map(pinned_with));
-        profiles.extend(crate::sandbox::install::part_pinned_settings(home)?);
-        paths.extend(crate::sandbox::install::whole_pinned_settings(home)?);
+    match hooks {
+        HookPins::Selected(selected) => {
+            for host in selected {
+                let config = HostConfig::for_host(home, *host)?;
+                if config.state(binary) == HookState::Installed {
+                    owners.push((config.settings_path.clone(), config.host));
+                    paths.extend(pinned_with(&config));
+                }
+            }
+        }
+        HookPins::Adopt => {
+            let installed = installed_hooks(home, binary)?;
+            owners.extend(installed.iter().map(|c| (c.settings_path.clone(), c.host)));
+            paths.extend(installed.iter().flat_map(pinned_with));
+            profiles.extend(crate::sandbox::install::part_pinned_settings(home)?);
+            paths.extend(crate::sandbox::install::whole_pinned_settings(home)?);
+        }
+        HookPins::Keep if !had_lock => {
+            // Without a lock there is nothing to keep, so this environment's hooks it is.
+            let installed = installed_hooks(home, binary)?;
+            owners.extend(installed.iter().map(|c| (c.settings_path.clone(), c.host)));
+            paths.extend(installed.iter().flat_map(pinned_with));
+            profiles.extend(crate::sandbox::install::part_pinned_settings(home)?);
+            paths.extend(crate::sandbox::install::whole_pinned_settings(home)?);
+        }
+        HookPins::Keep => {}
     }
     let mut lock = Lock::pin_owned(binary, &paths, &owners)?;
     // A state file that is missing (one a person accepted as deleted) is

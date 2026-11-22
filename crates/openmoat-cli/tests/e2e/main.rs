@@ -45,6 +45,7 @@ mod home_screen;
 mod hook_liveness;
 mod hook_off;
 mod hook_only;
+mod hooks_only;
 mod host_failures;
 mod hosts;
 #[cfg(unix)]
