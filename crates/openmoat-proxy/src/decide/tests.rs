@@ -472,3 +472,61 @@ fn an_address_without_rules_is_neither_named_nor_denied() {
         assert_eq!(denied(&addresses, ip), None, "{ip}");
     }
 }
+
+/// An empty network allowlist means no network, never all of it (ADR-108):
+/// the sandbox-runtime advisory in which an empty allowlist applied no
+/// restriction at all. Every way of saying nothing about hosts, or of listing
+/// none, refuses every name and every address, in every spelling.
+#[test]
+fn an_empty_allowlist_reaches_no_host() {
+    let empty = [
+        "version: 1\n",
+        "version: 1\nallow: []\n",
+        "version: 1\ndefaults: { net: deny }\n",
+        "version: 1\ndefaults: { \"*\": defer }\nallow: []\n",
+        "version: 1\ndefaults: { \"*\": review }\n",
+        "version: 1\ndefaults: { net: defer, fetch: defer }\n",
+    ];
+    let hosts = [
+        "example.com",
+        "api.github.com",
+        "c2VjcmV0LXZhbHVl.exfil.example",
+        "93.184.216.34",
+        "1572395042",
+        "2606:2800:220:1::1",
+        "localhost",
+    ];
+    for yaml in empty {
+        let policy = Policy::parse(yaml).unwrap();
+        let compiled = CompiledPolicy::compile(&policy, &ctx()).unwrap();
+        for h in hosts {
+            let d = host(&compiled, h);
+            assert_eq!(d.verdict, Verdict::Deny, "{yaml:?} {h}: {d:?}");
+        }
+    }
+}
+
+/// A policy that allows one name allows that name alone: a raw address, an
+/// address in another spelling, a subdomain carrying data (DNS
+/// exfiltration through a name the proxy would have to resolve) and a
+/// lookalike are all refused before anything is resolved (ADR-108).
+#[test]
+fn an_allowlist_of_one_name_refuses_raw_addresses_and_data_in_names() {
+    let yaml = "version: 1\nallow:\n  - { id: gh, net: [api.github.com] }\n";
+    let policy = Policy::parse(yaml).unwrap();
+    let compiled = CompiledPolicy::compile(&policy, &ctx()).unwrap();
+    assert_eq!(host(&compiled, "api.github.com").verdict, Verdict::Allow);
+    for h in [
+        "140.82.112.6",
+        "2350934022",
+        "0x8c527006",
+        "::ffff:140.82.112.6",
+        "c2VjcmV0.api.github.com",
+        "api.github.com.exfil.example",
+        "api-github.com",
+        "github.com",
+    ] {
+        let d = host(&compiled, h);
+        assert_eq!(d.verdict, Verdict::Deny, "{h}: {d:?}");
+    }
+}

@@ -280,3 +280,31 @@ fn an_address_in_another_spelling_is_not_a_name() {
         assert!(normalise_name(name).is_some(), "{name:?}");
     }
 }
+
+/// Domain fronting over plain HTTP (ADR-108): the proxy decides by the
+/// target's host, so a `Host` header that names another one, in any
+/// spelling a server might read as another host, is refused, never
+/// forwarded. A `Host` that names the same host in another case or with
+/// its default port is the same request.
+#[test]
+fn a_host_header_that_fronts_another_host_is_refused() {
+    for raw in [
+        "GET http://allowed.com/ HTTP/1.1\r\nHost: evil.com\r\n\r\n",
+        "GET http://allowed.com/ HTTP/1.1\r\nHost: allowed.com@evil.com\r\n\r\n",
+        "GET http://allowed.com/ HTTP/1.1\r\nHost: evil.com, allowed.com\r\n\r\n",
+        "GET http://allowed.com/ HTTP/1.1\r\nHost: allowed.com.evil.com\r\n\r\n",
+        "GET http://allowed.com/ HTTP/1.1\r\nHost: evil.com\r\nHost: allowed.com\r\n\r\n",
+        "GET http://allowed.com/ HTTP/1.1\r\nHost: allowed.com\r\nHost: evil.com\r\n\r\n",
+        "GET http://allowed.com/ HTTP/1.1\r\nHost: allowed.com:8080\r\n\r\n",
+        "GET http://allowed.com/ HTTP/1.1\r\nHost: 93.184.216.34\r\n\r\n",
+        "GET http://allowed.com/ HTTP/1.1\r\nHost: allowed.com/evil\r\n\r\n",
+    ] {
+        assert!(parse(raw.as_bytes()).is_err(), "{raw:?}");
+    }
+    for raw in [
+        "GET http://allowed.com/ HTTP/1.1\r\nHost: ALLOWED.com\r\n\r\n",
+        "GET http://allowed.com/ HTTP/1.1\r\nHost: allowed.com:80\r\n\r\n",
+    ] {
+        assert!(head(raw).contains("GET / HTTP/1.1\r\n"), "{raw:?}");
+    }
+}

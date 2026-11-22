@@ -31,6 +31,7 @@ fn an_older_kernel_applies_what_it_has_and_names_the_seccomp_fallback() {
     assert!(shown.contains("applies ABI 4, 6"), "{shown}");
     assert!(shown.contains("seccomp filter alone"), "{shown}");
     assert!(shown.contains("ABI 9 (Linux 7.1)"), "{shown}");
+    assert!(shown.contains("ABI 10 (Linux 7.2)"), "{shown}");
     let lines = lines(&six);
     let nine = lines.iter().find(|l| l.starts_with("ABI 9 ")).unwrap();
     assert!(nine.contains("not available here"), "{nine}");
@@ -46,16 +47,17 @@ fn the_floor_alone_applies_only_the_floor() {
 }
 
 #[test]
-fn a_new_kernel_applies_the_unix_socket_step_and_names_what_it_leaves() {
+fn a_new_kernel_applies_the_unix_socket_and_udp_steps_and_names_what_it_leaves() {
     let twelve = Kernel::Abi(12);
-    assert_eq!(twelve.applied(), [4, 6, 9]);
+    assert_eq!(twelve.applied(), [4, 6, 9, 10]);
     let shown = summary(&twelve);
     assert!(!shown.contains("seccomp filter alone"), "{shown}");
     let lines = lines(&twelve);
     assert_eq!(lines.len(), STEPS.len());
     let udp = lines.iter().find(|l| l.starts_with("ABI 10 ")).unwrap();
-    assert!(udp.contains("available, not used"), "{udp}");
-    assert!(udp.contains("refuses UDP sockets"), "{udp}");
+    assert!(udp.contains("used: every UDP bind"), "{udp}");
+    let caps = lines.iter().find(|l| l.starts_with("ABI 12 ")).unwrap();
+    assert!(caps.contains("available, not used"), "{caps}");
     let tsync = lines.iter().find(|l| l.starts_with("ABI 8 ")).unwrap();
     assert!(tsync.contains("proxy and relay threads"), "{tsync}");
 }
@@ -89,7 +91,12 @@ fn the_json_carries_the_kernel_the_applied_steps_and_the_table() {
     assert_eq!(value["floor"], FLOOR);
     assert_eq!(value["applied"], serde_json::json!([4, 6, 9]));
     assert_eq!(value["steps"][5]["used"], "used");
-    assert_eq!(value["steps"][6]["used"], "not_in_crate");
+    assert_eq!(value["steps"][6]["used"], "used");
+    assert_eq!(value["steps"][8]["used"], "not_in_crate");
+    assert_eq!(
+        json(&Kernel::Abi(10))["applied"],
+        serde_json::json!([4, 6, 9, 10])
+    );
     let missing = json(&Kernel::Missing("no Landlock".to_owned()));
     assert_eq!(missing["kernel"]["missing"], "no Landlock");
 }

@@ -10,6 +10,9 @@ use crate::common::{OK, Sandbox, USAGE, output, stderr, text};
 /// The run's boundary record: `--print-boundary` and one row per run (ADR-089).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod boundary;
+/// The egress bypasses other sandboxes document, tried from inside (ADR-108).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod bypass;
 /// Files open in the launcher stay out of the sandbox (ADR-088).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod inherited_fds;
@@ -39,6 +42,9 @@ mod mcp_boundary;
 /// (ADR-090).
 #[cfg(target_os = "linux")]
 mod project_paths;
+/// The protection score and `sandbox.strict: true` (ADR-108).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod score;
 /// The scrubbed environment: only the allowlist reaches the program (ADR-105).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod scrubbed_env;

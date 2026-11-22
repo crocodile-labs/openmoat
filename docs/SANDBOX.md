@@ -402,6 +402,50 @@ suite's.
 nothing back and macOS has no `/proc`, so it is neither `applied` nor `tested`, and the
 row has no `launch` part. The profile is the one `openmoat sandbox show` prints.
 
+### The protection score and strict mode
+
+Each record carries a protection score (`score`, ADR-108): every kernel feature
+`openmoat run` can use on the platform has a weight, the weights add up to 100, and the
+score is the sum of those in force, with each missing one named and what brings it.
+Planned, a feature counts when the system has it and the run asks for it; after the
+start, only when the launch confirmed it.
+
+| Linux feature | Weight | | Linux feature | Weight |
+|---|---|---|---|---|
+| `landlock_filesystem` (ABI 4) | 25 | | `landlock_resolve_unix` (ABI 9) | 5 |
+| `landlock_tcp_port` (ABI 4) | 10 | | `landlock_udp` (ABI 10) | 5 |
+| `seccomp` | 15 | | `network_namespace` (bubblewrap) | 15 |
+| `no_new_privs` | 5 | | `isolated_view` (the Isolated tier) | 15 |
+| `landlock_scopes` (ABI 6) | 5 | | | |
+
+On macOS the Seatbelt profile is the whole 100: it holds files, the network (the
+proxy's address alone) and Mach services in one. A score compares runs on one system,
+not systems. The hook alone scores 0: an allowed call runs with your permissions.
+
+```bash
+openmoat doctor                    # on Linux 7.1 with bubblewrap:
+                                   # protection  isolated    95/100; missing: landlock_udp (not on this system: needs Landlock ABI 10, Linux 7.2; …)
+                                   # protection  lightweight 80/100; missing: landlock_udp (…); isolated_view (…)
+                                   # protection  hook-only   0/100: no kernel feature is in force; …
+openmoat run --print-boundary -- gemini | tail -1      # protection score: 95/100; missing: …
+openmoat run --print-boundary --format json -- gemini | jq .score
+```
+
+`sandbox.strict: true` in your own policy (POLICY.md §9.7) makes `openmoat run` start
+only with the whole score: it refuses before anything starts when the plan lacks a
+feature (exit 64, naming each), `--print-boundary` prints the plan and then refuses the
+same way, and after the start a feature the launch did not confirm stops the agent and
+its processes, with a `deny` boundary row. On Linux that means the Isolated tier on
+Landlock ABI 10 (Linux 7.2) or later; on a kernel or system without it, strict mode
+refuses every run, which is what it is for. A repository policy or a pack cannot set it.
+`require.run: full-boundary` (ADR-077) stays the lighter requirement: a sandbox and a
+network of the agent's own, whatever the kernel's newer steps.
+
+An empty network allowlist is no network: the proxy refuses every host and every
+address no rule allows, the Landlock and Seatbelt rules reach only the proxy's port,
+and Claude Code's settings get an empty `allowedDomains` with `strictAllowlist`, never
+a missing list.
+
 ## `openmoat run` (Lightweight tier)
 
 Without a container or VM runtime, `openmoat run` puts a whole agent in a sandbox generated
@@ -456,7 +500,7 @@ bubblewrap.
   | 7 | 6.15 | not used (kernel audit logging): OpenMoat's audit log records its own decisions |
   | 8 | 7.0 | not used (one ruleset for all threads): OpenMoat's proxy thread must stay outside |
   | 9 | 7.1 | used: a pathname Unix socket made outside the sandbox cannot be connected or sent to |
-  | 10 | 7.2 | not used yet (UDP): the `landlock` crate cannot ask for it; seccomp refuses UDP |
+  | 10 | 7.2 | used: every UDP bind, connect and send refused (ADR-108); no rule grants UDP, so no datagram (DNS to any resolver) leaves, beside seccomp's refusal of UDP sockets |
   | 11 | 7.3 | nothing to add (`no_new_privs` is set already) |
   | 12 | 7.4 | not used yet (capabilities, namespaces): seccomp refuses new namespaces |
 
@@ -874,12 +918,19 @@ OS sandbox: openmoat run --write ~/.gemini -- gemini (docs/SANDBOX.md)
 | Cline CLI | `openmoat run --write ~/.cline -- cline` |
 | goose | `openmoat run --write ~/.local/share/goose --write ~/.local/state/goose -- goose` |
 | Antigravity CLI | `openmoat run --write ~/.gemini/antigravity-cli -- agy` |
+| Qwen Code | `openmoat run --write ~/.qwen -- qwen` |
+| Crush | `openmoat run --write ~/.local/share/crush --write ~/.cache/crush -- crush` |
 
 On macOS before 13, on Windows, and on Linux without a network namespace (where
 `openmoat run` refuses a `--write` path outside the project) those commands name why
 there is none. OpenClaw and the Continue CLI get no command: OpenClaw's Gateway serves a
 local port, which the sandbox does not allow, and which directories `cn` writes was not
 checked.
+
+`openmoat status` lists each agent with a command and no sandboxed-start shim under
+`Needs your attention` (ADR-108): `hook only: no OS boundary`, with that one command as
+the fix. A warning: the status stays healthy. `openmoat init` names the same, per agent,
+before it asks whether typing the agent's name should start it confined (ADR-106).
 
 What the command does not do for you:
 

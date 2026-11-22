@@ -5,7 +5,7 @@
 use openmoat_hosts::Host;
 
 use super::{Attention, Mark, Row};
-use crate::protection::{Level, Protection, Required};
+use crate::protection::{Level, OsSandbox, Protection, Required};
 use crate::sandbox::install as host_sandbox;
 
 /// The agent rows and the names of the agents not installed here.
@@ -79,11 +79,42 @@ pub fn agent_table(agents: &[Protection], attention: &Attention, verbose: bool) 
 /// on how to reach an OS sandbox (ADR-076): `moat status` and `moat doctor`
 /// only, `moat init` having said enough.
 pub fn os_sandbox_rows(agents: &[Protection]) -> Vec<Row> {
+    os_sandbox_rows_but(agents, &[])
+}
+
+/// [`os_sandbox_rows`] less the agents `shown` names, whose command is in
+/// `Needs your attention` already ([`hook_only_rows`]).
+pub fn os_sandbox_rows_but(agents: &[Protection], shown: &[&str]) -> Vec<Row> {
     agents
         .iter()
+        .filter(|agent| !shown.contains(&agent.host))
         .filter_map(|agent| {
             let sandbox = agent.os_sandbox.as_ref()?;
             Some(Row::new(Mark::Info, agent.name, sandbox.line()))
+        })
+        .collect()
+}
+
+/// `openmoat status`'s `Needs your attention` rows for agents only the hook
+/// checks (ADR-108): each agent at `hook only` that `openmoat run` can confine
+/// here and that does not start in it already (no sandboxed-start shim,
+/// `shimmed` says by host id), with the one command that confines it. A
+/// warning: the hook is what the agent offers, so the status stays healthy.
+pub fn hook_only_rows(agents: &[Protection], shimmed: &dyn Fn(&str) -> bool) -> Vec<Row> {
+    agents
+        .iter()
+        .filter(|agent| agent.level == Level::HookOnly && !shimmed(agent.host))
+        .filter_map(|agent| match agent.os_sandbox.as_ref()? {
+            OsSandbox::Command { command, .. } => Some(
+                Row::new(
+                    Mark::Attention,
+                    agent.name,
+                    "hook only: no OS boundary, so an allowed call runs with your permissions \
+                     and a classifier mistake is a bypass; start it confined",
+                )
+                .fix(command.clone()),
+            ),
+            OsSandbox::Unavailable { .. } | OsSandbox::Unknown { .. } => None,
         })
         .collect()
 }

@@ -109,9 +109,10 @@ pub const STEPS: [Step; 9] = [
         linux: "7.2",
         adds: "UDP bind, connect and send (`LANDLOCK_ACCESS_NET_BIND_UDP`, \
                `LANDLOCK_ACCESS_NET_CONNECT_SEND_UDP`)",
-        used: Use::NotInCrate,
-        why: "the `landlock` crate OpenMoat is built with cannot ask for it yet",
-        without: "the seccomp filter refuses UDP sockets",
+        used: Use::Used,
+        why: "every UDP bind, connect and send is refused, beside the seccomp filter: \
+              no rule grants UDP, so a datagram (DNS to any resolver) cannot leave",
+        without: "the seccomp filter alone refuses UDP sockets",
     },
     Step {
         abi: 11,

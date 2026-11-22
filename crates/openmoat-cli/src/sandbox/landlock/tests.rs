@@ -130,3 +130,19 @@ fn an_allow_default_grants_the_root() {
     assert!(out.rules.read.contains(&"/".to_owned()));
     assert!(!out.rules.write.contains(&"/".to_owned()));
 }
+
+/// An empty network allowlist is no network, never all of it (ADR-108): the
+/// only TCP port is the proxy's, whatever the policy lists, and a policy
+/// whose `net` default is allow gains no other port either; the proxy then
+/// refuses every host the list does not name.
+#[test]
+fn an_empty_allowlist_leaves_only_the_proxy_port() {
+    for yaml in [
+        "version: 1\n",
+        "version: 1\ndefaults: { net: deny }\nallow: []\n",
+        "version: 1\ndefaults: { net: allow }\n",
+    ] {
+        let out = generated(yaml);
+        assert_eq!(out.rules.connect_port, Some(18080), "{yaml:?}");
+    }
+}

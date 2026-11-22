@@ -409,11 +409,13 @@ fn restricted(rules: &Rules, report: Report, command: Command) -> Result<Confine
             .handle_access(AccessNet::from_all(ABI_REQUIRED))?
             // Where the kernel has them, beside the seccomp filter (ADR-082):
             // abstract Unix sockets and signals outside the sandbox (ABI 6),
-            // and pathname Unix sockets made outside it (ABI 9), which no
-            // rule below grants.
+            // pathname Unix sockets made outside it (ABI 9), and every UDP
+            // bind, connect and send (ABI 10, ADR-108), which no rule below
+            // grants: the proxy is TCP, so no UDP is ever allowed.
             .set_compatibility(CompatLevel::BestEffort)
             .scope(Scope::from_all(ABI::V6))?
             .handle_access(AccessFs::ResolveUnix)?
+            .handle_access(AccessNet::BindUdp | AccessNet::ConnectSendUdp)?
             .create()?
             .add_rules(path_beneath_rules(
                 &rules.read,

@@ -219,6 +219,21 @@ fn the_project_top_is_protected_unless_the_policy_says_writable() {
     assert!(!written.contains("project_top"), "{written}");
 }
 
+/// `sandbox.strict` (ADR-108): off unless the person's own policy says
+/// `true`; a value that is no boolean is an error, and the default policy and
+/// one written back out leave it unsaid.
+#[test]
+fn strict_is_off_unless_the_policy_says_true() {
+    let strict = |yaml: &str| Policy::parse(yaml).map(|p| p.sandbox_strict());
+    assert!(!strict("version: 1\n").unwrap());
+    assert!(!strict(crate::DEFAULT_POLICY).unwrap());
+    assert!(!strict("version: 1\nsandbox: { strict: false }\n").unwrap());
+    assert!(strict("version: 1\nsandbox: { strict: true }\n").unwrap());
+    assert!(strict("version: 1\nsandbox: { strict: always }\n").is_err());
+    let written = crate::yaml::to_string(&SandboxSettings::default()).unwrap();
+    assert!(!written.contains("strict"), "{written}");
+}
+
 /// `sandbox.env` (ADR-105): unsaid unless the person's own policy says
 /// `scrubbed` or `inherited`; any other value is an error, the default policy
 /// leaves it unsaid, and so does one written back out.

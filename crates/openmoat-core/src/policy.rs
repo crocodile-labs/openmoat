@@ -417,6 +417,13 @@ pub struct SandboxSettings {
     /// policy or a pack has no `sandbox:`.
     #[serde(default, skip_serializing_if = "ProjectHookOff::is_refuse")]
     pub project_hook_off: ProjectHookOff,
+    /// `openmoat run` starts only when every kernel feature of its protection
+    /// score is in force (ADR-108): planned before the start, confirmed after
+    /// it, so a missing Landlock step, a port-only network or the Lightweight
+    /// tier refuses the run (fail closed). Read from the person's own policy
+    /// alone: a repository policy or a pack has no `sandbox:`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub strict: bool,
 }
 
 /// `sandbox.project_hook_off` (ADR-098).
@@ -551,6 +558,14 @@ impl Policy {
             .as_ref()
             .map(|s| s.project_hook_off)
             .unwrap_or_default()
+    }
+
+    /// Whether `openmoat run` refuses to start without its whole protection
+    /// score (`sandbox.strict`, ADR-108); `false` unless the person's own
+    /// policy says so.
+    #[must_use]
+    pub fn sandbox_strict(&self) -> bool {
+        self.sandbox.as_ref().is_some_and(|s| s.strict)
     }
 
     /// What a `defer` becomes in an agent mode that asks no person

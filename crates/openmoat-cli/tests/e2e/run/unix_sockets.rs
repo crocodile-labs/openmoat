@@ -72,7 +72,16 @@ fn a_datagram_pair_is_refused_and_nothing_reaches_a_socket_outside() {
     assert_eq!(rows.len(), 1, "{rows:?}");
     let abi = rows[0]["landlock"]["abi"].as_u64().unwrap();
     let resolve_unix = restriction(&rows[0], "landlock_resolve_unix");
-    assert_eq!(resolve_unix["applied"], abi >= 9, "{}", rows[0]);
+    // ABI 9 lacks ABI 10's UDP rights, which the run asks for too, so its
+    // ruleset is only partly enforced and the step is unknown (ADR-108).
+    let expected = match abi {
+        10.. => serde_json::json!(true),
+        9 => serde_json::Value::Null,
+        _ => serde_json::json!(false),
+    };
+    assert_eq!(resolve_unix["applied"], expected, "{}", rows[0]);
+    let udp = restriction(&rows[0], "landlock_udp");
+    assert_eq!(udp["applied"], abi >= 10, "{}", rows[0]);
 }
 
 #[test]

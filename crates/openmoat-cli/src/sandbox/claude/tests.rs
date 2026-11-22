@@ -212,6 +212,25 @@ fn network_lists_domains_and_keeps_addresses_denied() {
     assert_eq!(out.sandbox["network"]["strictAllowlist"], json!(true));
 }
 
+/// An empty allowlist is written as an empty `allowedDomains` with
+/// `strictAllowlist` on, never left out (ADR-108): Claude Code's sandbox
+/// runtime once applied no network restriction when the list was empty,
+/// and a missing key would leave the choice to its defaults.
+#[test]
+fn an_empty_allowlist_is_written_as_no_domains_never_as_none() {
+    for yaml in [
+        "version: 1\n",
+        "version: 1\ndefaults: { net: deny }\nallow: []\n",
+        "version: 1\ndefaults: { \"*\": review }\n",
+    ] {
+        let out = generated(yaml);
+        let network = &out.sandbox["network"];
+        assert_eq!(network["allowedDomains"], json!([]), "{yaml:?}: {network}");
+        assert_eq!(network["strictAllowlist"], json!(true), "{yaml:?}");
+        assert!(network.get("allowAllUnixSockets").is_none(), "{network}");
+    }
+}
+
 #[test]
 fn both_proxy_ports_name_moat_proxy_only_when_the_policy_opts_in() {
     let out = generated(DEFAULT_POLICY);

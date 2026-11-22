@@ -126,8 +126,24 @@ fn sandboxed_start(
          [y/N/d] ",
         names.join(", ")
     );
+    // What each agent has today, so the choice is made per agent (ADR-108).
+    for shim in &shims {
+        writeln!(
+            out,
+            "  {:<16} hook only: no OS boundary, so a classifier mistake is a bypass; with \
+             sandboxed start, typing `{}` starts it confined",
+            shim.host.display_name(),
+            shim.name
+        )?;
+    }
     let shown = |out: &mut Deferred| start_diff(&shims, &dir, rc_file.as_deref(), &lines, out);
     if !yes(&question, out, shown)? {
+        writeln!(
+            out,
+            "  sandboxed start  not set up: {} stay(s) hook only; `openmoat status` shows the \
+             command that starts each confined",
+            names.join(", ")
+        )?;
         return Ok(false);
     }
     start::write(home, &shims)?;

@@ -47,7 +47,7 @@ getrandom = "0.4"
 tempfile = "3"
 httparse = "1.10"
 signal-hook = { version = "0.4", default-features = false }
-landlock = "0.4"
+landlock = "0.4.8"
 seccompiler = "0.5"
 libc = "0.2"
 # `openat`, `renameat`, `unlinkat` and the rest without `unsafe`: a restore

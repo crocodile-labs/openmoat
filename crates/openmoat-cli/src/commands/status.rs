@@ -109,13 +109,29 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     let agents = protection::report(&home, &binary)?;
     // An agent below the level the policy requires has every call denied.
     healthy &= agents.iter().all(protection::Protection::meets_required);
+    // Hook-only agents `openmoat run` can confine here (ADR-108): warnings.
+    let shims = crate::start::Record::load(&home).unwrap_or_default();
+    let shimmed = |id: &str| shims.shims.iter().any(|s| s.host == id);
+    let mut confined_by_row = Vec::new();
+    for row in crate::report::hook_only_rows(&agents, &shimmed) {
+        confined_by_row.extend(
+            agents
+                .iter()
+                .filter(|a| a.name == row.label)
+                .map(|a| a.host),
+        );
+        shown.attention.push(row);
+    }
     let table = crate::report::agent_table(&agents, &shown.attention, false);
     let mut out = io::stdout().lock();
     let mut printer = Printer::stdout(&mut out);
     printer.title("status")?;
     printer.attention(&shown.attention)?;
     let mut table = table;
-    table.rows.extend(crate::report::os_sandbox_rows(&agents));
+    table.rows.extend(crate::report::os_sandbox_rows_but(
+        &agents,
+        &confined_by_row,
+    ));
     table.rows.append(&mut shown.agents);
     printer.agents(&table)?;
     printer.heading("OpenMoat")?;

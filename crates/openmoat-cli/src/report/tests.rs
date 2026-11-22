@@ -133,3 +133,50 @@ fn counts_say_one_or_many() {
     assert_eq!(count(0, "agent"), "0 agents");
     assert_eq!(count(5, "agent"), "5 agents");
 }
+
+/// A hook-only agent `openmoat run` can confine gets a warning with its one
+/// command, unless its sandboxed-start shim starts it confined already; an
+/// agent with no command offered gets none (ADR-108).
+#[test]
+fn a_hook_only_agent_with_a_command_needs_attention() {
+    use crate::protection::{Level, OsSandbox, Protection};
+    let agent = |host: &'static str, sandbox: OsSandbox| Protection {
+        host,
+        name: host,
+        level: Level::HookOnly,
+        reason: None,
+        gaps: "",
+        limit: None,
+        required: None,
+        os_sandbox: Some(sandbox),
+        hook_failure: None,
+    };
+    let agents = [
+        agent(
+            "gemini-cli",
+            OsSandbox::Command {
+                command: "openmoat run --write ~/.gemini -- gemini".to_owned(),
+                note: None,
+            },
+        ),
+        agent("openclaw", OsSandbox::Unknown { why: "its Gateway" }),
+    ];
+    let rows = hook_only_rows(&agents, &|_| false);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0].mark, Mark::Attention);
+    assert!(
+        rows[0].text.contains("hook only: no OS boundary"),
+        "{rows:?}"
+    );
+    assert_eq!(
+        rows[0].fix.as_deref(),
+        Some("openmoat run --write ~/.gemini -- gemini")
+    );
+    assert_eq!(hook_only_rows(&agents, &|id| id == "gemini-cli").len(), 0);
+    let left = os_sandbox_rows_but(&agents, &["gemini-cli"]);
+    assert_eq!(left.len(), 1, "{left:?}");
+    assert!(
+        left[0].text.contains("no `openmoat run` command"),
+        "{left:?}"
+    );
+}

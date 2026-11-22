@@ -43,6 +43,7 @@ pub fn restrictions(isolated: bool, port_only: bool, kernel: Option<&Kernel>) ->
         Restriction::planned(M::LandlockTcpPort, abi >= 4, true),
         Restriction::planned(M::LandlockScopes, abi >= 6, true),
         Restriction::planned(M::LandlockResolveUnix, abi >= 9, true),
+        Restriction::planned(M::LandlockUdp, abi >= 10, true),
         Restriction::planned(M::Seccomp, true, true),
         Restriction::planned(M::NoNewPrivs, true, true),
         Restriction::planned(M::NetworkNamespace, namespace, namespace),

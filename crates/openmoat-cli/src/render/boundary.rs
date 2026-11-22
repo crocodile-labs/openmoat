@@ -52,6 +52,9 @@ pub fn lines(record: &EffectiveBoundary) -> Vec<String> {
     }
     lines.push("  restriction             available configured applied tested".to_owned());
     lines.extend(record.restrictions.iter().map(row));
+    if let Some(score) = &record.score {
+        lines.push(format!("  protection score: {}", score.line()));
+    }
     lines
 }
 
@@ -145,6 +148,7 @@ mod tests {
             ],
             launch: None,
             environment: None,
+            score: None,
         };
         let shown = lines(&record).join("\n");
         for expected in [

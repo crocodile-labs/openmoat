@@ -173,8 +173,15 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     tool_token: crate::ToolToken::NotWithheld {
         why: "how Qwen Code starts tool commands and hooks was not checked",
     },
-    run: crate::RunFacts::Unknown {
-        why: "which directories `qwen` writes outside the project was not checked",
+    // Outside the project Qwen Code writes its own directory alone: settings,
+    // its sign-in, chat recordings, `file-history/` for `/rewind` and its
+    // locales are all under `~/.qwen` (`QWEN_HOME`), by the settings reference
+    // (`docs/users/configuration/settings.md`); the system files under
+    // `/etc/qwen-code` are only read (ADR-108).
+    run: crate::RunFacts::Known {
+        program: "qwen",
+        args: &[],
+        writes: &[crate::RunWrite::ConfigDir],
     },
     weekly: weekly::WEEKLY,
     hook_off: hook_off::HOOK_OFF,

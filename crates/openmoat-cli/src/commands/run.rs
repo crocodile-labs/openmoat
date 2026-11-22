@@ -34,6 +34,7 @@ mod linux;
 mod macos;
 mod release_age;
 mod required;
+pub mod score;
 mod temp;
 pub mod tier;
 mod tool_shell;
@@ -217,6 +218,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     if agent.project_top_open() {
         isolation::record_project_top(&home, &run_session, &ctx.cwd)?;
     }
+    let strict_score = policy.sandbox_strict();
     let mut record = boundary::plan(boundary::Plan {
         asked: Asked::of(args),
         tier: &tier,
@@ -228,6 +230,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         port: Some(port),
         project_top_open: agent.project_top_open(),
     });
+    boundary::refuse_incomplete(strict_score, &record)?;
     let cwd = ctx.cwd.clone();
     // Outside the sandbox, before the agent starts (ADR-085).
     let snapshots = RunSnapshots::start(&home, &ctx, args.no_snapshot, &run_session);
@@ -298,7 +301,10 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     )
     .context("keeping OpenMoat running on Ctrl-C")?;
     let status = agent
-        .status(|check| boundary::launched(&home, (&run_session, &cwd), &mut record, check))
+        .status(|check| {
+            let record = (&mut record, strict_score);
+            boundary::launched(&home, (&run_session, &cwd), record, check)
+        })
         .with_context(|| format!("starting {}", program.display()))?;
     snapshots.finish();
     Ok(if status.success() {

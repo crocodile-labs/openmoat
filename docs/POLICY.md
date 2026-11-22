@@ -47,6 +47,7 @@ sandbox:                            # optional: what the host sandboxes may read
   package_min_release_age_days: 7   # optional: `openmoat run` keeps npm and uv off versions newer than this; 0 is off (§9.1)
   project_top: protected            # optional, your own policy only: `writable` opens the project's top without bubblewrap on Linux (§9.4)
   project_hook_off: refuse          # optional, your own policy only: `start` lets `openmoat run` start an agent whose project turns its hook off (§9.5)
+  strict: false                     # optional, your own policy only: `true` makes `openmoat run` start only with its whole protection score (§9.7)
 
 secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§2.1)
 requests:   [ <request rules>, … ]  # method and path rules for allowed hosts (§2.3)
@@ -2227,6 +2228,27 @@ the list does not name. The run says how many it withheld, `--verbose` names the
   read it.
 - **A tool that stops working** under `--scrub-env` needs a variable no list names: add it
   with `--env NAME` once, or `sandbox.env_allow` for good.
+
+
+### 9.7 Strict mode (`sandbox.strict`)
+
+```yaml
+sandbox:
+  strict: true   # default: false
+```
+
+Every run's boundary record carries a protection score (ADR-108, SANDBOX.md "The
+protection score and strict mode"): the kernel features `openmoat run` can use on the
+platform, weighted to 100, and which are in force. With `strict: true`, `openmoat run`
+starts only when all of them are: it refuses before anything starts (exit 64, naming
+each missing feature and what brings it), and stops the agent when the check after the
+start cannot confirm one. On Linux that is the Isolated tier on Landlock ABI 10 or
+later; on macOS, the Seatbelt profile. It fails closed: an unknown score is a refusal.
+
+Only your own policy reads it: a repository policy or a pack with `sandbox:` is
+refused, so a project can neither turn strict mode on for you nor off. It asks more
+than `require.run: full-boundary` (§9.3), which a repository may set and which accepts
+any Landlock ABI from 4.
 
 ## 10. Repository policy
 

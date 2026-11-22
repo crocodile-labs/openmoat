@@ -11,6 +11,9 @@
 
 use serde::{Deserialize, Serialize};
 
+mod score;
+pub use score::{ProtectionScore, ScoreItem, WEIGHTS_LINUX, WEIGHTS_MACOS, weights};
+
 /// The version of the record's JSON form.
 pub const VERSION: u32 = 1;
 
@@ -42,6 +45,12 @@ pub struct EffectiveBoundary {
     /// absent from records written before it was added.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment: Option<RunEnvironment>,
+    /// The protection score of this run (ADR-108): which of the platform's
+    /// kernel features are in force, out of 100, with the missing ones named.
+    /// Set by [`Self::rescore`], which [`Self::launched`] calls again; absent
+    /// from records written before it was added.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub score: Option<ProtectionScore>,
 }
 
 /// What of the environment `openmoat run` was started from reaches the
@@ -191,6 +200,9 @@ pub enum Mechanism {
     /// Pathname Unix sockets made outside the sandbox refused (ABI 9, best
     /// effort).
     LandlockResolveUnix,
+    /// Every UDP bind, connect and send refused (ABI 10, best effort, ADR-108):
+    /// the kernel's own rule beside the seccomp filter's refusal of UDP sockets.
+    LandlockUdp,
     /// The seccomp filters.
     Seccomp,
     /// `PR_SET_NO_NEW_PRIVS`: no set-user-ID gain across `exec`.
@@ -212,6 +224,7 @@ impl Mechanism {
             Self::LandlockTcpPort => "landlock_tcp_port",
             Self::LandlockScopes => "landlock_scopes",
             Self::LandlockResolveUnix => "landlock_resolve_unix",
+            Self::LandlockUdp => "landlock_udp",
             Self::Seccomp => "seccomp",
             Self::NoNewPrivs => "no_new_privs",
             Self::NetworkNamespace => "network_namespace",
@@ -270,9 +283,10 @@ impl Restriction {
             | Mechanism::LandlockTcpPort
             | Mechanism::NetworkNamespace
             | Mechanism::IsolatedView => self.applied == Some(true),
-            Mechanism::LandlockScopes | Mechanism::LandlockResolveUnix | Mechanism::Seatbelt => {
-                true
-            }
+            Mechanism::LandlockScopes
+            | Mechanism::LandlockResolveUnix
+            | Mechanism::LandlockUdp
+            | Mechanism::Seatbelt => true,
         };
         reported_off || (launched && !confirmed)
     }
@@ -382,6 +396,7 @@ impl EffectiveBoundary {
                 Mechanism::LandlockFilesystem | Mechanism::LandlockTcpPort => (enforced, None),
                 Mechanism::LandlockScopes => (step(6), None),
                 Mechanism::LandlockResolveUnix => (step(9), None),
+                Mechanism::LandlockUdp => (step(10), None),
                 Mechanism::Seccomp => (
                     check.seccomp_filters.map(|n| n > 0),
                     check.proc_seccomp_filter,
@@ -398,6 +413,12 @@ impl EffectiveBoundary {
             }
         }
         self.launch = Some(check);
+        self.rescore();
+    }
+
+    /// Work out [`Self::score`] from the record as it stands.
+    pub fn rescore(&mut self) {
+        self.score = Some(score::of(self));
     }
 
     /// The restrictions the run asked for, the system has, and the launch

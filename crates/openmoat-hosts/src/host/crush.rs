@@ -171,9 +171,34 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         why: "Crush runs its `bash` tool and its hooks in its own embedded shell; which \
               variables that shell reads was not checked",
     },
-    run: crate::RunFacts::Unknown {
-        why: "which directories `crush` writes outside the project was not checked",
+    // Outside the project Crush writes its state, `~/.local/share/crush`
+    // ("JSON state only; Crush does not execute a `crushrc` from them", the
+    // README), and its cache, `~/.cache/crush` on every Unix including macOS
+    // (`GlobalConfigData()` and `GlobalCacheDir()` in `internal/config/load.go`);
+    // its logs and database are in the project's `.crush`. The global
+    // `crush.json`, which holds OpenMoat's hook, is not written (ADR-108).
+    run: crate::RunFacts::Known {
+        program: "crush",
+        args: &[],
+        writes: &[
+            crate::RunWrite::Home(".local/share/crush"),
+            crate::RunWrite::Home(".cache/crush"),
+        ],
     },
+    // The model providers' keys of the README's table, less the cloud
+    // accounts (ADR-077), and the variables that move its files.
+    run_env: &[
+        "HYPER_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "GROQ_API_KEY",
+        "XAI_API_KEY",
+        "CRUSH_GLOBAL_CONFIG",
+        "CRUSH_GLOBAL_DATA",
+        "CRUSH_DATA_DIR",
+    ],
     weekly: crate::contract::Weekly {
         runs: crate::WeeklyRuns::NotRun(
             "not yet: how the npm package `@charmland/crush` places its binary when the job \

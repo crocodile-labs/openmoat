@@ -45,6 +45,23 @@ fn status_and_doctor_name_the_way_to_a_sandbox_or_why_there_is_none() {
                 assert!(command.starts_with("openmoat run"), "{host}: {command}");
                 assert!(command.contains(" --write "), "{host}: {command}");
                 assert!(command.ends_with(&format!("-- {program}")), "{command}");
+                // `status` puts it in `Needs your attention` with that one
+                // command, and the run stays healthy (ADR-108).
+                let out = sb.moat(&["status"]);
+                let shown = stdout(&out)
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                assert!(
+                    shown.contains("hook only: no OS boundary"),
+                    "{host}: {shown}"
+                );
+                let first = command
+                    .split_whitespace()
+                    .take(3)
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                assert!(shown.contains(&first), "{host}: {first}: {shown}");
             }
             // Windows, macOS before 13, Linux without a network namespace.
             _ => {

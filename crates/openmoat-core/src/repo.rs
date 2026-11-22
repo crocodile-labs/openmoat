@@ -323,6 +323,9 @@ mod tests {
             // Nor start an agent over a project file that turns its hook off
             // (ADR-098).
             "version: 1\nsandbox:\n  project_hook_off: start\n",
+            // A repository can neither turn strict mode on nor off (ADR-108):
+            // it is the person's choice for their own machine.
+            "version: 1\nsandbox:\n  strict: false\n",
             "version: 1\nrepo_review: []\n",
             "version: 2\n",
             "version: 1\ndeny:\n  - id: a\n",

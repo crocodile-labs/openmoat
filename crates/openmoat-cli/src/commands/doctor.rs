@@ -183,6 +183,15 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     if let Some(kernel) = super::run::landlock() {
         landlock(&mut report, &kernel, args.verbose);
     }
+    // Each tier's protection score here, the hook alone last (ADR-108).
+    for tier in super::run::score::tiers() {
+        let text = tier.line();
+        if tier.warns() {
+            report.note(&text);
+        } else {
+            report.line(Area::Sandbox, true, text);
+        }
+    }
     if let Some(policy) = &policy {
         let hosts = crate::mcp::set_up_hosts(&home, &binary);
         let names = super::run::withheld_names(policy, &hosts);

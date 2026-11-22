@@ -193,6 +193,8 @@ fn sandboxed_start_writes_a_shim_and_the_path_lines_on_a_yes() {
         assert!(!sb.home.join(".moat/bin").exists(), "{shown}");
         return;
     }
+    // The offer names what the agent has today, per agent (ADR-108).
+    assert!(shown.contains("hook only: no OS boundary"), "{shown}");
     let shim = sb.home.join(".moat/bin").join(program);
     let text_of_shim = fs::read_to_string(&shim).unwrap();
     assert!(
