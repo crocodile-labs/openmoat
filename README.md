@@ -244,6 +244,14 @@ and [docs/SANDBOX.md](docs/SANDBOX.md).
   agree, not that OpenMoat is complete
   ([full results](https://github.com/crocodile-labs/moatbench/tree/main/runs/2026-11-09-openmoat-0.19.0),
   [docs/MOATBENCH.md](docs/MOATBENCH.md)).
+- **Outside benchmarks.** The 0.25.0 default policy's decision engine on two attack sets
+  written by others, with every case it does not stop listed. RedCode-Exec, code sent
+  inline in the command, the 900 snippets that act on the machine: 19.8% denied, 50.0%
+  denied or held for review, none allowed, the rest left to the agent's own prompt; the
+  same code written to a file and then run is stopped in no case, which leaves it to the
+  OS sandbox. agent-egress-bench, the 122 of 192 attacks it has an input for: 47.5% denied,
+  12 of 37 benign requests denied, all for going to a host the policy does not list
+  ([docs/BENCHMARKS.md](docs/BENCHMARKS.md)).
 - **Break OpenMoat.** Find a way past the default policy, report it privately, and the fix
   becomes a permanent test with your name on it ([docs/CHALLENGE.md](docs/CHALLENGE.md)).
 - **Open rules.** The default policy is one file,

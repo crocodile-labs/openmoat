@@ -1256,9 +1256,12 @@ fuzz/                          cargo-fuzz targets: decide_shell, policy_parse,
                                (separate workspace)
 docs/                          this document, INSTALL, USAGE, DEMO, SANDBOX, POLICY,
                                SDK, THREAT_MODEL, ROADMAP, CHALLENGE, MOATBENCH,
-                               ADDING_AN_AGENT, COVERAGE and EVIDENCE (generated), adr/
+                               BENCHMARKS, ADDING_AN_AGENT, COVERAGE and EVIDENCE
+                               (generated), adr/
 scripts/ci/quality-gate.sh     fmt, clippy and tests, as CI runs them; the pre-push hook runs it
 scripts/ci/sdk-js.sh           builds the WebAssembly module and runs the JS SDK's tests
+scripts/bench/external.py      outside benchmark datasets as tool calls, decided by
+                               `openmoat policy check` (docs/BENCHMARKS.md)
 ```
 
 ### Module map
@@ -1282,8 +1285,9 @@ What each module holds. The rules for each path are in `AGENTS.md` §2.
 | `crates/openmoat-hosts/src/host/<module>/fixtures/*.json` | real host payloads |
 | `tests/fixtures/sandbox/` | generated host sandbox settings and Seatbelt profile for the default policy |
 | `crates/*/tests/` | end-to-end tests of the binary in one target, `crates/openmoat-cli/tests/e2e/` (one module per area: `cli`, `alias`, `guard`, `cursor`, `cursor_sandbox`, `deliver`, `copilot_cli`, `openclaw`, `pi`, `gemini_cli`, `opencode`, `hermes`, `cline`, `config_change`, `lock`, `lock_settings`, `install_path`, `binary_path`, `approvals`, `allow`, `allow_expiry`, `allow_files`, `anchor`, `edit`, `escapes`, `heartbeat`, `home_screen`, `hosts`, `human_only`, `listings`, `mcp`, `mcp_gateway`, `packs`, `permission_mode`, `protection`, `provenance`, `audit`, `export`, `team`, `paths`, `policy_upgrade`, `policy_migrate`, `upgrade_path`, `push`, `replay_report`, `moatbench`, `sandbox`, `sandbox_sync`, `sandbox_exec`, `run`, `run_guard`, `uninstall`, `canary`, `check_diff`, `closed_pipe`, `codex`, `continue_cli`, `host_failures`, `proxy`, `proxy_ca`, `proxy_session`, `remote_approvals`, `repo_policy`, `secret`, `session_code`, `taint`, `taint_answered`, `trust`, and `differential/` for the same scenarios against every enforcement layer, with `differential/agents` running the pinned real Claude Code against a scripted fake API; `common` is the shared helper module), conformance runner, the README and USAGE verdict tables checked against the default policy (`openmoat-core/tests/doc_tables.rs`), architecture invariants (`openmoat-core`, `openmoat-hosts`, and `openmoat-cli/tests/architecture.rs` for the approval channels) |
-| `docs/` | INSTALL, USAGE, DEMO, SANDBOX, POLICY, SDK, ARCHITECTURE, THREAT_MODEL, ROADMAP, CHALLENGE, ADDING_AN_AGENT, MOATBENCH, COVERAGE and EVIDENCE (generated), `adr/` |
+| `docs/` | INSTALL, USAGE, DEMO, SANDBOX, POLICY, SDK, ARCHITECTURE, THREAT_MODEL, ROADMAP, CHALLENGE, ADDING_AN_AGENT, MOATBENCH, BENCHMARKS, COVERAGE and EVIDENCE (generated), `adr/` |
 | `scripts/ci/quality-gate.sh` | the local gate: fmt, clippy and tests, as CI runs them |
+| `scripts/bench/` | `external.py`: outside benchmark datasets (RedCode-Exec, agent-egress-bench) turned into tool calls and decided by `openmoat policy check`; `redcode.py` and `egress.py` convert each dataset, `decide.py` runs the binary in a throwaway home, `report.py` scores and writes the tables (`docs/BENCHMARKS.md`); standard library only, the datasets are passed in and never run |
 | `scripts/smoke-real-agents.sh` | a person's check of the protections with their own Claude Code, Codex, Gemini CLI, pi and GitHub Copilot CLI in a throwaway home (CONTRIBUTING "Testing with real agents") |
 | `scripts/ci/latest-agents.sh`, `scripts/ci/latest-agents/` | the weekly check of each agent's latest release in a throwaway home; `agents.json`, generated from each host spec's `weekly` (`host/<module>/weekly.rs`, `tests/docs/weekly.rs`), records each agent's install, the release its adapter was checked against and its golden shell payload; `hosts/<agent>.sh` holds each record's own steps; `README.md` says what each agent's run proves |
 
