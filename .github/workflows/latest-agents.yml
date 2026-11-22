@@ -115,6 +115,10 @@ jobs:
           # strace: which hook file Antigravity CLI opens (latest-agents.sh, agy_diagnose).
           bash scripts/ci/apt-install.sh bubblewrap socat strace
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          # What else AppArmor applies to bubblewrap here (#784): Claude Code's sandbox
+          # fails with "nested userns is capability-restricted" even with the line above.
+          sudo aa-status 2>/dev/null | grep -i bwrap || true
+          sysctl kernel.apparmor_restrict_unprivileged_unconfined 2>/dev/null || true
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: openmoat-${{ runner.os }}
