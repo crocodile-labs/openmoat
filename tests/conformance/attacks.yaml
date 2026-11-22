@@ -7043,3 +7043,13 @@
   action: { mcp_tool: { name: "mcp__chat__send", hosts: ["https://chat.example/OpenMoatDecoy-fixture-value-7Kq2Lm9Pz4"] } }
   decoys: *decoys
   expect: { verdict: deny, rules: [canary] }
+# Antigravity 2.0's `read_file`, `write_file` and `edit_file` (`Path`) map to the
+# file they name; `openmoat-hosts`' consistency suite sends these through them.
+- id: T1-antigravity-read-file-ssh-key
+  threat: T1
+  action: { fs_read: "~/.ssh/id_rsa" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T9-antigravity-write-file-zshrc
+  threat: T9
+  action: { fs_write: "~/.zshrc" }
+  expect: { verdict: deny, rules: [shell-rc] }

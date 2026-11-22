@@ -62,6 +62,18 @@ still exits 2, the one signal left. The weekly job's denied payload checks exit 
   `RequestedTerminalID`). `ForeignShell` on Windows.
 - `view_file`, `list_dir` (`FsRead`); `write_to_file`, `replace_file_content`,
   `multi_replace_file_content` (`FsWrite`).
+- `read_file` (`FsRead`), `write_file`, `edit_file` (`FsWrite`) of the file their `Path`
+  names: Antigravity 2.0's names, from a contribution (#844). The
+  [hooks page](https://antigravity.google/docs/hooks?tab=cli) lists none of them and no
+  `Path` argument; the SDK's [built-in tools](https://antigravity.google/docs/sdk/tools/)
+  list `edit_file` ("Edit an existing file", `BuiltinTools.EDIT_FILE` in
+  [`types.py`](https://github.com/google-antigravity/antigravity-sdk-python/blob/97c5c53d0741c601ea8c2401497cad3b5ee8dc98/google/antigravity/types.py#L528))
+  without its arguments, and no `read_file` or `write_file`. The names and `Path` are as
+  observed by the contributor in real calls, read 2026-11-22. No source names a second
+  path (a rename or move target) for `edit_file`, so only `Path` is checked; a call
+  without a `Path` string is decided as an unknown tool (every path its arguments name is
+  checked, `tool.unknown` decides the tool), never allowed on its name. Their new content
+  is not read for file provenance: its key is not documented.
 - `find_by_name`, `grep_search` (`FsRead`, `ReadFiles`), with the directory their
   `Pattern` or `Includes` names and where a `..` climbs to.
 - `read_url_content` (`Fetch`), `search_web` (`WebSearch`), `generate_image`

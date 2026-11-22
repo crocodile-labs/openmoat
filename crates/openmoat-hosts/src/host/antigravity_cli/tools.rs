@@ -56,17 +56,12 @@ pub(super) fn map_on(
         "view_file" => Action::FsRead {
             path: field("AbsolutePath")?,
         },
-        "read_file" => Action::FsRead {
-            path: field("Path")?,
-        },
+        "read_file" | "write_file" | "edit_file" => return observed_file_tool(tool, input),
         "write_to_file" | "replace_file_content" | "multi_replace_file_content" => {
             Action::FsWrite {
                 path: field("TargetFile")?,
             }
         }
-        "write_file" | "edit_file" => Action::FsWrite {
-            path: field("Path")?,
-        },
         "list_dir" => Action::FsRead {
             path: field("DirectoryPath")?,
         },
@@ -113,6 +108,27 @@ pub(super) fn map_on(
         name if name.starts_with("mcp_") => crate::wire::unknown::mcp(name, input)?,
         // `send_message` and any tool the docs do not list.
         _ => crate::wire::unknown::action(Host::AntigravityCli, tool, input)?,
+    };
+    Ok(Mapped::action(action))
+}
+
+/// Antigravity 2.0's `read_file` (`FsRead`), `write_file` and `edit_file`
+/// (`FsWrite`) of the one file their `Path` names. The hooks page documents
+/// neither these names nor `Path`: the SDK lists `edit_file` among its
+/// built-in tools without its arguments, and the shape is the one seen in
+/// real calls. So a call without a `Path` string is not an error here but an
+/// unknown tool: every path its arguments name is checked and `tool.unknown`
+/// decides it, never an allow on its name alone.
+fn observed_file_tool(tool: &str, input: &Value) -> Result<Mapped, HostError> {
+    let path = input
+        .get("Path")
+        .and_then(Value::as_str)
+        .filter(|p| !p.is_empty())
+        .map(str::to_owned);
+    let action = match (tool, path) {
+        ("read_file", Some(path)) => Action::FsRead { path },
+        (_, Some(path)) => Action::FsWrite { path },
+        (_, None) => crate::wire::unknown::action(Host::AntigravityCli, tool, input)?,
     };
     Ok(Mapped::action(action))
 }

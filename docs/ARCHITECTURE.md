@@ -385,6 +385,7 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | goose | any other unprefixed tool | tool name and arguments | `UnknownTool` (`tool.unknown`) |
 | Antigravity CLI | `run_command` | `CommandLine`, after a `cd` to `Cwd`; needs review when it names an earlier terminal (`RequestedTerminalID`); the Windows shell is not documented | `Shell`, `Unchecked`; `ForeignShell` on Windows |
 | Antigravity CLI | `view_file`, `list_dir` / `write_to_file`, `replace_file_content`, `multi_replace_file_content` | `AbsolutePath`, `DirectoryPath` / `TargetFile` | `FsRead` / `FsWrite` |
+| Antigravity CLI | `read_file` / `write_file`, `edit_file` (Antigravity 2.0) | `Path`, as seen in real calls (not on the hooks page); without it, read as an unknown tool | `FsRead` / `FsWrite`; `UnknownTool` |
 | Antigravity CLI | `find_by_name`, `grep_search` | `SearchDirectory`, `SearchPath`, and the directory `Pattern` or `Includes` names before its first wildcard and where a `..` climbs to | `FsRead`, `ReadFiles` |
 | Antigravity CLI | `read_url_content` / `search_web` | `Url` / `query` | `Fetch` / `WebSearch` |
 | Antigravity CLI | `generate_image` | each of `ImagePaths`, read and sent to the model; with none, the tool itself | `ReadFiles`; `UnknownTool` |

