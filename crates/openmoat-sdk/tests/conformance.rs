@@ -48,6 +48,11 @@ struct Fixture {
     #[serde(default)]
     session: Vec<FixtureAction>,
     repo: Option<RepoFixture>,
+    /// Decoy keys planted for the fixture (ADR-106). `openmoat init` plants
+    /// them and the guard checks them, so they are no part of what the SDK
+    /// decides: such a fixture is the core's alone.
+    #[serde(default)]
+    decoys: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -430,7 +435,7 @@ fn every_fixture_decides_through_the_sdk_as_through_the_engine() {
     let mut vectors = Vec::new();
     let mut cache = Compiled::default();
     for f in &fixtures {
-        if f.session.iter().any(|earlier| earlier.output.is_some()) {
+        if f.session.iter().any(|earlier| earlier.output.is_some()) || f.decoys.is_some() {
             continue;
         }
         let engine = engine_decision(f, &policy, &mut cache);
