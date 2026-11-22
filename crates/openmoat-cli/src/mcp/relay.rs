@@ -92,6 +92,8 @@ pub struct Call<'a> {
     pub name: &'a str,
     /// The tool's or prompt's arguments; `None` when the message has none.
     pub arguments: Option<&'a Value>,
+    /// The client's request metadata, before forwarding to the server.
+    pub metadata: Option<&'a Value>,
     /// The request's id as the relay matches its response ([`id_key`]);
     /// `None` for a notification, which gets no response.
     pub request: Option<&'a str>,

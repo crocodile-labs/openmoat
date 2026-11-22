@@ -106,17 +106,16 @@ pub(super) fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
         {
             provenance.write(&store, id, host.id(), &r.session_id)?;
         }
-        // An MCP call the host may now send: `openmoat mcp proxy` passes on only
-        // a call that matches such a decision (ADR-045). Like the row, a decision
-        // that cannot be written fails the call.
-        if let Some(r) = request {
-            mcp_ticket(&store, id, host, r, decision, relayed)?;
-        }
         // Under `moat run`, the run's proxy applies this session's taint too
         // (ADR-027); a link that cannot be written fails the call like the row.
         let run = std::env::var(taint::run::RUN_SESSION_ENV).ok();
         if let (Some(run), Some(r)) = (taint::run::run_session(run.as_deref()), request) {
             taint::run::link(&store, run, host, &r.session_id)?;
+        }
+        // Publish the MCP ticket last. Any earlier write failure makes the
+        // guard answer deny, so it must leave no ticket the relay could take.
+        if let Some(r) = request {
+            mcp_ticket(&store, id, host, r, decision, relayed)?;
         }
         Ok(())
     })?;
