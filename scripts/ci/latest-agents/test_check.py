@@ -232,6 +232,49 @@ class ToolFailures(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("not a JSON object: not json", printed)
 
+    # What the ubuntu-latest runner answered Claude Code's seccomp step (#784).
+    NESTED = ("apply-seccomp: write /proc/self/setgroups (nested userns is "
+              "capability-restricted; caller must provide CAP_SYS_ADMIN): Permission denied")
+
+    def env_limited(self):
+        return run_quietly(check.cmd_env_limited, str(self.root), HOST)
+
+    def test_a_runner_limit_is_a_skip_line_not_a_pass_or_a_silent_ignore(self):
+        self.capture(self.failure("ls moat-ci-no-such-path", self.NESTED))
+        self.capture(self.failure("curl -s https://docs.moat-ci.example/setup", self.NESTED))
+        code, printed = self.run_check()
+        self.assertEqual(code, 0)
+        skips = [line for line in printed.splitlines() if line.startswith("skip  env-limit: ")]
+        self.assertEqual(len(skips), 1, printed)
+        self.assertIn("nested user namespace refused", skips[0])
+        self.assertIn("not an OpenMoat result", skips[0])
+        self.assertIn("command=curl -s https://docs.moat-ci.example/setup", skips[0])
+        self.assertIn("::warning title=some-host: runner limit::", printed)
+        self.assertIn("but the expected one and runner limits (2 payload(s)", printed)
+        self.assertEqual(self.env_limited(), (0, "nested user namespace refused\n"))
+
+    def test_another_failure_beside_a_runner_limit_still_fails(self):
+        self.capture(self.failure("curl -s https://docs.moat-ci.example/setup", self.NESTED))
+        error = "bwrap: execvp /tmp/moat-ci-tool-shell.abc/bash: No such file or directory"
+        self.capture(self.failure("curl -s https://collect.moat-ci.example/r", error))
+        code, printed = self.run_check()
+        self.assertEqual(code, 1)
+        self.assertTrue(printed.startswith(f"FAIL  1 {HOST} tool call(s) failed"), printed)
+        self.assertIn(error, printed)
+        self.assertNotIn("skip  env-limit", printed)
+
+    def test_only_the_exact_runner_text_is_a_limit(self):
+        self.assertEqual(self.env_limited(), (1, ""), "nothing captured")
+        for error in ("bwrap: setting up uid map: Permission denied",
+                      "nested userns is capability-restricted",
+                      "apply-seccomp: Permission denied",
+                      "echo 'apply-seccomp:'\nnested userns is capability-restricted"):
+            self.assertIsNone(check.env_limit({"error": error}), error)
+        self.capture(self.failure("ls moat-ci-no-such-path", "ls: cannot access"))
+        self.assertEqual(self.env_limited(), (1, ""))
+        self.assertEqual(check.env_limit({"tool_response": {"stderr": self.NESTED}}),
+                         "nested user namespace refused")
+
 
 class Proves(unittest.TestCase):
     """A record's `proves`, which docs/PROTECTION.md shows as evidence."""

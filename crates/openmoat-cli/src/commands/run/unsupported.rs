@@ -87,6 +87,11 @@ pub fn bubblewrap() -> Option<bool> {
     None
 }
 
+/// None: no agent sandbox here uses user namespaces.
+pub fn bubblewrap_userns() -> Option<std::result::Result<(), String>> {
+    None
+}
+
 /// None: `moat run` refuses here, so nothing in a project is open to it.
 pub fn project_open(_: &Policy, _: &EvalContext) -> Option<String> {
     None

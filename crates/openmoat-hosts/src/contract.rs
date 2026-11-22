@@ -18,6 +18,7 @@ mod hook_failure;
 mod hook_file;
 mod hook_off;
 mod hook_trust;
+mod linux_sandbox;
 mod location;
 mod mcp;
 mod plugin;
@@ -44,6 +45,7 @@ pub use hook_off::{
     HookOff, Managed, ManagedHooks, ManagedShape, ProjectFile, ProjectOff, SessionOverride,
 };
 pub use hook_trust::HookTrust;
+pub use linux_sandbox::{LinuxProgram, LinuxSandboxNeeds};
 pub use location::{Locate, Located, Location, XdgDir};
 pub use mcp::{
     AutoStart, BuiltinMcp, McpAutoStart, McpCommandForm, McpFile, McpNames, McpReader, McpServer,
@@ -609,6 +611,10 @@ pub struct SandboxSpec {
     /// Whether the sandbox lets a command type into the terminal (`TIOCSTI`)
     /// on Linux, so only the kernel stops it, as `moat doctor` warns.
     pub tiocsti_open_on_linux: bool,
+    /// What the sandbox needs from a Linux machine to start a command, which
+    /// `moat doctor` and `moat status` check; `None` when the host has no
+    /// Linux sandbox.
+    pub linux_needs: Option<LinuxSandboxNeeds>,
     /// How the sandbox's traffic to `openmoat proxy` carries an agent session
     /// when the policy sets `sandbox.proxy_port` (ADR-044).
     pub proxy_sessions: ProxySessions,

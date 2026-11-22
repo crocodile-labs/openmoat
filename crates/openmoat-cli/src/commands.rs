@@ -159,6 +159,13 @@ pub fn run_unavailable() -> Option<String> {
     run::unavailable()
 }
 
+/// Whether the system's bubblewrap creates a user namespace here, for the
+/// agents' own sandboxes (`sandbox::linux_needs`); `None` without it or off
+/// Linux.
+pub fn run_bubblewrap_userns() -> Option<std::result::Result<(), String>> {
+    run::bubblewrap_userns()
+}
+
 /// What `openmoat run` lacks here for its full boundary (ADR-077); `None` when
 /// it has all of it.
 pub fn run_full_boundary_gap() -> Option<String> {

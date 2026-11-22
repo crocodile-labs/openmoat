@@ -36,6 +36,7 @@ pub mod install;
 pub mod kerberos;
 pub mod landlock;
 mod links;
+pub mod linux_needs;
 pub mod own_login;
 mod patterns;
 pub(crate) use patterns::RUNS_LATER;

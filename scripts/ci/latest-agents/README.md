@@ -81,7 +81,16 @@ unknown claim and a record without `hook` and without `why`.
   to be written from such a capture, not from the documentation. `check.py
   tool-failures` does fail, before the audit checks, when a payload belongs to any call
   but the `ls` meant to fail, and quotes its `error` (a sandbox that could not start the
-  shell prints `bwrap`, `socat` or `execvp` text there). A tool shell that never started
+  shell prints `bwrap`, `socat` or `execvp` text there). One error is a limit of the
+  runner, not a result (`ENV_LIMITS` in `check.py`): on `ubuntu-latest` Claude Code's
+  seccomp step cannot make a user namespace inside bubblewrap's (`apply-seccomp: write
+  /proc/self/setgroups (nested userns is capability-restricted; …)`, #784), so no Bash
+  call starts in its sandbox. Such a payload prints `skip  env-limit: …` and a warning
+  annotation instead of failing; `check.py env-limited` then makes the script skip, each
+  with its own `skip  env-limit` line, the tool-shell checks and the injected-input check,
+  which need a call to have run. The `SessionStart` row, the denied read (decided in
+  `PreToolUse`, before the sandbox) and the resumed session's checks still run, and a
+  failure with any other error still fails the step. A tool shell that never started
   is printed first too, so the first `FAIL` of the step names the cause, not the audit
   row it left missing. An audit check that fails lists each new row on its own line:
   tool, verdict, rules and command, each cut to 160 characters.

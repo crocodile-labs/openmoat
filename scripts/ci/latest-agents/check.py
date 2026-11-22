@@ -36,7 +36,10 @@ read JSON, and the agent records they come from (agents.json beside this file).
     check.py tool-failures <dir> <host> <text>
                                              every captured PostToolUseFailure is for the call
                                              whose command holds <text>; any other fails, with
-                                             its error quoted
+                                             its error quoted, except a limit of the runner
+                                             (ENV_LIMITS), printed as `skip  env-limit`
+    check.py env-limited <dir> <host>        exit 0 and print the runner limit a captured
+                                             PostToolUseFailure shows, else exit 1
     check.py scrub <host> <version> <captured dir> <root> <home> <project> <out dir>
                                              each payload `openmoat guard` copied for <host> written
                                              as `captured-<version>-<n>.json`, with the throwaway
@@ -544,33 +547,90 @@ def failure_text(payload):
     return "(no error field)"
 
 
-def cmd_tool_failures(captured, host, expected):
-    """Every captured PostToolUseFailure belongs to the one call meant to fail
-    (its command holds `expected`). Any other means a call that should have run
-    did not start, and the payload's own error says why."""
-    found = sorted(Path(captured).glob(f"{host}-event-PostToolUseFailure-*.json"))
-    other = []
-    for path in found:
+# Errors that say the runner, not the agent or OpenMoat, kept the agent's own
+# sandbox from starting a call: each a name and a pattern of its error text.
+# Claude Code's seccomp step makes a user namespace inside bubblewrap's, which
+# GitHub's ubuntu-latest runner refuses although bubblewrap itself starts (#784):
+#   apply-seccomp: write /proc/self/setgroups (nested userns is
+#   capability-restricted; caller must provide CAP_SYS_ADMIN): Permission denied
+ENV_LIMITS = (
+    ("nested user namespace refused",
+     re.compile(r"apply-seccomp:[^\n]*nested userns is capability-restricted")),
+)
+
+
+def env_limit(payload):
+    """The name of the runner limit a failure payload's error shows, or None."""
+    text = failure_text(payload)
+    if not isinstance(text, str):
+        text = json.dumps(text)
+    for name, pattern in ENV_LIMITS:
+        if pattern.search(text):
+            return name
+    return None
+
+
+def failures(captured, host):
+    """Each captured PostToolUseFailure of `host`: (file, payload or None, text)."""
+    for path in sorted(Path(captured).glob(f"{host}-event-PostToolUseFailure-*.json")):
         text = path.read_text(encoding="utf-8", errors="replace")
         try:
             payload = json.loads(text)
         except ValueError:
             payload = None
-        if not isinstance(payload, dict):
+        yield path, payload if isinstance(payload, dict) else None, text
+
+
+def cmd_tool_failures(captured, host, expected):
+    """Every captured PostToolUseFailure belongs to the one call meant to fail
+    (its command holds `expected`). Any other means a call that should have run
+    did not start, and the payload's own error says why. A failure whose error
+    is a limit of the runner (ENV_LIMITS) is printed as a `skip  env-limit`
+    line and a warning annotation instead: it proves nothing about the hook,
+    for or against; any other failure still fails."""
+    found = list(failures(captured, host))
+    other, limited = [], []
+    for path, payload, text in found:
+        if payload is None:
             other.append(f"      - {path.name}: not a JSON object: {cut(text)}")
             continue
         tool_input = payload.get("tool_input")
         command = tool_input.get("command") if isinstance(tool_input, dict) else tool_input
         if isinstance(command, str) and expected in command:
             continue
-        other.append(f"      - tool={cut(payload.get('tool_name'))} command={cut(command)} "
-                     f"error={cut(failure_text(payload), 400)}")
+        line = (f"tool={cut(payload.get('tool_name'))} command={cut(command)} "
+                f"error={cut(failure_text(payload), 400)}")
+        limit = env_limit(payload)
+        if limit:
+            limited.append((limit, line))
+        else:
+            other.append(f"      - {line}")
     if other:
         fail(f"{len(other)} {host} tool call(s) failed that should have run (PostToolUseFailure "
              f"for a call other than the one with {expected}):\n" + "\n".join(other))
-    print(f"ok    no {host} PostToolUseFailure but the expected one "
-          f"({len(found)} payload(s) captured)")
+    for limit, line in limited:
+        print(f"skip  env-limit: {host}'s own sandbox could not start a call on this runner "
+              f"({limit}), not an OpenMoat result: {line}")
+    if limited:
+        annotate("warning", f"{host}: runner limit",
+                 f"{len(limited)} call(s) could not start in {host}'s own sandbox on this "
+                 f"runner ({limited[0][0]}); the checks that need a call's output are skipped")
+    print(f"ok    no {host} PostToolUseFailure but the expected one"
+          f"{' and runner limits' if limited else ''} ({len(found)} payload(s) captured)")
     return 0
+
+
+def cmd_env_limited(captured, host):
+    """Exit 0 and print the limit when any captured PostToolUseFailure of `host`
+    (the expected one included) shows a limit of the runner; exit 1, silent,
+    otherwise. The script skips, with a `skip` line, the checks that need a
+    call to have run in the agent's sandbox."""
+    for _, payload, _ in failures(captured, host):
+        limit = payload and env_limit(payload)
+        if limit:
+            print(limit)
+            return 0
+    return 1
 
 
 def unlocalise(value, places):
@@ -781,6 +841,7 @@ COMMANDS = {
     "scrub": (cmd_scrub, 7), "resumed": (cmd_resumed, 1),
     "background-mcp": (cmd_background_mcp, 5), "capture-event": (cmd_capture_event, 2),
     "event-captured": (cmd_event_captured, 3), "tool-failures": (cmd_tool_failures, 3),
+    "env-limited": (cmd_env_limited, 2),
 }
 
 

@@ -130,6 +130,17 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         windows_modes: Some(&windows_sandbox::Codex),
         // Codex's Linux sandbox does not refuse `TIOCSTI`.
         tiocsti_open_on_linux: true,
+        // The sandboxing docs (<https://developers.openai.com/codex/sandboxing>):
+        // Codex uses the first `bwrap` on `PATH`, else a bundled helper that
+        // "requires support for unprivileged user namespace creation", and
+        // warns at startup when it cannot create one. So `bwrap` is advised,
+        // not needed; the namespace is.
+        linux_needs: Some(crate::contract::LinuxSandboxNeeds {
+            programs: &[],
+            user_namespaces: true,
+            without: "Codex warns when it starts, and the commands it runs in its sandbox cannot \
+                      start",
+        }),
         // Its upstream proxy comes from the Codex process's own `HTTP_PROXY`,
         // and its hooks cannot set a command's environment (ADR-044).
         proxy_sessions: ProxySessions::NoCredential,

@@ -137,6 +137,11 @@ pub fn bubblewrap() -> Option<bool> {
     None
 }
 
+/// None: no agent sandbox here uses user namespaces.
+pub fn bubblewrap_userns() -> Option<std::result::Result<(), String>> {
+    None
+}
+
 /// None: Seatbelt denies inside the project what the policy denies, so
 /// nothing there stays open for `moat doctor` to name.
 pub fn project_open(_: &Policy, _: &EvalContext) -> Option<String> {

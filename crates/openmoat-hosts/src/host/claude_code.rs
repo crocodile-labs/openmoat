@@ -155,6 +155,25 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         ),
         windows_modes: None,
         tiocsti_open_on_linux: false,
+        // The sandboxing docs, "Set up Linux and WSL2": the sandbox relies on
+        // `bubblewrap` and `socat`; Ubuntu's AppArmor restriction on user
+        // namespaces "keeps the sandbox from starting". With
+        // `failIfUnavailable` and `allowUnsandboxedCommands: false` nothing
+        // runs outside it.
+        linux_needs: Some(crate::contract::LinuxSandboxNeeds {
+            programs: &[
+                crate::contract::LinuxProgram {
+                    name: "bwrap",
+                    package: "bubblewrap",
+                },
+                crate::contract::LinuxProgram {
+                    name: "socat",
+                    package: "socat",
+                },
+            ],
+            user_namespaces: true,
+            without: "its Bash commands fail (`failIfUnavailable`, no unsandboxed commands)",
+        }),
         // The hooks reference, "Persist environment variables": each Bash
         // command runs the file's lines first (ADR-044).
         proxy_sessions: ProxySessions::EnvFile("CLAUDE_ENV_FILE"),

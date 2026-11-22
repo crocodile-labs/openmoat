@@ -12,7 +12,7 @@ use crate::home::Home;
 use crate::install::{HookState, HostConfig, Recorded};
 use crate::integrity::Lock;
 use crate::report::{Mark, Row};
-use crate::sandbox::{Plan, install as host_sandbox};
+use crate::sandbox::{Plan, install as host_sandbox, linux_needs};
 
 /// Each host's hook, then the agents OpenMoat finds but cannot hook; `false`
 /// on any problem.
@@ -154,6 +154,15 @@ pub(super) fn sandboxes(shown: &mut Shown, home: &Home, plan: &Plan, binary: &Pa
             }
         }
     }
+    // On Linux, an agent whose own sandbox cannot start a command here (#784):
+    // a warning that leaves `healthy` alone; `doctor` names the fixes.
+    if let Some(facts) = linux_needs::Facts::here() {
+        for finding in linux_needs::findings(&with_sandbox, &facts) {
+            let row = Row::new(Mark::Attention, finding.agent, finding.short())
+                .fix("openmoat doctor lists the fixes");
+            shown.attention.push(row);
+        }
+    }
     if let Some(port) = plan.proxy_port.filter(|_| !with_sandbox.is_empty()) {
         // A warning that leaves `healthy` alone: a stopped proxy fails closed.
         let (ok, text) = crate::commands::proxy::listening_line(port);
@@ -183,6 +192,33 @@ pub(super) fn sandboxes(shown: &mut Shown, home: &Home, plan: &Plan, binary: &Pa
         healthy &= ok;
     }
     healthy
+}
+
+/// `status --format json`'s `own_sandbox_linux`: on Linux, the agents whose
+/// own sandbox OpenMoat wrote and which cannot start a command here; empty
+/// elsewhere, and without a policy that loads.
+pub(super) fn own_sandbox_linux(home: &Home, binary: &Path) -> Vec<linux_needs::Finding> {
+    let Some(facts) = linux_needs::Facts::here() else {
+        return Vec::new();
+    };
+    let Some(plan) = home
+        .load_policy()
+        .ok()
+        .and_then(|policy| Plan::new(home, &policy).ok())
+    else {
+        return Vec::new();
+    };
+    let lock = Lock::load(&home.lock_path()).ok();
+    let hosts: Vec<Host> = host_sandbox::hosts()
+        .filter(|h| HostConfig::for_host(home, *h).is_ok_and(|c| c.set_up(binary)))
+        .filter(|h| {
+            !matches!(
+                host_sandbox::problems(home, *h, &plan, lock.as_ref()),
+                Ok(None)
+            )
+        })
+        .collect();
+    linux_needs::findings(&hosts, &facts)
 }
 
 /// A proxy row: in the `OpenMoat` section when fine, else a warning.

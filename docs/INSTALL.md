@@ -210,6 +210,15 @@ confinement, run Claude Code and `openmoat` inside WSL2. Codex's sandbox is set 
 other systems; Cursor's `sandbox.json` is not written, because Cursor documents its
 sandbox for macOS and Linux only.
 
+On Linux, the sandboxes `init` turns on need what each agent documents: Claude Code
+needs bubblewrap and socat (`sudo apt-get install bubblewrap socat` on Debian and
+Ubuntu, `sudo dnf install bubblewrap socat` on Fedora), and Claude Code, Codex and
+Cursor all need to create user namespaces as you, which Ubuntu 23.10 and later restrict
+through AppArmor by default (`kernel.apparmor_restrict_unprivileged_userns=1`). If an
+agent's commands all fail after `openmoat init`, run `openmoat doctor`: it says which
+agent's sandbox cannot start commands here and why, with the fixes
+([SANDBOX.md](SANDBOX.md#what-each-agents-sandbox-needs-on-linux)).
+
 On native Windows, `openmoat doctor` also shows which of its Windows sandbox modes Codex's
 `config.toml` selects (`[windows] sandbox`, `[features] prefer_mxc`). Codex's MXC and
 `elevated` modes enforce the read denies OpenMoat writes; its `unelevated` mode does not

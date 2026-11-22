@@ -170,6 +170,39 @@ OpenMoat's read denies hold only through the hook there (ADR-083). `openmoat sta
 `hook only`, and a sandbox that is missing, weakened or out of date the same way, with
 the reason ([USAGE.md](USAGE.md#how-each-agent-is-protected)).
 
+### What each agent's sandbox needs on Linux
+
+What each agent's documentation says its own Linux sandbox needs. The programs and user
+namespaces are in each host's spec (`SandboxSpec::linux_needs`), and `openmoat doctor`
+checks them ([USAGE.md](USAGE.md#can-the-agents-own-sandbox-start-commands-here-linux));
+the Landlock ABI has its own `landlock` row there:
+
+| Agent | Needs | Where it is missing | Source |
+|---|---|---|---|
+| Claude Code | `bwrap` (package `bubblewrap`) and `socat` on `PATH`; user namespaces as the user | with `failIfUnavailable` and no unsandboxed commands, its Bash commands fail | [Sandboxing](https://code.claude.com/docs/en/sandboxing), "Set up Linux and WSL2" |
+| Codex | user namespaces as the user; the first `bwrap` on `PATH`, else a bundled helper that needs them too | Codex warns when it starts, and its sandboxed commands cannot start | [Sandboxing](https://developers.openai.com/codex/sandboxing) |
+| Cursor | Linux 6.2 with Landlock v3, and unprivileged user namespaces | Cursor asks before running each command instead | [Run Modes](https://cursor.com/docs/agent/security/run-modes) |
+
+User namespaces are refused to a user where `user.max_user_namespaces` is `0`, where
+Debian's `kernel.unprivileged_userns_clone` is `0`, on Ubuntu 23.10 and later where
+`kernel.apparmor_restrict_unprivileged_userns` is `1` (the default) and the program has
+no AppArmor profile that allows them, and in containers and virtual machines that do not
+allow them. Claude Code's and Codex's documentation give the fixes for Ubuntu: an
+AppArmor profile for `/usr/bin/bwrap` (Claude Code's page has one to copy; Codex's
+installs `bwrap-userns-restrict` from the `apparmor-profiles` package), or `sudo sysctl -w
+kernel.apparmor_restrict_unprivileged_userns=0`, which lifts the restriction for every
+program until the next reboot; the same line in a file under `/etc/sysctl.d/` keeps it.
+Cursor's page says its desktop app needs no setup, and that the CLI may need the
+distribution's AppArmor package.
+
+No policy setting leaves one agent's sandbox off: where an agent's sandbox cannot start,
+its hook still decides each call, and the fix is the machine's. `openmoat doctor` cannot
+see a machine that allows a user namespace but not one inside another: Claude Code's
+seccomp step makes one inside bubblewrap's, and on GitHub's `ubuntu-latest` runner it
+fails with `apply-seccomp: write /proc/self/setgroups (nested userns is
+capability-restricted; …)` although bubblewrap starts (#784,
+[LIMITS.md](LIMITS.md)).
+
 Network has two modes:
 
 - **Default:** each agent's own proxy enforces the allowlist.

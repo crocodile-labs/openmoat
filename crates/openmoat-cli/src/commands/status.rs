@@ -172,6 +172,7 @@ fn report(home: &Home, binary: &Path, update: Option<&String>) -> Result<serde_j
             .collect::<Vec<_>>(),
         "repo_git_config": crate::project_settings::git_config::warnings_here(),
         "opt_in": crate::opt_in::rows(home, time::now_ms()),
+        "own_sandbox_linux": agents::own_sandbox_linux(home, binary),
     }))
 }
 

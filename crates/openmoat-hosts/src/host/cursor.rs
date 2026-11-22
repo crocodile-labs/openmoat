@@ -111,6 +111,15 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         ),
         windows_modes: None,
         tiocsti_open_on_linux: false,
+        // Run Modes (<https://cursor.com/docs/agent/security/run-modes>): Landlock
+        // and seccomp, which need "unprivileged user namespaces enabled"; where
+        // they are missing "Cursor falls back to asking for approval before
+        // running commands".
+        linux_needs: Some(crate::contract::LinuxSandboxNeeds {
+            programs: &[],
+            user_namespaces: true,
+            without: "Cursor asks before running each command instead",
+        }),
         // `sandbox.json` has no proxy setting.
         proxy_sessions: ProxySessions::NotProxied,
         own_sandbox_off: None,

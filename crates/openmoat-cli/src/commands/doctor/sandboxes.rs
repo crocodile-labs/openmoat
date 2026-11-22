@@ -17,7 +17,7 @@ use crate::install::{HostConfig, read_or_empty};
 use crate::integrity::Lock;
 use crate::report::{Mark, Row};
 use crate::sandbox::backend::{MaskLevel, Output, SandboxBackend};
-use crate::sandbox::{Plan, install as host_sandbox};
+use crate::sandbox::{Plan, install as host_sandbox, linux_needs};
 
 /// The Standard tier: each present host's sandbox settings against the policy,
 /// then how many places the translation loses or widens (each one with `verbose`).
@@ -92,6 +92,13 @@ pub(super) fn sandboxes(
             for line in String::from_utf8_lossy(&text).lines() {
                 report.human(Place::Details, Row::new(Mark::Info, name, line.trim()));
             }
+        }
+    }
+    // On Linux, the agents whose own sandbox cannot start a command here
+    // (#784): a warning, which changes no decision.
+    if let Some(facts) = linux_needs::Facts::here() {
+        for finding in linux_needs::findings(&with_sandbox, &facts) {
+            report.warn(&finding.line());
         }
     }
     if let Some(port) = plan.proxy_port.filter(|_| present) {

@@ -308,6 +308,13 @@ pub fn bubblewrap() -> Option<bool> {
     Some(isolate::system_bwrap().is_some())
 }
 
+/// Whether the system's bubblewrap creates its namespaces, a user namespace
+/// among them (`isolate::probe`); `None` where it is not installed.
+pub fn bubblewrap_userns() -> Option<std::result::Result<(), String>> {
+    isolate::system_bwrap()?;
+    Some(isolate::probe().map(|_| ()))
+}
+
 /// What `moat doctor` says where `moat run --no-isolate`, or a plain `moat run`
 /// that cannot isolate, would grant the project of `ctx` entry by entry (no
 /// network namespace, ADR-090): the paths the policy denies there that would

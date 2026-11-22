@@ -461,6 +461,14 @@ pub fn bubblewrap() -> Option<bool> {
     platform::bubblewrap()
 }
 
+/// On Linux with the system's bubblewrap installed, whether it creates a user
+/// namespace here (`Err` holds why not), for the agents' own sandboxes in
+/// `moat doctor` and `moat status`; `None` without bubblewrap or off Linux.
+/// The probe `moat run` makes to choose its tier, run once per process.
+pub fn bubblewrap_userns() -> Option<std::result::Result<(), String>> {
+    platform::bubblewrap_userns()
+}
+
 /// On Linux without a network namespace, which paths the policy denies in the
 /// project of `ctx` `moat run` would leave open to commands, for `moat doctor`
 /// (ADR-090); `None` elsewhere.

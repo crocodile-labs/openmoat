@@ -129,8 +129,17 @@ load_hook() {
     # the Bash calls is the first FAIL in the log, not a missing audit row it
     # caused; the job still fails at the end, after the checks below said what
     # they find.
+    # A limit of the runner (check.py ENV_LIMITS: GitHub's ubuntu-latest refuses
+    # the user namespace Claude Code's seccomp step makes inside bubblewrap's,
+    # #784) keeps every Bash call from starting in Claude Code's own sandbox.
+    # The checks that need a call to have run are then skipped with a `skip`
+    # line; the SessionStart row, the denied read (PreToolUse) and no other
+    # tool failure are still required.
+    env_limit=$(check env-limited "$out/captured" claude-code) || env_limit=
     tool_shell_failure=
-    if [ ! -s "$tool_shell_log" ]; then
+    if [ -n "$env_limit" ]; then
+        echo "skip  env-limit: the tool-shell checks (ADR-075) need a Bash call to start ($env_limit)"
+    elif [ ! -s "$tool_shell_log" ]; then
         tool_shell_failure="the shell CLAUDE_CODE_SHELL names never started (ADR-075)"
     elif ! grep -q 'curl -s' "$tool_shell_log"; then
         echo "-- what the named shell was started with:"
@@ -149,7 +158,11 @@ load_hook() {
     tool_failures=0
     check tool-failures "$out/captured" claude-code moat-ci-no-such-path || tool_failures=1
     check session-start "$host" "$out/audit-before.json" "$out/audit-after.json"
-    check injected "$host" "$out/audit-before.json" "$out/audit-after.json" "$injected_host"
+    if [ -n "$env_limit" ]; then
+        echo "skip  env-limit: injected input (ADR-057) needs the output of a Bash call ($env_limit)"
+    else
+        check injected "$host" "$out/audit-before.json" "$out/audit-after.json" "$injected_host"
+    fi
     claude_resumed
     if [ -n "$tool_shell_failure" ] || [ "$tool_failures" -ne 0 ]; then
         exit 1

@@ -100,6 +100,21 @@ Each agent's gaps and the reasons are in
   there; other agents' logins stay denied. An API-key login can go through the broker
   instead ([BROKER_LOGINS.md](BROKER_LOGINS.md)); an OAuth login cannot
   ([ADR-054](adr/ADR-054-agent-credentials-in-sandboxes.md)).
+- **On Linux, an agent's own sandbox can fail every command where user namespaces are
+  refused.** Claude Code's, Codex's and Cursor's sandboxes need to create user
+  namespaces as the user, and Claude Code's needs `bwrap` and `socat` on `PATH`
+  ([SANDBOX.md](SANDBOX.md#what-each-agents-sandbox-needs-on-linux)). Where Ubuntu's
+  AppArmor restriction, `user.max_user_namespaces=0`, Debian's
+  `kernel.unprivileged_userns_clone=0` or a container refuses them, Claude Code's
+  commands fail, Codex's sandboxed commands do not start and Cursor asks before each
+  command; the hook still decides each call. `openmoat doctor` and `openmoat status` say
+  so and name the fixes, which are the machine's: no policy setting leaves one agent's
+  sandbox off yet. They read settings and ask the system's `bwrap` for one namespace, so
+  they cannot see a machine that allows a namespace but not one inside another, as
+  Claude Code's seccomp step makes; GitHub's `ubuntu-latest` runner is such a machine
+  (#784). Cursor's desktop app has an AppArmor profile of its own, which the check does
+  not read, so with the restriction on and no `bwrap` installed it may warn for Cursor
+  where Cursor's sandbox starts.
 - **On Linux without bubblewrap, nothing can be created at the top of the project, and
   deeper denied paths stay open.** Landlock grants a folder with everything in it, so
   where `openmoat run` gets no network namespace (bubblewrap missing or blocked) it grants
