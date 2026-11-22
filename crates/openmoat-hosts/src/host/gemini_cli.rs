@@ -149,6 +149,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_reader: &McpServersJson,
         project_files: &[(".gemini/settings.json", &McpServersJson)],
         tool_names: &Prefixed,
+        call_ids: None,
         auto_start: None,
     }),
     // A trusted folder's `.gemini/settings.json` is merged over the user's:

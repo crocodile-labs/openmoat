@@ -48,8 +48,8 @@ pub use hook_trust::HookTrust;
 pub use linux_sandbox::{LinuxProgram, LinuxSandboxNeeds};
 pub use location::{Locate, Located, Location, XdgDir};
 pub use mcp::{
-    AutoStart, BuiltinMcp, McpAutoStart, McpCommandForm, McpFile, McpNames, McpReader, McpServer,
-    McpSpec, McpSyntax,
+    AutoStart, BuiltinMcp, McpAutoStart, McpCallIds, McpCommandForm, McpFile, McpNames, McpReader,
+    McpServer, McpSpec, McpSyntax,
 };
 pub(crate) use mcp::{
     McpServersJson, Prefixed, SinglePrefixed, escape, server, servers_at, spelled,

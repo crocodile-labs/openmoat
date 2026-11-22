@@ -186,6 +186,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             (".opencode/opencode.jsonc", &mcp::OpenCodeJson),
         ],
         tool_names: &mcp::Joined,
+        call_ids: None,
         auto_start: None,
     }),
     // A project's `opencode.json[c]` and `.opencode/opencode.json[c]` add

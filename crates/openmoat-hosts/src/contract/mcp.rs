@@ -21,9 +21,25 @@ pub struct McpSpec {
     pub project_files: &'static [(&'static str, &'static dyn McpReader)],
     /// How the host names a server's tools in its hook payloads.
     pub tool_names: &'static dyn McpNames,
+    /// The keys of a `tools/call`'s `_meta` in which the host names the hook
+    /// session and the call it sent the call for; `None` for a host that sends
+    /// none OpenMoat knows of (ADR-107).
+    pub call_ids: Option<McpCallIds>,
     /// Which settings make the host start a project's servers without asking
     /// the person first; `None` for a host OpenMoat knows no such setting of.
     pub auto_start: Option<&'static dyn McpAutoStart>,
+}
+
+/// Where in a `tools/call`'s `_meta` a host names the hook session and the
+/// call ([`McpSpec::call_ids`]): their values are the hook payload's session
+/// id and tool call id for the same call. When either key is there, `openmoat
+/// mcp proxy` takes only the hook decision with both, exactly (ADR-107).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct McpCallIds {
+    /// The key whose value is the hook's session id (Codex's `threadId`).
+    pub session: &'static str,
+    /// The key whose value is the hook's tool call id (Codex's `callId`).
+    pub call: &'static str,
 }
 
 /// An MCP server the host provides itself, which no MCP configuration file

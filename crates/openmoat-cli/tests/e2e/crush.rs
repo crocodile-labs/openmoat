@@ -66,7 +66,7 @@ fn init_adds_one_flat_entry_beside_the_persons_and_is_idempotent() {
             .ends_with(&sb.hook_args(Host::Crush.id())),
         "{root}"
     );
-    let again = sb.moat_as_person(&["init", "--yes"]);
+    let again = sb.moat(&["init", "--yes"]);
     assert_eq!(again.status.code(), Some(OK), "{}", text(&again));
     assert_eq!(fs::read_to_string(config(&sb)).unwrap(), first);
 }

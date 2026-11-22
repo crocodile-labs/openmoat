@@ -144,6 +144,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_reader: &mcp::ClaudeJson,
         project_files: &[(".mcp.json", &McpServersJson)],
         tool_names: &Prefixed,
+        call_ids: None,
         auto_start: Some(&mcp::AutoStartSettings),
     }),
     // Claude Code's sandbox runs on macOS, Linux and WSL2 only, and with

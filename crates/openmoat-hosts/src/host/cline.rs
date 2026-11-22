@@ -156,6 +156,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_reader: &McpServersJson,
         project_files: &[],
         tool_names: &mcp::Spelled,
+        call_ids: None,
         auto_start: None,
     }),
     protect: protect::PROTECT,

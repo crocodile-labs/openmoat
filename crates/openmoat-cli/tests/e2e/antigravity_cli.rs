@@ -77,7 +77,7 @@ fn init_adds_one_named_entry_and_is_idempotent() {
     );
 
     let before = fs::read_to_string(hook_file(&sb)).unwrap();
-    let again = sb.moat_as_person(&["init", "--yes"]);
+    let again = sb.moat(&["init", "--yes"]);
     assert_eq!(again.status.code(), Some(OK), "{}", text(&again));
     assert_eq!(fs::read_to_string(hook_file(&sb)).unwrap(), before);
     assert_eq!(status(&sb)["level"], "hook-only", "{}", status(&sb));

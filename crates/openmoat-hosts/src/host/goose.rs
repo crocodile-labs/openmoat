@@ -130,6 +130,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_reader: &mcp::Extensions,
         project_files: &[],
         tool_names: &mcp::GooseNames,
+        call_ids: None,
         auto_start: None,
     }),
     // `enabledPlugins` and `disabledPlugins` in `.config/goose/settings.json`

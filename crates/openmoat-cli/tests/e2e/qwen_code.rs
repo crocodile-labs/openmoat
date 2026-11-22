@@ -60,7 +60,7 @@ fn init_adds_one_named_entry_beside_the_persons_and_is_idempotent() {
     assert_eq!(ours["hooks"][0]["name"], "openmoat", "{root}");
     assert_eq!(ours["hooks"][0]["timeout"], 600, "{root}");
     assert_eq!(root["model"]["name"], "qwen3-coder-plus");
-    let again = sb.moat_as_person(&["init", "--yes"]);
+    let again = sb.moat(&["init", "--yes"]);
     assert_eq!(again.status.code(), Some(OK), "{}", text(&again));
     assert_eq!(fs::read_to_string(settings(&sb)).unwrap(), first);
 }

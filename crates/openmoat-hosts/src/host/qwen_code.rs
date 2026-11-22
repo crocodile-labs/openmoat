@@ -142,6 +142,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_reader: &McpServersJson,
         project_files: &[(".qwen/settings.json", &McpServersJson)],
         tool_names: &Prefixed,
+        call_ids: None,
         auto_start: None,
     }),
     // A project's `.qwen/settings.json` is merged over the person's, and its

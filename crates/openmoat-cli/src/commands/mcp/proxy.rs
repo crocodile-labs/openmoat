@@ -67,6 +67,9 @@ pub fn run(args: &McpProxyArgs) -> Result<Code> {
     let from_server = child.stdout.take().context("no pipe from the server")?;
     let host = Arc::new(Mutex::new(Some(io::stdout())));
 
+    // The host's side ends when the agent closes stdin; closing the pipe then
+    // tells the server to exit, which ends the server's side below. Each side
+    // reports to `supervise`, which bounds how long the server has.
     let (done, finished) = mpsc::channel();
     let host_done = done.clone();
     let (relay_in, server_in, host_in) = (
@@ -76,11 +79,16 @@ pub fn run(args: &McpProxyArgs) -> Result<Code> {
     );
     std::thread::spawn(move || {
         let pumped = relay::pump_host(&relay_in, io::stdin().lock(), &*server_in, &*host_in, &note);
+        // Noted here: the server's side may have finished first, and then
+        // nothing waits for this side's result.
+        if let Err(e) = pumped {
+            note(&format!("{e:#}"));
+        }
         server_in
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
-        let _ = host_done.send(process::Pump::Host(pumped));
+        let _ = host_done.send(process::Pump::Host);
     });
     std::thread::spawn(move || {
         let pumped = relay::pump_server(
@@ -92,8 +100,7 @@ pub fn run(args: &McpProxyArgs) -> Result<Code> {
         );
         let _ = done.send(process::Pump::Server(pumped));
     });
-    let status = process::supervise(child, &finished)?;
-    Ok(if status.success() {
+    Ok(if process::supervise(child, &finished, note)? {
         Code::Ok
     } else {
         Code::Failed

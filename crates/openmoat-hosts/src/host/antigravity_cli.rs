@@ -152,6 +152,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_reader: &McpServersJson,
         project_files: &[(".agents/mcp_config.json", &McpServersJson)],
         tool_names: &crate::contract::SinglePrefixed,
+        call_ids: None,
         auto_start: None,
     }),
     // `<workspace>/.agents/` holds a project's hooks, MCP servers and plugins.

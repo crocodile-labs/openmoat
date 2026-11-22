@@ -26,14 +26,14 @@ pub use contract::{
     HEARTBEAT_FLAG, Heartbeat, Helper, HookDir, HookFailure, HookLayout, HookOff, HookSpec,
     HookTrust, HookVersions, HostDocs, HostSpec, InstallSpec, KeyShape, LinuxProgram,
     LinuxSandboxNeeds, Liveness, Locate, Located, Location, Managed, ManagedHooks, ManagedShape,
-    Marketplace, McpAutoStart, McpCommandForm, McpFile, McpNames, McpReader, McpServer, McpSpec,
-    McpSyntax, Meta, OtherHooks, Paths, Platform, Plugin, PluginDir, PluginFile, PluginSpec,
-    ProcessSpec, ProjectFile, ProjectOff, ProjectSettingsSpec, Protect, Proves, ProxySessions,
-    RelaxedCheck, RelaxedKey, Reviews, RunFacts, RunWrite, Runner, RunsLater, SandboxFormat,
-    SandboxSpec, SessionDir, SessionOverride, Sessions, SettingsFile, SettingsReader, StandAside,
-    SystemFile, SystemSettingsSpec, ToolRow, ToolToken, Unseen, Version, Weekly, WeeklyInstall,
-    WeeklyPayload, WeeklyRun, WeeklyRuns, WindowsSandboxLevel, WindowsSandboxMode,
-    WindowsSandboxReader, WorkspaceSpec, every_runs_later,
+    Marketplace, McpAutoStart, McpCallIds, McpCommandForm, McpFile, McpNames, McpReader, McpServer,
+    McpSpec, McpSyntax, Meta, OtherHooks, Paths, Platform, Plugin, PluginDir, PluginFile,
+    PluginSpec, ProcessSpec, ProjectFile, ProjectOff, ProjectSettingsSpec, Protect, Proves,
+    ProxySessions, RelaxedCheck, RelaxedKey, Reviews, RunFacts, RunWrite, Runner, RunsLater,
+    SandboxFormat, SandboxSpec, SessionDir, SessionOverride, Sessions, SettingsFile,
+    SettingsReader, StandAside, SystemFile, SystemSettingsSpec, ToolRow, ToolToken, Unseen,
+    Version, Weekly, WeeklyInstall, WeeklyPayload, WeeklyRun, WeeklyRuns, WindowsSandboxLevel,
+    WindowsSandboxMode, WindowsSandboxReader, WorkspaceSpec, every_runs_later,
 };
 pub use wire::guard_command::{EVENT_FLAG, GuardCommand, HOME_FLAG, decode_home, encode_home};
 pub use wire::hook_file::yaml as yaml_hooks;

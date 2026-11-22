@@ -108,6 +108,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_reader: &McpServersJson,
         project_files: &[(".cursor/mcp.json", &McpServersJson)],
         tool_names: &Prefixed,
+        call_ids: None,
         auto_start: None,
     }),
     // Cursor documents its sandbox for macOS and Linux only.

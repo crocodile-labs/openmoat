@@ -181,7 +181,21 @@ fn attributed_codex_calls_never_take_another_sessions_ticket() {
         ),
         None
     );
+    // Only one of the ids, or empty ones, is refused: never the argument match.
     assert_eq!(take(json!({"threadId": "thread-a"}), &arguments), None);
+    assert_eq!(take(json!({"callId": "call-a"}), &arguments), None);
+    assert_eq!(
+        take(json!({"threadId": "", "callId": ""}), &arguments),
+        None
+    );
+    assert_eq!(
+        take(json!({"threadId": "thread-a", "callId": ""}), &arguments),
+        None
+    );
+    assert_eq!(
+        take(json!({"threadId": 1, "callId": "call-a"}), &arguments),
+        None
+    );
     assert_eq!(
         take(
             json!({"threadId": "thread-a", "callId": "needs-review"}),

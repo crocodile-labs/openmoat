@@ -123,6 +123,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             (".github/mcp.json", &mcp::JsonOrBare),
         ],
         tool_names: &mcp::Dashed,
+        call_ids: None,
         auto_start: None,
     }),
     // A repository's settings are merged over the user's, and

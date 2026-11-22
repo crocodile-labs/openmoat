@@ -51,6 +51,16 @@ use crate::{context, integrity, secrets};
 /// carry.
 const AUDIT_HOST: &str = MCP_PROXY;
 
+/// What a call's `_meta` says of the hook session and call it is for (ADR-107).
+enum Named<'c> {
+    /// Neither key, or an agent that sends none: the argument match decides.
+    Neither,
+    /// One key, or one that is not a non-empty string: matches no decision.
+    Incomplete,
+    /// The hook's session id and tool call id.
+    Both(&'c str, &'c str),
+}
+
 pub struct Gateway {
     home: Home,
     server: String,
@@ -217,25 +227,19 @@ impl Gateway {
                 self.host.is_none_or(|own| own == host) && names_tool(host, &t.tool, server, tool)
             })
         };
-        if self.host == Some(Host::Codex)
-            && let Some(meta) = call.metadata
-            && (meta.get("threadId").is_some() || meta.get("callId").is_some())
-        {
-            let (Some(thread), Some(call_id)) = (
-                meta.get("threadId").and_then(Value::as_str),
-                meta.get("callId").and_then(Value::as_str),
-            ) else {
-                return Ok(None);
-            };
-            if thread.is_empty() || call_id.is_empty() {
-                return Ok(None);
+        // A call that names its hook session and call (ADR-107) takes only
+        // that decision, or none: never the argument match below.
+        match self.names_its_call(call) {
+            Named::Neither => {}
+            Named::Incomplete => return Ok(None),
+            Named::Both(session, call_id) => {
+                return Ok(store.take_mcp_ticket(&digest, |ticket| {
+                    ours(ticket)
+                        && ticket.session_id == session
+                        && ticket.call_id.as_deref() == Some(call_id)
+                        && ticket.verdict == "allow"
+                })?);
             }
-            return Ok(store.take_mcp_ticket(&digest, |ticket| {
-                ours(ticket)
-                    && ticket.session_id == thread
-                    && ticket.call_id.as_deref() == Some(call_id)
-                    && ticket.verdict == "allow"
-            })?);
         }
         let last = self
             .served
@@ -256,6 +260,30 @@ impl Gateway {
                 Some((ticket.host.clone(), ticket.session_id.clone()));
         }
         Ok(taken)
+    }
+
+    /// Whether `call`'s `_meta` names the hook session and call it was sent
+    /// for, in the keys the agent's spec gives (`McpSpec::call_ids`).
+    fn names_its_call<'c>(&self, call: &Call<'c>) -> Named<'c> {
+        let keys = self
+            .host
+            .and_then(|host| host.spec().mcp.as_ref())
+            .and_then(|mcp| mcp.call_ids);
+        let (Some(keys), Some(meta)) = (keys, call.metadata) else {
+            return Named::Neither;
+        };
+        if meta.get(keys.session).is_none() && meta.get(keys.call).is_none() {
+            return Named::Neither;
+        }
+        let id = |key: &str| {
+            meta.get(key)
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+        };
+        match (id(keys.session), id(keys.call)) {
+            (Some(session), Some(call_id)) => Named::Both(session, call_id),
+            _ => Named::Incomplete,
+        }
     }
 
     /// The policy's decision for `action` in `cwd` (the server's own when

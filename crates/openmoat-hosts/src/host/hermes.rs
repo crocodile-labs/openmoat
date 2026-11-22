@@ -155,6 +155,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_reader: &mcp::McpServersYaml,
         project_files: &[],
         tool_names: &mcp::HermesNames,
+        call_ids: None,
         auto_start: None,
     }),
     protect: protect::PROTECT,

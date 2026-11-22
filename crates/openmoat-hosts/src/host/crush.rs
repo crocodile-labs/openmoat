@@ -137,6 +137,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             (".crush/crush.json", &mcp::CrushJson),
         ],
         tool_names: &SinglePrefixed,
+        call_ids: None,
         auto_start: None,
     }),
     // A project's `crush.json`, `.crush.json` and its workspace's

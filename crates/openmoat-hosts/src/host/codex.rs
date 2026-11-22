@@ -7,7 +7,7 @@ use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
-    Reviews, CONFIG_HOOK_TIMEOUT_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, Prefixed,
+    Reviews, CONFIG_HOOK_TIMEOUT_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpCallIds, McpFile, McpSpec, Prefixed,
     ProjectSettingsSpec, ProxySessions, SandboxFormat, SandboxSpec,
     TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
@@ -125,6 +125,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_reader: &mcp::ConfigToml,
         project_files: &[(".codex/config.toml", &mcp::ConfigToml)],
         tool_names: &Prefixed,
+        // Codex's `mcp_tool_call.rs` puts `callId` and, for an approved
+        // call, `threadId` in the request's `_meta`; the hook's `tool_use_id`
+        // and `session_id` for the same call (ADR-107).
+        call_ids: Some(McpCallIds {
+            session: "threadId",
+            call: "callId",
+        }),
         auto_start: None,
     }),
     sandbox: Some(SandboxSpec {
