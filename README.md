@@ -157,10 +157,10 @@ Which agents and operating systems each feature works with: [docs/FEATURES.md](d
 | Part | What it does | Start with |
 |---|---|---|
 | **Policy engine** | Decides each tool call the hook reports from what it really does: it reads the shell the way a shell does and checks the files, hosts and programs a call touches. | `openmoat init` |
-| **OS sandboxes** | Confine the code an allowed call runs: the agents' own sandboxes written from the same policy, or `openmoat run` for any agent. `openmoat doctor` scores how much of `openmoat run`'s boundary this system can enforce (out of 100), and `sandbox.strict: true` starts a run only with all of it ([docs/SANDBOX.md](docs/SANDBOX.md#the-protection-score-and-strict-mode)). | `openmoat run -- <agent>` |
+| **OS sandboxes** | Confine the code an allowed call runs: the agents' own sandboxes written from the same policy, or `openmoat run` for any agent (on Windows a preview that holds writes outside the project and the agent's processes, not reads or the network, [docs/SANDBOX.md](docs/SANDBOX.md#openmoat-run-on-windows-preview-writes-only)). `openmoat doctor` scores how much of `openmoat run`'s boundary this system can enforce (out of 100), and `sandbox.strict: true` starts a run only with all of it ([docs/SANDBOX.md](docs/SANDBOX.md#the-protection-score-and-strict-mode)). | `openmoat run -- <agent>` |
 | **Egress proxy** | Lets network from the sandboxes reach only the hosts the policy lists. | `openmoat proxy install` |
 | **Secret broker** | The agent holds a placeholder; the proxy adds your real token for one host only. | `openmoat secret add gh` |
-| **MCP gateway** | Starts only the MCP servers you accepted, pins each tool's description, and holds data one server returned that is sent into another's writing tool. | `openmoat mcp wrap <server>` |
+| **MCP gateway** | Starts only the MCP servers you accepted, pins each tool's description and the package release the server runs, and holds data one server returned that is sent into another's writing tool. Speaks MCP 2025 and 2026-07-28; refuses a server's sampling requests unless the policy allows them, and links it asks you to open that are not `https` or go to a host the policy does not allow ([docs/USAGE.md](docs/USAGE.md#mcp-servers-through-the-gateway)). | `openmoat mcp wrap <server>` |
 | **Audit trail** | Records every decision in a local, keyed, hash-chained log with secrets redacted; follows calls live and explains any block. Signed checkpoints let anyone with the public key check the log on another machine ([docs/USAGE.md](docs/USAGE.md#check-that-the-audit-log-was-not-changed)). | `openmoat watch` · `openmoat audit checkpoint` |
 | **Merge check** | Flags what a pull request's changes do: CI and hook edits, agent settings, look-alike packages, new hosts, a policy change that lets more through. | `openmoat policy check-diff` |
 | **Policy lock** | Pins the policy and hook files: an agent's call that changes the rules, approves its own block or switches OpenMoat off is denied. It also records the other hooks, plugin hooks and git programs the agents run, and names a new or changed one until you accept it ([docs/USAGE.md](docs/USAGE.md#other-hooks-the-agents-run)). | `openmoat doctor` · `openmoat hooks list` |
@@ -208,8 +208,8 @@ sets up each:
 
 **hook + OS sandbox**: each call the hook reports is checked, and the agent's own sandbox,
 written from the same policy, confines the commands it runs. **hook only**: the hook's
-decision is the only check; start the agent with `openmoat run` (macOS, Linux) for OS
-confinement too (`openmoat status` names the command for each such agent). In editors: Claude Code's VS Code extension and JetBrains plugin use the
+decision is the only check; start the agent with `openmoat run` (macOS, Linux; on
+Windows a preview that holds writes only) for OS confinement too (`openmoat status` names the command for each such agent). In editors: Claude Code's VS Code extension and JetBrains plugin use the
 same hook, and Cursor's Tab is refused secret files ([docs/IDE.md](docs/IDE.md)).
 
 What each hook covers, tool by tool: [docs/INSTALL.md](docs/INSTALL.md#set-up-with-openmoat-init).
@@ -244,28 +244,34 @@ and [docs/SANDBOX.md](docs/SANDBOX.md).
 
 ## Proof
 
-- **MoatBench.** `openmoat bench` runs OpenMoat's own scenarios as each of the 14
-  agents' hook payloads. OpenMoat 0.25.0, 2026-11-22, macOS 12: of 762 attack runs, 538
-  denied, 155 held for review, 9 left to OpenMoat's OS sandbox, 60 left to the agent's
-  own prompt by design, none allowed; the 844 steps of eight developer workflows met no
-  deny and only their 26 expected reviews; 0 false positives, 0 mismatches. Its proof
-  report on the same machine: 12 checks pass, 0 fail, 5 not tested there (4 need
-  `openmoat run`, which needs macOS 13 or later, and 1 needs the real agent). The
-  scenarios were written by OpenMoat's authors, so this shows that the policy and the
-  benchmark agree, not that OpenMoat is complete ([docs/MOATBENCH.md](docs/MOATBENCH.md)).
-  The [MoatBench repository](https://github.com/crocodile-labs/moatbench), which anyone
-  can re-run, last published OpenMoat 0.19.0 on set 0.1.0
-  ([results](https://github.com/crocodile-labs/moatbench/tree/main/runs/2026-11-09-openmoat-0.19.0)).
-- **Outside benchmarks.** The default policy's decision engine on two attack sets written
-  by others, with every case it does not stop listed, measured on 0.25.0 and again with
-  the rules that measurement led to (ADR-112). RedCode-Exec, code sent inline in the
-  command, the 900 snippets that act on the machine: 22.1% denied, 68.9% denied or held
-  for review (0.25.0: 19.8% and 50.0%), none allowed, the rest left to the agent's own
-  prompt; the same code written to a file and then run is stopped in no case, which leaves
-  it to the OS sandbox. agent-egress-bench, the 122 of 192 attacks it has an input for:
-  50.0% denied, 54.1% denied or held (0.25.0: 47.5% for both); 12 of 37 benign requests
-  denied, the same 12 before and after, all for going to a host the policy does not list
-  ([docs/BENCHMARKS.md](docs/BENCHMARKS.md)).
+**Our own scenarios (MoatBench, OpenMoat 0.25.0, macOS 12).** `openmoat bench` sends each
+scenario as each of the 14 agents' hook payloads:
+
+| | Runs | Denied | Held for review | Left to OS sandbox | Left to agent's prompt | Allowed |
+|---|--:|--:|--:|--:|--:|--:|
+| Attacks | 762 | 538 | 155 | 9 | 60 | 0 |
+| Normal developer work | 844 steps | 0 | 26 (all expected) | – | – | the rest |
+
+0 false positives, 0 mismatches. The proof report on the same machine: 12 pass, 0 fail,
+5 not tested there (4 need `openmoat run` on macOS 13 or later, 1 needs the real agent).
+The scenarios were written by OpenMoat's authors, so this shows that the policy and the
+benchmark agree, not that OpenMoat is complete ([docs/MOATBENCH.md](docs/MOATBENCH.md)).
+The [MoatBench repository](https://github.com/crocodile-labs/moatbench), which anyone can
+re-run, last published OpenMoat 0.19.0
+([results](https://github.com/crocodile-labs/moatbench/tree/main/runs/2026-11-09-openmoat-0.19.0)).
+
+**Attack sets written by others (decision engine, default policy).** 0.25.0 → with the
+rules it led to (ADR-112):
+
+| Benchmark | Cases | Denied | Denied or held | Allowed | False positives |
+|---|--:|--:|--:|--:|--:|
+| RedCode-Exec (inline code that acts on the machine) | 900 | 19.8% → 22.1% | 50.0% → 68.9% | 0 | – |
+| agent-egress-bench | 122 of 192 | 47.5% → 50.0% | 47.5% → 54.1% | 1 | 12 of 37 (same before and after) |
+
+The same RedCode-Exec code written to a file and then run is left to the OS sandbox; the
+denied false positives are all hosts the policy does not list. Every case not stopped is
+listed in [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+
 - **Break OpenMoat.** Find a way past the default policy, report it privately, and the fix
   becomes a permanent test with your name on it ([docs/CHALLENGE.md](docs/CHALLENGE.md)).
 - **Open rules.** The default policy is one file,

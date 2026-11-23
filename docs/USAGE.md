@@ -1256,7 +1256,9 @@ $ openmoat audit export --session 9f2c…
   elicitation (the server asks the agent to open a page for you) passes only for an
   `https` page on a host that is not this machine, a private network or a link-local
   address such as the cloud metadata service `169.254.169.254`, and that the policy does
-  not deny. A refused request refuses the whole answer, with error -32001.
+  not deny. The default policy denies connections to hosts it does not list, so a server
+  that sends you to its own sign-in page needs that host allowed: `openmoat allow --site
+  auth.example.com`. A refused request refuses the whole answer, with error -32001.
 - **Where an argument goes is part of the tool.** A 2026-07-28 tool can send an argument
   as an HTTP header (`x-mcp-header`); `openmoat mcp accept` names each such mapping, and a
   changed one holds the tool. A tool whose mappings break the specification's rules, or
@@ -1301,7 +1303,15 @@ these takes one command in your own terminal (agents are denied all of them):
   `~/.claude.json`, a project's `.mcp.json`, Cursor's `mcp.json`, Codex's `config.toml`;
   every agent's files are in [POLICY.md](POLICY.md) §8) changed or was added since you
   last accepted the agents' MCP servers, so it starts a command nobody reviewed. Run `openmoat mcp accept <server>`: it shows what changed and asks.
-  Other servers and tools keep working meanwhile.
+  Other servers and tools keep working meanwhile. A server started with `npx`, `uvx` or
+  `docker run` is held the same way when the package release it runs is not the one you
+  accepted (`package release: … → …`); the same command clears it.
+- **A wrapped MCP server's sign-in link or sampling request is refused** (error -32001,
+  rule `mcp-server-request`): a link the server asks you to open must be `https` to a host
+  the policy allows, and the default policy denies connections to hosts it does not list.
+  To let a server send you to its own page, allow that host: `openmoat allow --site
+  auth.example.com`. Sampling stays off unless the policy sets
+  `mcp: { allow_sampling: true }` ([POLICY.md §8](POLICY.md#8-the-policy-lock)).
 - **A wrapped MCP server shows no tools**, or its calls fail with error -32602 naming
   `openmoat mcp accept`: `openmoat mcp proxy` holds every tool of a server until you have read
   it, the first time the server starts through the proxy too. Run `openmoat mcp accept

@@ -74,7 +74,9 @@ Each agent's gaps and the reasons are in
   connects directly); anything whose access list grants `Everyone` write; denied places
   inside the project below its top, matched by a glob, or made after the run started; the
   tool-shell wrapper (tool commands keep the relay token); batch files (`.cmd`/`.bat`,
-  such as npm shims) are not started. A Windows run scores at most 55/100, so
+  such as npm shims) are not started. The first run in a folder leaves an inherited
+  access-list entry on it for a SID no account has, and keeps it; adding it to a large
+  tree takes a while once. A Windows run scores at most 55/100, so
   `require.run: full-boundary` and `sandbox.strict: true` refuse there. No real agent has
   been run under it yet: the tests start `cmd.exe`
   ([SANDBOX.md](SANDBOX.md#openmoat-run-on-windows-preview-writes-only)).
@@ -272,7 +274,9 @@ Each agent's gaps and the reasons are in
   server's `input_required` result is a new call to the gateway; a host that does not
   run its hook for the retry gets it refused. Sampling through a wrapped server is
   refused unless the policy sets `mcp: { allow_sampling: true }`, and a URL-mode
-  elicitation must name an `https` page on a host the policy does not deny. A tool whose
+  elicitation must name an `https` page on a host the policy does not deny; the default
+  policy denies hosts it does not list, so a server's own sign-in page is refused until
+  you allow its host (`openmoat allow --site <host>`). A tool whose
   schema refers to itself (`$ref` loops, a recursive tree type) or to another document is
   refused.
 - **The hook sees an MCP call's arguments, not what the server then does.** A server

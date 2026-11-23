@@ -38,13 +38,15 @@ Then run `openmoat init` ([below](#set-up-with-openmoat-init)).
 > [!NOTE]
 > **Windows.** On Windows, OpenMoat applies the policy through the agents' hooks. It
 > sets up no OS sandbox for Claude Code or Cursor (Codex's own sandbox settings are
-> written as on other systems), `openmoat run` refuses to start, and `openmoat proxy` cannot
+> written as on other systems), `openmoat run` starts a preview tier that refuses writes
+> outside the project and ends the agent's processes but holds neither reads nor the
+> network ([SANDBOX.md](SANDBOX.md#openmoat-run-on-windows-preview-writes-only)), and `openmoat proxy` cannot
 > be installed as a service. `openmoat init` gives the state directory an access list of
 > your account and `SYSTEM` only (on an NTFS drive; it refuses a folder another account
 > owns), which keeps other accounts out but not the agent, which runs as you: the hook's
 > rules keep the agent out of it. The hook denies commands and
-> paths that cross into WSL (`wsl`, `\\wsl$`), where no Windows path rule reaches. For OS
-> confinement, run the agent and `openmoat` inside WSL2 ([details below](#set-up-with-openmoat-init)).
+> paths that cross into WSL (`wsl`, `\\wsl$`), where no Windows path rule reaches. For
+> full OS confinement, run the agent and `openmoat` inside WSL2 ([details below](#set-up-with-openmoat-init)).
 
 > [!NOTE]
 > **The `moat` name.** The command is `openmoat`. Releases up to 0.7.0 called it
@@ -530,6 +532,31 @@ What you will see, and what to run:
   `openmoat audit checkpoint`; logs from earlier releases keep verifying as before.
 - **`openmoat status` lists hook-only agents `openmoat run` can confine here** under
   `Needs your attention`, with the command; Qwen Code and Crush now get one.
+- **`openmoat run` starts on native Windows** (preview, ADR-115) instead of refusing. It
+  refuses writes outside the project, the run's temp directory and `--write` paths, and
+  ends every process the agent started when the run ends; reads and the network are not
+  held by the OS, so it scores at most 55/100 and `sandbox.strict: true` or
+  `require.run: full-boundary` still refuse there. Start the agent's `.exe`, not an npm
+  `.cmd` shim, which is refused. The first run in a folder adds one access-list entry for
+  a SID no account has (`icacls <folder>` lists it) and keeps it, so later runs change
+  nothing ([SANDBOX.md](SANDBOX.md#openmoat-run-on-windows-preview-writes-only)).
+- **Wrapped MCP servers' sampling requests are refused** unless the policy sets
+  `mcp: { allow_sampling: true }`, and a link a server asks you to open must be `https`
+  to a host the policy allows (`openmoat allow --site <host>` for a server's own sign-in
+  page). An older binary refuses a policy that sets `allow_sampling`, so update every
+  machine first ([USAGE.md](USAGE.md#mcp-servers-through-the-gateway)).
+- **Stdio MCP servers are held when their package release changes**: accepting a server
+  started with `npx`, `uvx` or `docker run` also records the release it runs, and another
+  release holds the server until you accept it again. A server accepted before this
+  release is not held for having none recorded; its release is recorded the next time you
+  accept it. Agents that speak MCP
+  2026-07-28 keep a server accepted under the older revision while its text is the same;
+  one whose results name another server is held.
+- **Linux, Claude Code: `openmoat doctor` names another AppArmor fix** (#784). If you
+  loaded Ubuntu's `bwrap-userns-restrict` profile because an earlier release suggested
+  it, Claude Code's sandbox fails under it; doctor now warns and names the profile
+  Claude Code's documentation gives for `/usr/bin/bwrap`
+  ([SANDBOX.md](SANDBOX.md#what-each-agents-sandbox-needs-on-linux)).
 
 ### What can change between 0.x minor releases
 
