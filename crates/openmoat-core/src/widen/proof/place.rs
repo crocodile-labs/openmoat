@@ -26,7 +26,13 @@ mod tests {
 
     #[test]
     fn a_place_keeps_both_halves() {
-        for (m, s) in [(0, 0), (0, 1), (7, u32::MAX), (u32::MAX, 0), (u32::MAX, u32::MAX)] {
+        for (m, s) in [
+            (0, 0),
+            (0, 1),
+            (7, u32::MAX),
+            (u32::MAX, 0),
+            (u32::MAX, u32::MAX),
+        ] {
             assert_eq!(unplace(place(m, s)), (m, s));
         }
         assert_ne!(place(1, 0), place(0, 1));
