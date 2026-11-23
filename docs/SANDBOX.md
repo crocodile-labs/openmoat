@@ -307,7 +307,12 @@ the documentation, and the generated file has not yet been run under a Cursor bu
 
 `sandbox.json` has no key that denies a path. A read root with a denied path below it
 (`~/.cargo` holds `~/.cargo/credentials.toml`) is therefore left out, which is stricter
-and is listed as such, and what the policy denies by name inside the workspace
+and is listed as such; a system folder, outside your home directory with every denied
+path in it outside it too (`/etc` holds `/etc/shadow`), is granted whole, since nearly
+every command reads it, and its denied paths are listed as wider
+(`cursor.system-folder`): there the system's own file permissions keep them from you,
+and the hook still denies every call that names them. What the policy denies by name
+inside the workspace
 (`**/.env`, `.moat`, `.git`) stays readable and writable to sandboxed commands, listed
 as wider. Cursor itself keeps `.cursor/*.json`, `.claude/**/*.json`, `.vscode`,
 `.git/hooks`, `.git/config` and `.git/info/attributes` unwritable. With the
