@@ -18,7 +18,6 @@ use tempfile::TempDir;
 /// Success, or verdict `allow`.
 pub const OK: i32 = 0;
 /// The agent `moat run` started failed; never a verdict.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub const FAILED: i32 = 1;
 /// Verdict `deny`; also every error in `moat guard`.
 pub const DENY: i32 = 2;
