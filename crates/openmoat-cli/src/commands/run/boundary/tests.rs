@@ -26,7 +26,14 @@ fn a_forced_fallback_is_two_downgrades() {
     let record = planned(Asked::Default, &tier, Some(why));
     assert_eq!(record.requested, Requested::Default);
     assert_eq!(record.tier, Applied::Lightweight);
-    assert_eq!(record.network.mode, NetworkMode::PortOnly);
+    // The weaker network is Landlock's port rule, except where the platform
+    // holds the proxy variables only (Windows, ADR-115): that stays as is.
+    let weaker = if platform::NETWORK == NetworkMode::ProxyVariables {
+        NetworkMode::ProxyVariables
+    } else {
+        NetworkMode::PortOnly
+    };
+    assert_eq!(record.network.mode, weaker);
     assert_eq!(record.downgrades.len(), 2, "{:?}", record.downgrades);
     assert!(record.downgrades.iter().all(|d| !d.chosen && d.why == why));
     assert_eq!(record.landlock.as_ref().unwrap().abi, Some(5));
