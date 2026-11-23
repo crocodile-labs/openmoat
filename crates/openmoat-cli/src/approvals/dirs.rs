@@ -158,19 +158,41 @@ fn below(pattern: &str, dir: &str) -> bool {
 #[must_use]
 pub fn exclusions(policy: &Policy, dir: &[String], places: &Places) -> Vec<String> {
     let mut kept: Vec<String> = Vec::new();
-    let protected = policy
-        .review
-        .iter()
-        .flat_map(|g| &g.fs_write)
-        .filter(|p| !p.starts_with('!'));
-    for pattern in protected {
-        for spelling in dir {
-            if let Some(found) = in_dir(pattern, spelling, places) {
-                keep_broadest(&mut kept, found);
+    for group in &policy.review {
+        let excepted: Vec<&str> = group
+            .fs_write
+            .iter()
+            .filter_map(|p| p.strip_prefix('!'))
+            .collect();
+        let protected = group.fs_write.iter().filter(|p| !p.starts_with('!'));
+        for pattern in protected {
+            for spelling in dir {
+                // The group's own exceptions take the whole directory out of
+                // it (`system-files` holds `/usr/**` but not `/usr/local/**`):
+                // it holds nothing there.
+                if excepted_whole(&excepted, spelling, places) {
+                    continue;
+                }
+                if let Some(found) = in_dir(pattern, spelling, places) {
+                    keep_broadest(&mut kept, found);
+                }
             }
         }
     }
     kept
+}
+
+/// Whether one of `excepted` (a group's exceptions, without the `!`) covers
+/// every path in `dir`, in any of its spellings.
+fn excepted_whole(excepted: &[&str], dir: &str, places: &Places) -> bool {
+    let inside = format!("{dir}/**");
+    excepted.iter().any(|exception| {
+        places
+            .spellings(exception)
+            .unwrap_or_default()
+            .iter()
+            .any(|spelled| covers(Kind::FsWrite, spelled, &inside))
+    })
 }
 
 /// `pattern` as it applies in `dir`, or `None` when it names nothing there.

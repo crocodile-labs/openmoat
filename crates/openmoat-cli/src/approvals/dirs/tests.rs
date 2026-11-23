@@ -106,6 +106,29 @@ fn fixed_paths_in_the_directory_are_left_out_too() {
     assert!(usr.iter().any(|p| p == "/usr/local/bin/**"), "{usr:?}");
 }
 
+/// A group whose own exception takes the whole directory out of it holds
+/// nothing there (`system-files` reviews `/usr/**` but not `/usr/local/**`);
+/// a directory the exception does not cover keeps the group's pattern, so a
+/// grant there never answers the review.
+#[test]
+fn a_group_excepting_the_whole_directory_leaves_nothing_out() {
+    let policy = default_policy();
+    let local = exclusions(&policy, &["/usr/local/share/tools".to_owned()], &places());
+    assert!(!local.iter().any(|p| p == "/usr/**"), "{local:?}");
+    let rule = grant("/usr/local/share/tools").rule(&policy, &places());
+    assert_eq!(
+        verdict(&policy, &[rule], &write("/usr/local/share/tools/x")),
+        Verdict::Allow
+    );
+    let system = exclusions(&policy, &["/usr/share/tools".to_owned()], &places());
+    assert!(system.iter().any(|p| p == "/usr/**"), "{system:?}");
+    let rule = grant("/usr/share/tools").rule(&policy, &places());
+    assert_eq!(
+        verdict(&policy, &[rule], &write("/usr/share/tools/x")),
+        Verdict::Review
+    );
+}
+
 #[test]
 fn a_dir_grant_never_answers_a_review_or_a_deny() {
     let policy = default_policy();
