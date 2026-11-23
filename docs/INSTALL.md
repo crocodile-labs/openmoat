@@ -509,6 +509,18 @@ What you will see, and what to run:
   review too. An upgrade that would move any call toward allow is listed and applied only
   with `openmoat policy upgrade --accept-widening`; the upgrade from the 0.25.0 default
   only narrows.
+- **New reviews after private data meets untrusted content** (ADR-113): once a session
+  has read private data (a key, an agent's login, the whole environment) and content
+  someone else may have written (a page, an MCP result, `gh issue view`), a call that can
+  send data out needs review (`lethal-trifecta`), to an allowed host and `git push` too.
+  This needs no upgrade step; sessions that never read private data are unchanged
+  ([USAGE.md](USAGE.md#private-data-untrusted-content-and-a-way-out-the-lethal-trifecta)).
+- **Collect-then-send needs review**: a send of a file the session packed from outside the
+  project, and any send after the session copied private data into a file, are reviewed
+  by the new default rule `staging-egress`, which `openmoat policy upgrade` adds
+  ([USAGE.md](USAGE.md#data-packed-or-copied-before-it-is-sent-staging)).
+- **Rules may test arguments** (`when:`, POLICY.md §2.4). An older binary refuses a
+  policy that uses it, so update every machine before you share such a rule.
 - **`openmoat doctor` shows new rows**: the protection score of each `openmoat run` tier,
   and the audit log's checkpoint public key. The checkpoint signing key
   (`~/.moat/audit.key.ed25519`) is made by `openmoat init` or the first

@@ -166,10 +166,14 @@ Which agents and operating systems each feature works with: [docs/FEATURES.md](d
 | **Policy lock** | Pins the policy and hook files: an agent's call that changes the rules, approves its own block or switches OpenMoat off is denied. It also records the other hooks, plugin hooks and git programs the agents run, and names a new or changed one until you accept it ([docs/USAGE.md](docs/USAGE.md#other-hooks-the-agents-run)). | `openmoat doctor` · `openmoat hooks list` |
 
 By risk: secrets read or sent, data sent to unlisted hosts, instructions planted in what
-the agent reads, code that runs later (CI, git hooks, login items, `PATH`), look-alike
+the agent reads, a send after the same session read both private data and content someone
+else wrote (`lethal-trifecta`, held for review even to an allowed host), data packed or
+copied before it is sent (`staging-egress`), code that runs later (CI, git hooks, login items, `PATH`), look-alike
 packages, downloaded or hidden code, containers handed the host, changes to the system's
 own folders and processes, destructive commands.
-Every rule and how to change it: [docs/POLICY.md](docs/POLICY.md). Before a policy change
+Every rule and how to change it: [docs/POLICY.md](docs/POLICY.md); a rule can also test a
+call's arguments, such as an MCP mail tool's recipients
+([`when:`](docs/POLICY.md#24-argument-conditions-when)). Before a policy change
 applies (`openmoat policy upgrade`, `openmoat trust`, `openmoat policy install`), OpenMoat
 lists the calls it finds the change would decide less strictly, and an upgrade that has any
 needs `--accept-widening`; `openmoat policy diff OLD NEW --widen` checks any two policies

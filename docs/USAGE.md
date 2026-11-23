@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Read this when** an agent was stopped or held for review, you want to review what it did, change the policy or share rules with a team. Every command and exit code is here.
 
-**On this page:** [Where to use it](#where-to-use-it) · [What the default policy does](#what-the-default-policy-does) · [Run openmoat when something needs you](#run-openmoat-when-something-needs-you) · [How each agent is protected](#how-each-agent-is-protected) · [Other hooks the agents run](#other-hooks-the-agents-run) · [A call is denied](#a-call-is-denied) · [A call needs review](#a-call-needs-review) · [Session taint](#session-taint) · [Review what the agent did](#review-what-the-agent-did) · [Check that the audit log was not changed](#check-that-the-audit-log-was-not-changed) · [Change the policy](#change-the-policy) · [Share rules with your team](#share-rules-with-your-team) · [If OpenMoat gets in your way](#if-openmoat-gets-in-your-way) · [Report a bug](#report-a-bug) · [Commands](#commands)
+**On this page:** [Where to use it](#where-to-use-it) · [What the default policy does](#what-the-default-policy-does) · [Run openmoat when something needs you](#run-openmoat-when-something-needs-you) · [How each agent is protected](#how-each-agent-is-protected) · [Other hooks the agents run](#other-hooks-the-agents-run) · [A call is denied](#a-call-is-denied) · [A call needs review](#a-call-needs-review) · [Session taint](#session-taint) · [The lethal trifecta](#private-data-untrusted-content-and-a-way-out-the-lethal-trifecta) · [Staging](#data-packed-or-copied-before-it-is-sent-staging) · [Review what the agent did](#review-what-the-agent-did) · [Check that the audit log was not changed](#check-that-the-audit-log-was-not-changed) · [Change the policy](#change-the-policy) · [Share rules with your team](#share-rules-with-your-team) · [If OpenMoat gets in your way](#if-openmoat-gets-in-your-way) · [Report a bug](#report-a-bug) · [Commands](#commands)
 
 ## Where to use it
 
@@ -521,6 +521,9 @@ After upgrading, run `openmoat init` once to add the after-call hook entry this 
 only once you trust it in `/hooks`.
 `openmoat doctor` reports the hook as needing `openmoat init` until then.
 OpenMoat keeps fingerprints of the output, not the text ([POLICY.md](POLICY.md) §4.1.2).
+A host, path or command is linked however the later call spells it: a percent-encoded
+host, a relative path read against the folder it was found in, a command written with its
+program's directory, `./` or `~`.
 
 The same holds for `openmoat proxy` with Claude Code (`sandbox.proxy_port`, ADR-044):
 each session's `SessionStart` hook gives its Bash commands a proxy credential of their
@@ -544,6 +547,45 @@ from `openmoat proxy`. After upgrading, run `openmoat init` once so Claude Code 
 commands get 407. A Codex started with `HTTP_PROXY` pointing at `openmoat proxy` needs
 `sandbox.proxy_serve_without_credential: true` in the policy, which serves requests
 without a credential and drops their session taint; `openmoat run -- codex` keeps it.
+
+### Private data, untrusted content and a way out (the lethal trifecta)
+
+A prompt injection carries data away when one session has read private data, read
+content someone else may have written, and then sends something out. Each is ordinary
+alone, so OpenMoat watches for the three together (ADR-113). Once the session has read
+private data (a key, a token file, an agent's or a build tool's login, a decoy key, the
+whole environment, or a file `taint.private_paths` names) **and** untrusted content (a
+page, a search, an MCP result, an issue read with `gh issue view`), every call that can
+send data out needs review, rule `lethal-trifecta`, even to a host the policy allows:
+a connection or fetch off this machine, a web search, an MCP tool that writes or sends,
+`git push`, `gh pr create`, `npm publish` and the like.
+
+```text
+review [lethal-trifecta] this session read private data (read /Users/me/.codex/auth.json)
+and content someone else may have written (the output of `gh issue view 7 --comments`),
+and this call can send data to git-push: …
+```
+
+A session that fetched docs and pushes code, or read a login and never read untrusted
+content, is not held. Answer the review in the agent's prompt. To deny instead, or to
+name more private files, set this in your own policy
+([POLICY.md §4.6](POLICY.md#46-the-lethal-trifecta)):
+
+```yaml
+taint:
+  trifecta: deny                  # default review
+  private_paths: ["~/finance/**"] # reads of these count as private data
+```
+
+### Data packed or copied before it is sent (staging)
+
+A session that packs files from outside the project (`tar czf /tmp/a.tgz ~/notes`) and then
+sends that file (`curl -F f=@/tmp/a.tgz https://…`), or that copied private data into a
+file (`cp ~/.aws/credentials notes/`) and then sends anything (`git push`), needs review,
+rule `staging-egress` ([POLICY.md §4.5](POLICY.md#45-staging-data-sent-after-collection)).
+A send after many reads outside the project, with nothing packed, is only recorded; `openmoat
+report` counts those per session. A policy from an earlier release gets the rule with
+`openmoat policy upgrade`.
 
 ## Review what the agent did
 
@@ -867,6 +909,30 @@ It lists each call that moves toward allow (deny > review > defer > allow) with 
 before and after, and says which kinds of call it proved over every path, host and name
 and which it checked over cases only. It exits 0 when nothing widens, 2 when something
 does and 3 when only a setting changed whose direction it does not rank.
+
+A `deny` or `review` rule can also look at what a call's arguments hold, with `when:`
+([POLICY.md §2.4](POLICY.md#24-argument-conditions-when)): mail to a recipient outside
+your domain, a browser tool opening a site outside a list, a save outside the project, a
+URL that came from content the agent read:
+
+```yaml
+deny:
+  - id: mail-outside-team
+    mcp: ["mcp__mail__send_email"]
+    when:
+      - { arg: [to, cc, bcc], not_in: ["*@example.com"] }
+review:
+  - id: planted-url
+    mcp: ["mcp__http__post"]
+    when:
+      - { arg: url, provenance: untrusted }
+```
+
+The tests are `under`/`not_under` (paths), `host_in`/`host_not_in` (URLs), `in`/`not_in`
+(values, recipient lists), `matches`/`not_matches` (whole values) and `provenance:
+untrusted`. A negated test also holds when the call names no such value, so a tool that
+calls the field something else is still stopped; name every key it uses. `openmoat policy
+lint` refuses `when:` on `allow` and `defer` rules.
 
 Until you re-pin, every call is denied with `kernel-integrity`: a pinned file that
 changed without a person accepting it is treated as tampered. The same happens when
@@ -1338,7 +1404,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat watch [--host …] [--only deny\|review] [--session …] [--recent N] [--no-follow]` | follow the agents' calls live, one line each; reads the audit log only ([Watch the agents live](#watch-the-agents-live)) |
 | `openmoat why [--last \| <id> \| HH:MM[:SS]] [--format json]` | explain one deny or review: its rules and where they are, how the policy decides the call now, the context, and how to change it ([Why was this blocked?](#why-was-this-blocked)) |
 | `openmoat serve [--listen 127.0.0.1:<port>]` | see `status`, `show`, `report` and `why` in a browser on this machine: 127.0.0.1 only, a link with a token made for this run, read-only; person-only ([In a browser](#in-a-browser)) |
-| `openmoat replay --since today` · `openmoat report --since 7d` | per-session timeline · summary, with the sends after collecting outside the project per session and per active hour (recorded only, [POLICY.md §4.5](POLICY.md#45-staging-data-sent-after-collection-recorded)) |
+| `openmoat replay --since today` · `openmoat report --since 7d` | per-session timeline · summary, with the sends after collecting outside the project per session and per active hour (the `collected` trigger, recorded only; packed files and private data written to a file are reviewed, `staging-egress`, [POLICY.md §4.5](POLICY.md#45-staging-data-sent-after-collection)) |
 | `openmoat audit export [--since …] [--host …] [--session …]` | write events to stdout as JSON Lines with their chain hashes, for `audit verify` and `audit report` |
 | `openmoat audit verify <file> [--anchor <hash>] [--require-anchor]` | check an export without the database; print its head hash; without `--anchor` the result says "not anchored", and `--require-anchor` fails it; on the machine whose audit key made the lines, also check each line's MAC |
 | `openmoat audit anchor --git <repo>` · `--file <path>` | record the log's head outside it: a commit on `refs/moat/anchors` in that repository, or a line appended to that file; nothing is sent anywhere (terminal only) |
