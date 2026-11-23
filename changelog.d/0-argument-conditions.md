@@ -1,2 +1,0 @@
-### Added
-- Argument conditions on `deny` and `review` rules (`when:`): `under`/`not_under`, `host_in`/`host_not_in`, `in`/`not_in` (recipient lists), `matches`/`not_matches` and `provenance: untrusted`, over an MCP call's arguments and a host tool's path, URL, command or query; a negated condition holds when the call names no such value, and operating-system layers apply a conditional rule as if every condition held ([#0](https://github.com/crocodile-labs/openmoat/pull/0)).
