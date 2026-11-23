@@ -2,9 +2,9 @@
 //! the rule lists by id (informational, `RuleChange`), and every setting,
 //! each with the direction it moves protection (`Change`, ADR-111).
 //!
-//! A setting whose direction this code cannot tell (a changed `taint:` or
-//! `staging:` section, a changed brokered secret) is `Unchecked`: a person
-//! looks at it, as at a widening.
+//! A setting whose direction this code cannot tell (a changed `staging:`
+//! section, a changed brokered secret) is `Unchecked`: a person looks at it,
+//! as at a widening. `taint:` is ranked key by key.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -12,6 +12,7 @@ use serde::Serialize;
 
 use crate::kind::Kind;
 use crate::policy::{Policy, RuleGroup};
+use crate::taint::TaintSettings;
 use crate::verdict::Verdict;
 
 /// How one setting change moves protection.
@@ -108,10 +109,11 @@ pub(super) fn rule_changes(old: &Policy, new: &Policy) -> Vec<RuleChange> {
     out
 }
 
-/// What a group matches, as text: its patterns per kind and `hook_only`.
+/// What a group matches, as text: its patterns per kind, `hook_only` and its
+/// `when` conditions (ADR-113).
 fn fingerprint(group: &RuleGroup) -> String {
     let patterns: Vec<&[String]> = Kind::ALL.iter().map(|k| group.patterns(*k)).collect();
-    format!("{patterns:?} {}", group.hook_only)
+    format!("{patterns:?} {} {:?}", group.hook_only, group.when)
 }
 
 /// Every setting that differs, with its effect.
@@ -141,8 +143,8 @@ pub(super) fn changes(old: &Policy, new: &Policy) -> Vec<Change> {
     executables(old, new, &mut push);
     flags(old, new, &mut push);
     sandbox(old, new, &mut push);
+    taint(old, new, &mut push);
     for (setting, same) in [
-        ("taint", old.taint == new.taint),
         ("staging", old.staging == new.staging),
         ("check_diff", old.check_diff == new.check_diff),
         (
@@ -216,6 +218,82 @@ fn switch<T: std::fmt::Debug + PartialEq + Copy>(
             Effect::Narrows
         };
         push(setting, format!("{was:?} → {now:?}"), effect);
+    }
+}
+
+/// A list whose every entry holds more (a path that is private or protected,
+/// a server whose results taint): an entry gone widens, entries only added
+/// narrow. A glob replaced by a wider one counts as gone.
+fn holding_list(
+    setting: &str,
+    was: &[String],
+    now: &[String],
+    push: &mut impl FnMut(&str, String, Effect),
+) {
+    let gone: Vec<&String> = was.iter().filter(|p| !now.contains(p)).collect();
+    if !gone.is_empty() {
+        push(setting, format!("no longer lists {gone:?}"), Effect::Widens);
+    } else if now.iter().any(|p| !was.contains(p)) {
+        push(setting, "lists more".to_owned(), Effect::Narrows);
+    }
+}
+
+/// The `taint:` section, key by key (ADR-113 ranks the lethal trifecta's).
+fn taint(old: &Policy, new: &Policy, push: &mut impl FnMut(&str, String, Effect)) {
+    let empty = TaintSettings::default();
+    let a = old.taint.as_ref().unwrap_or(&empty);
+    // Every key named, so a key added to the section must be ranked here.
+    let TaintSettings {
+        protected_writes,
+        metadata_tools,
+        defined_servers,
+        provenance: _,
+        private_paths,
+        trifecta: _,
+    } = new.taint.as_ref().unwrap_or(&empty);
+    let (old_taint, new_taint) = (old.taint.as_ref(), new.taint.as_ref());
+    holding_list(
+        "taint.protected_writes",
+        &a.protected_writes,
+        protected_writes,
+        push,
+    );
+    holding_list(
+        "taint.defined_servers",
+        &a.defined_servers,
+        defined_servers,
+        push,
+    );
+    holding_list("taint.private_paths", &a.private_paths, private_paths, push);
+    // A metadata tool's results do not taint: one added holds less.
+    let trusted: Vec<&String> = metadata_tools
+        .iter()
+        .filter(|t| !a.metadata_tools.contains(t))
+        .collect();
+    if !trusted.is_empty() {
+        push(
+            "taint.metadata_tools",
+            format!("results of {trusted:?} no longer taint"),
+            Effect::Widens,
+        );
+    } else if a.metadata_tools.iter().any(|t| !metadata_tools.contains(t)) {
+        push(
+            "taint.metadata_tools",
+            "fewer tools".to_owned(),
+            Effect::Narrows,
+        );
+    }
+    let (x, y) = (
+        TaintSettings::provenance_on(old_taint),
+        TaintSettings::provenance_on(new_taint),
+    );
+    switch("taint.provenance", x, y, x && !y, push);
+    let (was, now) = (
+        TaintSettings::trifecta_under(old_taint),
+        TaintSettings::trifecta_under(new_taint),
+    );
+    if was != now {
+        push("taint.trifecta", moved(was, now), rank(was, now));
     }
 }
 

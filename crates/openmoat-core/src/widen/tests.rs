@@ -259,3 +259,69 @@ fn the_search_finds_what_no_sample_reaches() {
         "the samples alone miss it: {report:#?}"
     );
 }
+
+fn effect(report: &Report, setting: &str) -> Option<Effect> {
+    report
+        .settings
+        .iter()
+        .find(|c| c.setting == setting)
+        .map(|c| c.effect)
+}
+
+/// The lethal trifecta's keys (ADR-113): `deny` holds more than `review`, a
+/// private path gone holds less.
+#[test]
+fn taint_keys_are_ranked() {
+    let with = |taint: &str| format!("{BASE}taint: {taint}\n");
+    let deny = with("{ trifecta: deny, private_paths: ['~/notes/**'] }");
+    let report = compare_yaml(BASE, &deny);
+    assert_eq!(effect(&report, "taint.trifecta"), Some(Effect::Narrows));
+    assert_eq!(
+        effect(&report, "taint.private_paths"),
+        Some(Effect::Narrows)
+    );
+    assert!(!report.widens() && !report.unchecked(), "{report:#?}");
+    let back = compare_yaml(&deny, BASE);
+    assert_eq!(effect(&back, "taint.trifecta"), Some(Effect::Widens));
+    assert_eq!(effect(&back, "taint.private_paths"), Some(Effect::Widens));
+    let review = with("{ trifecta: review, private_paths: ['~/notes/**'] }");
+    let lower = compare_yaml(&deny, &review);
+    assert_eq!(effect(&lower, "taint.trifecta"), Some(Effect::Widens));
+    assert_eq!(effect(&lower, "taint.private_paths"), None);
+    // `review` written out is the default: nothing changed.
+    let written = compare_yaml(BASE, &with("{ trifecta: review }"));
+    assert_eq!(written.settings, []);
+}
+
+const MAIL: &str = "version: 1\ndefaults: { '*': defer }\n\
+    deny:\n  - id: mail\n    mcp: ['mcp__mail__send_email']\n";
+const MAIL_WHEN: &str = "    when:\n      - { arg: to, not_in: ['*@example.com'] }\n";
+
+/// `when` conditions only narrow a deny rule (ADR-113): adding one to a rule
+/// that held every call widens; the search reads the old policy's as met and
+/// the new policy's as unmet, and conditions both have alike stay proven.
+#[test]
+fn when_conditions_are_searched_on_the_safe_side() {
+    let conditional = format!("{MAIL}{MAIL_WHEN}");
+    let report = compare_yaml(MAIL, &conditional);
+    assert_eq!(outcome(&report, "mcp"), Outcome::Widens, "{report:#?}");
+    assert!(report.widens());
+    assert_eq!(
+        report
+            .rules
+            .iter()
+            .map(|r| r.change.as_str())
+            .collect::<Vec<_>>(),
+        ["changed"]
+    );
+    let same = compare_yaml(&conditional, &conditional);
+    assert!(!same.widens());
+    assert_eq!(outcome(&same, "mcp"), Outcome::Proven);
+    let back = compare_yaml(&conditional, MAIL);
+    assert!(!back.widens(), "{back:#?}");
+    assert_eq!(outcome(&back, "mcp"), Outcome::Proven);
+    // Another condition: the old one may have held calls the new one passes.
+    let other = conditional.replace("*@example.com", "*@example.org");
+    let changed = compare_yaml(&conditional, &other);
+    assert_ne!(outcome(&changed, "mcp"), Outcome::Proven, "{changed:#?}");
+}

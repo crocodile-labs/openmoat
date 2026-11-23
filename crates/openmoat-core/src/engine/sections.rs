@@ -58,4 +58,11 @@ impl CompiledGroup {
             .as_ref()
             .map(|b| b[kind as usize].as_slice())
     }
+
+    /// Whether the group has `when` conditions (ADR-113): it matches no atom
+    /// on its own, and adds its deny or review to a whole call whose
+    /// arguments meet them ([`CompiledPolicy::with_arguments`]).
+    pub(crate) fn conditional(&self) -> bool {
+        self.when.is_some()
+    }
 }

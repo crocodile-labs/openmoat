@@ -2055,8 +2055,11 @@ Checked over 9312 cases from fixtures and both policies' rules; proven over ever
 ```
 
 It exits 0 when nothing widens, 2 when something does, 3 when only a setting changed whose
-direction it does not rank (`taint:`, `staging:`, `check_diff:`, `require:`, a changed
-brokered secret); `--format json` prints the whole report, and `--fixtures FILE` adds the
+direction it does not rank (`staging:`, `check_diff:`, `require:`, a changed
+brokered secret). `taint:` is ranked key by key: `trifecta: review` → `deny` narrows and
+`deny` → `review` widens; an entry gone from `private_paths`, `protected_writes` or
+`defined_servers` widens; a tool added to `metadata_tools` widens; `provenance: false`
+widens. `--format json` prints the whole report, and `--fixtures FILE` adds the
 calls of a conformance fixture file. What it decides, in two contexts (home `/Users/me`,
 project `/p`; and home `/home/dev`, file names compared without case):
 
@@ -2070,7 +2073,10 @@ project `/p`; and home `/home/dev`, file names compared without case):
   every subject: each pattern is read as the regular expression the glob library matches
   with, and the product of all of them is walked to the end. When the search finishes,
   that kind is **proven** not to widen in that context; a widening it finds is decided by
-  the engine before it is listed. Shell commands, request rules and whole calls (with
+  the engine before it is listed. A group with `when` conditions (§2.4) counts in the
+  old policy as if its conditions held and not at all in the new one, unless both have
+  it alike, so a proven kind holds whatever arguments a call passes; a condition changed
+  or removed can leave its kind checked over cases only. Shell commands, request rules and whole calls (with
   their folder, taint and request layers) are **checked over cases only**; the last line
   says which is which.
 

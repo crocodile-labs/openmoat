@@ -1,0 +1,2 @@
+### Changed
+- `openmoat policy diff --widen` ranks each `taint:` key instead of asking a person to read the section: `trifecta: deny` → `review` and an entry gone from `private_paths` widen, the reverse narrows. A rule's `when` conditions are compared too, and the search over every subject reads the old policy's conditions as met and the new policy's as unmet, so a condition added to a deny rule is found as a widening ([#0](https://github.com/crocodile-labs/openmoat/pull/0)).

@@ -17,7 +17,10 @@
 //! patterns apply to a host only when it is written with a port. The search
 //! lets the new policy's allow rules use them always and the old policy's
 //! never, so it can only find more; a string the engine does not confirm
-//! leaves the kind not proven instead of reported.
+//! leaves the kind not proven instead of reported. Groups with `when`
+//! conditions (ADR-113) are read the same way: the old policy's as if their
+//! conditions held, the new policy's as absent (`conditional.rs`), so a
+//! proven kind holds whatever arguments a call passes.
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
 
@@ -27,7 +30,9 @@ use crate::action::AtomicAction;
 use crate::engine::{CompiledPolicy, Section};
 use crate::kind::Kind;
 use crate::verdict::Verdict;
+use conditional::{Role, Shared};
 
+mod conditional;
 mod differing;
 
 /// Most product states one search visits before it gives up unproven.
@@ -153,18 +158,29 @@ impl Matchers {
         Ok(list)
     }
 
-    fn side(&mut self, policy: &CompiledPolicy<'_>, target: Target) -> Result<Side, Unsupported> {
+    /// `policy`'s lists for `target`, its `when` groups placed for `role`
+    /// (`conditional.rs`).
+    fn side(
+        &mut self,
+        policy: &CompiledPolicy<'_>,
+        target: Target,
+        role: Role,
+        shared: &Shared,
+    ) -> Result<Side, Unsupported> {
         let kind = target.kind();
-        let mut sections = Vec::new();
+        let mut sections: Vec<(Section, Vec<Group>)> =
+            Section::ALL.iter().map(|s| (*s, Vec::new())).collect();
         for section in Section::ALL {
-            let mut groups = Vec::new();
             for g in policy.section(section) {
+                let Some(place) = shared.place(role, section, g) else {
+                    continue;
+                };
                 let lists = kind
                     .rule_kinds()
                     .iter()
                     .map(|k| self.list(g.globs(*k)))
                     .collect::<Result<_, _>>()?;
-                let bare = match (target.bare(), section) {
+                let bare = match (target.bare(), place) {
                     (true, Section::Allow) => Some(
                         kind.rule_kinds()
                             .iter()
@@ -173,13 +189,15 @@ impl Matchers {
                     ),
                     _ => None,
                 };
-                groups.push(Group {
+                let group = Group {
                     id: g.id().to_owned(),
                     lists,
                     bare,
-                });
+                };
+                if let Some((_, groups)) = sections.iter_mut().find(|(s, _)| *s == place) {
+                    groups.push(group);
+                }
             }
-            sections.push((section, groups));
         }
         let probe = target.atom("\u{0}".to_owned());
         Ok(Side {
@@ -418,9 +436,10 @@ pub(super) fn search(
     found: &mut Vec<Widening>,
 ) -> Outcome {
     let mut matchers = Matchers::default();
+    let shared = Shared::new(old, new);
     let sides = matchers
-        .side(old, target)
-        .and_then(|o| Ok((o, matchers.side(new, target)?)));
+        .side(old, target, Role::Old, &shared)
+        .and_then(|o| Ok((o, matchers.side(new, target, Role::New, &shared)?)));
     let (old_side, new_side) = match sides {
         Ok(sides) => sides,
         Err(Unsupported(why)) => return Outcome::NotProven(format!("a pattern reads as {why}")),
