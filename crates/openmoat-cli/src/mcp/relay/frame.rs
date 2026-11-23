@@ -48,6 +48,11 @@ fn send<W: Write>(out: &Mutex<Option<W>>, line: &str) -> Result<()> {
     Ok(())
 }
 
+/// Whether `out` was closed on purpose (taken), not failed.
+fn closed<W>(out: &Mutex<Option<W>>) -> bool {
+    out.lock().unwrap_or_else(PoisonError::into_inner).is_none()
+}
+
 /// Send what `relay` made of one line where it goes; `note` gets why anything
 /// was dropped.
 fn route<S: Write, H: Write>(
@@ -58,6 +63,12 @@ fn route<S: Write, H: Write>(
 ) -> Result<()> {
     for routed in routed {
         match routed {
+            // The agent ended the session and the server's input is already
+            // closed: an answer for the server (such as a refused request it
+            // sent after that) has nowhere to go and ends nothing.
+            Routed::Server(_) if closed(server) => {
+                note("the agent closed the session: an answer for the MCP server was not sent");
+            }
             Routed::Server(text) => send(server, &text).context("writing to the MCP server")?,
             Routed::Host(text) => send(host, &text).context("writing to the agent")?,
             Routed::Dropped(why) => note(&why),
