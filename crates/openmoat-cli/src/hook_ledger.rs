@@ -250,10 +250,14 @@ pub fn review(
     cwd: Option<&Path>,
     compiled: &CompiledPolicy<'_>,
 ) -> Review {
-    let scan = sources::scan(home, hosts, cwd);
+    reviewed(lock, &sources::scan(home, hosts, cwd), compiled)
+}
+
+/// What `scan` found, compared with `lock`'s ledger, classified by `compiled`.
+fn reviewed(lock: &Lock, scan: &Scan, compiled: &CompiledPolicy<'_>) -> Review {
     let empty = Pins::new();
     let pins = lock.hook_ledger.as_ref().unwrap_or(&empty);
-    let mut found = compare(pins, &scan, &|commands| classify(compiled, commands));
+    let mut found = compare(pins, scan, &|commands| classify(compiled, commands));
     found.recorded = lock.hook_ledger.is_some();
     // A repository policy or a pack cannot hold the key, so this is the
     // person's own setting.
@@ -262,12 +266,41 @@ pub fn review(
 }
 
 /// [`review`] under the person's policy, for `status`, `doctor`, `init` and
-/// `hooks accept`, which have no compiled policy of their own.
+/// `hooks accept`, which have no compiled policy of their own. The policy is
+/// read and compiled only when an entry is new or changed: only those are
+/// classified, and only they read `hooks.foreign`; with nothing to classify
+/// (the usual case) the review costs the scan alone.
 pub fn review_here(home: &Home, lock: &Lock, hosts: &[Host], cwd: Option<&Path>) -> Result<Review> {
-    let ctx = crate::context::eval_context(home, cwd, None)?;
-    let policy = crate::repo::effective_policy(home, &ctx)?;
-    let compiled = CompiledPolicy::compile(&policy, &ctx)?;
-    Ok(review(home, lock, hosts, cwd, &compiled))
+    let scan = sources::scan(home, hosts, cwd);
+    review_lazily(lock.hook_ledger.as_ref(), &scan, || {
+        let ctx = crate::context::eval_context(home, cwd, None)?;
+        let policy = crate::repo::effective_policy(home, &ctx)?;
+        let compiled = CompiledPolicy::compile(&policy, &ctx)?;
+        Ok(reviewed(lock, &scan, &compiled))
+    })
+}
+
+/// `scan` compared with `ledger`, by `classified` (which reads the policy)
+/// only when an entry is new or changed; otherwise there is nothing to
+/// classify and no `hooks.foreign` to read.
+fn review_lazily(
+    ledger: Option<&Pins>,
+    scan: &Scan,
+    classified: impl FnOnce() -> Result<Review>,
+) -> Result<Review> {
+    let empty = Pins::new();
+    let pins = ledger.unwrap_or(&empty);
+    let unaccepted = scan.found.iter().any(|found| {
+        pins.get(&found.id)
+            .is_none_or(|pin| pin.digest != found.digest)
+    });
+    if unaccepted {
+        return classified();
+    }
+    // Every entry is pinned as it is: `compare` classifies none of them.
+    let mut found = compare(pins, scan, &|_| (Verdict::Review, Vec::new()));
+    found.recorded = ledger.is_some();
+    Ok(found)
 }
 
 /// The hold for a call of `host` from `cwd`, while something `host` loads,

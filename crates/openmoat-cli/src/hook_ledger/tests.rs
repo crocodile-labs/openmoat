@@ -4,7 +4,7 @@ use openmoat_core::rule_id::FOREIGN_HOOK;
 use openmoat_core::{Decision, ForeignHooks, Verdict};
 use openmoat_hosts::Host;
 
-use super::{Found, HookPin, Pins, Scan, compare, hold, tightened};
+use super::{Found, HookPin, Pins, Scan, compare, hold, review_lazily, tightened};
 
 fn found(id: &str, digest: &str, commands: &[&str]) -> Found {
     Found {
@@ -121,6 +121,38 @@ fn only_pins_of_scanned_files_are_gone() {
     read.scanned.insert(here.file.display().to_string());
     let review = compare(&pinned(&[&here, &elsewhere]), &read, &classify);
     assert_eq!(review.gone, vec!["a".to_owned()]);
+}
+
+/// `status`, `doctor`, `init` and `hooks` read and compile the person's
+/// policy only to classify a new or changed entry: with every entry pinned
+/// as it is (or none found), they never do, so each of those commands pays
+/// for the scan alone. The policy is read in the closure; its calls are
+/// counted, not timed.
+#[test]
+fn the_policy_is_read_only_when_an_entry_is_new_or_changed() {
+    let one = found("a", "d1", &["./fmt.sh"]);
+    let pins = pinned(&[&one]);
+    let reads = std::cell::Cell::new(0);
+    let classified = || {
+        reads.set(reads.get() + 1);
+        Ok(compare(&pins, &scan(Vec::new()), &classify))
+    };
+    let review = review_lazily(Some(&pins), &scan(vec![one.clone()]), classified).unwrap();
+    assert_eq!((reads.get(), review.changes.len()), (0, 0));
+    assert!(review.recorded);
+    review_lazily(Some(&pins), &scan(Vec::new()), classified).unwrap();
+    // A lock from before the ledger with nothing found: nothing to classify.
+    let review = review_lazily(None, &scan(Vec::new()), classified).unwrap();
+    assert_eq!(reads.get(), 0);
+    assert!(!review.recorded);
+
+    // A changed digest, a new entry, or a first record: read once.
+    let changed = found("a", "d2", &["./fmt.sh"]);
+    review_lazily(Some(&pins), &scan(vec![changed]), classified).unwrap();
+    let new = found("b", "d1", &["./lint.sh"]);
+    review_lazily(Some(&pins), &scan(vec![one.clone(), new]), classified).unwrap();
+    review_lazily(None, &scan(vec![one]), classified).unwrap();
+    assert_eq!(reads.get(), 3);
 }
 
 #[test]
