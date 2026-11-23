@@ -38,6 +38,29 @@ fn age(path: &Path, minutes: u64) {
         .unwrap();
 }
 
+/// [`age`] that keeps the file's birth time. A real file is never last
+/// written before it was made, so macOS moves the birth time back with an
+/// older modification time unless it is set too; Linux cannot set it and
+/// leaves it.
+fn age_keeping_birth(path: &Path, minutes: u64) {
+    let born = fs::metadata(path).and_then(|m| m.created()).ok();
+    let then = SystemTime::now() - Duration::from_secs(minutes * 60);
+    let times = fs::FileTimes::new().set_modified(then);
+    #[cfg(target_vendor = "apple")]
+    let times = match born {
+        Some(born) => std::os::darwin::fs::FileTimesExt::set_created(times, born),
+        None => times,
+    };
+    #[cfg(not(target_vendor = "apple"))]
+    let _ = born;
+    fs::File::options()
+        .write(true)
+        .open(path)
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+        .set_times(times)
+        .unwrap();
+}
+
 /// Make every file `init` wrote that liveness reads for `host` (the hook file
 /// and the spec's settings files, such as Codex's `config.toml`) look written
 /// `minutes` ago, and the lock `minutes - 10` ago, as if `init` ran then and
@@ -226,7 +249,9 @@ fn a_started_session_that_called_a_tool_without_a_call_warns_at_once() {
         ]}});
         fs::write(&file, format!("{line}\n")).unwrap();
         // Written a minute ago: the guard had its budget to record a call.
-        age(&file, 1);
+        // The file was made after the start, which tells it from a resumed
+        // session's: its birth time stays.
+        age_keeping_birth(&file, 1);
         let doc = status(&sb);
         let hook = entry(&doc, "hooks", host);
         assert_eq!(hook["state"], "unchecked", "{host}: {doc}");
