@@ -145,7 +145,14 @@ fn moatbench_hook_that_denies_everything_blocks_attacks_and_work() {
         ),
         "{text}"
     );
-    assert!(text.contains("  codex: runs the call when"), "{text}");
+    // What the spec says Codex does (ADR-109: a missing or killed guard
+    // blocks; a timeout runs the call).
+    let failure = format!(
+        "  {}: {}",
+        Host::Codex.id(),
+        Host::Codex.spec().on_hook_failure
+    );
+    assert!(text.contains(&failure), "{text}");
     let (report, _) = bench(&sb, &["--hook", &hook, "--host", Host::Codex.id()]);
     let attacks = &report["categories"]["exfiltration"];
     assert_eq!(attacks["blocked"], attacks["runs"], "{report:#}");
