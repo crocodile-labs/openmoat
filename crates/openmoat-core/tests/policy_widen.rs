@@ -68,7 +68,10 @@ fn the_default_policy_is_proven_against_itself() {
 }
 
 /// 0.25.0 added `ps` environment dumps to `env-dump` and the decoy-key record
-/// to `kernel-self`: two deny rules that hold more, nothing else.
+/// to `kernel-self`; since then `kernel-self` also names the audit signing key
+/// and `hooks accept` (ADR-109, ADR-110), and the outside benchmarks' gaps
+/// (ADR-112) grew `secrets-paths` and `persistence` and added three review
+/// rules. Every change holds more, nothing else.
 #[test]
 fn the_upgrade_from_the_0_24_default_only_narrows() {
     let old = Policy::parse(DEFAULT_V0_24_0).unwrap();
@@ -84,7 +87,12 @@ fn the_upgrade_from_the_0_24_default_only_narrows() {
         changed,
         [
             ("deny", "env-dump", "changed"),
-            ("deny", "kernel-self", "changed")
+            ("deny", "kernel-self", "changed"),
+            ("review", "persistence", "changed"),
+            ("deny", "secrets-paths", "changed"),
+            ("review", "credential-egress", "added"),
+            ("review", "stops-system", "added"),
+            ("review", "system-files", "added")
         ]
     );
     for p in &report.proof {
