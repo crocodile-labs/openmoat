@@ -214,10 +214,11 @@ fn permanent_overlay_rules_merge_into_the_policy() {
     );
     let init = sb.moat_as_person(&["init", "--yes"]);
     assert_eq!(init.status.code(), Some(OK), "{}", text(&init));
-    // The foreign-hook ledger classifies with the policy, which does not
-    // load: init finishes and says so (ADR-109).
+    // The policy does not load: init finishes and names why. (The hook
+    // ledger reads the policy only when a hook entry changed, so it says
+    // nothing here; ADR-109.)
     assert!(
-        text(&init).contains("other hooks      not recorded"),
+        text(&init).contains("must have an id starting with `approved-`"),
         "{}",
         text(&init)
     );
