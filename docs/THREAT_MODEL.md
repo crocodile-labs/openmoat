@@ -458,7 +458,12 @@ something OpenMoat claims to stop.
     only each other; a datagram pair, which could be sent to any pathname datagram
     socket the person may write (`/dev/log`), is refused. Where the kernel has
     Landlock ABI 9 (Linux 7.1), Landlock also refuses connecting or sending to a
-    pathname Unix socket made outside the sandbox, beside the filter (ADR-082).
+    pathname Unix socket made outside the sandbox, beside the filter (ADR-082). Where it
+    has ABI 10 (Linux 7.2), Landlock also refuses every UDP bind, connect and send, so no
+    datagram (DNS to any resolver) leaves even if the filter missed a socket (ADR-108).
+    Each run's boundary record carries a protection score of the kernel features in
+    force, and `sandbox.strict: true` refuses a run without all of them (SANDBOX.md
+    "The protection score and strict mode").
   - The agent shares the user's terminal. Typing into it is refused: `TIOCSTI` on
     macOS (Seatbelt), `TIOCSTI` and `TIOCLINUX` on Linux (the seccomp filter, also
     inside `--isolate`), whatever the kernel's `dev.tty.legacy_tiocsti` says.

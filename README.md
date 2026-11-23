@@ -45,7 +45,7 @@ shows one line per agent it finds and asks `Protect? [Y/n/d]` (`d` shows the ful
 Every file is backed up before it changes. An agent already set up is not asked again:
 
 ```
-OpenMoat 0.24.0 · protecting the agents on this machine
+OpenMoat 0.25.0 · protecting the agents on this machine
 
   Each file is backed up first · d shows the full diff · openmoat uninstall undoes it
 
@@ -157,18 +157,23 @@ Which agents and operating systems each feature works with: [docs/FEATURES.md](d
 | Part | What it does | Start with |
 |---|---|---|
 | **Policy engine** | Decides each tool call the hook reports from what it really does: it reads the shell the way a shell does and checks the files, hosts and programs a call touches. | `openmoat init` |
-| **OS sandboxes** | Confine the code an allowed call runs: the agents' own sandboxes written from the same policy, or `openmoat run` for any agent. | `openmoat run -- <agent>` |
+| **OS sandboxes** | Confine the code an allowed call runs: the agents' own sandboxes written from the same policy, or `openmoat run` for any agent. `openmoat doctor` scores how much of `openmoat run`'s boundary this system can enforce (out of 100), and `sandbox.strict: true` starts a run only with all of it ([docs/SANDBOX.md](docs/SANDBOX.md#the-protection-score-and-strict-mode)). | `openmoat run -- <agent>` |
 | **Egress proxy** | Lets network from the sandboxes reach only the hosts the policy lists. | `openmoat proxy install` |
 | **Secret broker** | The agent holds a placeholder; the proxy adds your real token for one host only. | `openmoat secret add gh` |
 | **MCP gateway** | Starts only the MCP servers you accepted, pins each tool's description, and holds data one server returned that is sent into another's writing tool. | `openmoat mcp wrap <server>` |
-| **Audit trail** | Records every decision in a local, keyed, hash-chained log with secrets redacted; follows calls live and explains any block. | `openmoat watch` |
-| **Merge check** | Flags what a pull request's changes do: CI and hook edits, agent settings, look-alike packages, new hosts. | `openmoat policy check-diff` |
-| **Policy lock** | Pins the policy and hook files: an agent's call that changes the rules, approves its own block or switches OpenMoat off is denied. | `openmoat doctor` |
+| **Audit trail** | Records every decision in a local, keyed, hash-chained log with secrets redacted; follows calls live and explains any block. Signed checkpoints let anyone with the public key check the log on another machine ([docs/USAGE.md](docs/USAGE.md#check-that-the-audit-log-was-not-changed)). | `openmoat watch` · `openmoat audit checkpoint` |
+| **Merge check** | Flags what a pull request's changes do: CI and hook edits, agent settings, look-alike packages, new hosts, a policy change that lets more through. | `openmoat policy check-diff` |
+| **Policy lock** | Pins the policy and hook files: an agent's call that changes the rules, approves its own block or switches OpenMoat off is denied. It also records the other hooks, plugin hooks and git programs the agents run, and names a new or changed one until you accept it ([docs/USAGE.md](docs/USAGE.md#other-hooks-the-agents-run)). | `openmoat doctor` · `openmoat hooks list` |
 
 By risk: secrets read or sent, data sent to unlisted hosts, instructions planted in what
 the agent reads, code that runs later (CI, git hooks, login items, `PATH`), look-alike
-packages, downloaded or hidden code, containers handed the host, destructive commands.
-Every rule and how to change it: [docs/POLICY.md](docs/POLICY.md). No AI model decides,
+packages, downloaded or hidden code, containers handed the host, changes to the system's
+own folders and processes, destructive commands.
+Every rule and how to change it: [docs/POLICY.md](docs/POLICY.md). Before a policy change
+applies (`openmoat policy upgrade`, `openmoat trust`, `openmoat policy install`), OpenMoat
+lists the calls it finds the change would decide less strictly, and an upgrade that has any
+needs `--accept-widening`; `openmoat policy diff OLD NEW --widen` checks any two policies
+([docs/POLICY.md §8.3](docs/POLICY.md#83-does-a-change-widen-openmoat-policy-diff---widen-adr-111)). No AI model decides,
 and OpenMoat sends nothing off your machine unless you set up
 [remote approvals](docs/APPROVALS.md) or [live audit delivery](docs/DELIVERY.md).
 
@@ -200,7 +205,7 @@ sets up each:
 **hook + OS sandbox**: each call the hook reports is checked, and the agent's own sandbox,
 written from the same policy, confines the commands it runs. **hook only**: the hook's
 decision is the only check; start the agent with `openmoat run` (macOS, Linux) for OS
-confinement too. In editors: Claude Code's VS Code extension and JetBrains plugin use the
+confinement too (`openmoat status` names the command for each such agent). In editors: Claude Code's VS Code extension and JetBrains plugin use the
 same hook, and Cursor's Tab is refused secret files ([docs/IDE.md](docs/IDE.md)).
 
 What each hook covers, tool by tool: [docs/INSTALL.md](docs/INSTALL.md#set-up-with-openmoat-init).
@@ -306,7 +311,8 @@ still change before 1.0; every such change has a CHANGELOG line. What comes next
 [docs/ROADMAP.md](docs/ROADMAP.md). To upgrade, update the binary the way you installed
 it, then run `openmoat doctor` and `openmoat policy upgrade` in your own terminal
 ([docs/INSTALL.md](docs/INSTALL.md#upgrading)); each release's own steps are in its
-[CHANGELOG](CHANGELOG.md) "Upgrading" line. Releases up to 0.7.0 called the command
+[CHANGELOG](CHANGELOG.md) "Upgrading" line, and what the release after 0.25.0 changes
+for you is in [docs/INSTALL.md](docs/INSTALL.md#from-0250-to-the-next-release). Releases up to 0.7.0 called the command
 `moat`; that name still runs `openmoat` for a few releases.
 
 ## Contributing

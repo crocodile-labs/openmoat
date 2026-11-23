@@ -488,6 +488,34 @@ Then, in a terminal of your own:
    sandboxes as `openmoat sandbox sync` does. `openmoat` alone offers the same at a
    terminal.
 
+### From 0.25.0 to the next release
+
+What you will see, and what to run:
+
+- **Codex, Gemini CLI, Qwen Code and Crush show their hook as out of date** until you run
+  `openmoat init`: the new hook entry blocks the call when `openmoat` is missing or killed
+  (ADR-109). Run `openmoat init` once; Codex then asks you to trust the changed hook in
+  `/hooks`, once.
+- **The first `openmoat init` records the other hooks the agents load** (plugin hooks,
+  helper commands, a project's hook files, `.git/config` programs), so nothing already
+  there is named or blocked; until then `openmoat status` and `openmoat doctor` say they
+  are not recorded yet. One added later is named by `openmoat status` until you run
+  `openmoat hooks accept` ([USAGE.md](USAGE.md#other-hooks-the-agents-run)).
+- **`openmoat policy upgrade` offers the new default rules** (ADR-112): `system-files`,
+  `stops-system`, `credential-egress`, and more paths and patterns in `secrets-paths`,
+  `persistence` and `token-egress`. After it, a listing or recursive read of `/etc` or
+  `/etc/ssh` itself (`ls /etc`, `grep -r … /etc`) needs review, because those folders now
+  hold secret paths; writes in the system's folders and stopping a system process need
+  review too. An upgrade that would move any call toward allow is listed and applied only
+  with `openmoat policy upgrade --accept-widening`; the upgrade from the 0.25.0 default
+  only narrows.
+- **`openmoat doctor` shows new rows**: the protection score of each `openmoat run` tier,
+  and the audit log's checkpoint public key. The checkpoint signing key
+  (`~/.moat/audit.key.ed25519`) is made by `openmoat init` or the first
+  `openmoat audit checkpoint`; logs from earlier releases keep verifying as before.
+- **`openmoat status` lists hook-only agents `openmoat run` can confine here** under
+  `Needs your attention`, with the command; Qwen Code and Crush now get one.
+
 ### What can change between 0.x minor releases
 
 Before 1.0 a minor release (0.5 → 0.6) may change things a patch release does not.

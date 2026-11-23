@@ -55,7 +55,7 @@ Each agent's gaps and the reasons are in
 
 - **Outside an OS sandbox, the hook decides alone.** For hook-only agents (OpenClaw,
   GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, goose, the
-  Antigravity CLI, and
+  Antigravity CLI, Qwen Code, Crush, and
   Claude Code and Cursor on native Windows), an allowed call runs with your permissions,
   so a classifier mistake is a bypass. `openmoat status` and `openmoat doctor` name the
   `openmoat run` command that puts each of them in an OS sandbox, or say why there is none
@@ -68,6 +68,13 @@ Each agent's gaps and the reasons are in
   sandbox or, on Linux, without the Isolated tier (ADR-080). An agent started without
   `openmoat run` is not refused
   ([POLICY.md §9.3](POLICY.md#93-requiring-openmoat-runs-full-boundary-requirerun)).
+- **The protection score counts kernel features, not how well they hold.** It says which
+  of the features `openmoat run` can use are in force, weighted to 100; a bug in one of
+  them, or in OpenMoat's rules for it, does not lower it. It compares runs on one system,
+  not systems, and the hook alone scores 0. `sandbox.strict: true` refuses any run below
+  100, so on Linux before 7.2 (Landlock ABI 10) it refuses every run; it is read from your
+  own policy only and, like `require.run`, says nothing about an agent started without
+  `openmoat run` ([SANDBOX.md](SANDBOX.md#the-protection-score-and-strict-mode), ADR-108).
 - **`openmoat run` scrubs the environment only when asked.** With `sandbox.env: scrubbed`,
   `--scrub-env` or `require.run: full-boundary`, only an allowlist of variables reaches the
   agent ([POLICY.md §9.6](POLICY.md#96-the-environment-openmoat-run-passes-on-sandboxenv),
@@ -406,6 +413,14 @@ call.
 
 ## Limits of single checks
 
+- **The never-widen check proves some kinds of call, and samples the rest.** `openmoat
+  policy diff --widen`, `policy upgrade`, `trust`, `policy install` and the merge check's
+  `diff-widens` prove for file, host, fetch, environment and MCP rules that no subject
+  widens, when their search finishes. Shell commands, request rules and whole calls (their
+  folder, taint and request layers) are checked over the bundled calls, cases made from
+  both policies' rules and `--fixtures` files only: a widening for a command none of them
+  spells is not found. The output says which kind got which check
+  ([POLICY.md §8.3](POLICY.md#83-does-a-change-widen-openmoat-policy-diff---widen-adr-111), ADR-111).
 - **A decoy key's value is caught as exact text.** The `canary` check finds a decoy's value
   in a call or a proxied request in any letter case, but not encoded (base64, hex), split
   across calls or rebuilt by a program before it is sent, as for brokered secrets. A
