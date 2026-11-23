@@ -9,6 +9,10 @@ use super::boundary::{Plan, plan};
 use super::isolation::{Asked, Lightweight, Offered, Tier};
 use super::platform;
 
+/// The left column of each tier's `openmoat doctor` line, which places the
+/// lines in its `OpenMoat` section.
+pub const LABEL: &str = "protection";
+
 /// One tier's score here, or why the tier cannot start.
 #[derive(Debug, Clone, Serialize)]
 pub struct TierScore {
@@ -29,7 +33,7 @@ impl TierScore {
             (None, Some(why)) => why.clone(),
             (None, None) => String::new(),
         };
-        format!("{:<16} {:<11} {text}", "protection", self.tier)
+        format!("{LABEL:<16} {:<11} {text}", self.tier)
     }
 
     /// Whether the line is a warning: a tier that starts with less than its
