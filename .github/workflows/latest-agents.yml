@@ -115,8 +115,32 @@ jobs:
           # strace: which hook file Antigravity CLI opens (latest-agents.sh, agy_diagnose).
           bash scripts/ci/apt-install.sh bubblewrap socat strace
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          # What else AppArmor applies to bubblewrap here (#784): Claude Code's sandbox
-          # fails with "nested userns is capability-restricted" even with the line above.
+      # Claude Code's sandbox fails under Ubuntu's bwrap-userns-restrict, which the runner
+      # loads: its unpriv_bwrap takes every capability from what /usr/bin/bwrap starts, so
+      # the nested user namespace Claude Code's seccomp step makes cannot write
+      # /proc/self/setgroups (#784). Claude Code's sandboxing docs, "Add an AppArmor profile
+      # for bubblewrap", give its own profile for /usr/bin/bwrap; both name the profile
+      # `bwrap`, so Ubuntu's is disabled first (Ubuntu's way: a link in disable/, then -R).
+      # Claude Code's job only; it never fails the job.
+      - name: AppArmor profile for bwrap from Claude Code's sandboxing docs
+        if: runner.os == 'Linux' && matrix.agent == 'claude-code'
+        continue-on-error: true
+        run: |
+          if [ -e /etc/apparmor.d/bwrap-userns-restrict ]; then
+            sudo mkdir -p /etc/apparmor.d/disable
+            sudo ln -sf /etc/apparmor.d/bwrap-userns-restrict /etc/apparmor.d/disable/
+            sudo apparmor_parser -R /etc/apparmor.d/bwrap-userns-restrict || true
+          fi
+          sudo tee /etc/apparmor.d/bwrap > /dev/null <<'EOF'
+          abi <abi/4.0>,
+          include <tunables/global>
+
+          profile bwrap /usr/bin/bwrap flags=(unconfined) {
+            userns,
+            include if exists <local/bwrap>
+          }
+          EOF
+          sudo systemctl reload apparmor || sudo apparmor_parser -r /etc/apparmor.d/bwrap
           sudo aa-status 2>/dev/null | grep -i bwrap || true
           sysctl kernel.apparmor_restrict_unprivileged_unconfined 2>/dev/null || true
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
