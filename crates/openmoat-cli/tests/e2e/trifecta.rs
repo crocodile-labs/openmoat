@@ -23,12 +23,14 @@ fn with_policy(policy: &str) -> Sandbox {
 // coverage: ASI01, ASI02
 #[test]
 fn issue_text_and_an_agent_login_make_a_later_push_need_review() {
-    let sb = with_policy(
-        "version: 1\ndefaults: { '*': review, net: deny }\n\
+    // An agent's login file, under the agent's directory from its spec.
+    let login_file = format!("{}/auth.json", dir_of(Host::Codex));
+    let sb = with_policy(&format!(
+        "version: 1\ndefaults: {{ '*': review, net: deny }}\n\
          allow:\n  - id: dev\n    shell: ['gh issue view *', 'git push *']\n\
          \x20 - id: registries\n    net: [api.github.com, github.com]\n\
-         review:\n  - id: agent-credentials\n    fs.read: ['~/.codex/auth.json']\n",
-    );
+         review:\n  - id: agent-credentials\n    fs.read: ['~/{login_file}']\n",
+    ));
     let proj = sb.project();
     let bash = |session, command: &str| {
         let input = json!({ "command": command });
@@ -39,7 +41,7 @@ fn issue_text_and_an_agent_login_make_a_later_push_need_review() {
         )
     };
     assert_eq!(bash("s1", "gh issue view 7 --comments").0, "allow");
-    let login = json!({"file_path": sb.home.join(".codex/auth.json").to_string_lossy()});
+    let login = json!({"file_path": sb.home.join(&login_file).to_string_lossy()});
     let (verdict, reason) = decide(
         &sb,
         Host::ClaudeCode.id(),
@@ -50,7 +52,7 @@ fn issue_text_and_an_agent_login_make_a_later_push_need_review() {
     let (verdict, reason) = bash("s1", "git push origin main");
     assert_eq!(verdict, "ask", "{reason}");
     assert!(reason.contains("[lethal-trifecta]"), "{reason}");
-    assert!(reason.contains(".codex/auth.json"), "{reason}");
+    assert!(reason.contains(&login_file), "{reason}");
     assert!(reason.contains("gh issue view 7"), "{reason}");
     // another session that read neither pushes as before
     assert_eq!(bash("s2", "git push origin main").0, "allow");

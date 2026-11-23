@@ -68,7 +68,7 @@ pub const ALLOWED_IN_SHARED_TESTS: &[(&str, usize)] = &[
     ("mcp.rs", 6),
     ("mcp_init_wrap.rs", 2),
     ("mcp_startup.rs", 2),
-    ("moatbench.rs", 1),
+    ("moatbench.rs", 0),
     ("project_settings_writes.rs", 17),
     ("protection.rs", 14),
     ("relay_token.rs", 1),
