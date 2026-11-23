@@ -119,6 +119,8 @@ fn offer_upgrade(update: &str, person: bool) -> Result<Option<Code>> {
         diff: false,
         yes: false,
         undo: false,
+        // A widening is shown and refused; the person reruns with the flag.
+        accept_widening: false,
     })
     .map(Some)
 }

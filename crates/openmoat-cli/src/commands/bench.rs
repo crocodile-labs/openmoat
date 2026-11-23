@@ -10,7 +10,7 @@
 mod hook;
 mod hosts;
 mod proof;
-mod scenario;
+pub(crate) mod scenario;
 mod score;
 #[cfg(test)]
 mod tests;

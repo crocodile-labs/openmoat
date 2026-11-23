@@ -143,11 +143,22 @@ pub fn install(args: &InstallArgs) -> Result<Code> {
     // The merged policy must still lint before anything is written, with the
     // pack this one replaces taken out.
     let mut policy = home.load_policy()?;
+    let before = policy.clone();
     let own = format!("{}{name}:", packs::PACK_RULE_PREFIX);
     for groups in [&mut policy.deny, &mut policy.repo_review, &mut policy.allow] {
         groups.retain(|g| !g.id.starts_with(&own));
     }
     packs::apply(&mut policy, &name, &pack)?;
+    // What the pack (or this version of it) widens, shown before it is written
+    // (ADR-111).
+    let mut out = Deferred::default();
+    let report = crate::widen::compare(&before, &policy, &[])?;
+    if report.widens() || report.unchecked() {
+        writeln!(out, "Installing `{name}` widens your policy:")?;
+        crate::widen::write_widenings(&mut out, &report, false)?;
+    } else {
+        writeln!(out, "✔ installing `{name}` moves no call toward allow")?;
+    }
 
     write_private(&packs::pack_path(&home, &name), text.as_bytes())?;
     write_private(&packs::sig_path(&home, &name), &signature)?;
@@ -163,7 +174,6 @@ pub fn install(args: &InstallArgs) -> Result<Code> {
     installed.save(&home.packs_path())?;
     let pinned = repin(&home)?;
 
-    let mut out = Deferred::default();
     for (verb, groups) in [
         ("deny", &pack.deny),
         ("review", &pack.review),

@@ -374,3 +374,49 @@ fn reports_escape_what_github_and_terminals_would_read() {
         "{text}"
     );
 }
+
+/// A repository policy change that trusts every host is a `diff-widens`
+/// deny per case, on the policy file; one that only adds a deny is none.
+#[test]
+fn a_widening_policy_change_is_a_deny_on_the_file() {
+    let user = Policy::parse(DEFAULT_POLICY).unwrap();
+    let merged = |repo: &str| {
+        openmoat_core::RepoPolicy::parse(repo)
+            .unwrap()
+            .merge(&user, true)
+            .unwrap()
+    };
+    let base = merged("version: 1\ndeny:\n  - id: no-prod\n    net: ['prod.example.com']\n");
+    let wide = merged(
+        "version: 1\ndeny:\n  - id: no-prod\n    net: ['prod.example.com']\n\
+         allow:\n  - id: any-host\n    net: ['*.example.com']\n",
+    );
+    let report =
+        openmoat_core::widen::compare(&base, &wide, &crate::widen::contexts()[..1], &[]).unwrap();
+    let findings = gate::widenings(".moat/policy.yaml", &report);
+    assert!(
+        findings.iter().any(|f| f.level == Level::Deny),
+        "{report:#?}"
+    );
+    for f in &findings {
+        assert_eq!(
+            (f.level, f.path.as_str()),
+            (Level::Deny, ".moat/policy.yaml"),
+            "{f:?}"
+        );
+        assert_eq!(f.rules, [openmoat_core::rule_id::DIFF_WIDENS]);
+    }
+    assert!(
+        findings
+            .iter()
+            .any(|f| f.reasons[0].contains("repo:any-host")),
+        "{findings:#?}"
+    );
+    let narrower = merged(
+        "version: 1\ndeny:\n  - id: no-prod\n    net: ['prod.example.com', 'staging.example.com']\n",
+    );
+    let report =
+        openmoat_core::widen::compare(&base, &narrower, &crate::widen::contexts()[..1], &[])
+            .unwrap();
+    assert_eq!(gate::widenings(".moat/policy.yaml", &report), []);
+}

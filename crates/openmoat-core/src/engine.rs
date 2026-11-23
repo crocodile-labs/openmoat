@@ -22,10 +22,12 @@ mod context;
 mod egress;
 mod injection;
 mod packages;
+mod sections;
 mod staging;
 mod taint;
 
 use atoms::{checked_atoms, value_read_atoms};
+pub(crate) use sections::Section;
 pub use staging::{STAGING_ATOM, Staging};
 pub use taint::{Secret, Taint, UntrustedKind};
 
@@ -89,7 +91,7 @@ pub struct CompiledPolicy<'p> {
 }
 
 #[derive(Debug)]
-struct CompiledGroup {
+pub(crate) struct CompiledGroup {
     /// The group's id, as decisions name it.
     id: String,
     /// The group's `reason`, which prefixes each of its reasons.

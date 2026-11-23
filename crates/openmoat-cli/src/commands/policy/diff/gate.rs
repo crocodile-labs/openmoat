@@ -19,7 +19,8 @@
 use anyhow::Result;
 use openmoat_core::diffscan::Settings;
 use openmoat_core::rule_id::{
-    DIFF_LINK, DIFF_PATH, DIFF_POLICY, DIFF_SECRET, DIFF_SUBMODULE, DIFF_UNCHECKED, SESSION_TAINT,
+    DIFF_LINK, DIFF_PATH, DIFF_POLICY, DIFF_SECRET, DIFF_SUBMODULE, DIFF_UNCHECKED, DIFF_WIDENS,
+    SESSION_TAINT,
 };
 use openmoat_core::{
     Action, CompiledPolicy, Decision, EvalContext, NoResolver, Policy, Taint, Verdict,
@@ -377,6 +378,64 @@ fn secret_findings(file: &FileChange) -> Vec<Finding> {
 /// The finding for a diff that was not read in full.
 pub fn unchecked(why: String) -> Finding {
     Finding::new(Level::Review, "", DIFF_UNCHECKED, why)
+}
+
+/// Most widenings listed as findings of their own; the rest are counted.
+const WIDENINGS_LISTED: usize = 20;
+
+/// What a change to the policy files at `path` widens (ADR-111): a `deny`
+/// finding per case that moves toward allow and per setting that widens, a
+/// `review` one per setting changed in a way the check does not rank.
+pub fn widenings(path: &str, report: &openmoat_core::widen::Report) -> Vec<Finding> {
+    use openmoat_core::widen::Effect;
+    let rules = |r: &[String]| {
+        if r.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", r.join(", "))
+        }
+    };
+    let mut out: Vec<Finding> = report
+        .widenings
+        .iter()
+        .take(WIDENINGS_LISTED)
+        .map(|w| {
+            let why = format!(
+                "the changed policy widens {}: {}{} → {}{}",
+                w.case,
+                w.before.as_str(),
+                rules(&w.before_rules),
+                w.after.as_str(),
+                rules(&w.after_rules)
+            );
+            Finding::new(Level::Deny, path, DIFF_WIDENS, why)
+        })
+        .collect();
+    if let Some(more) = report
+        .widenings
+        .len()
+        .checked_sub(WIDENINGS_LISTED)
+        .filter(|n| *n > 0)
+    {
+        let why = format!(
+            "the changed policy widens {more} more cases; `openmoat policy diff OLD NEW --widen` \
+             lists them"
+        );
+        out.push(Finding::new(Level::Deny, path, DIFF_WIDENS, why));
+    }
+    for change in &report.settings {
+        let level = match change.effect {
+            Effect::Widens => Level::Deny,
+            Effect::Unchecked => Level::Review,
+            Effect::Narrows => continue,
+        };
+        let why = format!(
+            "the changed policy changes {}: {}",
+            change.setting, change.what
+        );
+        out.push(Finding::new(level, path, DIFF_WIDENS, why));
+    }
+    out
 }
 
 #[cfg(test)]

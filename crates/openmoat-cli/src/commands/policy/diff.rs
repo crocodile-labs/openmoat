@@ -29,6 +29,9 @@ pub fn run(args: &CheckDiffArgs) -> Result<Code> {
     let gate = Gate::new(&input.policy, &input.policy_files)?;
     let mut findings = gate.check(&input.files);
     findings.extend(input.unchecked);
+    if let Some((path, report)) = &input.widened {
+        findings.extend(gate::widenings(path, report));
+    }
     let report = Report::new(
         &findings,
         input.files.len(),

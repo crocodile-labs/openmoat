@@ -43,6 +43,12 @@ impl LazyGlob {
         }
     }
 
+    /// The regular expression globset matches candidates with: what the
+    /// never-widen proof (`widen/proof.rs`) reads the glob as.
+    pub(super) fn regex(&self) -> &str {
+        self.glob.regex()
+    }
+
     pub(super) fn is_match(&self, candidate: &str) -> bool {
         self.may_match(candidate) && self.regex_match(candidate)
     }

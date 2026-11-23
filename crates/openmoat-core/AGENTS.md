@@ -12,7 +12,7 @@ The trusted core: the policy model and lint, the POSIX lexer (`lexer/`), the she
 - `thiserror` errors; no `unwrap`/`expect`/`panic!` outside tests.
 
 ## Test
-- `cargo test -p openmoat-core`: unit tests, `tests/conformance/main.rs` (and `owasp.rs` beside it, the OWASP agentic table, and `evidence.rs`, the end-to-end tests marked `// coverage: ASI<nn>` that count for a risk, ADR-079) over `tests/conformance/*.yaml`, `doc_tables.rs` (README and USAGE verdict tables), `ir_consistency.rs`, `ir_never_widens.rs`, `lexer_vs_bash.rs`, `architecture.rs`, `policy_schema/` (the JSON Schemas in `policies/*.schema.json` against the model: a key or variant added to a policy struct needs the same in the schema, ADR-103).
+- `cargo test -p openmoat-core`: unit tests, `tests/conformance/main.rs` (and `owasp.rs` beside it, the OWASP agentic table, and `evidence.rs`, the end-to-end tests marked `// coverage: ASI<nn>` that count for a risk, ADR-079) over `tests/conformance/*.yaml`, `doc_tables.rs` (README and USAGE verdict tables), `ir_consistency.rs`, `ir_never_widens.rs`, `policy_widen.rs` (the never-widen check of a policy change on the default policy over every conformance fixture, ADR-111), `lexer_vs_bash.rs`, `architecture.rs`, `policy_schema/` (the JSON Schemas in `policies/*.schema.json` against the model: a key or variant added to a policy struct needs the same in the schema, ADR-103).
 - `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance` regenerates `docs/COVERAGE.md`.
 - A policy change carries one attack that must be denied or held for review and one benign action that must stay allowed.
 

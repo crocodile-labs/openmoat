@@ -214,6 +214,9 @@ pub const DIFF_LINK: &str = "diff-link";
 pub const DIFF_SUBMODULE: &str = "diff-submodule";
 /// `policy check-diff`: a diff that was not read in full.
 pub const DIFF_UNCHECKED: &str = "diff-unchecked";
+/// `policy check-diff`: a change to a policy file the check reads that moves a
+/// call toward allow (ADR-111).
+pub const DIFF_WIDENS: &str = "diff-widens";
 
 /// The default policy's self-protection: OpenMoat's own files and the hosts'
 /// hook files.
@@ -351,6 +354,7 @@ pub const BUILTIN_RULES: &[BuiltinRule] = &[
     quiet(DIFF_LINK),
     quiet(DIFF_SUBMODULE),
     quiet(DIFF_UNCHECKED),
+    quiet(DIFF_WIDENS),
 ];
 
 /// OpenMoat's own rule `id`; `None` for any other id.

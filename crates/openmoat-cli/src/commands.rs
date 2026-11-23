@@ -4,7 +4,7 @@ mod allow;
 mod allowed;
 mod approvals;
 mod audit;
-mod bench;
+pub(crate) mod bench;
 mod demo;
 mod doctor;
 mod edit;
@@ -116,6 +116,7 @@ pub fn run(cli: Cli) -> Result<Code> {
             PolicyCommand::Lint(args) => policy::lint(&args),
             PolicyCommand::Check(args) => policy::check(&args),
             PolicyCommand::CheckDiff(args) => policy::check_diff(&args),
+            PolicyCommand::Diff(args) => policy::diff(&args),
             PolicyCommand::Compile(args) => policy::compile(&args),
             PolicyCommand::Upgrade(args) => policy::upgrade(&args),
             PolicyCommand::Migrate(args) => policy::migrate(&args),

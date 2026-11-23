@@ -436,3 +436,45 @@ fn demo_denies_a_key_read_under_a_home_spelled_with_a_double_slash() {
         "{text}"
     );
 }
+
+/// `policy diff --widen` (ADR-111): a change that lets a held call run exits 2
+/// and names the case and both rules; the reverse only narrows and exits 0.
+#[test]
+fn policy_diff_widen_names_what_moves_toward_allow() {
+    let sb = Sandbox::bare(&[]);
+    let dir = tempfile::tempdir().unwrap();
+    let old = dir.path().join("old.yaml");
+    let new = dir.path().join("new.yaml");
+    let base = "version: 1\ndefaults: { '*': review, net: deny }\n\
+        deny:\n  - id: keys\n    fs.read: ['~/.ssh/**']\n\
+        allow:\n  - id: dev\n    shell: ['git status']\n";
+    std::fs::write(&old, base).unwrap();
+    std::fs::write(&new, base.replace("'~/.ssh/**'", "'~/.ssh/id_*'")).unwrap();
+    let (old, new) = (old.to_str().unwrap(), new.to_str().unwrap());
+
+    let out = sb.moat(&["policy", "diff", old, new]);
+    assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
+    assert!(
+        stdout(&out).contains("rule keys (deny): changed"),
+        "{}",
+        stderr(&out)
+    );
+
+    let out = sb.moat(&["policy", "diff", old, new, "--widen"]);
+    assert_eq!(out.status.code(), Some(DENY), "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(
+        text.contains("move toward allow") || text.contains("moves toward allow"),
+        "{text}"
+    );
+    assert!(
+        text.contains("read /Users/me/.ssh/") && text.contains("deny (keys) → review"),
+        "{text}"
+    );
+    assert!(text.contains("proven over every subject for:"), "{text}");
+
+    let out = sb.moat(&["policy", "diff", new, old, "--widen", "--format", "json"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
+    let report: serde_json::Value = serde_json::from_str(&stdout(&out)).unwrap();
+    assert_eq!(report["widenings"], serde_json::json!([]));
+}

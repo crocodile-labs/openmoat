@@ -1551,6 +1551,14 @@ something OpenMoat claims to stop.
   person's deny rules. A trusted repository whose maintainers turn malicious
   widens only through a new file version, which drops back to tightening-only
   until someone trusts it again (ADR-022).
+- **A policy change is checked for widening, not reviewed for intent** (ADR-111).
+  `openmoat policy upgrade`, `openmoat trust`, `openmoat policy install` and the merge
+  check (`diff-widens`) list every call a change moves toward allow, proven over every
+  subject for path, host, fetch, environment and MCP rules where the search finishes,
+  checked over generated and bundled cases only for shell commands, request rules and
+  whole calls. A person who accepts a widening (`--accept-widening`, a yes to `trust`)
+  still accepts it; and a change of the classifier (how a command becomes atoms) is
+  not a policy change, so the conformance suite remains its check.
 - **The binary is pinned by path, not digest** (ADR-006, ADR-016). Whoever can replace
   the file the stable link points at decides what the hooks run. The recorded path, its
   directory and its link target are protected by literal path (`kernel-self`, every

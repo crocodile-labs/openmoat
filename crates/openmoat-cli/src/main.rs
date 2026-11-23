@@ -63,6 +63,7 @@ mod terminal;
 mod time;
 mod trust;
 mod upgrade;
+mod widen;
 
 use std::process::ExitCode;
 

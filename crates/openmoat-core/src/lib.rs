@@ -51,6 +51,7 @@ mod staging;
 mod taint;
 pub mod token;
 mod verdict;
+pub mod widen;
 pub mod yaml;
 
 pub use action::{Action, AtomicAction};

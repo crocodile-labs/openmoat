@@ -156,6 +156,7 @@ repository policy). The check adds:
 | `diff-secret` | deny | an added line holds a known token format |
 | `diff-path` | deny | a path is absolute, leaves the repository (`../`) or is not a file name |
 | `diff-policy` | review | the change edits a policy file the check read |
+| `diff-widens` | deny (review for a setting not ranked) | with `--base`, the change makes `.moat/policy.yaml` (merged into the policy as trusted) or the `--policy` file decide a call less strictly than the base revision's: one finding per case, with the rules before and after, and per setting that widens; the never-widen check of `openmoat policy diff --widen` (POLICY.md §8.3, ADR-111) |
 | `diff-link` | review | the change makes a symbolic link; where it points is checked too |
 | `diff-submodule` | review | the change moves a submodule to another commit |
 | `diff-unchecked` | review | with `--base`, the diff is larger than 64 MiB: its paths were checked, its added lines were not searched (a diff on stdin that large is an error, exit 64) |

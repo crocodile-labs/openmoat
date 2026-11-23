@@ -1244,6 +1244,7 @@ your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat prox
 | `push-runs-later` | review | the session read untrusted content or a secret, and the push changes a file `runs-later` names (§4.2) |
 | `push-unchecked` | review | what a push would publish could not be checked within 10 s or 8 MiB, or where it runs is not known (§4.2) |
 | `diff-path`, `diff-secret` | deny | `openmoat policy check-diff` only ([MERGE_CHECK.md](MERGE_CHECK.md), ADR-050): a changed path that leaves the repository or is not a file name; an added line that holds a known token format (the push check's scanner, §4.2) |
+| `diff-widens` | deny | `openmoat policy check-diff --base` only: the change makes a policy file the check reads decide a call less strictly (§8.3, ADR-111); `review` for a changed setting whose direction is not ranked |
 | `diff-policy`, `diff-link`, `diff-submodule`, `diff-unchecked` | review | `openmoat policy check-diff` only: a change to a policy file the check read; a symbolic link the change makes, with where it points; a submodule it changes; a diff too large to search its added lines |
 | `diff-package-near-miss`, `diff-install-script`, `diff-package-source`, `diff-lock-integrity`, `diff-ci-pr-target`, `diff-ci-permissions`, `diff-ci-unpinned`, `diff-ci-injection`, `diff-ci-secret-out`, `diff-pipe-to-shell`, `diff-decode-exec`, `diff-python-startup`, `diff-docker-remote-add`, `diff-encoded-blob`, `diff-private-key`, `diff-env-secret`, `diff-new-host` | each its own; `check_diff.levels` sets them | `openmoat policy check-diff` only: the content checks of an added line ([MERGE_CHECK.md](MERGE_CHECK.md#content-checks), ADR-055) |
 | `approved-session` | allow | a `review` for a shell command that a person granted with `openmoat allow` for this host session (§8.2) |
@@ -1883,6 +1884,54 @@ not made from a default, and nothing is offered. The upgraded policy must lint; 
 command shows the diff, asks `[y/N]` (`--yes` skips the question, not the terminal), keeps
 the previous policy in `~/.moat/policy.yaml.before-upgrade` and re-pins. `--undo` puts
 that file back byte for byte; `--dry-run` only shows the changes and needs no terminal.
+
+### 8.3 Does a change widen? (`openmoat policy diff --widen`, ADR-111)
+
+A policy change widens when the new policy decides some call less strictly than the old
+one, on the order deny > review > defer > allow. `openmoat policy diff OLD NEW` lists the
+rules and settings that changed; with `--widen` it decides both policies and lists every
+case that moves toward allow, with the rules before and after:
+
+```console
+$ openmoat policy diff old.yaml new.yaml --widen
+✖ 2 cases move toward allow:
+    read /Users/me/.ssh/config: deny (secrets-paths) → defer (default.fs.read)
+    shell "git push --force": review (force-push) → allow (dev-shell)
+  rule secrets-paths (deny): changed
+Checked over 9312 cases from fixtures and both policies' rules; proven over every subject for: fs.write, net, …; checked over cases only: shell commands, requests: rules, whole calls (folders, taint, requests, pins).
+```
+
+It exits 0 when nothing widens, 2 when something does, 3 when only a setting changed whose
+direction it does not rank (`taint:`, `staging:`, `check_diff:`, `require:`, a changed
+brokered secret); `--format json` prints the whole report, and `--fixtures FILE` adds the
+calls of a conformance fixture file. What it decides, in two contexts (home `/Users/me`,
+project `/p`; and home `/home/dev`, file names compared without case):
+
+- the bundled MoatBench calls and any `--fixtures` calls, as whole calls;
+- cases generated from both policies' rules, so a removed or changed rule's own edges are
+  decided: each path pattern's matches, its folder and a sibling; each host and its
+  lookalikes (`wgithub.com`, `github.com.w`); each shell pattern's argument lists; each
+  request rule with seven common methods, its wildcards filled, with a trailing `/` and in
+  capitals; and one case per kind that only `defaults` decide;
+- for `fs.read`, `fs.write`, `net`, `fetch`, `env.read`, `env.set` and `mcp`, a search of
+  every subject: each pattern is read as the regular expression the glob library matches
+  with, and the product of all of them is walked to the end. When the search finishes,
+  that kind is **proven** not to widen in that context; a widening it finds is decided by
+  the engine before it is listed. Shell commands, request rules and whole calls (with
+  their folder, taint and request layers) are **checked over cases only**; the last line
+  says which is which.
+
+Settings are compared one by one: a new `sandbox.read_roots` entry, a removed or wider
+`executables` pin, `require_signed_repo_policy` turned off, `unattended: defer`,
+`mcp.trust_first_sight`, a lower `defaults` verdict and the like widen.
+
+The same check runs where a policy changes: `openmoat policy upgrade` lists what an upgrade
+widens and applies it only with `--accept-widening` (without it the policy is left as it
+is and the command exits 3; an upgrade that only narrows, such as
+0.24.0 → 0.25.0, says so and needs nothing more); `openmoat trust` shows what trusting a
+repository policy widens; `openmoat policy install` shows what a pack widens; and
+`openmoat policy check-diff --base` reports each widening of a policy file it reads as a
+`diff-widens` deny ([MERGE_CHECK.md](MERGE_CHECK.md)).
 
 ## 9. Host sandboxes (`sandbox:`)
 

@@ -142,7 +142,20 @@ fn a_0_3_0_policy_gains_the_new_defaults_and_undo_restores_it() {
     );
     assert_eq!(policy(&sb), V0_3_0);
 
+    // The quiet default (ADR-025) leaves calls to the agent that 0.3.0 held
+    // for review: a widening, listed case by case and applied only with
+    // `--accept-widening` (ADR-111).
     let out = sb.moat_as_person(&["policy", "upgrade", "--yes"]);
+    assert_eq!(out.status.code(), Some(REVIEW), "{}", text(&out));
+    let shown = text(&out);
+    assert!(
+        shown.contains("This upgrade widens your policy:"),
+        "{shown}"
+    );
+    assert!(shown.contains("--accept-widening"), "{shown}");
+    assert_eq!(policy(&sb), V0_3_0);
+
+    let out = sb.moat_as_person(&["policy", "upgrade", "--yes", "--accept-widening"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(
         text(&out).contains("openmoat policy upgrade --undo"),
@@ -205,7 +218,7 @@ fn the_owners_changes_are_kept_and_a_conflicting_change_is_listed() {
         "{shown}"
     );
 
-    let out = sb.moat_as_person(&["policy", "upgrade", "--yes"]);
+    let out = sb.moat_as_person(&["policy", "upgrade", "--yes", "--accept-widening"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let upgraded = policy(&sb);
     assert!(

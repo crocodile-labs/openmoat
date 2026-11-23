@@ -142,8 +142,9 @@ fn upgrade_from(version: i64) {
     assert_eq!(verified.status.code(), Some(OK), "{}", text(&verified));
 
     // The person brings the policy up to date: their rule stays, and calls
-    // go on being decided and recorded under the key made above.
-    let out = sb.moat_as_person(&["policy", "upgrade", "--yes"]);
+    // go on being decided and recorded under the key made above. An older
+    // default may hold more than this one: the widening is accepted here.
+    let out = sb.moat_as_person(&["policy", "upgrade", "--yes", "--accept-widening"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let policy = std::fs::read_to_string(state(&sb, "policy.yaml")).unwrap();
     assert!(policy.contains(MY_RULE), "{policy}");

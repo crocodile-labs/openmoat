@@ -34,6 +34,12 @@ pub(crate) fn literal_folder(glob: &str) -> Option<&str> {
         .then_some(folder)
 }
 
+/// The text every match of `glob` begins with: up to its first `*`, `?`, `[`,
+/// `{` or `\`, or its first non-ASCII character.
+pub(crate) fn literal_start_of(glob: &str) -> &str {
+    lazy::literal_start(glob)
+}
+
 /// A compiled pattern that may be an exclusion.
 pub(crate) trait Matcher<C: ?Sized> {
     fn is_match(&self, candidate: &C) -> bool;
@@ -123,6 +129,12 @@ impl GlobPattern {
     #[must_use]
     pub fn is_match(&self, candidate: &str) -> bool {
         self.matcher.is_match(candidate) || self.dir.as_ref().is_some_and(|d| d.is_match(candidate))
+    }
+
+    /// The regular expressions a candidate is matched against, any of which
+    /// matching is a match: the glob's, and for `dir/**` also `dir`'s.
+    pub(crate) fn regexes(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.matcher.regex()).chain(self.dir.as_ref().map(LazyGlob::regex))
     }
 
     /// True when every candidate `other` matches is also matched by `self`.

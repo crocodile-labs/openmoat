@@ -23,6 +23,7 @@ use grants::Migration;
 
 mod grants;
 mod summary;
+mod widening;
 
 pub fn run(args: &UpgradeArgs) -> Result<Code> {
     let home = Home::locate()?;
@@ -39,6 +40,10 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
     let grants = Migration::for_home(&home, &plan.merge.text)?;
     let mut out = Deferred::default();
     describe(&plan, grants.as_ref(), args, &mut out)?;
+    let widened = widening::check(&plan)?;
+    if let Some(report) = &widened {
+        widening::write(&mut out, report)?;
+    }
     let binary = crate::install::hook_binary()?;
     let hook_upgrade = crate::install::migrate_hooks::needed(&home, &binary)?;
     if hook_upgrade {
@@ -69,6 +74,12 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
     integrity::refuse_drift(&home, "upgrade the policy")?;
     let checkpoint = integrity::Checkpoint::take(&home)?;
     lint(&home, &plan.merge.text)?;
+    if let Some(report) = &widened
+        && widening::refused(&mut out, report, args.accept_widening)?
+    {
+        out.finish()?;
+        return Ok(Code::Review);
+    }
     if !args.yes && !confirm(&plan, grants.as_ref(), &mut out)? {
         writeln!(out, "the policy was not changed")?;
         out.finish()?;

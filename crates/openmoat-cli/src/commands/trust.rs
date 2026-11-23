@@ -133,6 +133,9 @@ fn show(
         };
         render::line(out, &format!("    allow {id}: {}{note}", patterns(group)))?;
     }
+    if let Some(user) = user {
+        widening(out, found, user)?;
+    }
     writeln!(
         out,
         "  its {} review and {} deny rule(s) apply trusted or not:",
@@ -150,6 +153,26 @@ fn show(
             out,
             "  (your policy could not be read, so rules it makes moot are not marked)"
         )?;
+    }
+    Ok(())
+}
+
+/// What trusting `found` moves toward allow (ADR-111): the person's policy
+/// with the file merged untrusted against merged trusted, decided over the
+/// same cases.
+fn widening(out: &mut impl std::io::Write, found: &Found, user: &Policy) -> Result<()> {
+    let (Ok(before), Ok(after)) = (
+        found.policy.merge(user, false),
+        found.policy.merge(user, true),
+    ) else {
+        return Ok(());
+    };
+    let report = crate::widen::compare(&before, &after, &[])?;
+    if report.widens() {
+        writeln!(out, "  trusting it widens your policy:")?;
+        crate::widen::write_widenings(out, &report, false)?;
+    } else {
+        writeln!(out, "  trusting it moves no call toward allow")?;
     }
     Ok(())
 }

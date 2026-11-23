@@ -17,11 +17,17 @@ pub enum PolicyCommand {
     /// own files, secrets), and added lines holding a known token. Exits 0 when nothing is
     /// found, 2 when the policy denies something, 3 when something needs a person's review.
     CheckDiff(CheckDiffArgs),
+    /// Compare two policy files: the rules and settings that changed and, with --widen,
+    /// every call, rule boundary and subject the new one decides less strictly than the
+    /// old one (deny > review > defer > allow). With --widen, exits 0 when nothing
+    /// widens, 2 when something does, 3 when a setting changed that is not ranked.
+    Diff(DiffArgs),
     /// Print what OS layers enforce for a policy: the compiled IR and its losses.
     Compile(CompileArgs),
     /// Add what this release's default policy changed to ~/.moat/policy.yaml, keeping every
-    /// line you changed; shows the diff and asks first. Refused unless run from an
-    /// interactive terminal, except with --dry-run.
+    /// line you changed; shows the diff and asks first. An upgrade that moves a call toward
+    /// allow is listed case by case and applied only with --accept-widening (exit 3
+    /// without it). Refused unless run from an interactive terminal, except with --dry-run.
     Upgrade(UpgradeArgs),
     /// Rewrite a policy file in the current policy schema (`version:`), changing no rule:
     /// shows the diff, asks, and keeps the previous file beside it. Refused unless run from
@@ -132,6 +138,29 @@ pub struct CheckDiffArgs {
     pub format: Option<DiffFormat>,
 }
 
+#[derive(Debug, Args)]
+pub struct DiffArgs {
+    /// The policy before the change.
+    pub old: PathBuf,
+
+    /// The policy after the change.
+    pub new: PathBuf,
+
+    /// Decide both policies over the bundled cases, cases generated from both policies'
+    /// rules and a search over every path, host and name, and report what widens.
+    #[arg(long)]
+    pub widen: bool,
+
+    /// A conformance fixture file (`tests/conformance/*.yaml`) whose calls are decided
+    /// too; repeatable. Needs --widen.
+    #[arg(long, value_name = "FILE", requires = "widen")]
+    pub fixtures: Vec<PathBuf>,
+
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = Format::Text)]
+    pub format: Format,
+}
+
 /// `policy check-diff --format`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum DiffFormat {
@@ -174,7 +203,7 @@ pub enum ActionKind {
 #[derive(Debug, Args)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "four command-line flags, each of its own: clap reads them as bools"
+    reason = "five command-line flags, each of its own: clap reads them as bools"
 )]
 pub struct UpgradeArgs {
     /// Show the changes without writing anything; needs no terminal.
@@ -193,6 +222,11 @@ pub struct UpgradeArgs {
     /// Restore the policy the last upgrade replaced, byte for byte.
     #[arg(long)]
     pub undo: bool,
+
+    /// Apply an upgrade that moves a call toward allow or changes a setting the check
+    /// does not rank, after reading what it widens (still only from a terminal).
+    #[arg(long, conflicts_with = "undo")]
+    pub accept_widening: bool,
 }
 
 #[derive(Debug, Args)]

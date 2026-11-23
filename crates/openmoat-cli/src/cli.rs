@@ -24,7 +24,7 @@ pub use audit::{
 };
 pub use mcp::{McpAcceptArgs, McpCommand, McpProxyArgs, McpUnwrapArgs, McpWrapArgs};
 pub use policy::{
-    ActionKind, CheckArgs, CheckDiffArgs, CompileArgs, DiffFormat, InstallArgs, LintArgs,
+    ActionKind, CheckArgs, CheckDiffArgs, CompileArgs, DiffArgs, DiffFormat, InstallArgs, LintArgs,
     MigrateArgs, PolicyCommand, RemoveArgs, TrustKeyArgs, UpgradeArgs,
 };
 pub use provenance::{DiffProvenanceArgs, ProvenanceArgs, ProvenanceLevel};

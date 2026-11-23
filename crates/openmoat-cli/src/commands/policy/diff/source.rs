@@ -42,6 +42,9 @@ pub struct Input {
     /// Where the policy came from, for the report.
     pub policy_source: String,
     pub repo_policy: Option<String>,
+    /// What the change does to the policy files the check reads, when it
+    /// changes one (`--base` only, ADR-111): the file and the comparison.
+    pub widened: Option<(String, openmoat_core::widen::Report)>,
 }
 
 /// The unified diff on stdin, checked against `policy` (a file) or the default policy.
@@ -76,6 +79,7 @@ pub fn from_stdin(policy: Option<&Path>) -> Result<Input> {
         policy_files,
         policy_source: source,
         repo_policy: None,
+        widened: None,
     })
 }
 
@@ -104,7 +108,9 @@ pub fn from_git(base: &str, head: &str, policy: Option<&Path>) -> Result<Input> 
     let (files, unchecked) = changes(&git, &fork, &head)?;
     let (user, source, mut policy_files) = user_policy_at(&git, &base, policy)?;
     policy_files.push(REPO_POLICY.to_owned());
-    let (policy, repo_policy) = match blob(&git, &base, REPO_POLICY)? {
+    let base_repo = blob(&git, &base, REPO_POLICY)?;
+    let widened = widened(&git, [&base, &head], &user, policy, base_repo.as_deref())?;
+    let (policy, repo_policy) = match base_repo {
         Some(text) => {
             let repo = RepoPolicy::parse(&text)
                 .with_context(|| format!("invalid {REPO_POLICY} at {}", short(&base)))?;
@@ -121,7 +127,57 @@ pub fn from_git(base: &str, head: &str, policy: Option<&Path>) -> Result<Input> 
         policy_files,
         policy_source: source,
         repo_policy,
+        widened,
     })
+}
+
+/// The policy files as `head` has them against `user` and `base_repo` (the
+/// base revision's), when the change edits one: the user policy with the
+/// repository policy merged as trusted, since trust is what lets its allow
+/// rules apply. `None` when neither changed.
+fn widened(
+    git: &Git,
+    [base, head]: [&str; 2],
+    user: &Policy,
+    policy: Option<&Path>,
+    base_repo: Option<&str>,
+) -> Result<Option<(String, openmoat_core::widen::Report)>> {
+    let rel = policy.and_then(relative);
+    let head_user = match &rel {
+        Some(rel) => match blob(git, head, rel)? {
+            Some(text) => Some(
+                Policy::parse(&text)
+                    .with_context(|| format!("invalid {rel} at {}", short(head)))?,
+            ),
+            None => None,
+        },
+        None => None,
+    };
+    let head_repo = blob(git, head, REPO_POLICY)?;
+    let user_changed = head_user.as_ref().is_some_and(|h| h != user);
+    if !user_changed && head_repo.as_deref() == base_repo {
+        return Ok(None);
+    }
+    let merged = |user: &Policy, repo: Option<&str>, at: &str| -> Result<Policy> {
+        match repo {
+            Some(text) => RepoPolicy::parse(text)
+                .with_context(|| format!("invalid {REPO_POLICY} at {}", short(at)))?
+                .merge(user, true)
+                .context("merging the repository policy"),
+            None => Ok(user.clone()),
+        }
+    };
+    let old = merged(user, base_repo, base)?;
+    let new = merged(
+        head_user.as_ref().unwrap_or(user),
+        head_repo.as_deref(),
+        head,
+    )?;
+    let path = match (user_changed, rel) {
+        (true, Some(rel)) => rel,
+        _ => REPO_POLICY.to_owned(),
+    };
+    Ok(Some((path, crate::widen::compare(&old, &new, &[])?)))
 }
 
 /// The policy `--policy` names (a repository file read at `base` when the

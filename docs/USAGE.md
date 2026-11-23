@@ -916,7 +916,13 @@ openmoat policy upgrade --dry-run   # what the new default adds, grouped; change
 openmoat policy upgrade --diff      # the same, then the full diff of the policy
 openmoat policy upgrade             # shows the changes, asks, keeps a backup, re-pins and syncs the sandboxes
 openmoat policy upgrade --undo      # put the previous policy back
+openmoat policy upgrade --accept-widening   # apply an upgrade that moves calls toward allow
 ```
+
+Under the summary, the upgrade says whether it moves any call toward allow, checked over the
+bundled calls, cases from both policies' rules and a search over every path, host and name
+(docs/POLICY.md §8.3). An upgrade that widens is listed case by case and applied only with
+`--accept-widening`; without it nothing changes and the command exits 3.
 
 The changes are grouped by what they do, read from the policy before and after:
 
@@ -1321,7 +1327,8 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat policy lint` · `openmoat policy check "<action>" [--kind shell\|fs-read\|fs-write\|net\|fetch\|mcp]` · `openmoat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
 | `openmoat policy check-diff [--base <rev> [--head <rev>]] [--policy <file>] [--format text\|json\|github]` | check a change before it is merged: from `--base` to `--head` (`HEAD`), or a unified diff on stdin; exit 0 nothing found, 2 something the policy denies, 3 something for review ([MERGE_CHECK.md](MERGE_CHECK.md)); `--provenance review\|info\|off` (default `review`) shows what provenance notes say agents wrote in the change, never changing the exit code |
 | `openmoat provenance [--range <rev-range>] [--write-notes] [--verify] [--format text\|json]` | which files and lines of commits an agent session wrote, from this machine's audit log, and whether it had read untrusted content first · keep a note per commit on `refs/notes/openmoat` (person-only) · check those notes against the log (exit 64 on a mismatch) ([PROVENANCE.md](PROVENANCE.md)) |
-| `openmoat policy upgrade [--dry-run] [--diff] [--yes] [--undo]` | add what a new release's default policy changed, keeping your edits · undo the last upgrade |
+| `openmoat policy diff OLD NEW [--widen] [--fixtures FILE]… [--format text\|json]` | the rules and settings that changed; with `--widen`, every call the new policy decides less strictly, and what was proven; exit 0 nothing widens, 2 something does, 3 a setting changed that is not ranked (docs/POLICY.md §8.3) |
+| `openmoat policy upgrade [--dry-run] [--diff] [--yes] [--accept-widening] [--undo]` | add what a new release's default policy changed, keeping your edits; one that widens only with `--accept-widening` · undo the last upgrade |
 | `openmoat policy migrate [--file PATH] [--dry-run] [--yes]` | rewrite a policy in the current policy schema, changing no rule; keeps `<file>.before-migrate` (docs/POLICY.md §1.1) |
 | `openmoat policy trust-key <key.pub> --name <who>` | trust an SSH public key to sign policy packs (and signed repository policies, where the policy asks for them); signatures are made with `ssh-keygen -Y sign -n openmoat-pack` for a pack and `-n openmoat-repo-policy` for a repository policy |
 | `openmoat policy install <pack.yaml> [--sig <file>] [--name <name>]` · `openmoat policy remove <name>` | install a signed policy pack after its signature verifies; its rules apply as `pack:<name>:<id>` · take it out again |
@@ -1389,7 +1396,8 @@ hook file was moved, for an agent that runs one file. A dry run has
 Exit codes: 0 allow or success, 1 the program `openmoat run` or `openmoat mcp proxy` started
 exited non-zero, or `openmoat mcp proxy` refused to start the server, or a layer `openmoat bench
 --report` exercised failed, 2 deny,
-3 unresolved review (`policy check`) or a change for review (`policy check-diff`), 64 usage or
+3 unresolved review (`policy check`), a change for review (`policy check-diff`), a widening
+upgrade without `--accept-widening` or a setting change not ranked (`policy diff --widen`), 64 usage or
 configuration error. `openmoat guard` never
 exits 64: it denies with exit 2 instead, so a broken hook blocks rather than fails open
 (ADR-004, ADR-015).
