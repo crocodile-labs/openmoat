@@ -106,9 +106,13 @@ fn grant_masks_deny_inside_grants_what_the_checker_denies() {
         for (path, kind) in denied_literals_outside(&ir, &project) {
             let exists = std::fs::symlink_metadata(&path).is_ok();
             let atom = super::atom(kind, &path);
+            // A mask stands at the resolved spelling, as bubblewrap binds it:
+            // where a folder on the way is a link (macOS's `/etc`), the file
+            // reached through it is the one masked there.
+            let real = super::super::links::real_path(&path);
             if exists
                 && checker.check_os(&atom) == Some(Effect::Deny)
-                && effect(kind, &path) == Effect::Allow
+                && effect(kind, &real) == Effect::Allow
             {
                 open.push(format!("{kind:?} {path}"));
             }
