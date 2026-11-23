@@ -6,6 +6,15 @@ const PROJECT: &str = "C:/Users/me/proj";
 const TEMP: &str = "C:/Users/me/AppData/Local/Temp/openmoat-run-0011";
 const WRITE: &str = "C:/Users/me/.agent";
 
+/// The default policy with `from` replaced by `to` once. The file is checked
+/// out with CRLF on Windows, so the edit works on LF text, and it must land:
+/// an edit that matches nothing would test the plain default.
+fn default_with(from: &str, to: &str) -> String {
+    let lf = DEFAULT_POLICY.replace("\r\n", "\n");
+    assert!(lf.contains(from), "the default policy has no {from:?}");
+    lf.replacen(from, to, 1)
+}
+
 fn generated_with(yaml: &str, exists: &dyn Fn(&str) -> bool) -> anyhow::Result<Generated> {
     let policy = Policy::parse(yaml).expect("test policy lints");
     let ctx = EvalContext {
@@ -80,10 +89,8 @@ fn the_projects_protected_places_get_deny_entries() {
     }
     assert!(entry(&g, PROJECT, false).is_none(), "{:?}", g.plan);
 
-    let yaml = format!(
-        "{DEFAULT_POLICY}\n" // the default, plus one deny two folders down
-    )
-    .replace(
+    // The default, plus one deny two folders down.
+    let yaml = default_with(
         "deny:\n",
         "deny:\n  - id: deep\n    fs.write: [\"${project}/a/b/c\"]\n",
     );
@@ -101,7 +108,7 @@ fn the_projects_protected_places_get_deny_entries() {
 /// and the network.
 #[test]
 fn what_the_token_cannot_hold_is_named() {
-    let yaml = DEFAULT_POLICY.replace(
+    let yaml = default_with(
         "deny:\n",
         "deny:\n  - id: later\n    fs.write: [\"${project}/missing-dir\"]\n",
     );
@@ -136,7 +143,7 @@ fn a_missing_write_root_is_a_loss() {
 /// refused: the token would hold nothing.
 #[test]
 fn every_write_allowed_or_a_drive_is_refused() {
-    let open = DEFAULT_POLICY.replacen("defaults:\n", "defaults:\n  fs.write: allow\n", 1);
+    let open = default_with("defaults:\n", "defaults:\n  fs.write: allow\n");
     if Policy::parse(&open).is_ok() {
         let error = generated_with(&open, &|_| true).unwrap_err();
         assert!(
@@ -144,7 +151,7 @@ fn every_write_allowed_or_a_drive_is_refused() {
             "{error:#}"
         );
     }
-    let drive = DEFAULT_POLICY.replace(
+    let drive = default_with(
         "allow:\n  - id: project-fs\n",
         "allow:\n  - id: drive\n    fs.write: [\"D:/**\"]\n  - id: project-fs\n",
     );
