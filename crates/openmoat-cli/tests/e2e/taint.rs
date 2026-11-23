@@ -158,7 +158,12 @@ fn an_approved_secret_read_makes_later_network_need_review() {
 
     let (verdict, reason) = fetch("s1");
     assert_eq!(verdict, "ask", "{reason}");
-    assert!(reason.contains("[session-taint]"), "{reason}");
+    // The session fetched before it read the key, so the send is also the
+    // lethal trifecta (ADR-113): the review names both rules.
+    assert!(
+        reason.contains("[session-taint, lethal-trifecta]"),
+        "{reason}"
+    );
     assert!(reason.contains(".ssh/id_rsa"), "{reason}");
     assert_eq!(fetch("s2").0, "allow", "taint belongs to one session");
 }

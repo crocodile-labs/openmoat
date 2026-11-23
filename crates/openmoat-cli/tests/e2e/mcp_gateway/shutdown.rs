@@ -23,7 +23,9 @@ fn closing_stdin_reaps_an_upstream_that_ignores_eof() {
         std::thread::sleep(Duration::from_millis(20));
     };
     drop(proxy.stdin.take());
-    let deadline = Instant::now() + Duration::from_secs(5);
+    // The proxy waits 5 s for the server to close its output, then 5 s after
+    // SIGTERM before SIGKILL; leave room for a busy runner.
+    let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         if let Some(status) = proxy.child.try_wait().unwrap() {
             assert!(!status.success(), "forced shutdown must not report success");

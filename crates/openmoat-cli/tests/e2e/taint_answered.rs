@@ -161,7 +161,7 @@ fn a_secret_the_session_read_is_not_answered_by_a_later_grant() {
     let (verdict, reason) = send();
     assert_eq!(verdict, "ask", "{reason}");
     assert!(
-        reason.contains("[session-taint]") && reason.contains(".ssh/id_rsa"),
+        reason.contains("[session-taint, lethal-trifecta]") && reason.contains(".ssh/id_rsa"),
         "{reason}"
     );
 }
