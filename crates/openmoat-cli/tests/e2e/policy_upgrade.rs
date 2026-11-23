@@ -103,10 +103,12 @@ fn the_changes_are_grouped_and_d_shows_the_diff() {
     assert!(shown.contains(r#""!${project}/**/.git/**""#), "{shown}");
 
     // `d` shows the full diff and asks again; an empty answer is still no.
+    // 0.3.0 → this default widens, so the question comes only with
+    // `--accept-widening` (ADR-111).
     let mut person = sb.command();
     person
         .env("MOAT_ASSUME_TTY", "1")
-        .args(["policy", "upgrade"]);
+        .args(["policy", "upgrade", "--accept-widening"]);
     let out = output(&mut person, Some("d\n\n"));
     let shown = text(&out);
     assert_eq!(
@@ -341,15 +343,24 @@ fn init_doctor_and_the_home_screen_offer_an_available_update() {
     assert!(shown.contains("`openmoat policy upgrade`") && !shown.contains("Nothing needs you"));
     assert_eq!(policy(&sb), V0_3_0);
 
+    // 0.3.0 → this default widens (calls 0.3.0 held for review now defer):
+    // the home screen shows the cases and refuses, as `policy upgrade` does
+    // without `--accept-widening` (ADR-111); it never asks to apply them.
     let out = output(sb.command().env("MOAT_ASSUME_TTY", "1"), Some("y\ny\n"));
     let shown = text(&out);
-    assert_eq!(out.status.code(), Some(OK), "{shown}");
+    assert_eq!(out.status.code(), Some(REVIEW), "{shown}");
     assert!(
         shown.contains("See the changes? [y/N]")
-            && shown.contains("Apply these changes? [y/N/d]")
-            && shown.contains("✔ Policy upgraded"),
+            && shown.contains("This upgrade widens your policy:")
+            && shown.contains("openmoat policy upgrade --accept-widening")
+            && !shown.contains("Apply these changes? [y/N/d]"),
         "{shown}"
     );
+    assert_eq!(policy(&sb), V0_3_0);
+
+    let out = sb.moat_as_person(&["policy", "upgrade", "--yes", "--accept-widening"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(text(&out).contains("✔ Policy upgraded"), "{}", text(&out));
     assert_eq!(policy(&sb), default_lf());
     assert!(text(&sb.moat(&[])).contains("Nothing needs you."));
 }
