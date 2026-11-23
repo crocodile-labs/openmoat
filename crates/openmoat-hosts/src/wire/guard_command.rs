@@ -167,7 +167,7 @@ pub(crate) const POWERSHELL_TAIL: &str = "; if (-not $?) { exit 2 }";
 /// was killed (`128` and the signal). The tail turns that into exit 2 with a
 /// reason on stderr, the block every such host reads (Codex, Gemini CLI,
 /// Qwen Code, Crush). The guard's own answer on stdout stands as it is.
-pub(crate) const SH_TAIL: &str = "; s=$?; [ $s -eq 0 ] || [ $s -eq 2 ] || { echo 'openmoat: \
+pub const SH_TAIL: &str = "; s=$?; [ $s -eq 0 ] || [ $s -eq 2 ] || { echo 'openmoat: \
      the hook failed (openmoat missing or killed), so the call is blocked; run openmoat \
      doctor' >&2; s=2; }; exit $s";
 

@@ -35,7 +35,9 @@ pub use contract::{
     Unseen, Version, Weekly, WeeklyInstall, WeeklyPayload, WeeklyRun, WeeklyRuns,
     WindowsSandboxLevel, WindowsSandboxMode, WindowsSandboxReader, WorkspaceSpec, every_runs_later,
 };
-pub use wire::guard_command::{EVENT_FLAG, GuardCommand, HOME_FLAG, decode_home, encode_home};
+pub use wire::guard_command::{
+    EVENT_FLAG, GuardCommand, HOME_FLAG, SH_TAIL, decode_home, encode_home,
+};
 pub use wire::hook_file::yaml as yaml_hooks;
 pub use wire::hook_file::{
     ForeignEntry, HookFile, HookFileError, HookFileState, HookOutcome, commands_in,

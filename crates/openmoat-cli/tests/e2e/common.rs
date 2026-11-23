@@ -197,6 +197,14 @@ impl Sandbox {
         format!(" guard --host {host} --home {}", self.home_word())
     }
 
+    /// What a POSIX shell hook `moat init` writes for a host whose call runs
+    /// when its hook fails ends with: [`Sandbox::hook_args`] followed by the
+    /// fail-safe tail that turns a missing or killed guard into a block
+    /// ([`openmoat_hosts::SH_TAIL`], ADR-109).
+    pub fn fail_safe_hook_args(&self, host: &str) -> String {
+        self.hook_args(host) + openmoat_hosts::SH_TAIL
+    }
+
     /// Run the hook for `host` with `payload` as `moat init` wrote it, the
     /// state directory on its command line.
     pub fn guard_homed(&self, host: &str, payload: &str) -> Output {

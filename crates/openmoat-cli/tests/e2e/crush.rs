@@ -63,7 +63,7 @@ fn init_adds_one_flat_entry_beside_the_persons_and_is_idempotent() {
         ours["command"]
             .as_str()
             .unwrap()
-            .ends_with(&sb.hook_args(Host::Crush.id())),
+            .ends_with(&sb.fail_safe_hook_args(Host::Crush.id())),
         "{root}"
     );
     let again = sb.moat(&["init", "--yes"]);

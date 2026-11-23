@@ -250,7 +250,8 @@ fn legacy_codex_hook_is_reported_and_migrated_by_each_upgrade_path() {
             hook["command"]
                 .as_str()
                 .unwrap()
-                .ends_with(&sb.hook_args(Host::Codex.id()))
+                .ends_with(&sb.fail_safe_hook_args(Host::Codex.id())),
+            "{hook}"
         );
         assert_eq!(hook["statusMessage"], "OpenMoat");
         assert!(path.with_extension("json.moat-backup").exists());
