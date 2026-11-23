@@ -133,7 +133,13 @@ pub const SHAPES: &[Shape] = &[
         id: "gitlab",
         description: "a GitLab token",
         hosts: &["gitlab.com"],
-        prefixes: &["glpat-"],
+        // personal, project and group access tokens, then deploy, runner,
+        // pipeline trigger, feed, SCIM, CI/CD job, incoming mail, Kubernetes
+        // agent and OAuth application secrets (GitLab docs, "Token prefixes")
+        prefixes: &[
+            "glpat-", "gldt-", "glrt-", "glptt-", "glft-", "glsoat-", "glcbt-", "glimt-",
+            "glagent-", "gloas-",
+        ],
         lower_label: false,
         body: alnum_underscore_dash,
         min: 20,
@@ -219,6 +225,8 @@ fn starts_with(chars: &[char], prefix: &str) -> bool {
     let mut rest = chars.iter();
     prefix.chars().all(|p| rest.next() == Some(&p))
 }
+
+pub mod credentials;
 
 #[cfg(test)]
 mod tests;

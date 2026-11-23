@@ -114,10 +114,11 @@ fn every_deferred_kind_is_reported_as_a_loss() {
             .into(),
         "fs.write `persistence`: the hook holds it for review; OS layers deny unless an allow rule matches".into(),
         "fs.write `runs-later`: the hook holds it for review; OS layers deny unless an allow rule matches".into(),
+        "fs.write `system-files`: the hook holds it for review; OS layers deny unless an allow rule matches".into(),
     ] {
         assert!(losses.contains(&expected), "{losses:#?}");
     }
-    assert_eq!(losses.len(), 9, "{losses:#?}");
+    assert_eq!(losses.len(), 10, "{losses:#?}");
 }
 
 #[test]

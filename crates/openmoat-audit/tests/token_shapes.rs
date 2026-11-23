@@ -22,6 +22,10 @@ const TOKENS: &[&str] = &[
     "npm_FAKEfake0000FAKEfake0000FAKEfake",
     // `\x2d` is `-`: written out, the prefix trips GitHub's secret scanning.
     "glpat\x2dFAKEfake0000FAKEfake",
+    "gldt\x2dFAKEfake0000FAKEfake0000",
+    "glrt\x2dFAKEfake0000FAKEfake0000",
+    "glptt\x2dFAKEfake0000FAKEfake0000",
+    "glcbt\x2d64_FAKEfake0000FAKEfake0000",
 ];
 
 const NOT_TOKENS: &[&str] = &[
@@ -32,6 +36,8 @@ const NOT_TOKENS: &[&str] = &[
     "sk-short",
     "sk-ant-short",
     "ghp_short",
+    "gldt\x2dshort",
+    "glxyz\x2dFAKEfake0000FAKEfake0000",
     "xghp_FAKEfake0000FAKEfake0000FAKEfake00",
     "ghp_FAKEfake0000FAKEfake0000_",
     "AKIA0000FAKE0000TESTX",

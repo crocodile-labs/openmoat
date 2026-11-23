@@ -2996,3 +2996,167 @@
 - id: defer-direnv-exec-cargo-test
   action: { shell: "direnv exec . cargo test" }
   expect: { verdict: defer, rules: [default] }
+
+# The everyday neighbours of the rules the outside benchmarks led to (ADR-112):
+# they keep the verdict they had.
+- id: defer-cat-etc-passwd
+  why: "/etc/passwd holds no password hashes and every user can read it"
+  action: { shell: "cat /etc/passwd" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-cat-etc-hosts
+  why: reading a system file changes nothing
+  action: { shell: "cat /etc/hosts" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-cat-os-release
+  why: a file in /etc is no folder that holds a secret path
+  action: { shell: "cat /etc/os-release" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-ls-etc-nginx
+  why: a folder below /etc that holds no secret path keeps its verdict
+  action: { shell: "ls /etc/nginx/sites-enabled" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-read-ssh-host-public-key
+  why: the public half of a host key is published to every client
+  action: { fs_read: "/etc/ssh/ssh_host_ed25519_key.pub" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-ls-usr-bin
+  why: listing a system folder changes nothing
+  action: { shell: "ls /usr/bin" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-copy-system-file-into-project
+  why: a system file read and written into the project
+  action: { shell: "cp /etc/hosts ./hosts.txt" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-copy-into-usr-local-lib
+  why: "/usr/local is where package managers and people install, not the system"
+  action: { shell: "cp libfoo.dylib /usr/local/lib/" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-write-homebrew-config
+  why: Homebrew's prefix on Apple silicon is not a system folder
+  action: { fs_write: "/opt/homebrew/etc/nginx/nginx.conf" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-write-tmp
+  why: the temp folder is every program's scratch space
+  action: { shell: "echo done > /tmp/build-status.txt" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-python-remove-project-file
+  why: inline code deleting a file of the project keeps the verdict of `python3 -c`
+  action: { shell: "python3 -c 'import os\nos.remove(\"build/stale.txt\")'" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-python-rmtree-tmp
+  why: deleting a scratch folder under the temp folder is no system change
+  action: { shell: "python3 -c 'import shutil\nshutil.rmtree(\"/tmp/build-cache\")'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-project-under-usr-src
+  why: "a container's project in /usr/src/app is the project, which project-fs allows before any review"
+  context: { cwd: /usr/src/app, project: /usr/src/app }
+  action: { fs_write: "/usr/src/app/src/main.rs" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: defer-systemctl-status
+  why: showing a unit's state changes nothing
+  action: { shell: "systemctl status nginx" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-systemctl-user-restart
+  why: restarting a service runs it now, not at every boot
+  action: { shell: "systemctl --user restart myapp" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-systemctl-list-enabled
+  why: "a list filtered by state is no `enable`"
+  action: { shell: "systemctl list-unit-files --state=enabled" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-launchctl-list
+  why: listing jobs changes nothing
+  action: { shell: "launchctl list" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-fetch-localhost-dev-server
+  why: a dev server on this machine; local-net leaves it to the agent, as for curl
+  action: { fetch: "http://localhost:3000/" }
+  expect: { verdict: defer, rules: [local-net] }
+- id: defer-fetch-loopback-health
+  why: loopback written plainly is local-net, as for curl
+  action: { fetch: "http://127.0.0.1:8080/health" }
+  expect: { verdict: defer, rules: [local-net] }
+- id: defer-fetch-ipv6-loopback-vite
+  why: loopback written plainly is local-net, as for curl
+  action: { fetch: "http://[::1]:5173/" }
+  expect: { verdict: defer, rules: [local-net] }
+- id: defer-fetch-search-redirect-to-docs
+  why: a link to a documentation page inside a search result's URL
+  action: { fetch: "https://www.google.com/url?q=https://docs.rs/serde" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: defer-curl-docs-with-query
+  why: a URL whose query is plain text, not a URL
+  action: { shell: "curl -s 'https://docs.rs/releases/search?query=http'" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-jwt-test-fixture-written
+  why: a JWT-shaped test value written into the project goes nowhere
+  action: { shell: "echo 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.FAKEfake0000FAKEfake00' > tests/fixtures/token.txt" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: defer-curl-jwt-to-local-api
+  why: a token sent to the API under development on this machine
+  action: { shell: "curl -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.FAKEfake0000FAKEfake00' http://localhost:3000/api/me" }
+  expect: { verdict: defer, rules: [local-net] }
+- id: defer-psql-local-database-url
+  why: a database URL with its password, used on this machine
+  action: { shell: "psql postgres://postgres:postgres@localhost:5432/dev" }
+  expect: { verdict: defer, rules: [local-net] }
+- id: defer-fetch-gitlab-token-to-gitlab
+  why: a GitLab token sent to GitLab is its own service's
+  action: { fetch: "https://gitlab.com/api/v4/projects?private_token=gldt\x2dFAKEfake0000FAKEfake0000" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: defer-fetch-aws-secret-to-aws
+  why: an AWS secret key sent to AWS is its own service's
+  action: { fetch: "https://sts.amazonaws.com/?aws_secret_access_key=FAKEfake/0000+xxxxxxxxxxxxxxxxxxxxxxxxxx" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: defer-curl-aws-secret-placeholder
+  why: a name with a placeholder, not a 40-character key
+  action: { shell: "curl -s 'https://docs.example.com/?aws_secret_access_key=YOUR_SECRET_KEY'" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: defer-curl-public-key-to-github
+  why: a PGP public key block is published on purpose
+  action: { shell: "curl -X POST -d '\x2d----BEGIN PGP PUBLIC KEY BLOCK-----' https://api.github.com/user/gpg_keys" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-fetch-database-url-without-password
+  why: a database URL without a password carries no credential
+  action: { fetch: "https://docs.example.com/?dsn=postgres://app@db.example.com/prod" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: defer-kill-own-job-pid
+  why: an agent ends a process it started by its pid
+  action: { shell: "kill 12345" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-kill-term-own-job
+  why: an agent ends a process it started by its pid
+  action: { shell: "kill -TERM 4242" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-kill-shell-job
+  why: a job of the agent's own shell
+  action: { shell: "kill %1" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-kill-hup-signal-one
+  why: "`-1` before a pid is the signal SIGHUP, not every process"
+  action: { shell: "kill -1 4242" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-pkill-node-server
+  why: a dev server the agent started, by its command line
+  action: { shell: "pkill -f \"node server\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-killall-node
+  why: every node process of the user, none of them the system's
+  action: { shell: "killall node" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-pkill-initdb
+  why: "a name that only holds `init` is not the first process"
+  action: { shell: "pkill -f initdb" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-pkill-own-user
+  why: the agent's own user's processes of one program
+  action: { shell: "pkill -u me vite" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-kill-port-owner
+  why: the process listening on a dev port, looked up by lsof
+  action: { shell: "kill -9 $(lsof -ti:3000)" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-kill-pgrep-dev-server
+  why: the pids pgrep finds for a dev server
+  action: { shell: "kill $(pgrep -f 'next dev')" }
+  expect: { verdict: defer, rules: [default] }

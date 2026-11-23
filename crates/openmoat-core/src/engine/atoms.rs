@@ -67,7 +67,7 @@ fn classify_action(
                 .collect(),
         ),
         // every host a client may read the URL as reaching (`host::web`)
-        Action::Net { url } | Action::Fetch { url } => match web::readings(url) {
+        Action::Net { url } => match web::readings(url) {
             hosts if hosts.is_empty() => ParseOutcome::Unparseable {
                 reason: format!("no host in url `{url}`"),
                 atoms: Vec::new(),
@@ -76,13 +76,43 @@ fn classify_action(
             hosts => ParseOutcome::Parsed(
                 hosts
                     .into_iter()
-                    .map(|host| match action {
-                        Action::Fetch { .. } => AtomicAction::Fetch { host },
-                        _ => AtomicAction::Net { host },
-                    })
+                    .map(|host| AtomicAction::Net { host })
                     .collect(),
             ),
         },
+        // a fetch tool opens one page, read as a browser call that only opens
+        // one (ADR-047, ADR-112): a domain name is a `fetch`, an address in
+        // any spelling `net`, and the URLs inside it are judged too. Each
+        // `net` host stays a `fetch` as well, so a `fetch` rule that named it
+        // still applies; strictest wins
+        Action::Fetch { url } => {
+            let mut atoms = Vec::new();
+            let unparsed = urls::opened(url, true, "fetch", ctx, &mut atoms);
+            let fetches: Vec<AtomicAction> = atoms
+                .iter()
+                .filter_map(|atom| match atom {
+                    AtomicAction::Net { host } => Some(AtomicAction::Fetch { host: host.clone() }),
+                    _ => None,
+                })
+                .collect();
+            atoms.extend(fetches);
+            match unparsed {
+                Some(Unparsed {
+                    reason,
+                    needs_review,
+                }) => ParseOutcome::Unparseable {
+                    reason,
+                    atoms,
+                    needs_review,
+                },
+                None if atoms.is_empty() => ParseOutcome::Unparseable {
+                    reason: format!("no host in url `{url}`"),
+                    atoms,
+                    needs_review: false,
+                },
+                None => ParseOutcome::Parsed(atoms),
+            }
+        }
         Action::WebSearch { query } => ParseOutcome::Parsed(vec![AtomicAction::WebSearch {
             query: query.clone(),
         }]),
@@ -170,7 +200,7 @@ impl Named<'_> {
             note(urls::named(url, what, ctx, &mut atoms));
         }
         for url in self.opens {
-            note(urls::opened(url, opens_as.as_fetch, ctx, &mut atoms));
+            note(urls::opened(url, opens_as.as_fetch, what, ctx, &mut atoms));
         }
         let mut globs = Vec::new();
         let cwd = [Some(ctx.cwd.clone())];

@@ -135,6 +135,48 @@ fn a_policy_from_the_previous_default_is_offered_the_project_settings_note() {
     );
 }
 
+/// ADR-112's rules (`system-files`, `stops-system`, `credential-egress`) and
+/// the system credential files reach a policy made from the previous default,
+/// beside the person's own change.
+#[test]
+fn a_policy_from_the_previous_default_is_offered_the_benchmark_rules() {
+    let new = &openmoat_core::DEFAULT_POLICY.replace("\r\n", "\n");
+    let cut = |text: &str, from: &str, to: &str| {
+        let start = text.find(from).unwrap();
+        let end = start + text[start..].find(to).unwrap();
+        format!("{}{}", &text[..start], &text[end..])
+    };
+    let mut old = cut(
+        new,
+        "      # the system's password hashes",
+        "    fs.write: *secret-paths",
+    );
+    old = cut(
+        &old,
+        "  # the operating system's own folders",
+        "  - id: stops-openmoat",
+    );
+    old = cut(&old, "  - id: stops-system", "  - id: home-sweep");
+    old = cut(
+        &old,
+        "  # `@credential-egress <kind> <host>`",
+        "\n# Installs, publishing",
+    );
+    let mine = |text: &str| {
+        text.replace(
+            "\"~/.zsh_history\"",
+            "\"~/.zsh_history\"\n      - \"~/mine\"",
+        )
+    };
+    let merged = merge(&old, &mine(&old), new);
+    assert_eq!(merged.conflicts().count(), 0);
+    assert_eq!(merged.text, mine(new));
+    let policy = openmoat_core::Policy::parse(&merged.text).unwrap();
+    for id in ["system-files", "stops-system", "credential-egress"] {
+        assert!(policy.review.iter().any(|g| g.id == id), "{id}");
+    }
+}
+
 #[test]
 fn crlf_policies_line_up_with_the_lf_default() {
     let yours = BASE.replace('\n', "\r\n");

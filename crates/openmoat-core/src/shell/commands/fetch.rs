@@ -270,5 +270,21 @@ pub(super) fn fetchable_host(host: &str) -> bool {
     crate::host::fetchable(host)
 }
 
+/// `host`, the host of the word `token`, and when `token` is a URL the hosts
+/// of the web URLs inside it (`?target=http://169.254.169.254/`), which the
+/// server reaches when it relays or redirects, as for a fetch tool's URL
+/// (`host::web::embedded_hosts`, ADR-112).
+pub(super) fn with_embedded(host: String, token: &str) -> Vec<String> {
+    let mut hosts = vec![host];
+    if token.contains("://") {
+        for inner in crate::host::web::embedded_hosts(token) {
+            if !hosts.contains(&inner) {
+                hosts.push(inner);
+            }
+        }
+    }
+    hosts
+}
+
 #[cfg(test)]
 mod tests;

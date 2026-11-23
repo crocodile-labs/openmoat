@@ -35,7 +35,7 @@ fn an_atom_no_rule_names_changes_no_decision() {
         !p.atoms(&shell(&command), &NoResolver)
             .0
             .iter()
-            .any(egress::is_personal)
+            .any(egress::counts_where_named)
     );
 }
 

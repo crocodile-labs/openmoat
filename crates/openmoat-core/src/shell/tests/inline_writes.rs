@@ -113,6 +113,45 @@ fn code_that_writes_writes_the_files_it_names() {
 }
 
 #[test]
+fn code_that_deletes_writes_the_files_it_names() {
+    for (cmd, path) in [
+        (
+            r#"python3 -c 'import os; os.remove("/etc/passwd")'"#,
+            "/etc/passwd",
+        ),
+        (
+            r#"python3 -c 'import os; os.unlink("/etc/hosts")'"#,
+            "/etc/hosts",
+        ),
+        (
+            r#"python3 -c 'from pathlib import Path; Path("/etc/group").unlink()'"#,
+            "/etc/group",
+        ),
+        (
+            r#"python3 -c 'import shutil; shutil.rmtree("/usr/lib/python3")'"#,
+            "/usr/lib/python3",
+        ),
+        (
+            r#"python3 -c 'import os; os.rmdir("/usr/share/doc")'"#,
+            "/usr/share/doc",
+        ),
+        (
+            r#"node -e "require('fs').unlinkSync('/etc/hosts')""#,
+            "/etc/hosts",
+        ),
+        (
+            r#"node -e "require('fs').rmSync('/usr/lib/node', {recursive: true})""#,
+            "/usr/lib/node",
+        ),
+        (r#"php -r 'unlink("/etc/hosts");'"#, "/etc/hosts"),
+        (r#"ruby -e 'File.delete("/etc/hosts")'"#, "/etc/hosts"),
+    ] {
+        let atoms = parsed(cmd);
+        assert!(has_write(&atoms, path), "{cmd}: {atoms:?}");
+    }
+}
+
+#[test]
 fn code_that_writes_also_writes_what_it_reads_by_name() {
     // which name the write goes to is not known: both count
     let atoms = parsed(r#"python3 -c 'd=open("/p/a.txt").read(); open("/p/b.txt","w").write(d)'"#);
@@ -137,6 +176,8 @@ fn code_that_only_reads_writes_nothing() {
         r#"python3 -c 'import os; os.read(os.open("README.md", os.O_RDONLY), 9)'"#,
         r#"python3 -c 'from pathlib import Path; print(Path("README.md").open().read())'"#,
         r#"node -e "require('fs').openSync('README.md','r')""#,
+        // a list's `remove` deletes no file
+        r#"python3 -c 'l = open("a.txt").read().split(); l.remove("x"); print(l)'"#,
     ] {
         let atoms = parsed(cmd);
         assert!(

@@ -14,9 +14,16 @@
 //! The same text is scanned for personal data ([`crate::personal`], ADR-052):
 //! a payment card number or a list of mail addresses going to a host other
 //! than this machine becomes `@pii-egress <class> <host>` (`card`, `emails`).
-//! Those atoms count only where a policy rule names them ([`is_personal`]), so
-//! a policy without such a rule decides as it did before; the default policy
+//! Those atoms count only where a policy rule names them ([`counts_where_named`]),
+//! so a policy without such a rule decides as it did before; the default policy
 //! denies `card` (`card-egress`) and names no rule for `emails`.
+//!
+//! Credentials with no vendor prefix are found in the same texts
+//! ([`token::credentials`]): an AWS secret access key or a private key going
+//! to a host that is not its own is a `@token-egress` atom; a JWT or a
+//! database URL with a password is `@credential-egress <kind> <host>`, which
+//! also counts only where a rule names it (`credential-egress` holds it for
+//! review). Loopback hosts are left out of both.
 
 use crate::action::{Action, AtomicAction};
 use crate::host::web;
@@ -33,6 +40,10 @@ const TOKEN_ATOM: &str = "@token-egress";
 const PLACEHOLDER_ATOM: &str = "@placeholder-egress";
 /// First word of an atom for personal data sent off this machine.
 const PERSONAL_ATOM: &str = "@pii-egress";
+/// First word of an atom for a credential whose shape names no owner it could
+/// be checked against (a JWT, a database URL with a password), sent off this
+/// machine to a host that is not its own.
+const CREDENTIAL_ATOM: &str = "@credential-egress";
 /// The host of an atom when what is sent names no host the classifier can read.
 const UNKNOWN_HOST: &str = "(unknown-host)";
 /// The host of an atom for a web search query: the host's search provider.
@@ -77,6 +88,20 @@ pub(super) fn atoms(
                     push(&mut out, TOKEN_ATOM, shape.id, host);
                 }
             }
+            // credentials found only in context, which this machine may keep
+            for found in token::credentials::in_text(text) {
+                let first = if found.denied {
+                    TOKEN_ATOM
+                } else {
+                    CREDENTIAL_ATOM
+                };
+                for host in hosts
+                    .iter()
+                    .filter(|h| !found.owns(h) && !host::is_loopback(h))
+                {
+                    push(&mut out, first, found.id, host);
+                }
+            }
             for id in placeholders(text) {
                 let mapped = secrets.iter().find(|s| s.id == id).map(|s| s.host.as_str());
                 for host in hosts.iter().filter(|h| mapped != Some(h.as_str())) {
@@ -88,10 +113,12 @@ pub(super) fn atoms(
     out
 }
 
-/// Whether `atom` is a `@pii-egress` atom: it carries a verdict only where a
-/// rule names it, never the policy's defaults.
-pub(super) fn is_personal(atom: &AtomicAction) -> bool {
-    matches!(atom, AtomicAction::Shell { argv } if argv.first().is_some_and(|w| w == PERSONAL_ATOM))
+/// Whether `atom` is a `@pii-egress` or `@credential-egress` atom: it carries
+/// a verdict only where a rule names it, never the policy's defaults, so a
+/// policy without such a rule decides as it did before.
+pub(super) fn counts_where_named(atom: &AtomicAction) -> bool {
+    matches!(atom, AtomicAction::Shell { argv }
+        if argv.first().is_some_and(|w| w == PERSONAL_ATOM || w == CREDENTIAL_ATOM))
 }
 
 fn push(out: &mut Vec<AtomicAction>, first: &str, what: &str, host: &str) {
@@ -105,7 +132,9 @@ fn push(out: &mut Vec<AtomicAction>, first: &str, what: &str, host: &str) {
 
 pub(super) fn sends<'a>(action: &'a Action, atoms: &'a [AtomicAction]) -> Vec<Send<'a>> {
     match action {
-        Action::Fetch { url } | Action::Net { url } => vec![url_send(url)],
+        Action::Net { url } => vec![url_send(url)],
+        // read as a browser opens a page, so the URLs inside it are hosts too
+        Action::Fetch { url } => vec![open_send(url)],
         Action::WebSearch { query } => vec![Send {
             texts: vec![query],
             hosts: vec![WEB_SEARCH.to_owned()],

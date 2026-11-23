@@ -141,7 +141,10 @@ pub const TOKEN_SHAPES: &[(&str, &str)] = &[
     ("a Slack token", r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b"),
     ("a Google API key", r"\bAIza[0-9A-Za-z_-]{30,}\b"),
     ("an npm token", r"\bnpm_[A-Za-z0-9]{30,}\b"),
-    ("a GitLab token", r"\bglpat-[A-Za-z0-9_-]{20,}\b"),
+    (
+        "a GitLab token",
+        r"\b(?:glpat|gldt|glrt|glptt|glft|glsoat|glcbt|glimt|glagent|gloas)-[A-Za-z0-9_-]{20,}\b",
+    ),
 ];
 
 /// Credential patterns that run after [`TOKEN_SHAPES`]. A JSON web token is

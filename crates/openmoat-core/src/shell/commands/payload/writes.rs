@@ -1,6 +1,7 @@
 //! Inline code that writes files: `open("x.py", "w")`, `write_text`,
 //! `shutil.copy`, `fs.writeFileSync`, `File.write`, Perl's `open F, ">x"`,
-//! `file_put_contents`, `Deno.writeTextFile`, Lua's `io.open(…, "w")`. The scan
+//! `file_put_contents`, `Deno.writeTextFile`, Lua's `io.open(…, "w")`, and
+//! code that deletes one (`os.remove`, `Path.unlink`, `fs.rmSync`). The scan
 //! cannot tell which of the names in the code the write goes to, so when the
 //! code writes at all, every file name it shows as literal text is written as
 //! well as read: conservative, never looser. The existing rules then decide
@@ -52,6 +53,22 @@ const WRITERS: &[&str] = &[
     "Set-Content",
     "Add-Content",
     "Out-File",
+    // Calls that delete a file or a folder (ADR-112), a change like a write:
+    // Python's `os.remove`, `os.unlink`, `Path.unlink`, `os.rmdir`,
+    // `shutil.rmtree`; Node's `fs.unlink`, `fs.rm`, `fs.rmdir` and their
+    // `Sync` forms; PHP's `unlink` and `rmdir`; Deno, Ruby and PowerShell
+    "os.remove(",
+    "os.removedirs(",
+    "unlink(",
+    "unlinkSync(",
+    "rmdir(",
+    "rmdirSync(",
+    "shutil.rmtree(",
+    "fs.rm(",
+    "rmSync(",
+    "Deno.remove",
+    "File.delete",
+    "Remove-Item",
 ];
 
 /// Calls whose mode argument says whether they write (`open(p, "w")`,

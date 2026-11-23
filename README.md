@@ -235,22 +235,27 @@ and [docs/SANDBOX.md](docs/SANDBOX.md).
 
 ## Proof
 
-- **MoatBench.** [MoatBench](https://github.com/crocodile-labs/moatbench) is a benchmark in
-  its own repository that anyone can re-run. OpenMoat 0.19.0 on set 0.1.0, 2026-11-09, on
-  GitHub's Ubuntu and macOS runners: 43 of 45 attacks stopped, 0 of 84 ordinary steps
-  blocked, 0 attacks answered `allow`. The two not stopped, `rm -rf .` and an MCP tool
-  deleting a repository, are left to Claude Code's own prompt by design. The scenarios
-  were written by OpenMoat's authors, so this shows that the policy and the benchmark
-  agree, not that OpenMoat is complete
-  ([full results](https://github.com/crocodile-labs/moatbench/tree/main/runs/2026-11-09-openmoat-0.19.0),
-  [docs/MOATBENCH.md](docs/MOATBENCH.md)).
-- **Outside benchmarks.** The 0.25.0 default policy's decision engine on two attack sets
-  written by others, with every case it does not stop listed. RedCode-Exec, code sent
-  inline in the command, the 900 snippets that act on the machine: 19.8% denied, 50.0%
-  denied or held for review, none allowed, the rest left to the agent's own prompt; the
-  same code written to a file and then run is stopped in no case, which leaves it to the
-  OS sandbox. agent-egress-bench, the 122 of 192 attacks it has an input for: 47.5% denied,
-  12 of 37 benign requests denied, all for going to a host the policy does not list
+- **MoatBench.** `openmoat bench` runs OpenMoat's own scenarios as each of the 14
+  agents' hook payloads. OpenMoat 0.25.0, 2026-11-22, macOS 12: of 762 attack runs, 538
+  denied, 155 held for review, 9 left to OpenMoat's OS sandbox, 60 left to the agent's
+  own prompt by design, none allowed; the 844 steps of eight developer workflows met no
+  deny and only their 26 expected reviews; 0 false positives, 0 mismatches. Its proof
+  report on the same machine: 12 checks pass, 0 fail, 5 not tested there (4 need
+  `openmoat run`, which needs macOS 13 or later, and 1 needs the real agent). The
+  scenarios were written by OpenMoat's authors, so this shows that the policy and the
+  benchmark agree, not that OpenMoat is complete ([docs/MOATBENCH.md](docs/MOATBENCH.md)).
+  The [MoatBench repository](https://github.com/crocodile-labs/moatbench), which anyone
+  can re-run, last published OpenMoat 0.19.0 on set 0.1.0
+  ([results](https://github.com/crocodile-labs/moatbench/tree/main/runs/2026-11-09-openmoat-0.19.0)).
+- **Outside benchmarks.** The default policy's decision engine on two attack sets written
+  by others, with every case it does not stop listed, measured on 0.25.0 and again with
+  the rules that measurement led to (ADR-112). RedCode-Exec, code sent inline in the
+  command, the 900 snippets that act on the machine: 22.1% denied, 68.9% denied or held
+  for review (0.25.0: 19.8% and 50.0%), none allowed, the rest left to the agent's own
+  prompt; the same code written to a file and then run is stopped in no case, which leaves
+  it to the OS sandbox. agent-egress-bench, the 122 of 192 attacks it has an input for:
+  50.0% denied, 54.1% denied or held (0.25.0: 47.5% for both); 12 of 37 benign requests
+  denied, the same 12 before and after, all for going to a host the policy does not list
   ([docs/BENCHMARKS.md](docs/BENCHMARKS.md)).
 - **Break OpenMoat.** Find a way past the default policy, report it privately, and the fix
   becomes a permanent test with your name on it ([docs/CHALLENGE.md](docs/CHALLENGE.md)).

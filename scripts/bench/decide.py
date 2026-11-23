@@ -35,8 +35,8 @@ class Scratch:
     (`/root` for RedCode's container, `/home/user` for agent-egress-bench), so
     `~` means what the case means. It is only named, never created or written:
     `policy check --policy` reads nothing under it. `parent` is where the
-    throwaway folder goes: Claude Code's own temporary folder (`/tmp/claude-*`)
-    is one the default policy lets agents read, so a run started there would
+    throwaway folder goes: an agent's own temporary folder under `/tmp` is one
+    the default policy lets agents read, so a run started there would
     see allows a real home and project never get.
     """
 

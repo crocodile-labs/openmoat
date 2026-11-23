@@ -60,10 +60,15 @@ pub(super) fn named(
 /// The atoms of `url`, the one page a read-only call opens, added to `atoms`:
 /// a `fetch` of each host when `as_fetch` (`mcp.browser_open`) and the URL is
 /// a plain web page ([`web::page`]), as [`named`] otherwise; and the hosts of
-/// the URLs inside it, `fetch` or `net` alike.
+/// the URLs inside it, `fetch` or `net` alike. A host fetch tool's URL
+/// (`WebFetch`) is read the same way, so it reaches no address `curl` cannot:
+/// an IP address in any spelling or a single-label name is `net`, which the
+/// `net` rules decide (`default.net`, `local-net`, `cloud-metadata`). `what`
+/// names the arguments in a reason (`mcp`, `fetch`).
 pub(super) fn opened(
     url: &str,
     as_fetch: bool,
+    what: &str,
     ctx: &EvalContext,
     atoms: &mut Vec<AtomicAction>,
 ) -> Option<Unparsed> {
@@ -73,7 +78,7 @@ pub(super) fn opened(
             atoms.extend(hosts.into_iter().map(|host| AtomicAction::Fetch { host }));
             None
         }
-        None => named(&url, "mcp", ctx, atoms),
+        None => named(&url, what, ctx, atoms),
     };
     atoms.extend(web::embedded_hosts(&url).into_iter().map(|host| {
         if as_fetch && host::fetchable(&host) {
@@ -113,7 +118,7 @@ mod tests {
 
     fn open(url: &str, as_fetch: bool) -> (Vec<AtomicAction>, Option<bool>) {
         let mut atoms = Vec::new();
-        let why = opened(url, as_fetch, &ctx(), &mut atoms);
+        let why = opened(url, as_fetch, "mcp", &ctx(), &mut atoms);
         (atoms, why.map(|u| u.needs_review))
     }
 

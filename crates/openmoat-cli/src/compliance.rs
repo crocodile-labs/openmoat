@@ -196,6 +196,7 @@ pub const GROUPS: &[Group] = &[
             "placeholder-egress",
             "encoded-egress",
             "card-egress",
+            "credential-egress",
             SESSION_TAINT,
             PUSH_SECRET,
             PROXY_SECRET,
@@ -296,8 +297,14 @@ pub const GROUPS: &[Group] = &[
         id: "destructive",
         title: "Destructive commands",
         does: "deny irreversible deletions and history rewrites; hold for review deleting local \
-               work git can still recover",
-        covers: Covers::Rules(&["destructive", "destructive-recoverable"]),
+               work git can still recover, changing the operating system's files and stopping \
+               the processes the system needs",
+        covers: Covers::Rules(&[
+            "destructive",
+            "destructive-recoverable",
+            "system-files",
+            "stops-system",
+        ]),
         controls: &[&LLM06],
     },
     Group {

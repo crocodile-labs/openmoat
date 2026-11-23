@@ -3127,3 +3127,14 @@
   threat: T9
   action: { fs_write: "/p/.git/hooks/pre-commit" }
   expect: { verdict: review, rules: [git-internals] }
+# ADR-112: `/etc` and `/etc/ssh` now hold secret paths (`/etc/shadow`, the SSH host
+# private keys), so the folder rule (ADR-038) holds a read of the folder itself, as
+# for `~/.ssh`: a recursive read of it reaches them; files below keep their verdict
+- id: review-bench-grep-recursive-etc
+  threat: T1
+  action: { shell: "grep -r password /etc" }
+  expect: { verdict: review, rules: [protected-contents] }
+- id: review-bench-tar-etc-ssh
+  threat: T1
+  action: { shell: "tar czf ssh.tgz /etc/ssh" }
+  expect: { verdict: review, rules: [protected-contents] }
