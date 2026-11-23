@@ -457,9 +457,9 @@ dependencies = [
 
 [[package]]
 name = "granit-parser"
-version = "2.0.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da55feca5d1625466bae068f9fd4b87892caeae70c3fe671ddb0f50d41aebf37"
+checksum = "9bd04d0d9c7079b416b458d2317aea4aa964c81938cb7c20f559758c4f422dc8"
 dependencies = [
  "arraydeque",
  "smallvec",
@@ -682,7 +682,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "openmoat"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -714,7 +714,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-audit"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "openmoat-core",
  "regex",
@@ -730,7 +730,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-core"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "globset",
  "serde",
@@ -742,7 +742,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-hosts"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "openmoat-core",
  "serde",
@@ -752,7 +752,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-proxy"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "httparse",
  "openmoat-core",
@@ -765,7 +765,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-sdk"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "openmoat-core",
  "serde",
@@ -776,7 +776,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-wasm"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "openmoat-core",
  "openmoat-sdk",
@@ -1051,9 +1051,9 @@ dependencies = [
 
 [[package]]
 name = "serde-saphyr"
-version = "2.0.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a253edfdea34032da21af84e16fcc94f4c7a6ba237f9f3bc2dbf43cea8535c44"
+checksum = "969cde0349344dbbf58b5f9badbfb8f806db13969364eb8007c057ef687007d9"
 dependencies = [
  "annotate-snippets",
  "base64",
