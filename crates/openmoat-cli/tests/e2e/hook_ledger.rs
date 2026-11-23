@@ -132,8 +132,14 @@ fn a_changed_git_fsmonitor_is_named_but_does_not_hold_calls() {
     // still does: git runs it before any hook, which only `openmoat run`
     // confines, whether or not a person accepted it.
     let after = status_in(&sb, &cwd, &[]);
+    // `status`'s summary row still names the command, saying nothing waits
+    // for it.
     assert!(!after.contains("not accepted"), "{after}");
-    assert!(!after.contains("openmoat hooks accept"), "{after}");
+    assert!(!after.contains("calls are not held"), "{after}");
+    assert!(
+        after.contains("nothing waits for `openmoat hooks accept`"),
+        "{after}"
+    );
     assert!(after.contains("which git runs as a program"), "{after}");
 
     std::fs::write(&config, "[core]\n\tfsmonitor = ./.git/other.sh\n").unwrap();
