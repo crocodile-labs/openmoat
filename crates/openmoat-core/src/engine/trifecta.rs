@@ -213,10 +213,12 @@ impl CompiledPolicy<'_> {
                 .unwrap_or_default()
         });
         let verdict = crate::taint::TaintSettings::trifecta_under(self.policy.taint.as_ref());
+        // The facts only: the block message's `why` line explains the three
+        // together, and a reason longer than the message's limit loses its
+        // middle, which is where the untrusted source is named.
         let reason = format!(
             "this session read private data ({private}) and content someone else may have \
-             written ({untrusted}), and this call can send data to {}: private data, untrusted \
-             content and a way out are together how an injected instruction carries data away",
+             written ({untrusted}), and this call can send data to {}",
             targets.join(", ")
         );
         let mut out = decision;
