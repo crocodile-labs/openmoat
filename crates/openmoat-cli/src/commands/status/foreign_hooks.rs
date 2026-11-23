@@ -24,6 +24,11 @@ pub(super) fn found(home: &Home, binary: &Path) -> anyhow::Result<Review> {
 /// is a warning that leaves the status healthy, like a hook liveness warning:
 /// OpenMoat is installed as it should be, and only the person can judge it.
 pub(super) fn line(shown: &mut Shown, home: &Home, binary: &Path) -> bool {
+    // Without a lock there is no ledger to compare with: the lock's own line
+    // already says to run `openmoat init`, as for MCP servers.
+    if !home.lock_path().is_file() {
+        return true;
+    }
     match found(home, binary) {
         Ok(found) if !found.recorded => {
             for line in hook_ledger::lines(&found) {
