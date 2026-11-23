@@ -20,6 +20,33 @@ pub struct LinuxSandboxNeeds {
     /// prints it after "the agent's own sandbox cannot start commands on this
     /// machine".
     pub without: &'static str,
+    /// What the host's documentation says to do where Ubuntu's `AppArmor`
+    /// restriction on user namespaces stops its sandbox.
+    pub apparmor: UsernsProfileFix,
+}
+
+/// The fix a host's documentation gives for Ubuntu's `AppArmor` restriction on
+/// unprivileged user namespaces (`kernel.apparmor_restrict_unprivileged_userns`),
+/// besides lifting it with `sysctl`, which every one of them can use.
+///
+/// Ubuntu's `bwrap-userns-restrict` profile (the `apparmor` package from 25.04,
+/// `apparmor-profiles` before) attaches a profile named `bwrap` to
+/// `/usr/bin/bwrap` and stacks what bubblewrap starts into `unpriv_bwrap`,
+/// which denies every capability. A sandbox that needs a capability inside
+/// bubblewrap's namespace fails under it whatever the `sysctl` says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum UsernsProfileFix {
+    /// The documentation gives its own profile for `/usr/bin/bwrap`, named
+    /// `bwrap`, `flags=(unconfined)` with `userns`, in
+    /// `/etc/apparmor.d/bwrap`; its sandbox fails under
+    /// `bwrap-userns-restrict`, whose `bwrap` has the same name.
+    UnconfinedBwrapProfile,
+    /// The documentation says to load Ubuntu's `bwrap-userns-restrict`
+    /// profile, from the `apparmor-profiles` package on Ubuntu 24.04.
+    BwrapUsernsRestrict,
+    /// The documentation gives an `AppArmor` package of the host's own.
+    OwnPackage(&'static str),
 }
 
 /// A program a host's Linux sandbox starts, and the package that has it.

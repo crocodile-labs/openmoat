@@ -32,7 +32,7 @@ pub use contract::{
     Proves, ProxySessions, RelaxedCheck, RelaxedKey, Reviews, RunFacts, RunWrite, Runner,
     RunsLater, SandboxFormat, SandboxSpec, SessionDir, SessionOverride, Sessions, SettingsFile,
     SettingsReader, StandAside, Started, SystemFile, SystemSettingsSpec, ToolRow, ToolToken,
-    Unseen, Version, Weekly, WeeklyInstall, WeeklyPayload, WeeklyRun, WeeklyRuns,
+    Unseen, UsernsProfileFix, Version, Weekly, WeeklyInstall, WeeklyPayload, WeeklyRun, WeeklyRuns,
     WindowsSandboxLevel, WindowsSandboxMode, WindowsSandboxReader, WorkspaceSpec, every_runs_later,
 };
 pub use wire::guard_command::{

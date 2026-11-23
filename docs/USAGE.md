@@ -238,14 +238,20 @@ Claude Code needs `bwrap` and `socat` on `PATH`, and all three need to create us
 namespaces as you. Where they cannot, Claude Code's commands fail, Codex warns and its
 sandboxed commands do not start, and Cursor asks before each command. For each agent
 whose sandbox OpenMoat wrote, `openmoat doctor` reads `kernel.apparmor_restrict_unprivileged_userns`,
-`user.max_user_namespaces` and `kernel.unprivileged_userns_clone` from `/proc/sys`, looks
-for the programs on `PATH`, and uses the probe `openmoat run` makes anyway (the system's
-`bwrap` asked to create its namespaces, as you). A `bwrap` that creates them settles it.
-Nothing needs root and nothing on the machine changes; no decision changes either.
+`kernel.apparmor_restrict_unprivileged_unconfined`, `user.max_user_namespaces` and
+`kernel.unprivileged_userns_clone` from `/proc/sys`, which AppArmor profile applies to
+`/usr/bin/bwrap` (the kernel's list where you may read it, else the files in
+`/etc/apparmor.d/`), looks for the programs on `PATH`, and uses the probe `openmoat run`
+makes anyway (the system's `bwrap` asked to create its namespaces, as you). A `bwrap`
+that creates them settles the user-namespace question, but not for Claude Code under
+Ubuntu's `bwrap-userns-restrict` profile, which its sandbox fails under
+([SANDBOX.md](SANDBOX.md#what-each-agents-sandbox-needs-on-linux)). Each agent gets the
+fix its own documentation gives. Nothing needs root, no namespace is created for the
+check and nothing on the machine changes; no decision changes either.
 
 ```console
 $ openmoat doctor
-! Claude Code      the agent's own sandbox cannot start commands on this machine: kernel.apparmor_restrict_unprivileged_userns is 1 (Ubuntu's AppArmor restriction on user namespaces), so its Bash commands fail (`failIfUnavailable`, no unsandboxed commands). To fix it: an AppArmor profile that lets bwrap create user namespaces, as the agent's sandboxing documentation gives one (Ubuntu's apparmor-profiles package has bwrap-userns-restrict), then restart the agent; or `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, which lifts the restriction for every program until the next reboot; the same line in a file under /etc/sysctl.d/ keeps it after a reboot. OpenMoat has no setting that leaves this agent's sandbox off; its hook still decides each call
+! Claude Code      the agent's own sandbox cannot start commands on this machine: kernel.apparmor_restrict_unprivileged_userns is 1 (Ubuntu's AppArmor restriction on user namespaces), so its Bash commands fail (`failIfUnavailable`, no unsandboxed commands). To fix it: the AppArmor profile the agent's sandboxing documentation gives for /usr/bin/bwrap, in /etc/apparmor.d/bwrap (`profile bwrap /usr/bin/bwrap flags=(unconfined) { userns, }`, with its `abi` and `include` lines), then `sudo systemctl reload apparmor` and restart the agent; or `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, which lifts the restriction for every program until the next reboot; the same line in a file under /etc/sysctl.d/ keeps it after a reboot. OpenMoat has no setting that leaves this agent's sandbox off; its hook still decides each call
 $ openmoat status
 ! Claude Code      own sandbox cannot start commands here: user namespaces are blocked → openmoat doctor lists the fixes
 ```
@@ -256,7 +262,9 @@ leaves one agent's sandbox off yet, so there is no `openmoat init` choice to off
 `openmoat status --format json` lists the same as `own_sandbox_linux`: `host`, `agent`,
 `missing` (programs not on `PATH`), `user_namespaces` (`setting`: `max_user_namespaces`,
 `unprivileged_clone`, `apparmor` or `null`, and `bwrap`: bubblewrap's message or `null`;
-`null` when they are allowed), `outcome` and `fixes`. It is empty off Linux.
+`null` when they are allowed), `bwrap_userns_restrict` (`seen`: `loaded` or
+`installed`, and `restrict_unconfined`; `null` unless Ubuntu's profile applies to the
+`bwrap` an agent that fails under it runs), `outcome` and `fixes`. It is empty off Linux.
 
 ### Other hooks the agents run
 

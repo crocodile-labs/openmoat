@@ -47,7 +47,7 @@ pub use hook_off::{
 };
 pub use hook_trust::HookTrust;
 pub use ledger::{Ledger, PluginHooks};
-pub use linux_sandbox::{LinuxProgram, LinuxSandboxNeeds};
+pub use linux_sandbox::{LinuxProgram, LinuxSandboxNeeds, UsernsProfileFix};
 pub use location::{Locate, Located, Location, XdgDir};
 pub use mcp::{
     AutoStart, BuiltinMcp, McpAutoStart, McpCallIds, McpCommandForm, McpFile, McpNames, McpReader,

@@ -129,6 +129,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             programs: &[],
             user_namespaces: true,
             without: "Cursor asks before running each command instead",
+            // The same page: the desktop app needs no setup; remote environments
+            // and the standalone CLI install `cursor-sandbox-apparmor`.
+            apparmor: crate::contract::UsernsProfileFix::OwnPackage("cursor-sandbox-apparmor"),
         }),
         // `sandbox.json` has no proxy setting.
         proxy_sessions: ProxySessions::NotProxied,

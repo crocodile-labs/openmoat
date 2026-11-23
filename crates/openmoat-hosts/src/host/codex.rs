@@ -155,6 +155,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             user_namespaces: true,
             without: "Codex warns when it starts, and the commands it runs in its sandbox cannot \
                       start",
+            // The same page: on Ubuntu 24.04 load `bwrap-userns-restrict` from
+            // `apparmor-profiles`; Ubuntu 25.04's `apparmor` package ships it.
+            apparmor: crate::contract::UsernsProfileFix::BwrapUsernsRestrict,
         }),
         // Its upstream proxy comes from the Codex process's own `HTTP_PROXY`,
         // and its hooks cannot set a command's environment (ADR-044).

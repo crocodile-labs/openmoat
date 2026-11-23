@@ -217,7 +217,10 @@ On Linux, the sandboxes `init` turns on need what each agent documents: Claude C
 needs bubblewrap and socat (`sudo apt-get install bubblewrap socat` on Debian and
 Ubuntu, `sudo dnf install bubblewrap socat` on Fedora), and Claude Code, Codex and
 Cursor all need to create user namespaces as you, which Ubuntu 23.10 and later restrict
-through AppArmor by default (`kernel.apparmor_restrict_unprivileged_userns=1`). If an
+through AppArmor by default (`kernel.apparmor_restrict_unprivileged_userns=1`). Each
+agent's documentation gives a different AppArmor fix, and Claude Code's sandbox fails
+under the `bwrap-userns-restrict` profile Codex's suggests, so follow the one `openmoat
+doctor` names for each agent. If an
 agent's commands all fail after `openmoat init`, run `openmoat doctor`: it says which
 agent's sandbox cannot start commands here and why, with the fixes
 ([SANDBOX.md](SANDBOX.md#what-each-agents-sandbox-needs-on-linux)).

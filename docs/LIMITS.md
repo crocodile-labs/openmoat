@@ -116,10 +116,16 @@ Each agent's gaps and the reasons are in
   commands fail, Codex's sandboxed commands do not start and Cursor asks before each
   command; the hook still decides each call. `openmoat doctor` and `openmoat status` say
   so and name the fixes, which are the machine's: no policy setting leaves one agent's
-  sandbox off yet. They read settings and ask the system's `bwrap` for one namespace, so
-  they cannot see a machine that allows a namespace but not one inside another, as
-  Claude Code's seccomp step makes; GitHub's `ubuntu-latest` runner is such a machine
-  (#784). Cursor's desktop app has an AppArmor profile of its own, which the check does
+  sandbox off yet. Ubuntu's `bwrap-userns-restrict` AppArmor profile lets bubblewrap
+  create its namespaces but takes every capability from what it starts, so Claude
+  Code's seccomp step, which makes a user namespace inside bubblewrap's, fails under it
+  whatever `kernel.apparmor_restrict_unprivileged_userns` says (GitHub's
+  `ubuntu-latest` runner loads it, #784); the fix is the profile Claude Code's
+  documentation gives in its place
+  ([SANDBOX.md](SANDBOX.md#what-each-agents-sandbox-needs-on-linux)). The checks see
+  that profile from the kernel's list where they may read it, else from
+  `/etc/apparmor.d/`; one loaded by hand and not installed there is not seen, and
+  they never create a nested namespace to test. Cursor's desktop app has an AppArmor profile of its own, which the check does
   not read, so with the restriction on and no `bwrap` installed it may warn for Cursor
   where Cursor's sandbox starts.
 - **On Linux without bubblewrap, nothing can be created at the top of the project, and

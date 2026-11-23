@@ -4,19 +4,30 @@
 //! ([`openmoat_hosts::SandboxSpec::linux_needs`]). `openmoat doctor` and
 //! `openmoat status` report what is missing; nothing decides differently.
 //!
-//! The facts come from reading settings and the search path, and from the probe
-//! `openmoat run` already makes to choose its tier: the system's bubblewrap
-//! asked to create its namespaces, as the user. Nothing here needs root or
-//! changes the machine. Off Linux there are no facts and nothing to report.
+//! The facts come from reading settings, the search path and the `AppArmor`
+//! profiles for bubblewrap ([`apparmor`]), and from the probe `openmoat run`
+//! already makes to choose its tier: the system's bubblewrap asked to create
+//! its namespaces, as the user. Nothing here needs root, creates a namespace of
+//! its own or changes the machine. Off Linux there are no facts and nothing to
+//! report.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use openmoat_hosts::{Host, LinuxProgram, LinuxSandboxNeeds};
+use openmoat_hosts::{Host, LinuxProgram, LinuxSandboxNeeds, UsernsProfileFix};
 use serde::Serialize;
+
+pub use apparmor::{BwrapProfile, BwrapProfileSeen, Seen};
+
+mod apparmor;
 
 /// Ubuntu's `AppArmor` restriction (23.10 and later): `1` lets only programs
 /// with an `AppArmor` profile that allows it create a user namespace.
 const APPARMOR: &str = "/proc/sys/kernel/apparmor_restrict_unprivileged_userns";
+/// Ubuntu's restriction on unconfined programs changing to a profile that
+/// allows user namespaces; reported beside a `bwrap-userns-restrict` finding.
+const APPARMOR_UNCONFINED: &str = "/proc/sys/kernel/apparmor_restrict_unprivileged_unconfined";
+/// The `bwrap` both Ubuntu's profile and Claude Code's documented one attach to.
+const USR_BIN_BWRAP: &str = "/usr/bin/bwrap";
 /// How many user namespaces each user may create; `0` allows none.
 const MAX_USER_NAMESPACES: &str = "/proc/sys/user/max_user_namespaces";
 /// Debian's own switch (older Debian kernels): `0` refuses them to every user
@@ -29,6 +40,13 @@ const UNPRIVILEGED_CLONE: &str = "/proc/sys/kernel/unprivileged_userns_clone";
 pub struct Facts {
     /// [`APPARMOR`], trimmed; `None` where the kernel has no such setting.
     pub apparmor_restrict: Option<String>,
+    /// [`APPARMOR_UNCONFINED`], trimmed; `None` where the kernel has none.
+    pub apparmor_restrict_unconfined: Option<String>,
+    /// The `AppArmor` profile for `/usr/bin/bwrap`; `None` where it cannot be
+    /// read.
+    pub bwrap_apparmor: Option<BwrapProfileSeen>,
+    /// The first `bwrap` on the search path, its links resolved.
+    pub bwrap_path: Option<PathBuf>,
     /// [`MAX_USER_NAMESPACES`], trimmed; `None` where it cannot be read.
     pub max_user_namespaces: Option<String>,
     /// [`UNPRIVILEGED_CLONE`], trimmed; `None` where the kernel has none.
@@ -53,8 +71,13 @@ impl Facts {
             .filter(|p| crate::environment::find_in(&dirs, &[], p.name).is_some())
             .map(|p| p.name)
             .collect();
+        let bwrap_path = crate::environment::find_in(&dirs, &[], "bwrap")
+            .map(|p| std::fs::canonicalize(&p).unwrap_or(p));
         Some(Self {
             apparmor_restrict: setting(APPARMOR),
+            apparmor_restrict_unconfined: setting(APPARMOR_UNCONFINED),
+            bwrap_apparmor: BwrapProfileSeen::here(),
+            bwrap_path,
             max_user_namespaces: setting(MAX_USER_NAMESPACES),
             unprivileged_clone: setting(UNPRIVILEGED_CLONE),
             on_path,
@@ -139,6 +162,9 @@ pub struct Finding {
     pub missing: Vec<&'static str>,
     /// Why it cannot create a user namespace, when it needs one.
     pub user_namespaces: Option<Blocked>,
+    /// Where Ubuntu's `bwrap-userns-restrict` profile was seen, when it
+    /// applies to the `bwrap` this agent runs and its sandbox fails under it.
+    pub bwrap_userns_restrict: Option<Restricted>,
     /// What the agent does then, from its spec.
     pub outcome: &'static str,
     /// The fixes, each a choice on its own.
@@ -167,7 +193,9 @@ fn finding(
         .filter(|p| !facts.on_path.contains(&p.name))
         .collect();
     let user_namespaces = blocked.filter(|_| needs.user_namespaces).cloned();
-    if missing.is_empty() && user_namespaces.is_none() {
+    let usr_bin_bwrap = facts.bwrap_path.as_deref() == Some(Path::new(USR_BIN_BWRAP));
+    let bwrap_userns_restrict = restricted_bwrap(needs, facts, usr_bin_bwrap);
+    if missing.is_empty() && user_namespaces.is_none() && bwrap_userns_restrict.is_none() {
         return None;
     }
     let mut fixes = Vec::new();
@@ -179,34 +207,113 @@ fn finding(
             packages.join(" ")
         ));
     }
+    if bwrap_userns_restrict.is_some() {
+        fixes.push(REPLACE_USERNS_RESTRICT.to_owned());
+    }
     if let Some(blocked) = &user_namespaces {
-        fixes.extend(namespace_fixes(blocked));
+        // Under `bwrap-userns-restrict` the `AppArmor` setting's fixes do not
+        // help: the profile applies whatever the setting says.
+        if bwrap_userns_restrict.is_none() || blocked.setting != Some(Setting::AppArmor) {
+            fixes.extend(namespace_fixes(blocked, needs.apparmor, usr_bin_bwrap));
+        }
     }
     Some(Finding {
         host: host.id(),
         agent: host.display_name(),
         missing: missing.iter().map(|p| p.name).collect(),
         user_namespaces,
+        bwrap_userns_restrict,
         outcome: needs.without,
         fixes,
     })
 }
 
+/// Where Ubuntu's `bwrap-userns-restrict` was seen, when the host's
+/// documentation gives its own unconfined profile for `/usr/bin/bwrap` (its
+/// sandbox needs capabilities inside bubblewrap's namespace, which
+/// `unpriv_bwrap` denies) and that is the `bwrap` it runs. bubblewrap creating
+/// its own namespaces says nothing here: it still does under the profile.
+fn restricted_bwrap(
+    needs: &LinuxSandboxNeeds,
+    facts: &Facts,
+    usr_bin_bwrap: bool,
+) -> Option<Restricted> {
+    let profile = facts.bwrap_apparmor?;
+    (needs.apparmor == UsernsProfileFix::UnconfinedBwrapProfile
+        && usr_bin_bwrap
+        && profile.profile == BwrapProfile::UsernsRestrict)
+        .then(|| Restricted {
+            seen: profile.seen,
+            restrict_unconfined: facts.apparmor_restrict_unconfined.clone(),
+        })
+}
+
+/// Ubuntu's `bwrap-userns-restrict` applies to the `bwrap` a host runs, and
+/// its sandbox fails under it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Restricted {
+    /// Where the profile was seen.
+    pub seen: Seen,
+    /// `kernel.apparmor_restrict_unprivileged_unconfined`, where the kernel
+    /// has it.
+    pub restrict_unconfined: Option<String>,
+}
+
+/// Claude Code's sandboxing documentation, "Add an `AppArmor` profile for
+/// bubblewrap", after Ubuntu's profile is disabled the way Ubuntu's `AppArmor`
+/// documentation disables one (a link in `disable/`, then `apparmor_parser -R`).
+const REPLACE_USERNS_RESTRICT: &str = "disable Ubuntu's bwrap-userns-restrict \
+     (`sudo ln -s /etc/apparmor.d/bwrap-userns-restrict /etc/apparmor.d/disable/` and \
+     `sudo apparmor_parser -R /etc/apparmor.d/bwrap-userns-restrict`), write the profile \
+     the agent's sandboxing documentation gives to /etc/apparmor.d/bwrap \
+     (`profile bwrap /usr/bin/bwrap flags=(unconfined) { userns, }`, with its `abi` and \
+     `include` lines), run `sudo systemctl reload apparmor`, then restart the agent; \
+     `kernel.apparmor_restrict_unprivileged_userns=0` alone does not help";
+
 /// How a person lets user namespaces be created again: what the agents'
 /// own documentation and the kernel's settings say, never run by OpenMoat.
-fn namespace_fixes(blocked: &Blocked) -> Vec<String> {
+fn namespace_fixes(
+    blocked: &Blocked,
+    apparmor: UsernsProfileFix,
+    usr_bin_bwrap: bool,
+) -> Vec<String> {
     const KEEP: &str = "the same line in a file under /etc/sysctl.d/ keeps it after a reboot";
     match blocked.setting {
-        Some(Setting::AppArmor) => vec![
-            "an AppArmor profile that lets bwrap create user namespaces, as the agent's \
-             sandboxing documentation gives one (Ubuntu's apparmor-profiles package has \
-             bwrap-userns-restrict), then restart the agent"
-                .to_owned(),
-            format!(
-                "`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, which lifts \
-                 the restriction for every program until the next reboot; {KEEP}"
-            ),
-        ],
+        Some(Setting::AppArmor) => {
+            let profile = match apparmor {
+                // Its documentation: the profile only where it runs
+                // `/usr/bin/bwrap`; otherwise the `sysctl`.
+                UsernsProfileFix::UnconfinedBwrapProfile if !usr_bin_bwrap => None,
+                UsernsProfileFix::UnconfinedBwrapProfile => Some(
+                    "the AppArmor profile the agent's sandboxing documentation gives for \
+                     /usr/bin/bwrap, in /etc/apparmor.d/bwrap (`profile bwrap /usr/bin/bwrap \
+                     flags=(unconfined) { userns, }`, with its `abi` and `include` lines), then \
+                     `sudo systemctl reload apparmor` and restart the agent"
+                        .to_owned(),
+                ),
+                UsernsProfileFix::BwrapUsernsRestrict => Some(
+                    "load Ubuntu's bwrap-userns-restrict profile, as the agent's sandboxing \
+                     documentation says (Ubuntu 24.04: `sudo apt install apparmor-profiles \
+                     apparmor-utils`, `sudo install -m 0644 \
+                     /usr/share/apparmor/extra-profiles/bwrap-userns-restrict \
+                     /etc/apparmor.d/bwrap-userns-restrict`, `sudo apparmor_parser -r \
+                     /etc/apparmor.d/bwrap-userns-restrict`), then restart the agent"
+                        .to_owned(),
+                ),
+                UsernsProfileFix::OwnPackage(package) => Some(format!(
+                    "install the agent's own AppArmor package, {package}, as its sandboxing \
+                     documentation gives it, then restart the agent"
+                )),
+                _ => None,
+            };
+            profile
+                .into_iter()
+                .chain(std::iter::once(format!(
+                    "`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, which \
+                     lifts the restriction for every program until the next reboot; {KEEP}"
+                )))
+                .collect()
+        }
         Some(Setting::UnprivilegedClone) => vec![format!(
             "`sudo sysctl -w kernel.unprivileged_userns_clone=1`; {KEEP}"
         )],
@@ -230,6 +337,9 @@ impl Finding {
         if self.user_namespaces.is_some() {
             why.push("user namespaces are blocked".to_owned());
         }
+        if self.bwrap_userns_restrict.is_some() {
+            why.push("Ubuntu's bwrap-userns-restrict AppArmor profile applies to bwrap".to_owned());
+        }
         format!("own sandbox cannot start commands here: {}", why.join("; "))
     }
 
@@ -242,6 +352,9 @@ impl Finding {
         if let Some(blocked) = &self.user_namespaces {
             why.push(blocked.describe());
         }
+        if let Some(restricted) = &self.bwrap_userns_restrict {
+            why.push(restricted.describe());
+        }
         format!(
             "{:<16} the agent's own sandbox cannot start commands on this machine: {}, so {}. \
              To fix it: {}. OpenMoat has no setting that leaves this agent's sandbox off; its \
@@ -250,6 +363,27 @@ impl Finding {
             why.join("; "),
             self.outcome,
             self.fixes.join("; or ")
+        )
+    }
+}
+
+impl Restricted {
+    /// Why the sandbox fails under the profile, in words.
+    fn describe(&self) -> String {
+        let seen = match self.seen {
+            Seen::Loaded => "is loaded",
+            Seen::Installed => "is in /etc/apparmor.d/, which AppArmor loads at boot",
+        };
+        let unconfined = if self.restrict_unconfined.as_deref() == Some("1") {
+            ", with kernel.apparmor_restrict_unprivileged_unconfined at 1"
+        } else {
+            ""
+        };
+        format!(
+            "Ubuntu's bwrap-userns-restrict AppArmor profile {seen}{unconfined}: its \
+             unpriv_bwrap takes every capability from what /usr/bin/bwrap starts, so the \
+             sandbox cannot make the user namespace it needs inside bubblewrap's \
+             (`apply-seccomp: write /proc/self/setgroups`)"
         )
     }
 }

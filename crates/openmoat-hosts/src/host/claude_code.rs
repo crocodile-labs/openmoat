@@ -182,6 +182,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             ],
             user_namespaces: true,
             without: "its Bash commands fail (`failIfUnavailable`, no unsandboxed commands)",
+            // The same page, "Add an AppArmor profile for bubblewrap": the
+            // profile `bwrap` for `/usr/bin/bwrap`, `flags=(unconfined)` with
+            // `userns`, in `/etc/apparmor.d/bwrap`. Under Ubuntu's
+            // `bwrap-userns-restrict` its seccomp step fails with "apply-seccomp:
+            // write /proc/self/setgroups (nested userns is capability-restricted
+            // …)" (#784).
+            apparmor: crate::contract::UsernsProfileFix::UnconfinedBwrapProfile,
         }),
         // The hooks reference, "Persist environment variables": each Bash
         // command runs the file's lines first (ADR-044).

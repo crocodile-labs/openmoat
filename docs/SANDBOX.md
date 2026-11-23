@@ -187,21 +187,52 @@ User namespaces are refused to a user where `user.max_user_namespaces` is `0`, w
 Debian's `kernel.unprivileged_userns_clone` is `0`, on Ubuntu 23.10 and later where
 `kernel.apparmor_restrict_unprivileged_userns` is `1` (the default) and the program has
 no AppArmor profile that allows them, and in containers and virtual machines that do not
-allow them. Claude Code's and Codex's documentation give the fixes for Ubuntu: an
-AppArmor profile for `/usr/bin/bwrap` (Claude Code's page has one to copy; Codex's
-installs `bwrap-userns-restrict` from the `apparmor-profiles` package), or `sudo sysctl -w
-kernel.apparmor_restrict_unprivileged_userns=0`, which lifts the restriction for every
-program until the next reboot; the same line in a file under `/etc/sysctl.d/` keeps it.
-Cursor's page says its desktop app needs no setup, and that the CLI may need the
-distribution's AppArmor package.
+allow them. Each agent's documentation gives its own fix for Ubuntu, and they differ
+(each host's spec names it, `LinuxSandboxNeeds::apparmor`):
+
+- **Claude Code** ("Add an AppArmor profile for bubblewrap"): where it runs
+  `/usr/bin/bwrap`, write the profile its page gives to `/etc/apparmor.d/bwrap`
+  (`profile bwrap /usr/bin/bwrap flags=(unconfined) { userns, … }`), run `sudo systemctl
+  reload apparmor` and restart Claude Code; for any other `bwrap`, `sudo sysctl -w
+  kernel.apparmor_restrict_unprivileged_userns=0`.
+- **Codex**: load Ubuntu's `bwrap-userns-restrict` profile (on Ubuntu 24.04 from the
+  `apparmor-profiles` package, `/usr/share/apparmor/extra-profiles/bwrap-userns-restrict`;
+  Ubuntu 25.04's `apparmor` package ships it in `/etc/apparmor.d/`), and the `sysctl` as a
+  last resort.
+- **Cursor**: its desktop app needs no setup; remote environments and the standalone CLI
+  install Cursor's `cursor-sandbox-apparmor` package.
+
+`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` lifts the restriction for
+every program until the next reboot; the same line in a file under `/etc/sysctl.d/` keeps
+it.
+
+**`bwrap-userns-restrict` breaks Claude Code's sandbox (#784).** The profile attaches
+`bwrap` to `/usr/bin/bwrap` and stacks everything bubblewrap starts into `unpriv_bwrap`,
+which denies every capability (its own comment: so that "its children do not have
+capabilities"). bubblewrap still creates its namespaces, but Claude Code's seccomp step
+then makes a user namespace inside bubblewrap's and fails with `apply-seccomp: write
+/proc/self/setgroups (nested userns is capability-restricted; caller must provide
+CAP_SYS_ADMIN)`. The `sysctl` does not help: the profile applies whatever it says. This
+is what GitHub's `ubuntu-latest` runner loads. The fix is Claude Code's own profile in its
+place; both name their profile `bwrap`, so only one can apply. Disable Ubuntu's the way
+Ubuntu's AppArmor documentation disables a profile (`sudo ln -s
+/etc/apparmor.d/bwrap-userns-restrict /etc/apparmor.d/disable/`, then `sudo
+apparmor_parser -R /etc/apparmor.d/bwrap-userns-restrict`), write Claude Code's, reload
+AppArmor and restart Claude Code. Claude Code's profile lets `/usr/bin/bwrap` create user
+namespaces for Codex too.
+
+`openmoat doctor` reads which profile applies to `/usr/bin/bwrap`: from the kernel's
+list (`/sys/kernel/security/apparmor/profiles`) where the user may read it, which is
+usually root only, else from the files in `/etc/apparmor.d/` (less those linked in its
+`disable/`), which AppArmor loads at boot. With `bwrap-userns-restrict` there and the
+first `bwrap` on `PATH` being `/usr/bin/bwrap`, it warns for Claude Code even though
+bubblewrap creates its namespaces, and names the replacement above as the only fix; it
+also prints `kernel.apparmor_restrict_unprivileged_unconfined` when that is `1`. Where
+neither can be read, it says nothing about the profile.
 
 No policy setting leaves one agent's sandbox off: where an agent's sandbox cannot start,
-its hook still decides each call, and the fix is the machine's. `openmoat doctor` cannot
-see a machine that allows a user namespace but not one inside another: Claude Code's
-seccomp step makes one inside bubblewrap's, and on GitHub's `ubuntu-latest` runner it
-fails with `apply-seccomp: write /proc/self/setgroups (nested userns is
-capability-restricted; …)` although bubblewrap starts (#784,
-[LIMITS.md](LIMITS.md)).
+its hook still decides each call, and the fix is the machine's
+([LIMITS.md](LIMITS.md)).
 
 Network has two modes:
 
