@@ -839,7 +839,7 @@ deny:
     # Google, npm or GitLab token in a URL, a web search, or the arguments of a
     # command that connects to a host (POLICY.md §3); also an AWS secret access key
     # given by its name (`aws_secret_access_key=…`) sent anywhere but AWS, and a
-    # PEM private key (`-----BEGIN … PRIVATE KEY-----`) sent off this machine
+    # PEM private key (a PEM `BEGIN … PRIVATE KEY` header) sent off this machine
     shell: ["@token-egress *"]
   - id: placeholder-egress
     reason: sends a brokered secret's placeholder to a host the proxy does not put that secret in

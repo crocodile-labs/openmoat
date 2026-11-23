@@ -8,7 +8,7 @@
 //! - an AWS secret access key: 40 characters of its alphabet as the value of a
 //!   name ending in `secret_access_key` (`aws_secret_access_key=…`,
 //!   `"SecretAccessKey": "…"`). Its service is AWS's hosts.
-//! - a private key in PEM form: a `-----BEGIN … PRIVATE KEY-----` line (also
+//! - a private key in PEM form: a PEM `BEGIN … PRIVATE KEY` header line (also
 //!   `PGP PRIVATE KEY BLOCK`). No host owns it.
 //! - a JSON web token: three base64url parts, the first two `eyJ` (a JSON
 //!   object). No host owns it.
@@ -155,7 +155,7 @@ fn aws_secret(text: &str) -> bool {
     })
 }
 
-/// A `-----BEGIN <label> PRIVATE KEY-----` or `… PRIVATE KEY BLOCK-----` line.
+/// A PEM `BEGIN <label> PRIVATE KEY` or `… PRIVATE KEY BLOCK` header line.
 fn private_key(text: &str) -> bool {
     const BEGIN: &str = "-----BEGIN ";
     text.match_indices(BEGIN).any(|(at, _)| {
