@@ -40,20 +40,29 @@ pub fn run(args: &McpProxyArgs) -> Result<Code> {
     let pins = ToolPins::load(&path)?;
     // A policy that cannot be read, or one the lock no longer matches, trusts
     // nothing: a new server's tools are held, as they are by default (ADR-032).
-    let trust_first_sight = crate::integrity::refuse_drift(&home, "trust first sight").is_ok()
-        && home
-            .load_policy()
-            .is_ok_and(|policy| policy.trust_mcp_first_sight());
+    let intact = crate::integrity::refuse_drift(&home, "trust first sight").is_ok();
+    let policy = home.load_policy().ok().filter(|_| intact);
+    let trust_first_sight = policy
+        .as_ref()
+        .is_some_and(openmoat_core::Policy::trust_mcp_first_sight);
+    // Sampling passes only when the policy, with the lock intact, says so
+    // (ADR-114).
+    let allow_sampling = policy
+        .as_ref()
+        .is_some_and(openmoat_core::Policy::allow_mcp_sampling);
     let save: Save = Box::new(move |p: &ToolPins| p.save(&path));
     let gateway = Gateway::new(home, &args.server, args.host)?;
-    let relay = Arc::new(Relay::new(
-        &args.server,
-        pins,
-        trust_first_sight,
-        Box::new(gateway),
-        save,
-        crate::time::now_ms,
-    ));
+    let relay = Arc::new(
+        Relay::new(
+            &args.server,
+            pins,
+            trust_first_sight,
+            Box::new(gateway),
+            save,
+            crate::time::now_ms,
+        )
+        .allowing_sampling(allow_sampling),
+    );
 
     let mut child = process::own(&mut command(args, &env)?)
         .stdin(Stdio::piped())

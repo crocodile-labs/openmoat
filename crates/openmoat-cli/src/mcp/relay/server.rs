@@ -55,6 +55,17 @@ impl Relay {
                 if !self.response_of(&id, fields, out) {
                     return None;
                 }
+                // A 2026-07-28 result that asks the host for input is checked
+                // as the server's own requests are (ADR-114).
+                if let Some(result) = fields.get("result")
+                    && let Err(why) = self.screen_input(result)
+                {
+                    let refused = error(&id, REFUSED, &why);
+                    // The gate forgets the call as for any error answer.
+                    let _ = self.gate.result(&id_key(&id), &refused["error"]);
+                    out.push(dropped(&format!("the result of request {id}: {why}")));
+                    return Some(refused);
+                }
                 // An error answer reaches the model too: its `message` and
                 // `data` are the server's text as much as a result is.
                 let answer = fields.get("result").or_else(|| fields.get("error"));
@@ -69,8 +80,9 @@ impl Relay {
                     );
                     return Some(error(&id, REFUSED, &why));
                 }
-                self.filter_listing(&mut message);
+                self.filter_listing(&mut message, out);
                 self.filter_surface(&mut message, &id_key(&id));
+                self.filter_modern(&mut message, &id_key(&id));
                 Some(message)
             }
             _ => {
@@ -116,7 +128,8 @@ impl Relay {
             out.push(dropped(&format!("the server's `{method}` request: {why}")));
             false
         };
-        if let Some(why) = context_asked(method, params) {
+        let refused = self.no_requests().or_else(|| self.screen(method, params));
+        if let Some(why) = refused {
             // Recorded as refused; a record that fails refuses it all the same.
             let _ = self.gate.server_refused(method, &why);
             return refuse(why, out);
@@ -175,12 +188,12 @@ impl Relay {
     /// Leave the held tools out of a response that lists tools; a listing
     /// that changes the pins is saved. Every response with a tools array
     /// counts, whatever request it answers.
-    fn filter_listing(&self, message: &mut Value) {
+    fn filter_listing(&self, message: &mut Value, out: &mut Vec<Routed>) {
         let Some(Value::Array(tools)) = message.pointer_mut("/result/tools") else {
             return;
         };
         let mut state = self.state();
-        let hidden = self.list(&mut state, tools);
+        let hidden = self.list(&mut state, tools, out);
         // An entry without a string name has no pin to check it against, and
         // a host may still read one: it is dropped.
         tools.retain(|t| {
@@ -192,12 +205,32 @@ impl Relay {
 
     /// Check one listing against the pins, saving them when it changed them;
     /// the names to hide.
-    fn list(&self, state: &mut State, tools: &[Value]) -> std::collections::BTreeSet<String> {
+    fn list(
+        &self,
+        state: &mut State,
+        tools: &[Value],
+        out: &mut Vec<Routed>,
+    ) -> std::collections::BTreeSet<String> {
         let first = state.first;
         let listing = state.pins.list(tools, first, (self.now_ms)());
         state.first = false;
         if listing.changed {
             self.save_pins(state);
+        }
+        // A tool listed again with a schema OpenMoat reads is no longer refused.
+        for tool in tools {
+            if let Some(name) = tool.get("name").and_then(Value::as_str)
+                && !listing.rejected.contains_key(name)
+            {
+                state.rejected.remove(name);
+            }
+        }
+        for (name, why) in listing.rejected {
+            out.push(dropped(&format!(
+                "tool `{name}` of MCP server `{}`: {why}",
+                self.server
+            )));
+            state.rejected.insert(name, why);
         }
         listing.hidden
     }
@@ -238,7 +271,8 @@ impl Relay {
             .relist
             .as_ref()
             .map_or_else(|| (self.now_ms)(), |r| r.since_ms);
-        let request = openmoat_hosts::mcp_tools_list_request(&id, cursor);
+        let request =
+            Self::with_revision(state, openmoat_hosts::mcp_tools_list_request(&id, cursor));
         state.relist = Some(Relist {
             id,
             since_ms,
@@ -261,7 +295,11 @@ impl Relay {
             state.relist = None;
             return;
         };
-        self.list(state, tools);
+        self.list(state, tools, out);
+        // The identity this answer names counts as any result's does.
+        if let Some(mut answer) = result.cloned() {
+            self.check_identity(state, &mut answer);
+        }
         match result
             .and_then(|r| r.get("nextCursor"))
             .and_then(Value::as_str)
@@ -274,23 +312,6 @@ impl Relay {
             None => state.relist = None,
         }
     }
-}
-
-/// Why a server's `method` request is refused for the context it asks for:
-/// `sampling/createMessage` with `includeContext` other than `none` has the
-/// host add what other servers, or this one, put in the session, which would
-/// carry it to this server past the cross-server flow check (ADR-058).
-fn context_asked(method: &str, params: Option<&Value>) -> Option<String> {
-    if method != "sampling/createMessage" {
-        return None;
-    }
-    let context = params.and_then(|p| p.get("includeContext"))?;
-    if context.as_str() == Some("none") {
-        return None;
-    }
-    Some(format!(
-        "OpenMoat does not pass on a sampling request that asks for the session's context          (includeContext {context}): it would carry other servers' results to this one"
-    ))
 }
 
 fn dropped(why: &str) -> Routed {

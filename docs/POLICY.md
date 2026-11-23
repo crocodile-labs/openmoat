@@ -83,6 +83,7 @@ mcp:                                # optional: how `openmoat mcp proxy` treats 
   trust_first_sight: false          # optional, default false: pin its first tool listing unseen
   browser_open: fetch               # optional, default fetch: a browser MCP page open is a `fetch` (§4); `net` keeps it `net`
   flow_trusted: []                  # optional, since 0.16.0: servers whose results may reach other servers' acting tools unreviewed (§8)
+  allow_sampling: false             # optional, since 0.26.0, default false: pass wrapped servers' sampling requests to the agent (ADR-114)
 
 check_diff:                         # optional, since 0.16.0: levels of `openmoat policy check-diff`'s content checks
   levels:                           #   rule id → deny, review or off (MERGE_CHECK.md, ADR-055)
@@ -1872,6 +1873,20 @@ mcp:
 are seen as sources (an unwrapped, remote HTTP, plugin or managed server's results are not
 recorded), and text the agent rewrites (a paraphrase, an encoded or split address, a copy of
 fewer than eight words) is not found.
+
+The gateway refuses a server's sampling requests (`sampling/createMessage`, sent as a
+request or, under MCP 2026-07-28, inside a result's `inputRequests`): the server would
+choose text the model reads as a user turn. A policy that needs sampling allows it, and
+`openmoat policy lint` warns while it does; a request that asks for the session's context
+is refused either way (ADR-114):
+
+```yaml
+mcp:
+  allow_sampling: true              # optional, default false
+```
+
+A URL-mode elicitation passes only for an `https` page whose host is not local, private
+or link-local and that a `net` rule of the policy does not deny.
 
 ### 8.1 Executable pinning and the environment snapshot
 

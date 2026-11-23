@@ -74,6 +74,10 @@ pub struct Scan {
     /// Every file looked at, present or not, so a pin from one of them whose
     /// entry is gone counts as removed.
     pub scanned: Vec<PathBuf>,
+    /// The package release each server's command runs, by server id, where
+    /// it can be read offline (`provenance.rs`, ADR-114); filled by
+    /// [`super::provenance::fill`].
+    pub provenance: std::collections::BTreeMap<String, super::provenance::Provenance>,
 }
 
 /// The files `host` reads servers from, for a session in `cwd` (none of a

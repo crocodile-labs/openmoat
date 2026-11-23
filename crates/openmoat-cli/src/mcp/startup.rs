@@ -131,7 +131,10 @@ fn gather(home: &Home, launch: &Launch, cwd: Option<&Path>) -> Result<Startup> {
     for host in set_up_hosts(home, &binary) {
         sources.extend(servers::sources(home, host, cwd)?);
     }
-    let scan = servers::scan(&sources);
+    let mut scan = servers::scan(&sources);
+    // A new release of the server's package holds it as a changed
+    // definition does (ADR-114).
+    super::provenance::fill(&mut scan, &super::provenance::Roots::of_user());
     Ok(decide(&scan, pins, launch, |var| {
         std::env::var_os(var).is_some()
     }))

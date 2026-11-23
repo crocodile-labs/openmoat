@@ -1242,6 +1242,36 @@ $ openmoat audit export --session 9f2c…
 
   Calls of the same server, tools that only read, and other sessions stay quiet. To trust
   a server's flows, list it in the policy: `mcp: { flow_trusted: [github] }`.
+- **Both protocol revisions are checked.** An agent that speaks MCP 2026-07-28 has no
+  `initialize` handshake; the gateway pins the server's `server/discover` answer instead
+  (its instructions, capabilities and versions; the cache hints `ttlMs` and `cacheScope`
+  are not pinned) and the server information each result names. A server whose results
+  name another server than the one you accepted is held: all its calls are refused until
+  `openmoat mcp accept` (a new version number alone holds nothing). A server you accepted
+  under the older revision keeps its acceptance while its text stays the same
+  ([ADR-114](adr/ADR-114-mcp-2026-07-28-and-package-provenance.md)).
+- **What a server asks of you is checked, in any revision.** A sampling request (the
+  server asks the model to write text) is refused, as a request or inside a 2026-07-28
+  result's `inputRequests`; allow it with `mcp: { allow_sampling: true }`. A URL
+  elicitation (the server asks the agent to open a page for you) passes only for an
+  `https` page on a host that is not this machine, a private network or a link-local
+  address such as the cloud metadata service `169.254.169.254`, and that the policy does
+  not deny. A refused request refuses the whole answer, with error -32001.
+- **Where an argument goes is part of the tool.** A 2026-07-28 tool can send an argument
+  as an HTTP header (`x-mcp-header`); `openmoat mcp accept` names each such mapping, and a
+  changed one holds the tool. A tool whose mappings break the specification's rules, or
+  whose schema's `$ref`s point outside it, loop or nest too deep, is left out and its calls
+  refused.
+- **A new package release is held like a changed definition.** When you accept a server
+  started with `npx`, `uvx` or `docker run`, OpenMoat records the release it runs, read
+  from the command line and the package manager's own files on this machine (no network):
+
+  ```text
+  MCP server `mail` in ~/.claude.json changed
+      package release: npm package postmark-mcp 1.0.15 (sha512-…) → npm package postmark-mcp 1.0.16 (sha512-…)
+  ```
+
+  Its tool calls are refused, and a wrapped one does not start, until you accept it again.
 
 The gateway covers stdio servers. A remote (HTTP) server is checked by the hook alone, and
 its results are not kept for the flow check. Tool results reach the model as the server

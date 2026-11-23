@@ -34,9 +34,11 @@ impl Gate for Asked {
     }
 }
 
+/// A relay whose policy allows sampling (`mcp.allow_sampling`): refused by
+/// default (`tests/modern.rs`), the context check still applies.
 fn relay_asking(gate: &Asked) -> Relay {
     let save: Save = Box::new(|_| Ok(()));
-    Relay::new("docs", None, false, Box::new(gate.clone()), save, || 7)
+    Relay::new("docs", None, false, Box::new(gate.clone()), save, || 7).allowing_sampling(true)
 }
 
 fn sampling(id: u64, context: Option<&str>) -> String {

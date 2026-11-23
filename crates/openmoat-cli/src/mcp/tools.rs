@@ -34,6 +34,7 @@ use super::pins::canonical;
 use crate::home::{Home, write_private};
 use crate::integrity::sha256_hex;
 
+pub mod schema;
 pub mod surface;
 
 use surface::{Kind, Surface};
@@ -166,6 +167,9 @@ pub struct Listing {
     pub hidden: BTreeSet<String>,
     /// Whether the pins changed and must be saved.
     pub changed: bool,
+    /// Tools listed with a schema OpenMoat refuses ([`schema::refusal`]), by
+    /// name, with why: left out, never pinned or held, their calls refused.
+    pub rejected: BTreeMap<String, String>,
 }
 
 impl ToolPins {
@@ -222,7 +226,26 @@ impl ToolPins {
     /// and the name hidden, so the order of the entries changes nothing.
     pub fn list(&mut self, tools: &[Value], first: bool, now_ms: i64) -> Listing {
         let mut listing = Listing::default();
-        let listed: Vec<(String, ToolPin)> = tools.iter().filter_map(ToolPin::of).collect();
+        // A tool whose schema maps arguments to headers against the rules, or
+        // whose `$ref`s leave it, loop or run too deep, is no one's to accept.
+        for tool in tools {
+            if let (Some(name), Some(why)) = (
+                tool.get("name").and_then(Value::as_str),
+                schema::refusal(tool),
+            ) {
+                listing.rejected.insert(name.to_owned(), why);
+            }
+        }
+        let tools: Vec<&Value> = tools
+            .iter()
+            .filter(|t| {
+                t.get("name")
+                    .and_then(Value::as_str)
+                    .is_none_or(|n| !listing.rejected.contains_key(n))
+            })
+            .collect();
+        listing.hidden.extend(listing.rejected.keys().cloned());
+        let listed: Vec<(String, ToolPin)> = tools.iter().filter_map(|t| ToolPin::of(t)).collect();
         if first {
             // Each name's first entry; another entry of that name that differs
             // is held below like any change. An entry with text a terminal
@@ -230,7 +253,7 @@ impl ToolPins {
             let shown: Vec<(String, ToolPin)> = tools
                 .iter()
                 .filter(|tool| !has_invisible(tool))
-                .filter_map(ToolPin::of)
+                .filter_map(|tool| ToolPin::of(tool))
                 .collect();
             for (name, pin) in &shown {
                 if !self.tools.contains_key(name) {
@@ -391,6 +414,15 @@ fn describe(server: &str, name: &str, old: Option<&ToolPin>, new: &ToolPin, agai
             pin.description.as_deref().unwrap_or("(none)"),
             pretty(&pin.input_schema)
         );
+        // Where an argument goes besides the call itself (ADR-114).
+        for mapping in schema::mappings(&pin.input_schema) {
+            let _ = writeln!(
+                shown,
+                "argument `{}` is sent as HTTP header Mcp-Param-{}",
+                mapping.path.join("."),
+                mapping.header
+            );
+        }
         if !pin.output_schema.is_null() {
             let _ = writeln!(shown, "output schema:\n{}", pretty(&pin.output_schema));
         }

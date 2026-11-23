@@ -28,6 +28,7 @@ use openmoat_hosts::{Host, McpCommandForm};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::provenance::Provenance;
 use super::servers::{Scan, Server};
 use crate::integrity::sha256_hex;
 
@@ -112,6 +113,11 @@ pub struct ServerPin {
     pub digest: String,
     /// What a person is shown of the entry (see the module documentation).
     pub shown: Value,
+    /// The package release its command ran when it was accepted
+    /// (`provenance.rs`, ADR-114); `None` when none could be read, or for a
+    /// pin from before releases were recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<Provenance>,
 }
 
 /// Server id (`<file>#<pointer>`) → pin.
@@ -125,6 +131,7 @@ impl ServerPin {
             file: server.file.display().to_string(),
             digest: sha256_hex(canonical(&server.entry).as_bytes()),
             shown: shown(&server.entry, server.form),
+            provenance: None,
         }
     }
 }
@@ -138,6 +145,10 @@ pub enum Kind {
     Changed(Vec<String>),
     /// Pinned, and its file no longer defines it.
     Removed,
+    /// Pinned as it is, by a pin that records no package release, and its
+    /// command runs one that can be read now: accepting records it. Holds
+    /// nothing, since nothing was recorded to differ from (ADR-114).
+    Recorded(String),
 }
 
 /// One server whose definition is not the pinned one.
@@ -156,7 +167,7 @@ impl Change {
     /// Whether it should hold back the server's tool calls: a removed server
     /// runs nothing.
     pub fn blocks(&self) -> bool {
-        !matches!(self.kind, Kind::Removed)
+        !matches!(self.kind, Kind::Removed | Kind::Recorded(_))
     }
 
     /// One line naming the change, then its details indented. This is what a
@@ -169,6 +180,7 @@ impl Change {
             Kind::Added => "is new (not pinned yet)",
             Kind::Changed(_) => "changed",
             Kind::Removed => "was removed",
+            Kind::Recorded(_) => "runs a package release its pin does not record yet",
         };
         let mut text = format!(
             "MCP server {} in {} {what}",
@@ -186,6 +198,9 @@ impl Change {
                     let _ = write!(text, "\n    {}", compact(&pin.shown));
                 }
             }
+            Kind::Recorded(line) => {
+                let _ = write!(text, "\n    {line}");
+            }
             Kind::Removed => {}
         }
         crate::render::clean_lines(&text)
@@ -199,16 +214,23 @@ pub fn changes(pins: &Pins, scan: &Scan) -> Vec<Change> {
     let mut seen = BTreeSet::new();
     for server in &scan.servers {
         seen.insert(server.id.clone());
-        let now = ServerPin::of(server);
+        let mut now = ServerPin::of(server);
+        now.provenance = scan.provenance.get(&server.id).cloned();
         let kind = match pins.get(&server.id) {
             None => Kind::Added,
-            Some(old) if old.digest == now.digest => continue,
+            Some(old) if old.digest == now.digest => match release(old, &now) {
+                Some((line, true)) => Kind::Changed(vec![line]),
+                Some((line, false)) => Kind::Recorded(line),
+                None => continue,
+            },
             Some(old) => {
                 // A pin an older version wrote may keep a hidden value in
                 // clear: hashed the same way, it is compared, never shown.
                 let mut before = old.shown.clone();
                 hide(&mut before, server.form);
-                Kind::Changed(differences(&before, &now.shown, server.form))
+                let mut lines = differences(&before, &now.shown, server.form);
+                lines.extend(release(old, &now).map(|(line, _)| line));
+                Kind::Changed(lines)
             }
         };
         out.push(Change {
@@ -238,6 +260,31 @@ pub fn changes(pins: &Pins, scan: &Scan) -> Vec<Change> {
         }
     }
     out
+}
+
+/// How the package release `now` runs differs from the one `old` recorded:
+/// the line to show, and whether it holds the server. A release that cannot
+/// be read now holds nothing (the server's package manager installs it when
+/// it starts, and the next check reads it); one read where none was recorded
+/// is only recorded; one that differs from the recorded one holds it, as a
+/// changed definition does (ADR-114).
+fn release(old: &ServerPin, now: &ServerPin) -> Option<(String, bool)> {
+    let current = now.provenance.as_ref()?;
+    match &old.provenance {
+        None => Some((
+            format!("runs {} (recorded on accept)", current.shown()),
+            false,
+        )),
+        Some(recorded) if recorded == current => None,
+        Some(recorded) => Some((
+            format!(
+                "package release: {} → {}",
+                recorded.shown(),
+                current.shown()
+            ),
+            true,
+        )),
+    }
 }
 
 /// Store what accepting `changes` means in `pins`.

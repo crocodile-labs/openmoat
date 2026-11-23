@@ -23,6 +23,7 @@ use openmoat_hosts::Host;
 mod codex;
 mod flow;
 mod injected;
+mod modern;
 mod shutdown;
 
 const FIXTURES: &str = include_str!("mcp_gateway/fixtures.json");
@@ -54,6 +55,7 @@ impl Gateway {
         // (ADR-049): one per mode, each starting the proxy as `docs`.
         for mode in [
             "answer", "silent", "rug", "inject", "fail", "instruct", "sample", "stubborn",
+            "modern", "imposter", "mrtr",
         ] {
             let line = gateway.proxy_line(mode);
             let args: Vec<&str> = line.iter().map(String::as_str).collect();

@@ -21,6 +21,7 @@ fn scan(servers: Vec<Server>) -> Scan {
         servers,
         unreadable: Vec::new(),
         scanned: vec![PathBuf::from("/h/.claude.json")],
+        ..Scan::default()
     }
 }
 
@@ -314,4 +315,61 @@ fn tool_names_match_their_server_only() {
     assert!(!tool_of("mcp__github__get_issue", "git"));
     assert!(tool_of("mcp__my_server__run", "my.server"));
     assert!(!tool_of("mcp__other__run", "my.server"));
+}
+
+fn release(version: &str) -> crate::mcp::provenance::Provenance {
+    crate::mcp::provenance::Provenance {
+        ecosystem: "npm".to_owned(),
+        package: "postmark-mcp".to_owned(),
+        version: Some(version.to_owned()),
+        integrity: Some(format!("sha512-{version}")),
+    }
+}
+
+fn with_release(servers: Vec<Server>, version: &str) -> Scan {
+    let mut found = scan(servers);
+    for server in &found.servers {
+        found.provenance.insert(server.id.clone(), release(version));
+    }
+    found
+}
+
+#[test]
+fn a_new_package_release_holds_an_unchanged_definition() {
+    let gh = server(
+        "mail",
+        json!({"command": "npx", "args": ["-y", "postmark-mcp"]}),
+    );
+    let accepted = with_release(vec![gh.clone()], "1.0.15");
+    let mut pins = Pins::new();
+    let first = changes(&pins, &accepted);
+    apply(&mut pins, &first);
+    assert_eq!(
+        pins.values().next().unwrap().provenance,
+        Some(release("1.0.15"))
+    );
+    assert_eq!(changes(&pins, &accepted), Vec::<Change>::new());
+    // The definition is the same text; npx now runs 1.0.16 (postmark-mcp).
+    let bumped = changes(&pins, &with_release(vec![gh.clone()], "1.0.16"));
+    assert_eq!(bumped.len(), 1);
+    assert!(bumped[0].blocks());
+    assert!(bumped[0].describe().contains("1.0.15") && bumped[0].describe().contains("1.0.16"));
+    // A release that cannot be read now holds nothing.
+    assert_eq!(changes(&pins, &scan(vec![gh])), Vec::<Change>::new());
+}
+
+#[test]
+fn a_pin_without_a_release_records_one_without_holding() {
+    let gh = server(
+        "mail",
+        json!({"command": "npx", "args": ["-y", "postmark-mcp"]}),
+    );
+    let pins = pinned(std::slice::from_ref(&gh));
+    let found = changes(&pins, &with_release(vec![gh], "1.0.15"));
+    assert_eq!(found.len(), 1);
+    assert!(matches!(found[0].kind, Kind::Recorded(_)) && !found[0].blocks());
+    assert_eq!(
+        found[0].accept.as_ref().unwrap().provenance,
+        Some(release("1.0.15"))
+    );
 }

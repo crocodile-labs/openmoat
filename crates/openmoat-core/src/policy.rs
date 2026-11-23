@@ -456,6 +456,12 @@ pub struct McpSettings {
     /// review.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub flow_trusted: Vec<String>,
+    /// Pass a wrapped server's sampling requests (`sampling/createMessage`,
+    /// as a request or in a 2026-07-28 result's `inputRequests`) to the host,
+    /// which would have the model write text for the server. Off by default:
+    /// `openmoat mcp proxy` refuses them (ADR-114).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub allow_sampling: bool,
 }
 
 /// `mcp.browser_open`: the kind a read-only page open of an MCP tool is decided as.
@@ -596,6 +602,13 @@ impl Policy {
     #[must_use]
     pub fn mcp_flow_trusted(&self) -> &[String] {
         self.mcp.as_ref().map_or(&[], |m| m.flow_trusted.as_slice())
+    }
+
+    /// Whether `openmoat mcp proxy` passes a server's sampling requests on
+    /// (`mcp.allow_sampling`, ADR-114).
+    #[must_use]
+    pub fn allow_mcp_sampling(&self) -> bool {
+        self.mcp.as_ref().is_some_and(|m| m.allow_sampling)
     }
 }
 

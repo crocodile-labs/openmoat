@@ -445,6 +445,22 @@ impl Gate for Gateway {
         self.keep_instructions(text);
     }
 
+    /// The page of a URL-mode elicitation is decided as a connection to its
+    /// host, as a `resources/read` of an `https:` URI is: a deny refuses it
+    /// (ADR-114). A review passes: the host shows the person the URL and
+    /// asks before opening it.
+    fn url_refusal(&self, url: &str) -> Result<Option<String>> {
+        let action = openmoat_hosts::mcp_resource_action(&self.server, url)?;
+        let (decision, _) = self.policy(&action, None)?;
+        Ok((decision.verdict == Verdict::Deny).then(|| {
+            format!(
+                "the policy denies its host ({}: {})",
+                decision.rules.join(", "),
+                decision.reasons.join("; ")
+            )
+        }))
+    }
+
     fn server_request(&self, method: &str, params: Option<&Value>) -> Result<()> {
         let decision = Decision::single(
             Verdict::Allow,

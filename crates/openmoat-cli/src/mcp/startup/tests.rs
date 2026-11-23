@@ -31,6 +31,7 @@ fn scan(servers: Vec<Server>) -> Scan {
         scanned: servers.iter().map(|s| s.file.clone()).collect(),
         servers,
         unreadable: Vec::new(),
+        ..Scan::default()
     }
 }
 

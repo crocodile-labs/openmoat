@@ -364,6 +364,8 @@ fn flags(old: &Policy, new: &Policy, push: &mut impl FnMut(&str, String, Effect)
     );
     let (a, b) = (old.trust_mcp_first_sight(), new.trust_mcp_first_sight());
     switch("mcp.trust_first_sight", a, b, b, push);
+    let (a, b) = (old.allow_mcp_sampling(), new.allow_mcp_sampling());
+    switch("mcp.allow_sampling", a, b, b, push);
     let (a, b) = (old.browser_open_is_fetch(), new.browser_open_is_fetch());
     switch("mcp.browser_open (as fetch)", a, b, b, push);
     let added: Vec<&String> = new

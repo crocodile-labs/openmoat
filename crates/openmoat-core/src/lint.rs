@@ -162,6 +162,14 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
             ),
         });
     }
+    if policy.allow_mcp_sampling() {
+        out.push(Warning {
+            rule: "mcp.allow_sampling".to_owned(),
+            message: "`openmoat mcp proxy` passes a server's sampling requests to the agent: the \
+                      model answers text the server chose, as a user turn"
+                .to_owned(),
+        });
+    }
     out
 }
 
@@ -493,12 +501,14 @@ mod tests {
         let w = warn("version: 1\nmcp: { trust_first_sight: true }\n");
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(w[0].contains("mcp.trust_first_sight"), "{w:?}");
-        let quiet = "version: 1\nmcp: { trust_first_sight: false, flow_trusted: [] }\n";
+        let quiet = "version: 1\nmcp: { trust_first_sight: false, allow_sampling: false }\n";
         assert_eq!(warn(quiet), Vec::<String>::new());
         // servers trusted for cross-server flow (ADR-058)
         let w = warn("version: 1\nmcp: { flow_trusted: [github, linear] }\n");
         assert!(w.len() == 1 && w[0].contains("`mcp.flow_trusted`"), "{w:?}");
         assert!(w[0].contains("github, linear"), "{w:?}");
+        let w = warn("version: 1\nmcp: { allow_sampling: true }\n");
+        assert!(w.len() == 1 && w[0].contains("mcp.allow_sampling"), "{w:?}");
     }
 
     #[test]

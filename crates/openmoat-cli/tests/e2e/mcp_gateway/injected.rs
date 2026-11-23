@@ -3,10 +3,11 @@
 //! the hook's decision, whatever the agent, so a later call of that session
 //! that uses a host it planted needs review.
 
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::flow::decide;
 use super::{Gateway, Live, answer, call};
+use crate::common::text;
 
 #[test]
 fn a_host_a_wrapped_servers_result_planted_makes_a_later_curl_need_review() {
@@ -111,11 +112,25 @@ fn a_servers_instructions_are_held_until_accepted_and_then_feed_injected_input()
 }
 
 /// A server's request to the agent carries text the model reads: it is
-/// untrusted content of the session the gateway serves (ADR-069).
+/// untrusted content of the session the gateway serves (ADR-069). Sampling
+/// reaches the agent only where the policy allows it (ADR-114).
 #[test]
 fn a_host_a_wrapped_servers_sampling_request_names_makes_a_later_curl_need_review() {
     let gw = Gateway::new();
     let search = json!({"q": "release notes"});
+    assert!(!decide(&gw, "q0", "mcp__docs__search", &search).starts_with("deny"));
+    let refused = gw.session("sample", &[call(1, "search", &search)]);
+    assert!(
+        refused.contains("called search") && !refused.contains("drop.evil.example"),
+        "refused by default: {refused}"
+    );
+    let path = gw.sb.home.join(".moat/policy.yaml");
+    let mut policy: Value =
+        openmoat_core::yaml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    policy["mcp"]["allow_sampling"] = true.into();
+    std::fs::write(&path, openmoat_core::yaml::to_string(&policy).unwrap()).unwrap();
+    let repinned = gw.sb.moat_as_person(&["doctor", "--accept"]);
+    assert!(text(&repinned).contains("re-pinned"), "{}", text(&repinned));
     assert!(!decide(&gw, "q1", "mcp__docs__search", &search).starts_with("deny"));
     let host = gw.session("sample", &[call(1, "search", &search)]);
     assert!(

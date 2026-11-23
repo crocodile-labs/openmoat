@@ -92,23 +92,26 @@ impl Relay {
             };
         }
         let params = fields.get("params");
+        self.note_revision(method, params);
         let key = id.map(id_key);
         let request = key.as_deref();
         let refused = match method {
             "tools/call" => self.tool_call(params, request),
             "resources/read" => {
                 let uri = params.and_then(|p| p.get("uri")).and_then(Value::as_str);
+                let held = self.server_hold(&self.state());
                 self.gated(
                     Method::Resource,
                     uri.unwrap_or(""),
                     (None, request, None),
-                    None,
+                    held,
                 )
             }
             "prompts/get" => {
                 let name = params.and_then(|p| p.get("name")).and_then(Value::as_str);
                 let arguments = params.and_then(|p| p.get("arguments"));
-                let held = self.prompt_refusal(name.unwrap_or(""));
+                let server_held = self.server_hold(&self.state());
+                let held = server_held.or_else(|| self.prompt_refusal(name.unwrap_or("")));
                 self.gated(
                     Method::Prompt,
                     name.unwrap_or(""),
@@ -119,7 +122,9 @@ impl Relay {
             "notifications/cancelled" => {
                 // The server may never answer a cancelled request.
                 if let Some(cancelled) = params.and_then(|p| p.get("requestId")) {
-                    self.state().pending.remove(&id_key(cancelled));
+                    let mut state = self.state();
+                    state.pending.remove(&id_key(cancelled));
+                    state.discovers.remove(&id_key(cancelled));
                 }
                 None
             }
@@ -131,6 +136,10 @@ impl Relay {
                 if method == "initialize" {
                     // Its answer carries the instructions the pins check.
                     state.initialize = Some(id_key(id));
+                }
+                if method == "server/discover" {
+                    // Its answer carries the 2026-07-28 surface the pins check.
+                    state.discovers.insert(id_key(id));
                 }
                 state.pending.insert(id_key(id));
                 Outcome::Forward(message.clone())
@@ -224,6 +233,14 @@ impl Relay {
                 "OpenMoat cannot save the tool definitions of MCP server `{server}` ({why}), \
                  so it refuses its tool calls"
             ));
+        }
+        if let Some(why) = state.rejected.get(tool) {
+            return Some(format!(
+                "OpenMoat refuses tool `{tool}` of MCP server `{server}`: {why}"
+            ));
+        }
+        if let Some(why) = self.server_hold(&state) {
+            return Some(why);
         }
         if self.relisting(&mut state) {
             return Some(format!(

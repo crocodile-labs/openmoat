@@ -17,6 +17,7 @@ fn old_lock(home: &Home, binary: &Path) {
         digest: "00".to_owned(),
         shown: json!({"type": "local", "command": ["db"],
             "environment": {"API_KEY": "kept-secret-value"}}),
+        provenance: None,
     };
     lock.mcp_servers = Some(Pins::from([("/c/opencode.json#/mcp/db".to_owned(), pin)]));
     std::fs::write(

@@ -372,7 +372,8 @@
       "properties": {
         "trust_first_sight": { "description": "Pin a new server's first tool listing unseen (ADR-032). Default false.", "type": "boolean" },
         "browser_open": { "description": "A browser MCP page open is a `fetch` (the default) or a `net` connection (ADR-047).", "enum": ["fetch", "net"] },
-        "flow_trusted": { "description": "Since 0.16.0: servers whose results may reach other servers' acting tools unreviewed (ADR-058).", "$ref": "#/$defs/strings" }
+        "flow_trusted": { "description": "Since 0.16.0: servers whose results may reach other servers' acting tools unreviewed (ADR-058).", "$ref": "#/$defs/strings" },
+        "allow_sampling": { "description": "Since 0.26.0: pass wrapped servers' sampling requests to the agent (ADR-114). Default false.", "type": "boolean" }
       }
     },
     "checkDiff": {

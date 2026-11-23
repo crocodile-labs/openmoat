@@ -119,6 +119,15 @@ pub fn proxy_args(entry: &Value, form: McpCommandForm) -> Option<Vec<String>> {
     Some(args)
 }
 
+/// The command line `entry`, a definition in `form`, starts its server with:
+/// the original one of a wrapped definition. `None` when it starts no local
+/// program.
+pub fn server_command(entry: &Value, form: McpCommandForm) -> Option<Vec<String>> {
+    let (command, args) = form::parts(entry, form)?;
+    let (program, rest) = original(&command, &args).unwrap_or((command, args));
+    Some(std::iter::once(program).chain(rest).collect())
+}
+
 /// Wrapped `entry` given the arguments `args` for the proxy.
 fn with_proxy_args(entry: &Value, form: McpCommandForm, args: Vec<String>) -> Option<Value> {
     let (command, _) = form::parts(entry, form)?;

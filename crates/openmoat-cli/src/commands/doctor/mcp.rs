@@ -60,10 +60,11 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
                 Kind::Added => "is new",
                 Kind::Changed(_) => "changed; its tool calls are refused",
                 Kind::Removed => "was removed",
+                Kind::Recorded(_) => "runs a package release its pin does not record yet",
             };
             report.line(
                 Area::Mcp,
-                false,
+                matches!(change.kind, Kind::Recorded(_)),
                 format!(
                     "mcp servers      {} in {} {what}: {accept}",
                     crate::render::Named(&change.name),

@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use super::*;
 
 mod gaps;
+mod modern;
 mod requests;
 mod results;
 mod surface;
@@ -357,7 +358,9 @@ fn pins_that_cannot_be_saved_refuse_every_call() {
 
 #[test]
 fn other_messages_pass_through_as_read() {
+    // Sampling passes only where the policy allows it (ADR-114).
     let (relay, _) = relay(None, &Log::default());
+    let relay = relay.allowing_sampling(true);
     for line in [
         r#"{"id":1,"jsonrpc":"2.0","method":"initialize","params":{}}"#,
         r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
@@ -374,6 +377,7 @@ fn other_messages_pass_through_as_read() {
 fn the_servers_requests_to_the_host_are_recorded() {
     let log = Log::default();
     let (relay, _) = relay(None, &log);
+    let relay = relay.allowing_sampling(true);
     for method in [
         "sampling/createMessage",
         "elicitation/create",
@@ -389,7 +393,8 @@ fn the_servers_requests_to_the_host_are_recorded() {
     );
     // One that cannot be recorded is answered with an error instead.
     let save: Save = Box::new(|_| Ok(()));
-    let failing = Relay::new("docs", None, false, Box::new(Failing), save, || 0);
+    let failing =
+        Relay::new("docs", None, false, Box::new(Failing), save, || 0).allowing_sampling(true);
     let request = json!({"jsonrpc": "2.0", "id": 9, "method": "sampling/createMessage"});
     let out = failing.server_line(&request.to_string());
     let [Routed::Server(answer), Routed::Dropped(_)] = out.as_slice() else {

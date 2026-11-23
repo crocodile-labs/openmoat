@@ -25,7 +25,11 @@ use serde_json::{Value, json};
 use similar::{Algorithm, udiff::unified_diff};
 
 use super::super::pins::canonical;
+
+pub mod modern;
+
 use crate::integrity::sha256_hex;
+pub use modern::{Modern, SERVER_INFO};
 
 /// One pinned entry: the digest of the entry, and the entry to show.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -203,6 +207,9 @@ pub struct Surface {
     pub resources: Catalogue,
     #[serde(default, skip_serializing_if = "Catalogue::is_unseen")]
     pub templates: Catalogue,
+    /// What the server says of itself under MCP 2026-07-28 ([`modern`]).
+    #[serde(default, skip_serializing_if = "Modern::is_empty")]
+    pub modern: Modern,
 }
 
 /// What one `initialize` answer did to the pins.
@@ -272,7 +279,9 @@ impl Surface {
         let pin = EntryPin::of(&entry);
         let mut changed = !self.server_seen;
         self.server_seen = true;
-        if trust && self.server.is_none() && !super::has_invisible(&entry) {
+        // Accepted under 2026-07-28 with the same text: not asked again.
+        let same = self.matches_modern(&entry);
+        if (trust || same) && self.server.is_none() && !super::has_invisible(&entry) {
             self.server = Some(pin.clone());
             changed = true;
         }
@@ -347,6 +356,7 @@ impl Surface {
                 .iter()
                 .map(|k| self.catalogue_of(*k).held.len())
                 .sum::<usize>()
+            + self.modern.held_count()
     }
 
     pub fn accept_held(&mut self) {
@@ -356,6 +366,7 @@ impl Surface {
         for kind in Kind::ALL {
             self.catalogue(kind).accept_held();
         }
+        self.modern.accept_held();
     }
 
     /// What accepting each held entry changes, for a person to read.
@@ -372,6 +383,7 @@ impl Surface {
                 out.push(describe(&what, catalogue.accepted.get(name), &held.pin));
             }
         }
+        self.modern.describe_held(server, &mut out);
         out
     }
 }

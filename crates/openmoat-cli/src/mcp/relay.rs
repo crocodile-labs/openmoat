@@ -46,8 +46,22 @@
 //!   session's context (`includeContext` other than `none`) is refused; the
 //!   host's answer is passed on only to a request the server sent and the host
 //!   has not answered yet (ADR-069).
+//!
+//! Both revisions of the protocol are spoken (ADR-114, [`modern`], [`input`]):
+//! the 2025 `initialize` answer is checked as above, and under MCP 2026-07-28
+//! the `server/discover` answer is pinned the same way and every result's
+//! `_meta` `serverInfo` against the accepted identity (another one holds the
+//! server: its calls are refused). Which applies is read from what passes,
+//! never chosen once: a server that answers both is checked on each answer
+//! the host gets. A result's `inputRequests` (2026-07-28's way for a server to
+//! ask for sampling, elicitation or roots) go through the same checks as the
+//! server's own requests: sampling is refused unless the policy allows it, and
+//! a URL-mode elicitation must send the person to an `https` page on a host the
+//! policy does not deny. A tool whose schema breaks the `x-mcp-header` rules,
+//! or whose `$ref`s leave it, loop or run too deep, is left out and its calls
+//! refused (`tools/schema.rs`).
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use anyhow::Result;
@@ -57,6 +71,8 @@ use super::tools::ToolPins;
 
 mod frame;
 mod host;
+mod input;
+mod modern;
 mod server;
 mod surface;
 
@@ -131,6 +147,13 @@ pub trait Gate: Send + Sync {
     fn instructions(&self, text: &str) {
         let _ = text;
     }
+    /// Why the policy refuses to have the person sent to `url`, the page of
+    /// a URL-mode elicitation, if it does (ADR-114). The relay has already
+    /// refused one that is not `https` or names a local address.
+    fn url_refusal(&self, url: &str) -> Result<Option<String>> {
+        let _ = url;
+        Ok(None)
+    }
 }
 
 /// Saves the pins after a listing changed them.
@@ -138,6 +161,8 @@ pub type Save = Box<dyn Fn(&ToolPins) -> Result<()> + Send + Sync>;
 
 pub struct Relay {
     server: String,
+    /// The policy's `mcp.allow_sampling`: sampling requests reach the host.
+    allow_sampling: bool,
     state: Mutex<State>,
     gate: Box<dyn Gate>,
     save: Save,
@@ -167,6 +192,30 @@ struct State {
     relist: Option<server::Relist>,
     /// How many listings the relay has asked for, for their ids.
     relists: u64,
+    /// The ids ([`id_key`]) of the host's `server/discover` requests the
+    /// server has not answered yet (MCP 2026-07-28).
+    discovers: HashSet<String>,
+    /// Which revisions of MCP the host spoke.
+    spoken: Spoken,
+    /// The `serverInfo` the server's first result named in this process.
+    identity_seen: Option<Value>,
+    /// Why the server's calls are refused for the rest of this process: a
+    /// result named another `serverInfo` than the first.
+    identity_changed: Option<String>,
+    /// Tools listed with a schema OpenMoat refuses, with why (ADR-114).
+    rejected: BTreeMap<String, String>,
+}
+
+/// Which revisions of MCP the host spoke (ADR-114).
+#[derive(Default)]
+struct Spoken {
+    /// MCP 2026-07-28: a request's `_meta` named its protocol version.
+    modern: bool,
+    /// An earlier revision: the host sent `initialize`.
+    legacy: bool,
+    /// The 2026-07-28 protocol version the host's last request named, which
+    /// the relay's own requests carry.
+    protocol: Option<Value>,
 }
 
 /// Where a line goes.
@@ -206,11 +255,25 @@ impl Relay {
                 asked: HashSet::new(),
                 relist: None,
                 relists: 0,
+                discovers: HashSet::new(),
+                spoken: Spoken::default(),
+                identity_seen: None,
+                identity_changed: None,
+                rejected: BTreeMap::new(),
             }),
+            allow_sampling: false,
             gate,
             save,
             now_ms,
         }
+    }
+
+    /// Pass the server's sampling requests to the host (the policy's
+    /// `mcp.allow_sampling`); refused by default (ADR-114).
+    #[must_use]
+    pub fn allowing_sampling(mut self, allow: bool) -> Self {
+        self.allow_sampling = allow;
+        self
     }
 
     fn state(&self) -> MutexGuard<'_, State> {

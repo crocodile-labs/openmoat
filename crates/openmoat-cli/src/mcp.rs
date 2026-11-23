@@ -28,6 +28,7 @@ use crate::integrity::Lock;
 pub mod flow;
 pub mod outside;
 pub mod pins;
+pub mod provenance;
 pub mod relay;
 pub mod servers;
 pub mod startup;
@@ -117,7 +118,8 @@ pub fn review(home: &Home, lock: &Lock, hosts: &[Host], cwd: Option<&Path>) -> R
     for host in hosts {
         sources.extend(servers::sources(home, *host, cwd)?);
     }
-    let scan = servers::scan(&sources);
+    let mut scan = servers::scan(&sources);
+    provenance::fill(&mut scan, &provenance::Roots::of_user());
     let empty = Pins::new();
     let pins = lock.mcp_servers.as_ref().unwrap_or(&empty);
     Ok(Review {

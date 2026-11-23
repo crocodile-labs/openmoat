@@ -240,6 +240,27 @@ Each agent's gaps and the reasons are in
   named with what to set by hand; a goose extension of inline Python has no command to
   wrap. `openmoat status` lists the
   servers that start outside OpenMoat.
+- **The MCP gateway covers local stdio servers only.** Remote (HTTP) MCP servers, plugin
+  servers and managed MCP configuration are checked by the hook alone: their
+  definitions are pinned, their calls decided, but nothing pins what they list, holds
+  their tokens or checks where their OAuth discovery leads. A remote gateway is designed
+  as future work in [ADR-114](adr/ADR-114-mcp-2026-07-28-and-package-provenance.md)
+  (token custody, no token passthrough, SSRF-safe discovery) and not built.
+- **A package release is read offline, from what the package manager left.** A wrapped
+  or unwrapped stdio server's release is recorded when you accept it, from `npx`'s and
+  `uv tool`'s own files and an image digest on the command line
+  ([ADR-114](adr/ADR-114-mcp-2026-07-28-and-package-provenance.md)). A runner OpenMoat
+  does not read (`bunx`, `pnpm dlx`, a global install, a `node` path), an image tag
+  without a digest, or a cache that was cleared records nothing or only a tag, and a
+  release the package manager installs as the server starts is seen on the next check,
+  after that start.
+- **MCP 2026-07-28 retries need their own hook decision.** A `tools/call` that answers a
+  server's `input_required` result is a new call to the gateway; a host that does not
+  run its hook for the retry gets it refused. Sampling through a wrapped server is
+  refused unless the policy sets `mcp: { allow_sampling: true }`, and a URL-mode
+  elicitation must name an `https` page on a host the policy does not deny. A tool whose
+  schema refers to itself (`$ref` loops, a recursive tree type) or to another document is
+  refused.
 - **The hook sees an MCP call's arguments, not what the server then does.** A server
   started without `--sandbox` runs with your permissions: a tool that takes no path can
   still read any file you can and write anywhere, and neither the hook nor the gateway
