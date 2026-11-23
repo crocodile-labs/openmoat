@@ -27,8 +27,11 @@ use unix as platform;
 pub(super) use platform::own;
 
 /// How long the server has to close its output once the agent closed its
-/// input, and to exit once its output closed.
-const GRACE: Duration = Duration::from_secs(1);
+/// input, and to exit once its output closed. A server started under
+/// `openmoat run` exits through its sandbox and the run's proxy teardown, which
+/// on a busy machine takes more than a second; a server that ignores its
+/// closed input is still stopped within seconds.
+const GRACE: Duration = Duration::from_secs(5);
 
 /// How long a server asked to stop has before it is killed.
 const TERM_GRACE: Duration = Duration::from_secs(5);

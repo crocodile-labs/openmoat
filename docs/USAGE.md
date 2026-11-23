@@ -1386,8 +1386,8 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat proxy install` · `uninstall` · `status [--format json]` | run `openmoat proxy` as a user service (macOS launchd user agent, Linux systemd user unit) so it stays up; `status` reports not installed / stopped / running / drift-blocked / crashlooping. `install` and `uninstall` are person-only: run them in a terminal of your own. Not supported on Windows yet (#272) |
 | `openmoat guard --host <id> --home <dir>` | the hook entry point; agents call it, you do not. `--home` is the state directory `openmoat init` wrote into the hook; a `MOAT_HOME` that names another one makes it deny. OpenMoat's plugins also run it with `--heartbeat` as they load ([above](#did-the-agent-load-openmoats-plugin)) |
 
-When the agent closes `openmoat mcp proxy`'s input, the server has a second to close
-its output and exit; one that does not, or one whose output can no longer be passed
+When the agent closes `openmoat mcp proxy`'s input, the server has 5 seconds to close
+its output and 5 more to exit, time enough for a server started under `openmoat run`; one that does not, or one whose output can no longer be passed
 on, is sent `SIGTERM` (to its process group, on Unix), killed 5 seconds later if it
 is still running, and the proxy exits 1 with the reason on standard error (ADR-107).
 On Unix the server runs in its own process group, so what it started is stopped
