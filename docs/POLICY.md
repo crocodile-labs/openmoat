@@ -1923,7 +1923,8 @@ project `/p`; and home `/home/dev`, file names compared without case):
 
 Settings are compared one by one: a new `sandbox.read_roots` entry, a removed or wider
 `executables` pin, `require_signed_repo_policy` turned off, `unattended: defer`,
-`mcp.trust_first_sight`, a lower `defaults` verdict and the like widen.
+`mcp.trust_first_sight`, `sandbox.strict` turned off, `hooks.foreign` back to `warn`, a
+lower `defaults` verdict and the like widen.
 
 The same check runs where a policy changes: `openmoat policy upgrade` lists what an upgrade
 widens and applies it only with `--accept-widening` (without it the policy is left as it

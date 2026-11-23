@@ -274,6 +274,16 @@ fn flags(old: &Policy, new: &Policy, push: &mut impl FnMut(&str, String, Effect)
         b == crate::policy::Unattended::Defer,
         push,
     );
+    // `hold` holds every new or changed foreign hook's calls; `warn` only
+    // those whose command the policy denies (ADR-109).
+    let (a, b) = (old.foreign_hooks(), new.foreign_hooks());
+    switch(
+        "hooks.foreign",
+        a,
+        b,
+        b == crate::policy::ForeignHooks::Warn,
+        push,
+    );
     let (a, b) = (old.trust_mcp_first_sight(), new.trust_mcp_first_sight());
     switch("mcp.trust_first_sight", a, b, b, push);
     let (a, b) = (old.browser_open_is_fetch(), new.browser_open_is_fetch());
@@ -370,6 +380,10 @@ fn sandbox(old: &Policy, new: &Policy, push: &mut impl FnMut(&str, String, Effec
         y == crate::ProjectTop::Writable,
         push,
     );
+    // Strict refuses a run without every kernel feature (ADR-108): turning
+    // it off lets a weaker boundary run.
+    let (x, y) = (old.sandbox_strict(), new.sandbox_strict());
+    switch("sandbox.strict", x, y, x && !y, push);
     let (x, y) = (old.project_hook_off(), new.project_hook_off());
     switch(
         "sandbox.project_hook_off",

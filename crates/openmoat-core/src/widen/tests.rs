@@ -165,6 +165,28 @@ fn settings_are_ranked() {
     );
 }
 
+/// The settings ADR-108 and ADR-109 add: `sandbox.strict` off and
+/// `hooks.foreign: warn` are the wider values.
+#[test]
+fn strict_and_foreign_hooks_are_ranked() {
+    let strict = format!("{BASE}sandbox:\n  strict: true\nhooks:\n  foreign: hold\n");
+    let effect = |report: &Report, setting: &str| {
+        report
+            .settings
+            .iter()
+            .find(|c| c.setting == setting)
+            .map(|c| c.effect)
+    };
+    let narrowed = compare_yaml(BASE, &strict);
+    assert_eq!(effect(&narrowed, "sandbox.strict"), Some(Effect::Narrows));
+    assert_eq!(effect(&narrowed, "hooks.foreign"), Some(Effect::Narrows));
+    assert!(!narrowed.widens(), "{narrowed:#?}");
+    let widened = compare_yaml(&strict, BASE);
+    assert_eq!(effect(&widened, "sandbox.strict"), Some(Effect::Widens));
+    assert_eq!(effect(&widened, "hooks.foreign"), Some(Effect::Widens));
+    assert!(widened.widens());
+}
+
 #[test]
 fn conformance_files_are_read_as_calls() {
     let probes = fixtures(
