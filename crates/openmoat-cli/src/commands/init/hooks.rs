@@ -20,7 +20,21 @@ pub(super) fn record(
     files: &mut super::Writers<'_>,
 ) -> Result<()> {
     let cwd = std::env::current_dir().ok();
-    let recorded = crate::hook_ledger::record_current(home, binary, cwd.as_deref(), hold)?;
+    // The ledger classifies each command with the person's policy. One that
+    // does not load (a malformed overlay) makes the guard deny every call
+    // until it is fixed, so `init` still finishes: it records nothing, keeps
+    // the ledger it had, and says why, as `status` and `doctor` do.
+    let recorded = match crate::hook_ledger::record_current(home, binary, cwd.as_deref(), hold) {
+        Ok(recorded) => recorded,
+        Err(e) => {
+            writeln!(
+                files.out,
+                "! other hooks      not recorded: {e:#}; fix the policy and run `openmoat \
+                 init` again"
+            )?;
+            return Ok(());
+        }
+    };
     writeln!(
         files.detail,
         "✔ other hooks      {} hook commands and git programs recorded; a new or changed one \

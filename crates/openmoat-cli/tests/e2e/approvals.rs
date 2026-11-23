@@ -212,9 +212,14 @@ fn permanent_overlay_rules_merge_into_the_policy() {
         "policy.d/approved.yaml",
         "version: 1\nallow:\n  - id: evil\n    shell: ['*']\n",
     );
-    assert_eq!(
-        sb.moat_as_person(&["init", "--yes"]).status.code(),
-        Some(OK)
+    let init = sb.moat_as_person(&["init", "--yes"]);
+    assert_eq!(init.status.code(), Some(OK), "{}", text(&init));
+    // The foreign-hook ledger classifies with the policy, which does not
+    // load: init finishes and says so (ADR-109).
+    assert!(
+        text(&init).contains("other hooks      not recorded"),
+        "{}",
+        text(&init)
     );
     let d = decide(&sb, "any", "terraform apply");
     assert_eq!(
