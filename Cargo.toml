@@ -98,6 +98,30 @@ missing_panics_doc = "allow"
 [profile.dev.package.sha2]
 opt-level = 3
 
+# Every `openmoat` process parses the policy (serde-saphyr, granit-parser),
+# compiles and matches its globs (globset, regex-*, aho-corasick, memchr) and
+# opens the audit log (SQLite): unoptimised, that is most of each debug call's
+# time, and the end-to-end tests make thousands of calls. Only speed changes:
+# debug assertions and overflow checks stay on.
+[profile.dev.package.serde-saphyr]
+opt-level = 3
+[profile.dev.package.granit-parser]
+opt-level = 3
+[profile.dev.package.globset]
+opt-level = 3
+[profile.dev.package.regex]
+opt-level = 3
+[profile.dev.package.regex-automata]
+opt-level = 3
+[profile.dev.package.regex-syntax]
+opt-level = 3
+[profile.dev.package.aho-corasick]
+opt-level = 3
+[profile.dev.package.memchr]
+opt-level = 3
+[profile.dev.package.libsqlite3-sys]
+opt-level = 3
+
 [profile.release]
 lto = "thin"
 codegen-units = 1
