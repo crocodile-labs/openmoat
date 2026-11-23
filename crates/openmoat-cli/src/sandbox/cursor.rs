@@ -11,8 +11,10 @@
 //!   `additionalReadPaths` and the system paths tools need (libraries,
 //!   toolchains, certificate stores), and of `~/.ssh` only `known_hosts`;
 //! - no key denies a path, so nothing can be closed inside a granted one: a
-//!   grant with a denied path below it is left out, and what the policy denies
-//!   inside the workspace stays open to sandboxed commands;
+//!   grant in the home directory with a denied path below it is left out, a
+//!   system folder (`/etc`, holding `/etc/shadow`) is granted whole with its
+//!   denied paths reported, and what the policy denies inside the workspace
+//!   stays open to sandboxed commands;
 //! - `networkPolicy` allows only the listed domains when `default` is `deny`,
 //!   `deny` wins over `allow`, and private and metadata addresses are blocked;
 //! - a project's own `.cursor/sandbox.json` replaces `readBoundary` and
@@ -45,9 +47,10 @@ pub struct Generated {
     pub report: Report,
 }
 
-/// Generate `sandbox.json` for `ir`, lowered by [`super::lower_for_hosts`].
-/// `proxy_port` cannot be honoured: Cursor has no proxy setting.
-pub fn generate(ir: &Enforcement, proxy_port: Option<u16>) -> Result<Generated> {
+/// Generate `sandbox.json` for `ir`, lowered by [`super::lower_for_hosts`] for
+/// a user whose home directory is spelled as in `homes`. `proxy_port` cannot
+/// be honoured: Cursor has no proxy setting.
+pub fn generate(ir: &Enforcement, homes: &[String], proxy_port: Option<u16>) -> Result<Generated> {
     let mut report = Report::default();
     let checker = ir.checker()?;
     let open = |atom: AtomicAction| checker.check_os(&atom) == Some(Effect::Allow);
@@ -63,6 +66,7 @@ pub fn generate(ir: &Enforcement, proxy_port: Option<u16>) -> Result<Generated> 
             })
     };
     let mut reads = Grants::new(&ir.fs.read, Kind::FsRead, &mut report);
+    reads.homes = homes.to_vec();
     reads.allow_rules(&ir.fs.read, &readable, &mut report);
     for allowance in ir.allowances.iter().filter(|a| a.kind == Kind::FsRead) {
         for root in allowance.patterns.iter().filter(|p| !p.ends_with("/**")) {
@@ -93,6 +97,10 @@ struct Grants {
     denied: Vec<String>,
     /// Denied patterns that point into the workspace or anywhere, which stay open.
     open: Vec<String>,
+    /// The user's home directory spellings: a read root outside them whose
+    /// denied paths are all outside them too is a system folder, granted
+    /// whole ([`Self::grant`]).
+    homes: Vec<String>,
 }
 
 impl Grants {
@@ -102,6 +110,7 @@ impl Grants {
             granted: Vec::new(),
             denied: Vec::new(),
             open: Vec::new(),
+            homes: Vec::new(),
         };
         for rule in &access.deny {
             for pattern in split(&rule.patterns).0 {
@@ -172,6 +181,11 @@ impl Grants {
     }
 
     /// Grant `path` unless the IR denies it or a denied path lies below it.
+    /// A system folder (outside the home directory, as every denied path
+    /// below it is: `/etc` holding `/etc/shadow`) is read by nearly every
+    /// command, so it is granted whole and the denied paths in it are
+    /// reported as left to the hook; a folder of the user's (`~/.cargo`
+    /// holding `~/.cargo/credentials`) is left out instead.
     fn grant(
         &mut self,
         path: &str,
@@ -179,13 +193,38 @@ impl Grants {
         allowed: &dyn Fn(&str) -> bool,
         report: &mut Report,
     ) {
+        let below: Vec<&String> = self.denied.iter().filter(|d| is_below(d, path)).collect();
+        let in_home = |p: &str| self.homes.iter().any(|h| p == h || is_below(p, h));
         if !allowed(path) {
             report.loss(
                 self.kind,
                 rule,
                 format!("`{path}` is inside a denied path, so it is not granted"),
             );
-        } else if let Some(below) = self.denied.iter().find(|d| is_below(d, path)) {
+        } else if self.kind == Kind::FsRead
+            && !below.is_empty()
+            && !in_home(path)
+            && !below.iter().any(|d| in_home(d))
+        {
+            let names: Vec<String> = below.iter().map(|d| format!("`{d}`")).collect();
+            let patterns = below
+                .iter()
+                .flat_map(|d| [(*d).clone(), format!("{d}/**")])
+                .collect();
+            report.allowance(
+                self.kind,
+                "cursor.system-folder",
+                patterns,
+                &format!(
+                    "`{path}` is granted whole, since sandboxed commands need it, and \
+                     sandbox.json cannot deny a path inside it: sandboxed commands are kept \
+                     from {} only by the system's file permissions; the hook still denies \
+                     every call that names them",
+                    names.join(", ")
+                ),
+            );
+            push_unique(&mut self.granted, path.to_owned());
+        } else if let Some(below) = below.first() {
             report.loss(
                 self.kind,
                 rule,

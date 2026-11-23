@@ -9,7 +9,7 @@
 use openmoat_core::Kind;
 use openmoat_core::ir::Effect;
 
-use crate::sandbox::differential::{host_ir, policies, samples_in, under, unreported};
+use crate::sandbox::differential::{HOME, host_ir, policies, samples_in, under, unreported};
 use crate::sandbox::{PROJECT as HOST_PROJECT, Report};
 
 /// `report` with `${project}` in its patterns spelled as the placeholder the
@@ -58,7 +58,7 @@ fn cursor_effect(
 fn cursor_settings_deny_every_sampled_path_the_checker_denies_or_report_it() {
     for yaml in policies() {
         let ir = host_ir(yaml);
-        let generated = super::super::generate(&ir, None).expect("generates");
+        let generated = super::super::generate(&ir, &[HOME.to_owned()], None).expect("generates");
         let checker = ir.checker().expect("compiles");
         let wrong = unreported(
             &checker,

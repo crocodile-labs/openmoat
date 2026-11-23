@@ -22,7 +22,11 @@ pub static BACKEND: CursorSandbox = CursorSandbox;
 
 impl SandboxBackend for CursorSandbox {
     fn generate(&self, input: &Input<'_>, _settings: &Path) -> Result<Box<dyn Output>> {
-        Ok(Box::new(super::generate(input.ir, input.proxy_port)?))
+        Ok(Box::new(super::generate(
+            input.ir,
+            input.homes,
+            input.proxy_port,
+        )?))
     }
 
     fn undo(&self) -> Undo {

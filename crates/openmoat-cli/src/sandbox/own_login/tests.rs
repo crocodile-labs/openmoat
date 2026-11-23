@@ -234,7 +234,9 @@ fn the_host_settings_deny_every_agents_login_to_commands() {
         Some("deny")
     );
     // Cursor has no deny key: it grants no read path that holds a login.
-    let cursor = cursor::generate(&ir, None).unwrap().settings;
+    let cursor = cursor::generate(&ir, &[HOME.to_owned()], None)
+        .unwrap()
+        .settings;
     let reads = cursor["additionalReadPaths"].as_array().unwrap();
     for read in reads.iter().filter_map(|v| v.as_str()) {
         for login in &logins {

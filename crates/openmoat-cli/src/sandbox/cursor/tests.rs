@@ -11,7 +11,12 @@ mod differential;
 pub(super) fn generated(yaml: &str) -> Generated {
     let policy = Policy::parse(yaml).expect("test policy lints");
     let ir = lower_for_hosts(&policy, "/Users/me", None, Vec::new(), false).expect("lowers");
-    generate(&ir, crate::sandbox::proxy_port(&policy)).expect("generates")
+    generate(
+        &ir,
+        &["/Users/me".to_owned()],
+        crate::sandbox::proxy_port(&policy),
+    )
+    .expect("generates")
 }
 
 fn list(generated: &Generated, pointer: &str) -> Vec<String> {
@@ -74,6 +79,40 @@ fn protected_paths_are_never_granted_and_a_root_holding_one_is_left_out() {
         .iter()
         .find(|l| l.message.contains("`/Users/me/.cargo` holds a denied path"));
     assert!(loss.is_some(), "{:?}", out.report.losses);
+}
+
+/// A system folder holding a denied path (`/etc` and the system's password
+/// and host key files) stays granted, since nearly every command reads it,
+/// and its denied paths are reported as wider than the policy; a folder in
+/// the home directory holding one is left out (above).
+#[test]
+fn a_system_folder_with_a_denied_path_stays_granted_and_is_reported() {
+    let out = generated(DEFAULT_POLICY);
+    let reads = list(&out, "/additionalReadPaths");
+    for root in ["/etc", "/private/etc"] {
+        assert!(
+            reads.contains(&root.to_owned()),
+            "{root} missing: {reads:?}"
+        );
+    }
+    let allowance = out
+        .report
+        .allowances
+        .iter()
+        .find(|a| a.rule == "cursor.system-folder" && a.message.starts_with("`/etc` "))
+        .unwrap_or_else(|| panic!("{:?}", out.report.allowances));
+    assert!(
+        allowance.patterns.contains(&"/etc/shadow".to_owned()),
+        "{allowance:?}"
+    );
+    assert!(
+        !out.report
+            .losses
+            .iter()
+            .any(|l| l.message.starts_with("`/etc` ")),
+        "{:?}",
+        out.report.losses
+    );
 }
 
 #[test]
