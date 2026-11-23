@@ -47,7 +47,11 @@ solver. OpenMoat's core may depend only on `serde`, `serde-saphyr`, `globset` an
    give a kind the same default, an atom that no pattern matches which is in one
    policy and not in the same place (list, group, kind, exclusion) of the other gets
    the same verdict from both: only atoms such a pattern matches are decided, and the
-   search stops following a string once every such pattern is dead. The search also
+   search stops following a string once every such pattern that may lower a verdict
+   is dead. A change that can only hold more is not one of those: a pattern added to
+   a deny group, or to a review group where the kind's default is not `deny`; an
+   exclusion taken out of such a group; an exclusion of such a group the old policy
+   does not have (`/usr/**` without `/usr/local/**` in a new review group). The search also
    stops following a string once the least verdict the new policy can still give it
    is at least the greatest the old one can (a deny pattern that matches whatever
    follows, an allow that does). Whole calls, the costly part, are decided in the

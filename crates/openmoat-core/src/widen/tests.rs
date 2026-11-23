@@ -165,6 +165,44 @@ fn settings_are_ranked() {
     );
 }
 
+/// A review group the old policy lacks, with an exclusion, only holds more
+/// where the kind's default is not `deny`: proven, without a widening.
+#[test]
+fn a_new_review_group_with_an_exclusion_is_proven_to_narrow() {
+    let new = format!(
+        "{BASE}review:\n  - id: system\n    fs.write: ['/usr/**', '!/usr/local/**']\n    \
+         fs.read: ['/etc/**', '!/etc/hosts']\n"
+    );
+    let report = compare_yaml(BASE, &new);
+    assert!(!report.widens(), "{:#?}", report.widenings);
+    assert_eq!(outcome(&report, "fs.write"), Outcome::Proven);
+    assert_eq!(outcome(&report, "fs.read"), Outcome::Proven);
+}
+
+/// Where the default is `deny`, a review rule lets through what the default
+/// denied: the search still finds it, and an exclusion added to a deny group
+/// still widens.
+#[test]
+fn a_review_rule_under_a_deny_default_and_a_new_exclusion_widen() {
+    let new = format!("{BASE}review:\n  - id: some-hosts\n    net: ['example.org']\n");
+    let report = compare_yaml(BASE, &new);
+    assert_eq!(outcome(&report, "net"), Outcome::Widens);
+    assert!(
+        report
+            .widenings
+            .iter()
+            .any(|w| w.case.contains("example.org") && w.after == Verdict::Review),
+        "{:#?}",
+        report.widenings
+    );
+    let new = BASE.replace(
+        "'!~/.ssh/known_hosts'",
+        "'!~/.ssh/known_hosts', '!~/.ssh/config'",
+    );
+    let report = compare_yaml(BASE, &new);
+    assert_eq!(outcome(&report, "fs.read"), Outcome::Widens);
+}
+
 /// The settings ADR-108 and ADR-109 add: `sandbox.strict` off and
 /// `hooks.foreign: warn` are the wider values.
 #[test]

@@ -28,6 +28,8 @@ use crate::engine::{CompiledPolicy, Section};
 use crate::kind::Kind;
 use crate::verdict::Verdict;
 
+mod differing;
+
 /// Most product states one search visits before it gives up unproven.
 const MAX_STATES: usize = 250_000;
 /// Most widenings one search reports: one per distinct pair of deciding rules.
@@ -197,34 +199,6 @@ enum Live {
 }
 
 impl Side {
-    /// Every matcher of every list, keyed by where it stands: section, group,
-    /// list (bare lists after the others) and whether it excludes.
-    fn placed(&self) -> BTreeSet<(usize, String, usize, bool, usize)> {
-        let mut out = BTreeSet::new();
-        for (s, groups) in &self.sections {
-            let section = Section::ALL.iter().position(|x| x == s).unwrap_or_default();
-            for g in groups {
-                for (n, list) in g.lists.iter().chain(g.bare.iter().flatten()).enumerate() {
-                    for (neg, ms) in [(false, &list.pos), (true, &list.neg)] {
-                        out.extend(ms.iter().map(|m| (section, g.id.clone(), n, neg, *m)));
-                    }
-                }
-            }
-        }
-        out
-    }
-
-    /// The matchers whose place differs between `self` and `other`: a subject
-    /// none of them matches gets the same verdict from both, when the defaults
-    /// agree. `None` when they do not: every subject may differ.
-    fn differing(&self, other: &Self) -> Option<BTreeSet<usize>> {
-        if self.default != other.default {
-            return None;
-        }
-        let (a, b) = (self.placed(), other.placed());
-        Some(a.symmetric_difference(&b).map(|(.., m)| *m).collect())
-    }
-
     fn groups(&self, section: Section) -> impl Iterator<Item = &Group> {
         self.sections
             .iter()
@@ -490,8 +464,8 @@ pub(super) fn search(
                 stop_at = stop_at.min(states.len() + MORE_AFTER_FOUND);
             }
         }
-        // No continuation can be decided differently: every pattern that is
-        // not in both policies in the same place can no longer match.
+        // No continuation can be decided less strictly: every changed
+        // pattern that may lower a verdict can no longer match (`differing.rs`).
         if differing
             .as_ref()
             .is_some_and(|d| !state.iter().any(|(m, _)| d.contains(&(*m as usize))))
