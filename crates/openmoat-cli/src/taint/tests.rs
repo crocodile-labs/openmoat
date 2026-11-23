@@ -476,6 +476,7 @@ impl Covering {
             taint: Taint {
                 secrets: Vec::new(),
                 untrusted: Some(UNTRUSTED.to_owned()),
+                ..Taint::default()
             },
             untrusted_last_ms: Some(1_000),
             untrusted_last_row: Some(read_row.0),

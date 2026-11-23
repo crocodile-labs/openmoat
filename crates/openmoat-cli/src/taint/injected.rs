@@ -11,7 +11,7 @@ use std::cell::RefCell;
 
 use anyhow::{Context as _, Result};
 use openmoat_audit::{NewInjected, Store, StoreError};
-use openmoat_core::{Action, CompiledPolicy, Decision, InjectedLookup, InjectedToken};
+use openmoat_core::{Action, CompiledPolicy, Decision, InjectedLookup, InjectedMap, InjectedToken};
 use openmoat_hosts::Host;
 
 use crate::home::Home;
@@ -69,11 +69,25 @@ pub fn checked(
     action: &Action,
     decision: Decision,
 ) -> Result<Decision> {
+    with_lookup(home, store, (host, session), |seen| {
+        policy.with_injected(decision, action, &FsPathResolver, seen)
+    })
+}
+
+/// `f`'s result with `session`'s fingerprints as the core's lookup, which
+/// knows nothing when the session kept none (one index probe). A lookup that
+/// fails fails the call: the guard denies.
+pub fn with_lookup<T>(
+    home: &Home,
+    store: &Store,
+    (host, session): (Host, &str),
+    f: impl FnOnce(&dyn InjectedLookup) -> T,
+) -> Result<T> {
     let held = store
         .has_injected_inputs(host.id(), session)
         .context("reading this session's injected-input fingerprints")?;
     if !held {
-        return Ok(decision);
+        return Ok(f(&InjectedMap::default()));
     }
     let seen = Seen {
         store,
@@ -82,11 +96,11 @@ pub fn checked(
         session,
         failed: RefCell::new(None),
     };
-    let decision = policy.with_injected(decision, action, &FsPathResolver, &seen);
+    let out = f(&seen);
     if let Some(error) = seen.failed.take() {
         return Err(error).context("reading this session's injected-input fingerprints");
     }
-    Ok(decision)
+    Ok(out)
 }
 
 fn fingerprint(key: &Key, token: &InjectedToken) -> String {

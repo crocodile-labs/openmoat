@@ -293,6 +293,7 @@ impl<'p> Gate<'p> {
         let taint = Taint {
             secrets: Vec::new(),
             untrusted: Some(UNTRUSTED.to_owned()),
+            ..Taint::default()
         };
         let decision = self.policy.decide(&action);
         self.policy

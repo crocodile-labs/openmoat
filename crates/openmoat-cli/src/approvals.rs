@@ -347,7 +347,8 @@ impl Default for Overlay {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum Entry {
-    Rule(RuleGroup),
+    /// Boxed: a rule group is several times the size of a directory grant.
+    Rule(Box<RuleGroup>),
     Dir(DirGrant),
 }
 
@@ -613,7 +614,7 @@ impl Overlay {
     /// returning it.
     pub fn remove(&mut self, id: &str) -> Option<Entry> {
         let entry = if let Some(index) = self.allow.iter().position(|g| g.id == id) {
-            Entry::Rule(self.allow.remove(index))
+            Entry::Rule(Box::new(self.allow.remove(index)))
         } else {
             let index = self.dirs.iter().position(|g| g.id == id)?;
             Entry::Dir(self.dirs.remove(index))

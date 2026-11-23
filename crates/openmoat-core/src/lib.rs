@@ -17,6 +17,7 @@
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
 mod action;
+mod arguments;
 pub mod attribution;
 pub mod boundary;
 pub mod canary;
@@ -39,6 +40,7 @@ mod paths;
 mod pattern;
 mod personal;
 mod policy;
+mod predicate;
 mod programs;
 mod realpath;
 mod repo;
@@ -55,6 +57,10 @@ pub mod widen;
 pub mod yaml;
 
 pub use action::{Action, AtomicAction};
+pub use arguments::{
+    Arguments, MAX_VALUE_BYTES as MAX_ARGUMENT_VALUE_BYTES, MAX_VALUES as MAX_ARGUMENT_VALUES,
+    snake as argument_key,
+};
 // The taint `Secret` (material a session read) is exported as `TaintSecret`, apart
 // from the policy's brokered `Secret`.
 pub use engine::{
@@ -80,6 +86,7 @@ pub use policy::{
     Requirement, RuleGroup, RunBoundary, RunEnv, SUPPORTED_VERSION, SandboxSettings,
     TITLE_MAX_CHARS, Unattended, WHY_MAX_CHARS, declared_version, env_name_problem,
 };
+pub use predicate::{ArgNames, Predicate, Provenance};
 pub use programs::{MapResolver, NoResolver, ProgramResolver};
 pub use realpath::{MapPathResolver, PathResolver};
 pub use repo::{REPO_RULE_PREFIX, RepoPolicy};
@@ -96,7 +103,7 @@ pub use shell::installs::package_atoms;
 pub use shell::push::Push;
 pub use shell::replaced::replaced_files;
 pub use staging::{DEFAULT_OUTSIDE_FOLDERS, DEFAULT_OUTSIDE_READS, StagingSettings};
-pub use taint::TaintSettings;
+pub use taint::{TaintSettings, TrifectaVerdict};
 pub use verdict::{Decision, Notice, OLD_REVIEW, UnknownVerdict, Verdict};
 
 /// The shipped default policy, as YAML: what `moat init` installs and what the

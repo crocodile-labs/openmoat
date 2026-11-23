@@ -346,7 +346,7 @@ fn digest(host: Host, policy: &CompiledPolicy<'_>) -> Result<String> {
 
 /// The layout of a cached fold, part of every digest: a build that keys rows
 /// another way never reads a row written this way.
-const FOLD_FORMAT: &str = "fold-2";
+const FOLD_FORMAT: &str = "fold-3";
 
 /// `parts`, each length-prefixed, so no two different lists hash alike.
 fn parts(parts: &[&str]) -> Vec<u8> {
@@ -462,7 +462,7 @@ pub fn answered(
     // this call need review.
     let secrets_only = Taint {
         secrets: session.taint.secrets.clone(),
-        untrusted: None,
+        ..Taint::default()
     };
     let with_secrets = policy.with_taint(
         untainted.clone(),

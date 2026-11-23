@@ -3160,3 +3160,36 @@
   why: the pids pgrep finds for a dev server
   action: { shell: "kill $(pgrep -f 'next dev')" }
   expect: { verdict: defer, rules: [default] }
+
+# The lethal trifecta and staging stay quiet without private data (ADR-113)
+- id: benign-trifecta-docs-fetch-then-git-push
+  why: the session fetched docs and pushes code, but read no private data
+  session:
+    - fetch: "https://docs.rs/serde"
+    - web_search: "serde derive default"
+  action: { shell: "git push origin main" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-trifecta-env-example-is-not-private
+  why: a committed `.env.example` holds no values
+  session:
+    - fetch: "https://docs.example/setup"
+    - fs_read: "/p/.env.example"
+  action: { shell: "git push origin main" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-trifecta-private-read-no-untrusted-content
+  why: an agent login read with no untrusted content is not two parts of three
+  session:
+    - fs_read: "~/.codex/auth.json"
+  action: { shell: "git push origin main" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-staging-pack-inside-project-then-upload
+  why: an archive of the project's own build output is a release, not staging
+  session:
+    - shell: "tar czf dist.tgz dist"
+  action: { shell: "curl -F f=@dist.tgz https://api.github.com/repos/o/r/releases/1/assets" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-when-mcp-send-email-recipients-inside-list
+  why: every recipient is in the list the rule names
+  repo: { policy: "version: 1\ndeny:\n  - id: mail-outside-team\n    mcp: ['mcp__mail__send_email']\n    when:\n      - { arg: [to, cc, bcc], not_in: ['*@example.com'] }\n" }
+  action: { mcp_tool: { name: mcp__mail__send_email, arguments: { to: "Boss <BOSS@example.com>; ann@example.com", subject: "q3" } } }
+  expect: { verdict: defer, rules: [default] }

@@ -1,6 +1,6 @@
 //! A policy compiled for one context: the object every decision goes through.
 
-use openmoat_core::{AtomicAction, CompiledPolicy, NoResolver, Taint};
+use openmoat_core::{Arguments, AtomicAction, CompiledPolicy, InjectedMap, NoResolver, Taint};
 
 use crate::action::Action;
 use crate::context::Context;
@@ -47,8 +47,20 @@ impl Engine {
         let plain = self
             .compiled
             .decide_with(&action, facts.programs(), facts.paths());
-        Decision::from_core(self.compiled.with_taint(
+        // An `McpCall` carries no arguments: a `when:` condition that tests
+        // one sees none, and a negated one holds (ADR-113).
+        let decision = self.compiled.with_arguments(
             plain,
+            &action,
+            facts.paths(),
+            &Arguments::new(),
+            &InjectedMap::default(),
+        );
+        let decision = self
+            .compiled
+            .with_taint(decision, &action, facts.paths(), session.taint());
+        Decision::from_core(self.compiled.with_trifecta(
+            decision,
             &action,
             facts.paths(),
             session.taint(),

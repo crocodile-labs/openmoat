@@ -44,12 +44,14 @@ fn a_session_that_read_a_secret_reaches_only_that_secrets_host() {
     let untrusted = Taint {
         secrets: Vec::new(),
         untrusted: Some("fetch docs.rs".to_owned()),
+        ..Taint::default()
     };
     assert!(tainted(&compiled, "registry.npmjs.org", 443, &untrusted).is_none());
     // A secret from a file belongs to no host: every host, registries too, is refused.
     let file = Taint {
         secrets: vec![secret(None)],
         untrusted: None,
+        ..Taint::default()
     };
     for (host, port) in [
         ("registry.npmjs.org", 443),
@@ -68,6 +70,7 @@ fn a_session_that_read_a_secret_reaches_only_that_secrets_host() {
     let owned = Taint {
         secrets: vec![secret(Some("api.example.com"))],
         untrusted: None,
+        ..Taint::default()
     };
     assert!(tainted(&compiled, "api.example.com", 443, &owned).is_none());
     assert!(tainted(&compiled, "api.github.com", 443, &owned).is_some());

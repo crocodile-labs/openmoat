@@ -92,17 +92,18 @@ impl ProtectedFolders {
         }
     }
 
-    /// A review when `atom` reads or writes a folder that holds a protected
-    /// folder (or is one); `None` otherwise.
-    pub(super) fn decide(&self, atom: &AtomicAction) -> Option<Decision> {
-        let (path, folders, verb) = match atom {
-            AtomicAction::FsRead { path } => (path, &self.reads, "reads"),
-            AtomicAction::FsWrite { path } => (path, &self.writes, "writes into"),
-            _ => return None,
+    /// The deny rules whose paths lie in the folder `atom` reads or writes,
+    /// each once; none for the home folder or above it, or a shared temporary
+    /// folder.
+    pub(super) fn rules_held(&self, atom: &AtomicAction) -> Vec<&str> {
+        let (path, folders) = match atom {
+            AtomicAction::FsRead { path } => (path, &self.reads),
+            AtomicAction::FsWrite { path } => (path, &self.writes),
+            _ => return Vec::new(),
         };
         let dir = fold(path.trim_end_matches('/'), self.case_insensitive);
         if self.homes.iter().any(|home| holds(&dir, home)) || SHARED_TEMP.contains(&dir.as_str()) {
-            return None;
+            return Vec::new();
         }
         let mut rules: Vec<&str> = Vec::new();
         for folder in folders.iter().filter(|f| holds(&dir, &f.path)) {
@@ -110,6 +111,18 @@ impl ProtectedFolders {
                 rules.push(&folder.rule);
             }
         }
+        rules
+    }
+
+    /// A review when `atom` reads or writes a folder that holds a protected
+    /// folder (or is one); `None` otherwise.
+    pub(super) fn decide(&self, atom: &AtomicAction) -> Option<Decision> {
+        let (path, verb) = match atom {
+            AtomicAction::FsRead { path } => (path, "reads"),
+            AtomicAction::FsWrite { path } => (path, "writes into"),
+            _ => return None,
+        };
+        let rules = self.rules_held(atom);
         if rules.is_empty() {
             return None;
         }

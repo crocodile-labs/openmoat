@@ -173,7 +173,32 @@
         "hook_only": {
           "description": "`deny` groups with `fs.read` or `fs.write` only: the hook applies it, the OS layers leave its paths to the other rules (ADR-034).",
           "type": "boolean"
+        },
+        "when": {
+          "description": "`deny` and `review` groups only: argument conditions, all of which must hold for the group to match a call (§2.4, ADR-113).",
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" }
         }
+      }
+    },
+    "condition": {
+      "description": "One argument condition: `arg` (optional) and exactly one test (§2.4). A positive test holds when some value passes; a `not_` test holds unless the call has values and all pass.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "arg": {
+          "description": "The argument names the test reads (snake case, or a dotted path); `*` for every value. Absent: the test's default (§2.4).",
+          "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/strings" }]
+        },
+        "under": { "description": "A path is one of these or below one (globs, `~`, `${project}`).", "$ref": "#/$defs/strings" },
+        "not_under": { "description": "A path is outside all of these, or the call names none.", "$ref": "#/$defs/strings" },
+        "host_in": { "description": "A URL's host matches one of these host globs.", "$ref": "#/$defs/strings" },
+        "host_not_in": { "description": "A URL's host matches none of these, or the call names none.", "$ref": "#/$defs/strings" },
+        "in": { "description": "A value, each address of a recipient list, matches one of these globs, ignoring case.", "$ref": "#/$defs/strings" },
+        "not_in": { "description": "A value matches none of these, or the call has none.", "$ref": "#/$defs/strings" },
+        "matches": { "description": "A whole value matches one of these globs.", "$ref": "#/$defs/strings" },
+        "not_matches": { "description": "A value matches none of these globs, or the call has none.", "$ref": "#/$defs/strings" },
+        "provenance": { "description": "`untrusted`: a host or path in a value came from untrusted output the session read (ADR-057).", "enum": ["untrusted"] }
       }
     },
     "sandbox": {
@@ -325,7 +350,9 @@
         "protected_writes": { "description": "Path globs whose writes need review once the session read untrusted content; no `!`.", "$ref": "#/$defs/strings" },
         "metadata_tools": { "description": "More MCP tools, by full name, whose results are metadata, not content (ADR-057).", "$ref": "#/$defs/strings" },
         "defined_servers": { "description": "MCP servers a configuration defines; the built-in metadata tools never belong to one.", "$ref": "#/$defs/strings" },
-        "provenance": { "description": "Taint follows written files (§4.1.1, ADR-029). Default true.", "type": "boolean" }
+        "provenance": { "description": "Taint follows written files (§4.1.1, ADR-029). Default true.", "type": "boolean" },
+        "private_paths": { "description": "Path globs whose reads count as private data for the lethal trifecta and staging (§4.6, ADR-113); no `!`.", "$ref": "#/$defs/strings" },
+        "trifecta": { "description": "What a call that can send data out gets after the session read private data and untrusted content (§4.6, ADR-113). Default review.", "enum": ["review", "deny"] }
       }
     },
     "staging": {

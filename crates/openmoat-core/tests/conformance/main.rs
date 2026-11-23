@@ -17,11 +17,12 @@ use std::path::{Path, PathBuf};
 use std::collections::BTreeMap;
 
 use openmoat_core::{
-    Action, CompiledPolicy, DEFAULT_POLICY, EvalContext, InjectedMap, MapPathResolver, MapResolver,
-    Policy, RepoPolicy, Taint, TaintSecret, Verdict, rule_id,
+    Action, Arguments, CompiledPolicy, DEFAULT_POLICY, EvalContext, InjectedMap, MapPathResolver,
+    MapResolver, Policy, RepoPolicy, Staging, Taint, TaintSecret, Verdict, rule_id,
 };
 use serde::Deserialize;
 
+mod arguments;
 mod decoys;
 mod evidence;
 mod owasp;
@@ -172,6 +173,10 @@ enum McpFixture {
         #[serde(default)]
         value_reads: Vec<String>,
         unchecked: Option<String>,
+        /// The call's arguments as the host sent them, for `when:` conditions
+        /// (ADR-113): a string or a list of strings per key.
+        #[serde(default)]
+        arguments: BTreeMap<String, arguments::ArgValue>,
     },
 }
 
@@ -184,6 +189,15 @@ struct Expect {
 }
 
 impl FixtureAction {
+    /// The arguments an MCP call of the fixture names, flattened as the CLI
+    /// flattens what a host sends.
+    fn arguments(&self) -> Arguments {
+        match &self.mcp_tool {
+            Some(McpFixture::Call { arguments, .. }) => arguments::flatten(arguments),
+            _ => Arguments::new(),
+        }
+    }
+
     fn into_action(self, id: &str) -> Action {
         let candidates = [
             self.shell.map(|command| Action::Shell { command }),
@@ -216,6 +230,7 @@ impl FixtureAction {
                     commands,
                     value_reads,
                     unchecked,
+                    ..
                 } => Action::McpTool {
                     name,
                     reads,
@@ -298,7 +313,6 @@ fn default_policy_conformance() {
     let mut failed = 0usize;
 
     for (file, fixture) in fixtures {
-        let action = fixture.action.into_action(&fixture.id);
         let resolver = MapResolver {
             resolved: fixture.resolve.clone(),
             pins: fixture.pins.clone(),
@@ -331,6 +345,8 @@ fn default_policy_conformance() {
             CompiledPolicy::compile(used, &ctx).expect("default policy must compile")
         });
         let compiled = own.as_ref().unwrap_or(&compiled);
+        let arguments = fixture.action.arguments();
+        let action = fixture.action.into_action(&fixture.id);
         let plain = compiled.decide_with(&action, &resolver, &links);
         if shared {
             decoys::never_widens(
@@ -343,6 +359,7 @@ fn default_policy_conformance() {
         }
         // Taint only tightens: the worst session there is never loosens a verdict.
         let worst = compiled.with_taint(plain.clone(), &action, &links, &worst_taint());
+        let worst = compiled.with_trifecta(worst, &action, &links, &worst_taint());
         assert!(
             worst.verdict >= plain.verdict,
             "{}: taint loosened {:?} to {:?}",
@@ -352,19 +369,27 @@ fn default_policy_conformance() {
         );
         let cwd = fixture.context.as_ref().map_or(&ctx.cwd, |c| &c.cwd);
         let mut taint = Taint::default();
+        let mut staging = Staging::default();
         let mut seen = InjectedMap::default();
         for (n, mut earlier) in fixture.session.into_iter().enumerate() {
             let output = earlier.output.take();
             let earlier = earlier.into_action(&format!("{}.session[{n}]", fixture.id));
-            taint.absorb(compiled.exposure(&earlier, cwd, &links));
+            let (exposure, collection) =
+                compiled.exposure_and_collection(&earlier, cwd, &links, &|_| false);
+            taint.absorb(exposure);
+            staging.absorb(collection);
             if let (Some(output), Some(source)) =
                 (output, compiled.output_source(&earlier, cwd, &links))
             {
                 seen.add(compiled.injected_tokens(&earlier, cwd, &output), &source);
             }
         }
-        let decision = compiled.with_taint(plain, &action, &links, &taint);
-        let decision = compiled.with_injected(decision, &action, &links, &seen);
+        // the order `openmoat guard` applies them in
+        let decision = compiled.with_injected(plain, &action, &links, &seen);
+        let decision = compiled.with_arguments(decision, &action, &links, &arguments, &seen);
+        let decision = compiled.with_taint(decision, &action, &links, &taint);
+        let decision = compiled.with_staging(decision, &action, &links, &staging, &|_| false);
+        let decision = compiled.with_trifecta(decision, &action, &links, &taint);
         let decision = decoys::checked(fixture.decoys.as_ref(), &action, decision);
         // Every rule a decision carries is the policy's or one of OpenMoat's
         // own (`openmoat_core::rule_id`), never an id written somewhere else.
@@ -416,6 +441,8 @@ fn worst_taint() -> Taint {
             host: None,
         }],
         untrusted: Some("fetch evil.example".into()),
+        private: Some("read /Users/me/.codex/auth.json".into()),
+        seen: Some("the output of `gh issue view 1`".into()),
     }
 }
 

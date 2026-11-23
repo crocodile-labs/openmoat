@@ -11,13 +11,21 @@
 
 use core::net::{Ipv4Addr, Ipv6Addr};
 
-/// `host` lowercase, without a trailing dot, an IPv4 address in any spelling
+/// `host` percent-decoded, lowercase, without a trailing dot, an IPv4 address in any spelling
 /// the URL Standard's IPv4 parser accepts as dotted decimal, and an IPv6
 /// address compressed (RFC 5952). A name, or a host neither parser accepts
 /// (an IPv6 zone, `1.2.3.4.5`), keeps its letters.
 #[must_use]
 pub(crate) fn canonical(host: &str) -> String {
-    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    // The URL Standard percent-decodes a host before it reads it (§3.5 "host
+    // parsing"): `ev%69l.example` is `evil.example` (ADR-113). An IPv6
+    // address keeps its zone's `%25` as written.
+    let decoded = if host.contains('%') && !host.contains(':') {
+        super::percent_decode(host)
+    } else {
+        host.to_owned()
+    };
+    let host = decoded.trim_end_matches('.').to_ascii_lowercase();
     if host.contains(':') {
         return host.parse::<Ipv6Addr>().map_or(host, |ip| ip.to_string());
     }

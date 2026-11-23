@@ -142,6 +142,11 @@ enum McpFixture {
         #[serde(default)]
         value_reads: Vec<String>,
         unchecked: Option<String>,
+        /// The arguments `when:` conditions read (ADR-113). The SDK's
+        /// `McpCall` does not carry them, so such a fixture is the CLI's
+        /// claim alone and is skipped here.
+        #[serde(default)]
+        arguments: Option<serde_json::Value>,
     },
 }
 
@@ -188,6 +193,7 @@ impl FixtureAction {
                     opens,
                     value_reads,
                     unchecked,
+                    ..
                 } => {
                     let call = McpCall::new(name)
                         .reads(reads)
@@ -249,6 +255,7 @@ impl FixtureAction {
                     opens,
                     value_reads,
                     unchecked,
+                    ..
                 } => core::Action::McpTool {
                     name,
                     reads,
@@ -406,7 +413,10 @@ fn engine_decision(f: &Fixture, policy: &core::Policy, cache: &mut Compiled) -> 
     }
     let action = f.action.clone().core();
     let plain = compiled.decide_with(&action, &resolver, &links);
-    compiled.with_taint(plain, &action, &links, &taint)
+    let none = (core::Arguments::new(), core::InjectedMap::default());
+    let decision = compiled.with_arguments(plain, &action, &links, &none.0, &none.1);
+    let decision = compiled.with_taint(decision, &action, &links, &taint);
+    compiled.with_trifecta(decision, &action, &links, &taint)
 }
 
 /// The SDK's decision for `f`, through its public API only.
@@ -435,7 +445,24 @@ fn every_fixture_decides_through_the_sdk_as_through_the_engine() {
     let mut vectors = Vec::new();
     let mut cache = Compiled::default();
     for f in &fixtures {
-        if f.session.iter().any(|earlier| earlier.output.is_some()) || f.decoys.is_some() {
+        // Staging is folded by the CLI from the audit log (ADR-061), and the
+        // SDK's MCP calls carry no arguments for `when:` (ADR-113).
+        let cli_only = f
+            .expect
+            .rules
+            .iter()
+            .any(|r| r == core::rule_id::STAGING_EGRESS)
+            || matches!(
+                &f.action.mcp_tool,
+                Some(McpFixture::Call {
+                    arguments: Some(_),
+                    ..
+                })
+            );
+        if f.session.iter().any(|earlier| earlier.output.is_some())
+            || f.decoys.is_some()
+            || cli_only
+        {
             continue;
         }
         let engine = engine_decision(f, &policy, &mut cache);

@@ -8,6 +8,7 @@ use crate::rule_id::INJECTED_INPUT as INJECTED_RULE;
 
 mod foreign;
 mod normalised;
+mod spelled;
 
 fn ctx() -> EvalContext {
     EvalContext {

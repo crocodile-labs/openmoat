@@ -124,6 +124,10 @@ pub(crate) struct Candidates {
     pub(crate) paths: Vec<String>,
     /// Lines of code spans: fenced blocks, inline backticks, `$ ` prompts.
     pub(crate) commands: Vec<String>,
+    /// Paths relative to the directory the output was read in (`./x`,
+    /// `../x`), as written: the engine places them against that directory
+    /// (ADR-113).
+    pub(crate) relative: Vec<String>,
 }
 
 /// The candidate tokens of `text`, its first [`MAX_SCANNED_BYTES`] only.
@@ -131,6 +135,13 @@ pub(crate) fn candidates(text: &str) -> Candidates {
     let text = prefix(text, MAX_SCANNED_BYTES);
     let mut out = Candidates::default();
     for word in words(text) {
+        // a relative path keeps its leading dots, which sentence punctuation
+        // would take off (`../x` is not `/x`)
+        let ended = word.trim_end_matches(is_edge_punctuation);
+        if (ended.starts_with("./") || ended.starts_with("../")) && ended.len() <= MAX_WORD_LEN {
+            out.relative.push(ended.to_owned());
+            continue;
+        }
         let word = word.trim_matches(is_edge_punctuation);
         if word.is_empty() || word.len() > MAX_WORD_LEN {
             continue;

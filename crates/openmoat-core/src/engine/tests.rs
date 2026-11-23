@@ -1,3 +1,4 @@
+mod arguments;
 mod defer;
 mod executed;
 mod fetch;
@@ -7,6 +8,7 @@ mod moved_dirs;
 mod personal;
 mod staging;
 mod taint;
+mod trifecta;
 mod unparseable;
 
 use super::*;

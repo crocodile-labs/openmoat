@@ -210,15 +210,23 @@ something OpenMoat claims to stop.
   already ran, and places no spec names (Gemini CLI and Qwen Code extensions, Copilot
   CLI and Codex plugins) are not read.
 
-- **Collection before a send is recorded, not decided (ADR-061, proposed).** Data that is
-  sensitive without being a secret (documents, other repositories, an export), read file by
-  file outside the project, packed and sent to a host the policy allows, is `allow` or
-  `defer` call by call. Each call's collection outside the project is folded from the audit
-  log, and a later send carries `@staging-egress <host>` (POLICY.md §4.5), but no default
-  rule names it yet: the call's reasons record it and `openmoat report` counts it, so the
-  thresholds can be measured first. A policy that adds a rule for it decides it; a
+- **Collection before a send is decided in part (ADR-061, accepted by ADR-113).** Data
+  that is sensitive without being a secret (documents, other repositories, an export),
+  read file by file outside the project and sent to a host the policy allows, is `allow`
+  or `defer` call by call. Each call's collection is folded from the audit log, and a later
+  send carries `@staging-egress <host> <trigger>` (POLICY.md §4.5): a send of a file the
+  session packed from outside reads, and any send after it wrote private data into a file,
+  need review (`staging-egress`); a send after many outside reads with nothing packed is
+  recorded and counted by `openmoat report` until its thresholds are measured. A
   collection spread over several sessions, or sent by a script the agent wrote, is not
   linked.
+- **The lethal trifecta is decided at the session, not proven per value (ADR-113).** A
+  session that read private data and content someone else may have written holds every
+  call that can send data out for review (`lethal-trifecta`, POLICY.md §4.6), whatever
+  host it goes to. It does not know which value carries what: a send that carries
+  nothing private is held too, and private data that reaches a send by a path OpenMoat
+  does not see as a way out is not. Argument conditions (`when:`, POLICY.md §2.4) can say
+  more about a known tool, from what its arguments hold.
 - **Package checks are offline and name-based (ADR-030).** `package-near-miss` compares
   each installed name with a bundled list of popular names per registry, written by
   hand and refreshed with `scripts/refresh-top-packages.py`; nothing asks a registry.

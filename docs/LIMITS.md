@@ -480,21 +480,37 @@ call.
   `$env:USERPROFILE\`, `%USERPROFILE%\`, `$HOME\`); a UNC path, `${env:USERPROFILE}`,
   another variable, and a host or path built at run time (`"ev" + "il.example"`) are not
   seen. Another spelling of a planted
-  address, a subdomain of a planted URL host and a planted command run through a wrapper
-  are linked; a host by another name, a reworded command or a relative path is not
-  ([POLICY.md §4.1.2](POLICY.md#412-injected-input)). Only the output of the shell,
+  address (a percent-encoded one too), a subdomain of a planted URL host, a planted
+  command run through a wrapper or written with its program's directory, `./` or `~`, and
+  a relative path placed against the directory it was read in are linked; a host by
+  another name, a command with its flags re-ordered or other words, and anything the
+  model paraphrases, encodes or summarises are not
+  ([POLICY.md §4.1.2](POLICY.md#412-injected-input), ADR-113). Only the output of the shell,
   fetches, searches, MCP resource reads and MCP tools is read (every tool's on Copilot), each kept up to fixed
   bounds, so a page full of decoys can push a planted host out. Fetches, searches and MCP
   calls themselves are not checked against it, and an install without the
   after-call entry (`openmoat init` adds it; Codex runs it once trusted in `/hooks`)
   links nothing
   ([ADR-057](adr/ADR-057-injected-input-and-instruction-files.md)).
-- **Sending what a session collected is recorded, not stopped.** A send after the session
-  read many files outside the project, or packed them into an archive or an encoding,
-  carries `@staging-egress` in the audit log and in `openmoat report`, but no default rule
-  decides it yet. Only reads that went through OpenMoat's hook are counted, not files a
-  script or program read on its own ([ADR-061](adr/ADR-061-staging-chain.md),
-  proposed).
+- **Sending what a session collected is held only in part.** A send of a file the session
+  packed from files outside the project, and any send after it wrote private data into a
+  file, need review (`staging-egress`); a send after many outside reads with nothing
+  packed is recorded in the audit log and `openmoat report` but not decided until its
+  thresholds are measured. A file a `Write` tool fills with private data read in an
+  earlier call is not seen as staging, and only reads that went through OpenMoat's hook
+  count, not files a script or program read on its own
+  ([ADR-061](adr/ADR-061-staging-chain.md), [ADR-113](adr/ADR-113-trifecta-staging-and-argument-conditions.md)).
+- **The lethal trifecta needs all three parts in one session.** After private data and
+  untrusted content, a call that can send data out needs review (`lethal-trifecta`), but
+  private data read in one session and sent from another is not linked, `openmoat run`'s
+  proxy applies session taint only, and a way out OpenMoat does not know (a program that
+  uploads under another name) is not the third part
+  ([POLICY.md §4.6](POLICY.md#46-the-lethal-trifecta)).
+- **Argument conditions read what the host sends.** A `when:` condition sees an MCP call's
+  arguments as the payload carries them: a server that takes recipients from its own state
+  or resolves a contact name to an address is not seen, and a key the condition does not
+  name holds a negated condition rather than passing it
+  ([POLICY.md §2.4](POLICY.md#24-argument-conditions-when)).
 - **The container check reads the flags as written.** `container-host` matches the
   options a `docker`, `podman` or `nerdctl` command line shows; another spelling, or the
   same options in a compose file or a script, is not caught by it

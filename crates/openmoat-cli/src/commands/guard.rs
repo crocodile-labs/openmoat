@@ -434,8 +434,14 @@ fn evaluate(
     // (ADR-057); before the grant, so a person's grant for this exact call
     // answers it.
     let session_of = (host, request.session_id.as_str());
-    let mut decision =
+    let decision =
         taint::injected::checked(&home, &store, session_of, &compiled, action, decision)?;
+    // The policy's argument conditions (ADR-113): before the grant, as any
+    // rule's review is.
+    let arguments = crate::arguments::of_mcp(request.mcp_arguments.as_deref());
+    let mut decision = taint::injected::with_lookup(&home, &store, session_of, |seen| {
+        compiled.with_arguments(decision, action, &FsPathResolver, &arguments, seen)
+    })?;
     // A grant a person made with `moat allow` turns a `review` or a `defer` into an
     // `allow` (Cursor's file tools get a review for a defer, so they need it); a deny stays a deny.
     if matches!(decision.verdict, Verdict::Review | Verdict::Defer)
@@ -515,6 +521,9 @@ fn evaluate(
         &session.staging,
         &taint::is_dir,
     );
+    // Private data, untrusted content and a way out in one session (ADR-113);
+    // after the grant, which did not see the session's reads.
+    let decision = compiled.with_trifecta(decision, action, &FsPathResolver, &session.taint);
     // Code this session wrote, run with no OS sandbox below the hook; only
     // tightens (ADR-039). Part of the taint phase: it reads the audit log.
     let code = session_code::Call {

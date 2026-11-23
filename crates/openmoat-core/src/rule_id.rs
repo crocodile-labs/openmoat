@@ -50,6 +50,9 @@ pub const INJECTED_INPUT: &str = "injected-input";
 /// A call held because its arguments carry text another MCP server returned
 /// in this session.
 pub const MCP_CROSS_SERVER: &str = "mcp-cross-server";
+/// A call that can send data out, after the session read private data and
+/// content someone else may have written (ADR-113).
+pub const LETHAL_TRIFECTA: &str = "lethal-trifecta";
 
 /// Every decision the policy lock forces.
 pub const KERNEL_INTEGRITY: &str = "kernel-integrity";
@@ -225,6 +228,14 @@ pub const KERNEL_SELF: &str = "kernel-self";
 pub const AGENT_CREDENTIALS: &str = "agent-credentials";
 /// The default policy's rule for Kerberos ticket caches.
 pub const KERBEROS_TICKETS: &str = "kerberos-tickets";
+/// The default policy's rule for build tools' credential files.
+pub const BUILD_CREDENTIALS: &str = "build-credentials";
+/// The default policy's rule for commands that print the whole environment.
+pub const ENV_DUMP: &str = "env-dump";
+/// The default policy's rule for secret environment variables.
+pub const ENV_SECRETS: &str = "env-secrets";
+/// The default policy's review of a send after staging (ADR-061, ADR-113).
+pub const STAGING_EGRESS: &str = "staging-egress";
 /// The default policy's `allow` rule naming each agent's own temporary
 /// folders, generated from the host specs.
 pub const AGENT_TEMP: &str = "agent-temp";
@@ -239,6 +250,10 @@ pub const POLICY_RULES: &[&str] = &[
     KERBEROS_TICKETS,
     AGENT_TEMP,
     SECRETS_PATHS,
+    BUILD_CREDENTIALS,
+    ENV_DUMP,
+    ENV_SECRETS,
+    STAGING_EGRESS,
 ];
 
 /// The words of one of OpenMoat's own checks in a block message (ADR-059).
@@ -289,6 +304,7 @@ pub const BUILTIN_RULES: &[BuiltinRule] = &[
     worded(REQUEST_RULE, &words::REQUEST_RULE),
     worded(INJECTED_INPUT, &words::INJECTED_INPUT),
     worded(MCP_CROSS_SERVER, &words::MCP_CROSS_SERVER),
+    worded(LETHAL_TRIFECTA, &words::LETHAL_TRIFECTA),
     worded(KERNEL_INTEGRITY, &words::KERNEL_INTEGRITY),
     worded(KERNEL_ERROR, &words::KERNEL_ERROR),
     worded(UNGOVERNED, &words::UNGOVERNED),

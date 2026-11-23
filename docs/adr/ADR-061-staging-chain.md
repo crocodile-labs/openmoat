@@ -1,6 +1,6 @@
 # ADR-061: A send after the session collected or packed files from outside the project needs review
 
-Status: proposed · Date: 2026-11-06 · Builds on ADR-020, ADR-029, ADR-047 and ADR-052
+Status: accepted by ADR-113 (2026-11-22), which decides the `staged` trigger, adds private staging and keeps the count trigger recorded · Date: 2026-11-06 · Builds on ADR-020, ADR-029, ADR-047 and ADR-052
 
 ## Context
 

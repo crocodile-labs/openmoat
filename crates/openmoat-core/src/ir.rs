@@ -120,7 +120,8 @@ pub enum Effect {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DecideOnly {
     /// `shell`, `env.read`, `env.set`, `mcp` or `executables`; `fs.read` or
-    /// `fs.write` for `hook_only` groups.
+    /// `fs.write` for `hook_only` groups; `when` for groups with argument
+    /// conditions (ADR-113).
     pub kind: String,
     /// Rule group ids, or program names for `executables`.
     pub rules: Vec<String>,

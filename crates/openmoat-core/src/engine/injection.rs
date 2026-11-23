@@ -45,6 +45,15 @@ impl CompiledPolicy<'_> {
             ..self.ctx.clone()
         };
         let (atoms, _) = checked_atoms(action, &ctx, self.opens_as(), paths);
+        self.output_source_in(action, &atoms)
+    }
+
+    /// [`Self::output_source`] of `action`, whose checked atoms are `atoms`.
+    pub(super) fn output_source_in(
+        &self,
+        action: &Action,
+        atoms: &[AtomicAction],
+    ) -> Option<String> {
         if let Some(exposed) = atoms.iter().find(|atom| UntrustedKind::of(atom).is_some()) {
             let source = match action.shown() {
                 Action::Fetch { url } => format!("the page fetched from {url}"),
@@ -117,8 +126,11 @@ impl CompiledPolicy<'_> {
             .commands
             .iter()
             .flat_map(|line| self.commands_of(line, &ctx));
-        let paths = found.paths.iter().filter_map(|raw| {
-            let path = crate::paths::resolve(raw, &ctx.home, ctx.project.as_deref(), None)?;
+        // a relative path is placed against the directory the output was
+        // read in, as the agent would place it (ADR-113)
+        let paths = found.paths.iter().chain(&found.relative).filter_map(|raw| {
+            let path =
+                crate::paths::resolve(raw, &ctx.home, ctx.project.as_deref(), Some(&ctx.cwd))?;
             (path.len() > 1 && !self.in_project(&path)).then(|| Token {
                 kind: TokenKind::Path,
                 text: self.path_key(&path),
@@ -219,12 +231,16 @@ impl CompiledPolicy<'_> {
             // a command is compared as the classifier reads it, which also
             // yields the command a wrapper runs (`sudo`, `env`, `nohup`,
             // `sh -c`) and leaves `VAR=value` out, at keep and at check alike
+            // and with its program's directory, `./` and `~` taken out, and
+            // its paths placed against the working directory (ADR-113)
             AtomicAction::Shell { argv } => probe(
                 seen,
-                command_text(argv).map(|text| Token {
-                    kind: TokenKind::Command,
-                    text,
-                }),
+                command_texts(argv, &self.ctx)
+                    .into_iter()
+                    .map(|text| Token {
+                        kind: TokenKind::Command,
+                        text,
+                    }),
             ),
             _ => None,
         }?;
@@ -280,7 +296,7 @@ impl CompiledPolicy<'_> {
         atoms
             .iter()
             .filter_map(|atom| match atom {
-                AtomicAction::Shell { argv } => command_text(argv),
+                AtomicAction::Shell { argv } => command_texts(argv, ctx).into_iter().next(),
                 _ => None,
             })
             .map(|text| Token {
@@ -307,7 +323,7 @@ impl CompiledPolicy<'_> {
     }
 
     /// `path` as tokens compare it: lowercase where file names ignore case.
-    fn path_key(&self, path: &str) -> String {
+    pub(super) fn path_key(&self, path: &str) -> String {
         if self.ctx.case_insensitive_paths {
             path.to_lowercase()
         } else {
@@ -316,11 +332,56 @@ impl CompiledPolicy<'_> {
     }
 }
 
-/// The text a command is compared by: its words joined by spaces, when it has
-/// arguments and is long enough to be distinctive.
-fn command_text(argv: &[String]) -> Option<String> {
-    let text = argv.join(" ");
-    (argv.len() >= 2 && (MIN_COMMAND_LEN..=MAX_COMMAND_LEN).contains(&text.len())).then_some(text)
+/// The texts a command is compared by, when it has arguments and is long
+/// enough to be distinctive: its words normalised ([`normalised_words`]) and
+/// joined by spaces, which is what is kept; then, when that differs, its words
+/// as the classifier gave them, which rows kept before ADR-113 hold.
+fn command_texts(argv: &[String], ctx: &EvalContext) -> Vec<String> {
+    let fits = |text: &String| {
+        argv.len() >= 2 && (MIN_COMMAND_LEN..=MAX_COMMAND_LEN).contains(&text.len())
+    };
+    let normalised = normalised_words(argv, ctx).join(" ");
+    let written = argv.join(" ");
+    let mut out: Vec<String> = [normalised, written].into_iter().filter(fits).collect();
+    out.dedup();
+    out
+}
+
+/// A command's words in one spelling (ADR-113): the program without its
+/// directory (`/usr/bin/tar` is `tar`; lowercase where file names ignore
+/// case), a leading `./` taken off a word (`./out.tgz` is `out.tgz`), and a
+/// home path, an absolute path or one that climbs (`../x`) placed against the
+/// home and working directories. Options and other words stay as written:
+/// flags are not re-ordered, nothing is dropped.
+fn normalised_words(argv: &[String], ctx: &EvalContext) -> Vec<String> {
+    argv.iter()
+        .enumerate()
+        .map(|(n, word)| {
+            if n == 0 {
+                let program = program_name(word);
+                return if ctx.case_insensitive_paths {
+                    program.to_lowercase()
+                } else {
+                    program.to_owned()
+                };
+            }
+            let mut rest = word.as_str();
+            while let Some(tail) = rest.strip_prefix("./") {
+                rest = tail;
+            }
+            let placed = rest == "~"
+                || rest.starts_with("~/")
+                || rest.starts_with('/')
+                || rest.starts_with("../");
+            if placed
+                && let Some(path) =
+                    crate::paths::resolve(rest, &ctx.home, ctx.project.as_deref(), Some(&ctx.cwd))
+            {
+                return path;
+            }
+            rest.to_owned()
+        })
+        .collect()
 }
 
 /// One part of a call that came from untrusted content, worded as the reason
@@ -386,7 +447,7 @@ fn probe(
 /// its canonical spelling ([`crate::host::canonical`]), which tokens are kept
 /// in, then as written (lowercase, no trailing dot) when that differs, which
 /// rows kept before ADR-063 hold for an address spelled another way.
-fn host_tokens(host: &str, kinds: &[TokenKind]) -> Vec<Token> {
+pub(super) fn host_tokens(host: &str, kinds: &[TokenKind]) -> Vec<Token> {
     let canonical = crate::host::canonical(host);
     let written = host.trim_end_matches('.').to_ascii_lowercase();
     let spellings = if written == canonical {

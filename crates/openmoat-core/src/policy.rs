@@ -142,6 +142,11 @@ pub struct RuleGroup {
     /// with `net` or `fetch`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hook_only: bool,
+    /// Argument conditions (ADR-113): the group matches a call only when one
+    /// of its patterns does and every condition holds. `deny` and `review`
+    /// groups only, so a condition can only narrow what the group holds.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub when: Vec<crate::predicate::Predicate>,
 }
 
 impl RuleGroup {
@@ -689,6 +694,17 @@ impl Policy {
                 return Err(PolicyError::EmptyRule(group.id.clone()));
             }
             text::check(group)?;
+        }
+        let narrowing = self
+            .deny
+            .iter()
+            .chain(&self.repo_review)
+            .chain(&self.review);
+        for group in narrowing {
+            crate::predicate::check(group, true)?;
+        }
+        for group in self.allow.iter().chain(&self.defer) {
+            crate::predicate::check(group, false)?;
         }
         hook_only::check(self)?;
         for (name, paths) in &self.executables {

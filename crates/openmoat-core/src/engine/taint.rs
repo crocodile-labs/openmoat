@@ -41,6 +41,18 @@ pub struct Taint {
     pub secrets: Vec<Secret>,
     /// The first untrusted content the session read (`fetch docs.rs`), if any.
     pub untrusted: Option<String>,
+    /// The first private data the session read other than secret material:
+    /// an agent's or a build tool's credentials, a decoy key, the whole
+    /// environment, a file `taint.private_paths` names (ADR-113).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub private: Option<String>,
+    /// The first output the session read that someone else may have written:
+    /// what `untrusted` counts, and also a forge's issue and pull-request text
+    /// and a command's read from a host the policy does not allow
+    /// (`CompiledPolicy::output_source`, ADR-057). Not a metadata tool's
+    /// result. One part of the lethal trifecta (ADR-113).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seen: Option<String>,
 }
 
 /// Where untrusted content a session read came from: the one list of what
@@ -106,6 +118,12 @@ impl Taint {
         if self.untrusted.is_none() {
             self.untrusted = other.untrusted;
         }
+        if self.private.is_none() {
+            self.private = other.private;
+        }
+        if self.seen.is_none() {
+            self.seen = other.seen;
+        }
     }
 }
 
@@ -115,6 +133,20 @@ pub(super) fn compile_protected(
     ctx: &EvalContext,
 ) -> Result<Vec<GlobPattern>, PolicyError> {
     crate::taint::protected_writes(policy.taint.as_ref())
+        .flat_map(|p| ctx.spellings(p))
+        .map(|p| GlobPattern::compile(&p, ctx.case_insensitive_paths))
+        .collect()
+}
+
+/// The paths `policy`'s `taint.private_paths` names, compiled for `ctx`.
+pub(super) fn compile_private(
+    policy: &Policy,
+    ctx: &EvalContext,
+) -> Result<Vec<GlobPattern>, PolicyError> {
+    policy
+        .taint
+        .iter()
+        .flat_map(|t| &t.private_paths)
         .flat_map(|p| ctx.spellings(p))
         .map(|p| GlobPattern::compile(&p, ctx.case_insensitive_paths))
         .collect()
@@ -133,7 +165,7 @@ impl CompiledPolicy<'_> {
             ..self.ctx.clone()
         };
         let (atoms, _) = checked_atoms(action, &ctx, self.opens_as(), paths);
-        self.exposure_of(&atoms)
+        self.exposure_in(action, &atoms)
     }
 
     /// [`Self::exposure`] and [`Self::collection`] of one call that ran in
@@ -154,9 +186,24 @@ impl CompiledPolicy<'_> {
         };
         let (atoms, _) = checked_atoms(action, &ctx, self.opens_as(), paths);
         (
-            self.exposure_of(&atoms),
+            self.exposure_in(action, &atoms),
             self.collected(&atoms, &ctx, paths, is_dir),
         )
+    }
+
+    /// [`Self::exposure_of`] of `action`'s atoms, with the private data they
+    /// read and the output someone else may have written that `action` read
+    /// (ADR-113).
+    fn exposure_in(&self, action: &Action, atoms: &[AtomicAction]) -> Taint {
+        let mut taint = self.exposure_of(atoms);
+        taint.private = self.private_read(atoms);
+        let metadata = atoms.iter().any(|atom| {
+            matches!(atom, AtomicAction::McpTool { .. }) && self.taints(atom).is_none()
+        });
+        if !metadata {
+            taint.seen = self.output_source_in(action, atoms);
+        }
+        taint
     }
 
     /// What the checked atoms of one call exposed its session to.
@@ -170,7 +217,7 @@ impl CompiledPolicy<'_> {
                             source: atom.describe(),
                             host: None,
                         }],
-                        untrusted: None,
+                        ..Taint::default()
                     });
                 }
                 _ if self.taints(atom).is_some() => {
@@ -207,7 +254,7 @@ impl CompiledPolicy<'_> {
     /// that returns metadata, not content (a browser's tab list,
     /// `taint.metadata_tools`). Injected input still reads that result
     /// ([`Self::output_source`]): a page sets its own title and URL.
-    fn taints(&self, atom: &AtomicAction) -> Option<UntrustedKind> {
+    pub(super) fn taints(&self, atom: &AtomicAction) -> Option<UntrustedKind> {
         let kind = UntrustedKind::of(atom)?;
         match atom {
             AtomicAction::McpTool { name }
@@ -293,7 +340,7 @@ impl CompiledPolicy<'_> {
         Some(Decision::single(Verdict::Review, TAINT_RULE, reason))
     }
 
-    fn names_secret(&self, atom: &AtomicAction) -> bool {
+    pub(super) fn names_secret(&self, atom: &AtomicAction) -> bool {
         // A repository policy's rules are renamed to `repo:<id>` by `RepoPolicy::merge`,
         // so match the base id and the prefixed one; `repo_review` carries the review rules
         // merged in (ADR-022), so iterate it too.

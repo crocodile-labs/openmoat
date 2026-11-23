@@ -77,6 +77,7 @@ fn sessions_harness(a_read_secret: bool, limits: Limits) -> Harness {
                 host: None,
             }],
             untrusted: None,
+            ..Taint::default()
         }
     } else {
         Taint::default()
@@ -302,6 +303,7 @@ fn a_tunnel_opened_before_a_secret_read_is_closed_after_it() {
             host: None,
         }],
         untrusted: None,
+        ..Taint::default()
     };
     let started = std::time::Instant::now();
     assert_eq!(read_all(&mut s), "", "closed without an answer");

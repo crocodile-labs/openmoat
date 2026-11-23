@@ -164,6 +164,19 @@ fn lower_access(policy: &Policy, ctx: &EvalContext, kind: Kind, losses: &mut Vec
             access.deny.push(rule);
         }
     }
+    // A group's `when` conditions (ADR-113) read arguments an OS layer never
+    // sees: its rule applies to every access its patterns name, which is
+    // narrower than the hook, never wider.
+    let conditional = policy.deny.iter().chain(&policy.review);
+    for group in conditional.filter(|g| !g.when.is_empty() && !g.patterns(kind).is_empty()) {
+        losses.push(Loss {
+            kind,
+            rule: group.id.clone(),
+            message: "the hook applies it only when its `when` conditions hold; OS layers apply \
+                      it to every access its patterns name"
+                .to_owned(),
+        });
+    }
     access
 }
 
@@ -227,6 +240,17 @@ fn decide_only(policy: &Policy) -> Vec<DecideOnly> {
                 rules,
             });
         }
+    }
+    let conditional: Vec<String> = groups()
+        .filter(|g| !g.when.is_empty())
+        .map(|g| g.id.clone())
+        .collect();
+    if !conditional.is_empty() {
+        out.push(DecideOnly {
+            // the arguments a `when` condition reads (ADR-113)
+            kind: "when".to_owned(),
+            rules: conditional,
+        });
     }
     if !policy.executables.is_empty() {
         out.push(DecideOnly {

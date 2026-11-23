@@ -13,11 +13,12 @@
 
 use Framework::{Iso27001, OwaspLlm2025, Soc2};
 use openmoat_core::rule_id::{
-    AGENT_CREDENTIALS, DEFAULT_NET, EXECUTABLES, KERBEROS_TICKETS, KERNEL_INTEGRITY, KERNEL_SELF,
-    MCP_SERVER_CHANGED, MCP_TOOL_HELD, MCP_UNATTRIBUTED, PROJECT_SETTINGS, PROTECTED_CONTENTS,
-    PROXY_ADDRESS, PROXY_PORT, PROXY_REQUEST, PROXY_SECRET, PROXY_SECRET_ROUTE, PROXY_SESSION,
-    PROXY_SNI, PROXY_TLS, PROXY_UPSTREAM, PUSH_RUNS_LATER, PUSH_SECRET, SECRETS_PATHS,
-    SESSION_TAINT, SESSION_WRITTEN_CODE, SETTINGS_DRIFT,
+    AGENT_CREDENTIALS, BUILD_CREDENTIALS, DEFAULT_NET, ENV_DUMP, ENV_SECRETS, EXECUTABLES,
+    KERBEROS_TICKETS, KERNEL_INTEGRITY, KERNEL_SELF, LETHAL_TRIFECTA, MCP_SERVER_CHANGED,
+    MCP_TOOL_HELD, MCP_UNATTRIBUTED, PROJECT_SETTINGS, PROTECTED_CONTENTS, PROXY_ADDRESS,
+    PROXY_PORT, PROXY_REQUEST, PROXY_SECRET, PROXY_SECRET_ROUTE, PROXY_SESSION, PROXY_SNI,
+    PROXY_TLS, PROXY_UPSTREAM, PUSH_RUNS_LATER, PUSH_SECRET, SECRETS_PATHS, SESSION_TAINT,
+    SESSION_WRITTEN_CODE, SETTINGS_DRIFT, STAGING_EGRESS,
 };
 use serde::Serialize;
 
@@ -171,11 +172,11 @@ pub const GROUPS: &[Group] = &[
                environment variables and folders that hold them",
         covers: Covers::Rules(&[
             SECRETS_PATHS,
-            "build-credentials",
+            BUILD_CREDENTIALS,
             KERBEROS_TICKETS,
             AGENT_CREDENTIALS,
-            "env-secrets",
-            "env-dump",
+            ENV_SECRETS,
+            ENV_DUMP,
             "home-sweep",
             "other-home",
             "secret-names",
@@ -190,7 +191,9 @@ pub const GROUPS: &[Group] = &[
         title: "Secrets and personal data leaving the machine",
         does: "deny a known token or a brokered secret sent to a host that is not its own, \
                a payment card number sent off the machine, a push that publishes a \
-               secret, and hold for review what a session that read secret material sends out",
+               secret, and hold for review what a session that read secret material sends out, \
+               a send after it read private data and untrusted content, and a send of what it \
+               packed or copied out of private files",
         covers: Covers::Rules(&[
             "token-egress",
             "placeholder-egress",
@@ -198,6 +201,8 @@ pub const GROUPS: &[Group] = &[
             "card-egress",
             "credential-egress",
             SESSION_TAINT,
+            LETHAL_TRIFECTA,
+            STAGING_EGRESS,
             PUSH_SECRET,
             PROXY_SECRET,
             PROXY_SECRET_ROUTE,

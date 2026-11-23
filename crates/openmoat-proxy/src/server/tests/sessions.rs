@@ -32,6 +32,7 @@ fn secret_read() -> Taint {
             host: None,
         }],
         untrusted: None,
+        ..Taint::default()
     }
 }
 

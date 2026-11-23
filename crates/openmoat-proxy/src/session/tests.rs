@@ -297,6 +297,7 @@ fn taint_comes_from_the_lookup_for_that_session() {
             host: None,
         }],
         untrusted: None,
+        ..Taint::default()
     };
     let lookup = Fixed(HashMap::from([
         ("run-a", read.clone()),
@@ -324,6 +325,7 @@ impl TaintLookup for Growing {
                 })
                 .collect(),
             untrusted: None,
+            ..Taint::default()
         })
     }
 
@@ -388,6 +390,7 @@ fn without_a_version_a_recent_taint_is_looked_up_again() {
             host: None,
         }],
         untrusted: None,
+        ..Taint::default()
     });
     assert_eq!(
         sessions.taint_within("run-a", long).unwrap().secrets.len(),

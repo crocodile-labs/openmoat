@@ -349,9 +349,40 @@ pub struct TaintSettings {
     /// Absent means on; `false` turns it off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provenance: Option<bool>,
+    /// Path globs whose reads count as private data for the lethal trifecta
+    /// and staging (ADR-113), in addition to the paths of the built-in private
+    /// rules (`secrets-paths`, `agent-credentials`, …), which a policy cannot
+    /// shorten. No `!` exclusions.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub private_paths: Vec<String>,
+    /// What a call that can send data out gets once the session read private
+    /// data and untrusted content (ADR-113): `review` (absent, the default) or
+    /// `deny`. There is no value that turns it off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trifecta: Option<TrifectaVerdict>,
+}
+
+/// The verdict of the lethal trifecta (`taint.trifecta`, ADR-113).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TrifectaVerdict {
+    /// A person reviews the call.
+    #[default]
+    Review,
+    /// The call is denied.
+    Deny,
 }
 
 impl TaintSettings {
+    /// The trifecta's verdict under `settings`: `review` unless it says `deny`.
+    #[must_use]
+    pub fn trifecta_under(settings: Option<&Self>) -> crate::verdict::Verdict {
+        match settings.and_then(|s| s.trifecta).unwrap_or_default() {
+            TrifectaVerdict::Review => crate::verdict::Verdict::Review,
+            TrifectaVerdict::Deny => crate::verdict::Verdict::Deny,
+        }
+    }
+
     /// Whether file provenance is on under `settings` (the policy's `taint:`
     /// section, if any). On unless the section says `provenance: false`.
     #[must_use]
@@ -393,11 +424,23 @@ pub(crate) fn check(settings: Option<&TaintSettings>) -> Result<(), PolicyError>
 }
 
 fn check_protected_writes(settings: Option<&TaintSettings>) -> Result<(), PolicyError> {
+    check_globs(
+        "taint.protected_writes",
+        settings.iter().flat_map(|s| &s.protected_writes),
+    )?;
+    check_globs(
+        "taint.private_paths",
+        settings.iter().flat_map(|s| &s.private_paths),
+    )
+}
+
+/// Each of `globs` compiles and is not an exclusion.
+fn check_globs<'a>(rule: &str, globs: impl Iterator<Item = &'a String>) -> Result<(), PolicyError> {
     let problem = |problem: String| PolicyError::Rule {
-        rule: "taint.protected_writes".to_owned(),
+        rule: rule.to_owned(),
         problem,
     };
-    for p in settings.iter().flat_map(|s| &s.protected_writes) {
+    for p in globs {
         if p.trim_start().starts_with('!') {
             return Err(problem(format!(
                 "`{p}` is an exclusion; the list can only add paths"

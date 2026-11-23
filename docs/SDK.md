@@ -381,7 +381,10 @@ and report the ones that differ in `links`. Both examples do this.
 
 After a session reads secret material, network to any other host needs review; after it reads
 untrusted content (a fetch, a web search, an MCP result other than a browser's tab list), a
-write to a protected path needs review (session taint, [POLICY.md](POLICY.md)). Record each call after it ran and pass the
+write to a protected path needs review (session taint, [POLICY.md](POLICY.md)). After it read
+private data (a secret, an agent's or a build tool's credentials, the whole environment) and
+content someone else may have written, a call that can send data out needs review
+(`lethal-trifecta`, POLICY.md §4.6, ADR-113). Record each call after it ran and pass the
 session to the next decision. Taint only ever makes a decision stricter.
 
 ```js
@@ -428,6 +431,12 @@ A `Session` does not take what a call returned yet, so it has no injected-input 
 writes and, after a secret read, network, as above; a later command that uses a host a page
 named is not linked to the page. The conformance fixtures that give a call's output are the
 CLI's claim and are skipped by the SDK's conformance test.
+
+Staging (`staging-egress`, POLICY.md §4.5) is folded by the CLI from the audit log, so a
+`Session` does not carry it. An `McpCall` carries what its arguments name, not the arguments
+themselves: a policy's `when:` condition that reads an argument by name sees no value, so a
+negated one (`not_in`, `host_not_in`, …) holds and its deny or review applies (POLICY.md §2.4).
+The conformance fixtures of both are the CLI's and are skipped there.
 
 ## Versions
 

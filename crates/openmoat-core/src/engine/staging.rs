@@ -1,13 +1,17 @@
-//! Staging (ADR-061, proposed): what a session collected outside the project
-//! and packed, and the `@staging-egress <host>` atom a later send of data
-//! carries.
+//! Staging (ADR-061, accepted by ADR-113): what a session collected outside
+//! the project, packed, or wrote private data into, and the
+//! `@staging-egress <host> <trigger>` atom a later send carries.
 //!
 //! The caller keeps the session's history (the CLI folds it from the audit log
 //! with session taint) and folds [`CompiledPolicy::collection`] over the calls
-//! that ran. [`CompiledPolicy::with_staging`] then adds, for each host a send
+//! that ran. [`CompiledPolicy::with_staging`] then adds, for each place a send
 //! of this call goes to, the atom's decision where a rule of the policy names
-//! it, and otherwise only a reason that records it: no default rule names the
-//! atom yet, so a policy without one decides exactly as before.
+//! it, and otherwise only a reason that records it. The trigger is `private`
+//! (the session wrote private data into a file, and this call can send
+//! anything anywhere), `staged` (the send names a file the session packed
+//! from outside reads) or `collected` (the session read many files outside the
+//! project and the send carries a body). The default policy's
+//! `staging-egress` reviews the first two; `collected` stays recorded only.
 
 use serde::{Deserialize, Serialize};
 
@@ -36,11 +40,6 @@ const PACKERS: &[&str] = &[
     "base64", "base32", "xxd", "openssl", "gpg",
 ];
 
-/// Words in a tool's name that make an MCP call act rather than read.
-const ACTING: &[&str] = &[
-    "send", "post", "upload", "create", "write", "put", "publish", "share", "comment", "message",
-];
-
 /// What one session collected outside the project, folded from its calls.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -52,6 +51,10 @@ pub struct Staging {
     /// Files a packing or encoding command wrote from outside reads, newest
     /// last, at most 64.
     pub staged: Vec<String>,
+    /// Files a call that read private data wrote (`cp ~/.aws/credentials x`,
+    /// `tar czf k.tgz ~/.ssh`), newest last, at most 64 (ADR-113).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub private: Vec<String>,
 }
 
 impl Staging {
@@ -60,6 +63,12 @@ impl Staging {
         keep(&mut self.reads, other.reads, READS_KEPT, false);
         keep(&mut self.folders, other.folders, KEPT, false);
         keep(&mut self.staged, other.staged, KEPT, true);
+        keep(&mut self.private, other.private, KEPT, true);
+    }
+
+    /// Whether nothing was collected: no later send carries the atom.
+    fn is_clean(&self) -> bool {
+        self.reads.is_empty() && self.folders.is_empty() && self.private.is_empty()
     }
 
     /// The counts a reason ends with, which `openmoat report` reads back.
@@ -180,9 +189,6 @@ impl CompiledPolicy<'_> {
                 }
             }
         }
-        if out.reads.is_empty() && out.folders.is_empty() {
-            return out;
-        }
         let packers: Vec<&[String]> = atoms
             .iter()
             .filter_map(|atom| match atom {
@@ -190,24 +196,17 @@ impl CompiledPolicy<'_> {
                 _ => None,
             })
             .collect();
-        if packers.is_empty() {
+        let private = self.private_read(atoms).is_some()
+            || atoms
+                .iter()
+                .any(|atom| matches!(atom, AtomicAction::FsRead { .. }) && self.names_secret(atom));
+        if private {
+            out.private = written(atoms, &packers, ctx);
+        }
+        if (out.reads.is_empty() && out.folders.is_empty()) || packers.is_empty() {
             return out;
         }
-        // what the packer names as its archive, and what the command writes
-        // (`base64 x > /tmp/e.txt`, `gzip -c x > x.gz`)
-        let named = packers
-            .iter()
-            .filter_map(|argv| archive_of(argv))
-            .map(|archive| paths::normalise(archive, &ctx.home, ctx.project.as_deref(), &ctx.cwd));
-        let written = atoms.iter().filter_map(|atom| match atom {
-            AtomicAction::FsWrite { path } => Some(path.clone()),
-            _ => None,
-        });
-        for path in named.chain(written) {
-            if !out.staged.contains(&path) {
-                out.staged.push(path);
-            }
-        }
+        out.staged = written(atoms, &packers, ctx);
         out
     }
 
@@ -228,13 +227,13 @@ impl CompiledPolicy<'_> {
     ) -> Decision {
         // A session that read nothing outside the project sends nothing it
         // collected; skip classifying the call a second time.
-        if staging.reads.is_empty() && staging.folders.is_empty() {
+        if staging.is_clean() {
             return decision;
         }
         let (atoms, _) = checked_atoms(action, &self.ctx, self.opens_as(), paths);
         let mut state = staging.clone();
         state.absorb(self.collected(&atoms, &self.ctx, paths, is_dir));
-        if state.reads.is_empty() && state.folders.is_empty() {
+        if state.is_clean() {
             return decision;
         }
         let settings = self.policy.staging.as_ref();
@@ -250,35 +249,61 @@ impl CompiledPolicy<'_> {
         );
         let mut out = decision;
         let mut done: Vec<String> = Vec::new();
+        // private data written into a file: any send of this call
+        if let Some(file) = state.private.last() {
+            for target in self.egress_targets(action, &atoms) {
+                let what =
+                    format!("sends to {target} after this session wrote private data into {file}");
+                let detail = format!("{STAGING_ATOM} {target}: {what} {}", state.counts());
+                self.staging_atom(&mut out, &target, "private", &detail);
+                done.push(target);
+            }
+        }
         for (hosts, texts, body) in sends(action, &atoms) {
             let staged = self.names_staged(&state, &texts, &atoms);
             if staged.is_none() && !(collected && body) {
                 continue;
             }
+            let trigger = if staged.is_some() {
+                "staged"
+            } else {
+                "collected"
+            };
             for host in hosts {
                 if host::is_loopback(&host) || done.contains(&host) {
                     continue;
                 }
                 let detail = detail(&state, &host, staged.as_deref());
-                let atom = AtomicAction::Shell {
-                    argv: vec![STAGING_ATOM.to_owned(), host.clone()],
-                };
-                match self.matched_rules(&atom) {
-                    Some(hit) if matches!(hit.verdict, Verdict::Deny | Verdict::Review) => {
-                        let mut named = Decision::new(hit.verdict);
-                        for rule in &hit.rules {
-                            named.push(rule, detail.clone());
-                        }
-                        out.merge(named);
-                    }
-                    _ => out
-                        .reasons
-                        .push(format!("{detail}; recorded only, no rule decides it")),
-                }
+                self.staging_atom(&mut out, &host, trigger, &detail);
                 done.push(host);
             }
         }
         out
+    }
+
+    /// `out` with the decision of the atom `@staging-egress <target>
+    /// <trigger>` where a deny or review rule names it, and otherwise
+    /// `detail` recorded in its reasons.
+    fn staging_atom(&self, out: &mut Decision, target: &str, trigger: &str, detail: &str) {
+        let atom = AtomicAction::Shell {
+            argv: vec![
+                STAGING_ATOM.to_owned(),
+                target.to_owned(),
+                trigger.to_owned(),
+            ],
+        };
+        match self.matched_rules(&atom) {
+            Some(hit) if matches!(hit.verdict, Verdict::Deny | Verdict::Review) => {
+                let mut named = Decision::new(hit.verdict);
+                for rule in &hit.rules {
+                    named.push(rule, detail.to_owned());
+                }
+                out.merge(named);
+            }
+            _ => out
+                .reasons
+                .push(format!("{detail}; recorded only, no rule decides it")),
+        }
     }
 
     /// The staged file a send names: a path it reads, or a word of what it
@@ -358,9 +383,30 @@ fn sends<'a>(
             .next()
             .unwrap_or(name)
             .to_ascii_lowercase();
-        let acts = !writes.is_empty() || ACTING.iter().any(|w| tool.contains(w));
+        let acts = !writes.is_empty() || super::trifecta::ACTING.iter().any(|w| tool.contains(w));
         let texts = reads.iter().chain(writes).map(String::as_str).collect();
         out.push((vec![format!("mcp:{server}")], texts, acts));
+    }
+    out
+}
+
+/// What a call that packs, or reads private data, wrote: the archive a
+/// packer names and every file the command writes (`base64 x > /tmp/e.txt`,
+/// `cp ~/.aws/credentials notes/`), each once.
+fn written(atoms: &[AtomicAction], packers: &[&[String]], ctx: &EvalContext) -> Vec<String> {
+    let named = packers
+        .iter()
+        .filter_map(|argv| archive_of(argv))
+        .map(|archive| paths::normalise(archive, &ctx.home, ctx.project.as_deref(), &ctx.cwd));
+    let writes = atoms.iter().filter_map(|atom| match atom {
+        AtomicAction::FsWrite { path } => Some(path.clone()),
+        _ => None,
+    });
+    let mut out: Vec<String> = Vec::new();
+    for path in named.chain(writes) {
+        if !out.contains(&path) {
+            out.push(path);
+        }
     }
     out
 }

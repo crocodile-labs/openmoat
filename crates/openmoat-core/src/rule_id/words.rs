@@ -21,6 +21,13 @@ pub(super) const SESSION_TAINT: Words = Words {
     next: None,
 };
 
+pub(super) const LETHAL_TRIFECTA: Words = Words {
+    title: "sending data after the session read private data and untrusted content",
+    why: "private data, content someone else wrote and a way out are together how an \
+          injected instruction carries your data away",
+    next: None,
+};
+
 pub(super) const REQUEST_RULE: Words = Words {
     title: "sending a request your request rules refuse to a host you allow",
     why: "an allowed host can receive your data through an endpoint that publishes it, such as \

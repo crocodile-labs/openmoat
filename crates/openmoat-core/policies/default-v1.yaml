@@ -1701,6 +1701,19 @@ review:
     title: sending a login token or a database password off this machine
     why: whoever receives it can sign in as you, or into that database
     shell: ["@credential-egress *"]
+  # Staging (ADR-061, accepted by ADR-113). `@staging-egress <host> <trigger>`
+  # atoms on a send of a session that collected data: `staged`, the send names a
+  # file the session packed or encoded from files outside the project (`tar czf
+  # /tmp/a.tgz ~/Documents`, then `curl -F f=@/tmp/a.tgz …`); `private`, the
+  # session wrote private data into a file (`cp ~/.aws/credentials notes/`, `tar
+  # czf k.tgz ~/.ssh`) and this call can send data anywhere. `collected` (many
+  # outside reads, then a send with a body) stays recorded only: its thresholds
+  # are not yet measured (POLICY.md §4.5)
+  - id: staging-egress
+    reason: sends data after this session packed files from outside the project or wrote private data into a file
+    title: sending data the session packed or copied out of private files
+    why: collect, pack and send is how data leaves in steps that each look ordinary
+    shell: ["@staging-egress * staged $", "@staging-egress * private $"]
 
 # Installs, publishing and pushes are not listed: they match no rule, so the agent's
 # own prompt decides them like any other unlisted call (ADR-025).

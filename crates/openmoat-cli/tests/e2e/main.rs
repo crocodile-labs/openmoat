@@ -111,6 +111,7 @@ mod staging;
 mod taint;
 mod taint_answered;
 mod team;
+mod trifecta;
 mod trust;
 mod uninstall;
 mod upgrade_path;

@@ -77,6 +77,7 @@ fn ruled_on(
                 host: None,
             }],
             untrusted: None,
+            ..Taint::default()
         }
     } else {
         Taint::default()

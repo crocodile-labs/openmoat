@@ -407,7 +407,10 @@ fn change_overlay(home: &Home, args: &AllowArgs, out: &mut Deferred) -> Result<(
         })?;
         ("removed from", rule)
     } else if let Some(host) = &args.site {
-        ("added to", Entry::Rule(overlay.allow_site(host)?.clone()))
+        (
+            "added to",
+            Entry::Rule(Box::new(overlay.allow_site(host)?.clone())),
+        )
     } else {
         let dir = args
             .dir
