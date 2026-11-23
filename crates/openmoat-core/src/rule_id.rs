@@ -93,7 +93,8 @@ pub const PUSH_UNCHECKED: &str = "push-unchecked";
 /// person accepted.
 pub const MCP_SERVER_CHANGED: &str = "mcp-server-changed";
 /// A call of an agent that loads a hook command, plugin or program-running
-/// setting no person accepted since it was added or changed (ADR-109).
+/// setting no person accepted since it was added or changed, whose command
+/// the policy denies; any such one under `hooks.foreign: hold` (ADR-109).
 pub const FOREIGN_HOOK: &str = "foreign-hook";
 /// A call `openmoat mcp proxy` passed.
 pub const MCP_PROXY: &str = "mcp-proxy";

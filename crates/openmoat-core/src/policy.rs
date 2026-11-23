@@ -338,6 +338,13 @@ pub struct Policy {
     /// does not parse.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unattended: Option<Unattended>,
+    /// What a new or changed hook command, plugin hook or git program no
+    /// person accepted does to the calls of the agent that loads it
+    /// (`hooks.foreign`, ADR-109). Absent, the default: only one whose
+    /// command the policy denies changes them. Only the person's own policy
+    /// holds it: a repository policy or a pack with the key does not parse.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hooks: Option<HookSettings>,
     /// The `require:` sections of the repository policy and the packs merged
     /// in ([`Policy::add_requirement`]), read with [`Self::require`] by
     /// [`Policy::required_for`], which takes the strictest: they raise a
@@ -514,6 +521,32 @@ pub enum Unattended {
     Review,
 }
 
+/// The `hooks:` section (ADR-109).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HookSettings {
+    /// What a hook the foreign-hook ledger finds new or changed does to the
+    /// agent's calls; absent, [`ForeignHooks::Warn`].
+    #[serde(default)]
+    pub foreign: ForeignHooks,
+}
+
+/// `hooks.foreign`: what a new or changed hook command, plugin hook or git
+/// program no person accepted does to the calls of the agent that loads it
+/// (ADR-109).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ForeignHooks {
+    /// `openmoat status`, `doctor` and `watch` name it; the calls change only
+    /// while its command is one the policy denies, which denies them. The
+    /// default.
+    #[default]
+    Warn,
+    /// Every one holds the calls for review (a deny where its command is
+    /// denied) until a person accepts it.
+    Hold,
+}
+
 /// The release age `moat run` requires of new package versions when the policy
 /// does not say (ADR-030).
 pub const DEFAULT_PACKAGE_MIN_RELEASE_AGE_DAYS: u16 = 7;
@@ -573,6 +606,14 @@ impl Policy {
     #[must_use]
     pub fn unattended(&self) -> Unattended {
         self.unattended.unwrap_or_default()
+    }
+
+    /// What a new or changed foreign hook does to the agent's calls
+    /// (`hooks.foreign`, ADR-109): [`ForeignHooks::Warn`] unless the person's
+    /// own policy says `hold`.
+    #[must_use]
+    pub fn foreign_hooks(&self) -> ForeignHooks {
+        self.hooks.map(|h| h.foreign).unwrap_or_default()
     }
 
     /// Whether `moat mcp proxy` pins a new server's tools without a person

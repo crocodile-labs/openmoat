@@ -1,6 +1,7 @@
 //! The `moat doctor` lines for the foreign-hook ledger (ADR-109): hook
 //! commands, plugin hooks and git programs the agents load that no person
-//! accepted, each with the shell classifier's verdict.
+//! accepted, each with the shell classifier's verdict: a problem while it
+//! holds the agent's calls, a warning otherwise.
 
 use std::path::Path;
 
@@ -38,15 +39,19 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
         );
         return;
     }
+    // One that holds the agent's calls is a problem; one that does not (by
+    // default, any whose command is not denied) a warning, as in `status`.
     for change in &found.changes {
-        report.line(
-            Area::Hooks,
-            false,
-            format!(
-                "other hooks      {}; the agent's calls are held until `openmoat hooks accept`",
-                change.describe().replace('\n', "\n  ")
-            ),
+        let text = format!(
+            "other hooks      {}\n  `openmoat hooks accept` shows it and asks; {}",
+            change.describe().replace('\n', "\n  "),
+            change.effect(found.mode)
         );
+        if change.holds(found.mode) {
+            report.line(Area::Hooks, false, text);
+        } else {
+            report.warn(&text);
+        }
     }
 }
 

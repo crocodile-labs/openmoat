@@ -283,6 +283,18 @@ fn the_schemas_refuse_what_the_model_refuses() {
         (REPO, json!({ "version": 1, "defaults": "deny" })),
         (REPO, json!({ "version": 1, "unattended": "review" })),
         (
+            POLICY,
+            json!({ "version": 1, "hooks": { "foreign": "ask" } }),
+        ),
+        (
+            POLICY,
+            json!({ "version": 1, "hooks": { "other": "hold" } }),
+        ),
+        (
+            REPO,
+            json!({ "version": 1, "hooks": { "foreign": "hold" } }),
+        ),
+        (
             REPO,
             json!({ "version": 1, "requests": [{ "id": "a", "host": "h", "allow": ["GET /"] }] }),
         ),

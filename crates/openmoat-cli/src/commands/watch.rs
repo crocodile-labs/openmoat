@@ -22,11 +22,13 @@ use crate::exit::Code;
 use crate::home::Home;
 use crate::report::{Paths, Style};
 
+mod foreign_hooks;
 mod liveness;
 mod row;
 #[cfg(test)]
 mod tests;
 
+use foreign_hooks::ForeignHooks;
 use liveness::Liveness;
 use row::View;
 
@@ -69,7 +71,11 @@ pub fn run(args: &WatchArgs) -> Result<Code> {
         print(&mut out, &event, &view)?;
     }
     let mut liveness = Liveness::default();
+    let mut foreign = ForeignHooks::default();
     for line in liveness.look(&home, filter.host, view.style) {
+        writeln!(out, "{line}")?;
+    }
+    for line in foreign.look(&home, filter.host, view.style) {
         writeln!(out, "{line}")?;
     }
     out.flush()?;
@@ -84,6 +90,9 @@ pub fn run(args: &WatchArgs) -> Result<Code> {
         looks += 1;
         if looks.is_multiple_of(liveness::EVERY) {
             for line in liveness.look(&home, filter.host, view.style) {
+                writeln!(out, "{line}")?;
+            }
+            for line in foreign.look(&home, filter.host, view.style) {
                 writeln!(out, "{line}")?;
             }
         }

@@ -9,7 +9,8 @@ use anyhow::Result;
 use crate::home::Home;
 
 /// Record what the agents load now. An unattended `init` leaves new and
-/// changed entries for `openmoat hooks accept` (`hold`), as it leaves MCP
+/// changed entries for `openmoat hooks accept` (`hold`; what they do to the
+/// agents' calls meanwhile is the person's `hooks.foreign`), as it leaves MCP
 /// definitions, except on the first record, made when a lock without a
 /// ledger is upgraded: that blocks nothing that was there before.
 pub(super) fn record(
@@ -36,13 +37,17 @@ pub(super) fn record(
     if !recorded.held.is_empty() {
         writeln!(
             files.out,
-            "! other hooks      {} not recorded: no person at a terminal to accept them; the \
-             calls of the agents that load them are held until you run `openmoat hooks \
-             accept` in a terminal",
+            "! other hooks      {} not recorded: no person at a terminal to accept them; \
+             `openmoat status` names them until you run `openmoat hooks accept` in a terminal",
             recorded.held.len()
         )?;
         for change in &recorded.held {
-            writeln!(files.out, "  {}", change.describe().replace('\n', "\n  "))?;
+            writeln!(
+                files.out,
+                "  {}\n    {}",
+                change.describe().replace('\n', "\n  "),
+                change.effect(recorded.mode)
+            )?;
         }
     }
     Ok(())

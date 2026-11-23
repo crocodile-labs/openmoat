@@ -96,10 +96,12 @@ pub(in crate::commands) fn review_and_accept(
         writeln!(out, "{}", change.describe())?;
     }
     if !found.changes.is_empty() && !super::edit::confirm(out, "Accept these hooks? [y/N] ")? {
-        writeln!(
-            out,
-            "nothing was accepted; the calls of the agents that load them stay held"
-        )?;
+        let after = if found.holds() {
+            "the calls of the agents that load them stay held"
+        } else {
+            "`openmoat status` keeps naming them"
+        };
+        writeln!(out, "nothing was accepted; {after}")?;
         return Ok(true);
     }
     hook_ledger::accept(home, &found.changes, &found.gone)?;

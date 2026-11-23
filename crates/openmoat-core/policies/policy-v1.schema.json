@@ -94,6 +94,17 @@
     "unattended": {
       "description": "Your own policy only: what a `defer` becomes when the agent asks no one (§5.4, ADR-102). Default `defer`; `review` holds it.",
       "enum": ["defer", "review"]
+    },
+    "hooks": {
+      "description": "Your own policy only: what a new or changed hook command, plugin hook or git program no one accepted does to the agent's calls (§5.5, ADR-109).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "foreign": {
+          "description": "Default `warn`: `openmoat status`, `doctor` and `watch` name it, and only one whose command the policy denies denies the calls; `hold` holds the calls for review until `openmoat hooks accept`.",
+          "enum": ["warn", "hold"]
+        }
+      }
     }
   },
   "$defs": {

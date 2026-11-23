@@ -54,7 +54,7 @@ a path in the CLI:
 | Other hook files (Cline's `PreToolUse` files and plugins) | `OtherHooks` | the file's bytes (a directory by every file in it) |
 | The repository's git configuration | `project_settings/git_config.rs` (`programs`) | each value; id `<file>#<key>` |
 
-A file that is not JSON where JSON was expected is pinned by its bytes, so it is held
+A file that is not JSON where JSON was expected is pinned by its bytes, so it is named
 like any other change rather than skipped.
 
 Each new or changed entry is classified by the existing shell classifier under the
@@ -64,16 +64,44 @@ has no command to classify and counts as `review`.
 ### 2. What a change does
 
 While an entry the calling agent loads (or the repository's git configuration names)
-is new or differs from its pin, `openmoat guard` tightens that agent's decision with
-rule `foreign-hook`: `review`, or `deny` when the classifier denies the entry's
-command. It is applied last, after a person's grant, which cannot answer it; it only
-tightens. A host that cannot prompt receives the review as a deny, as for every
+is new or differs from its pin:
+
+- **Its command is one the classifier denies** (`curl … | sh`, a download piped to a
+  shell): `openmoat guard` denies every call of that agent with rule `foreign-hook`
+  until a person accepts it.
+- **Anything else** (a command that classifies as `review`, `defer` or `allow`, a file
+  of code with no command to classify, a `.git/config` program such as
+  `core.fsmonitor` whose value is not denied): no call's verdict changes. `openmoat
+  status` names it under "Needs your attention", `openmoat doctor` and `openmoat watch`
+  name it too, each with its verdict, the rules behind it and the fix, `openmoat hooks
+  accept`.
+- **`hooks.foreign: hold`** in the person's policy (default `warn`) holds the calls for
+  every such entry instead: `review`, or `deny` where the command is denied, as above.
+  Only the person's policy holds the key; a repository policy or a pack with it does
+  not parse (the same rule as `unattended:`, ADR-102).
+
+The tightening is applied last, after a person's grant, which cannot answer it; it
+only tightens. A host that cannot prompt receives a review as a deny, as for every
 other review. MCP tool calls held by their own pins and calls of ungoverned tools are
 decided before it and are not held by it.
 
-`openmoat status` and `openmoat doctor` name each one with its verdict and the rules
-behind it, as a problem (exit 64). `openmoat hooks list` lists the ledger and what
-waits. `openmoat hooks accept` shows each change and records it on yes: it refuses
+Why the default warns: OpenMoat denies what must never happen and otherwise stays
+quiet and leaves the call to the person. A plugin update or a project's
+`.git/config` change that adds an ordinary command is a common, legitimate event;
+holding every call of the agent for it stops the session for something the person
+will almost always accept, and teaches them to accept without looking. A command the
+policy denies is what must never happen, so it still stops the session. The program
+has usually run already either way (a `SessionStart` hook runs before any tool call),
+so the hold never prevented the run; what it adds is a stop, which `hold` keeps for a
+person who wants it.
+
+`openmoat status` and `openmoat doctor` count an entry that holds calls as a problem
+(`status` exits 64) and one that does not as a warning, which leaves the exit code
+alone, as a hook liveness warning does (ADR-104): OpenMoat is set up as it should
+be, and only the person can judge the hook. `status --format json` gives each
+entry's `holds`. `openmoat watch` prints one line when an entry appears, as it does
+for liveness. `openmoat hooks list` lists the ledger and what waits, and exits 64
+while something waits. `openmoat hooks accept` shows each change and records it on yes: it refuses
 without a terminal, with an agent among its parents (`terminal::refuse_agent`) and
 over a drifted lock; the default policy denies `openmoat hooks accept` to agents
 (`kernel-self`, attack fixtures `T9-agent-accepts-its-own-foreign-hook`,
@@ -145,11 +173,17 @@ with the fix ADR-104 gives. A matcher this code cannot read (anything but
 
 ## Consequences
 
-- A plugin update or settings edit that adds a hook is held until a person accepts
-  it; one that pipes a download to a shell is denied. The program itself may already
-  have run (a `SessionStart` hook runs before any tool call): the ledger makes the
-  change visible and stops the session's tool calls, it does not undo it. Only
-  `openmoat run` keeps such programs in a sandbox.
+- A plugin update or settings edit that adds a hook is named by `status`, `doctor`
+  and `watch` until a person accepts it; one that pipes a download to a shell denies
+  the agent's calls until then, and `hooks.foreign: hold` holds them for any. The
+  program itself may already have run (a `SessionStart` hook runs before any tool
+  call): the ledger makes the change visible, and stops the session's tool calls only
+  where it denies or holds them; it does not undo it. Only `openmoat run` keeps such
+  programs in a sandbox.
+- A new hook whose command the classifier does not deny but that does harm (a script
+  file it runs, an ordinary-looking command) is not stopped by default: it is reported,
+  and the person decides. `hooks.foreign: hold` is the setting for a machine where
+  every new hook must wait for a person.
 - Hosts and places not in a spec are not read: Gemini CLI and Qwen Code extensions,
   GitHub Copilot CLI and Codex plugins, OpenClaw and Hermes Agent plugins beyond
   OpenMoat's, and pi's and OpenCode's user extension folders. Each needs its source
@@ -157,6 +191,9 @@ with the fix ADR-104 gives. A matcher this code cannot read (anything but
 - Every guarded call reads the calling agent's hook, settings and plugin files and
   the repository's git configuration (bounded: 1 MiB a file, 256 directories a level,
   512 files a plugin directory).
-- `openmoat status` exits 64 while something waits for `openmoat hooks accept`.
+- `openmoat status` exits 64 while something that waits for `openmoat hooks accept`
+  holds the agent's calls; a warning alone leaves it at 0.
+- A policy with `hooks:` is refused by a release from before the key (unknown keys
+  are rejected), whose guard then denies every call.
 - The lock gains a section older builds ignore; a downgrade keeps working without the
   ledger.

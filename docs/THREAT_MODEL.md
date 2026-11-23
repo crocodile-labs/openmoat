@@ -193,17 +193,22 @@ something OpenMoat claims to stop.
   (`repo_git_config` in `status --format json`), reading the files as text; a hooks
   folder `runs-later` already holds (`.husky/_`, `.githooks`) and Git LFS's filters are
   left out. Each such key's value is also in the foreign-hook ledger (ADR-109): while
-  one is new or changed, every agent's calls in that repository are held for review (a
-  deny when the classifier denies the value) until a person runs `openmoat hooks
-  accept`. The program may have run by then; the hold stops what the session does next.
+  one is new or changed, `status`, `doctor` and `watch` name it until a person runs
+  `openmoat hooks accept`, and every agent's calls in that repository are denied when
+  the classifier denies the value (held for review for any value under the person's
+  `hooks.foreign: hold`). The program may have run by then; a deny stops what the
+  session does next.
 - **Other hooks and plugins run beside OpenMoat's (ADR-109).** A plugin update or a
   settings edit can add a hook command the agent runs at an event OpenMoat never sees
   (HookPry: 77% of such installs ran, none blocked). The foreign-hook ledger pins each
-  hook command, plugin hook and program-running setting the agents' specs name, and a
-  new or changed one holds the calls of the agent that loads it, `deny` when the shell
-  classifier denies its command (`foreign-hook`). It cannot undo what the hook already
-  ran, and places no spec names (Gemini CLI and Qwen Code extensions, Copilot CLI and
-  Codex plugins) are not read.
+  hook command, plugin hook and program-running setting the agents' specs name; a new
+  or changed one is named by `status`, `doctor` and `watch`, and denies the calls of
+  the agent that loads it when the shell classifier denies its command
+  (`foreign-hook`). One the classifier does not deny is reported, not held, unless the
+  person's policy says `hooks.foreign: hold`: a harmful hook with an ordinary-looking
+  command is left to the person who reads the warning. It cannot undo what the hook
+  already ran, and places no spec names (Gemini CLI and Qwen Code extensions, Copilot
+  CLI and Codex plugins) are not read.
 
 - **Collection before a send is recorded, not decided (ADR-061, proposed).** Data that is
   sensitive without being a secret (documents, other repositories, an export), read file by

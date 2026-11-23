@@ -1,7 +1,8 @@
 //! The foreign-hook ledger (ADR-109): a hook command, plugin hook or git
-//! program an agent loads that no person accepted holds the agent's calls
-//! (rule `foreign-hook`) until `openmoat hooks accept`; one the classifier
-//! denies denies them.
+//! program an agent loads that no person accepted is named by `openmoat
+//! status` until `openmoat hooks accept`; one the classifier denies denies
+//! the agent's calls (rule `foreign-hook`) until then, and the person's
+//! `hooks.foreign: hold` holds them for any.
 
 use std::path::{Path, PathBuf};
 
@@ -80,23 +81,44 @@ fn a_plugin_update_that_pipes_a_download_to_a_shell_is_denied_until_accepted() {
     );
     assert!(!bash(&sb, &cwd).contains("foreign-hook"));
 
-    // A further change to the same hook is a new entry again.
+    // A further change to the same hook is a new entry again; its command
+    // is not denied, so it is named and the calls keep their verdict.
     update_plugin(&sb, "./other.sh");
-    let again = bash(&sb, &cwd);
-    assert!(again.contains("foreign-hook"), "{again}");
-    assert!(again.contains("\"ask\""), "{again}");
+    assert!(!bash(&sb, &cwd).contains("foreign-hook"));
+    let status = sb.moat(&["status"]);
+    assert!(
+        text(&status).contains("is new (not accepted)"),
+        "{}",
+        text(&status)
+    );
+}
+
+/// `status` in the repository, where its git configuration is read.
+fn status_in(sb: &Sandbox, cwd: &Path, format: &[&str]) -> String {
+    text(&output(
+        sb.command().arg("status").args(format).current_dir(cwd),
+        None,
+    ))
 }
 
 #[test]
-fn a_changed_git_fsmonitor_holds_calls_for_review_until_accepted() {
+fn a_changed_git_fsmonitor_is_named_but_does_not_hold_calls() {
     let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
     let cwd = sb.project();
     let config = cwd.join(".git/config");
     std::fs::write(&config, "[core]\n\tfsmonitor = ./.git/watch.sh\n").unwrap();
-    // A program git runs is held whatever its verdict: a person looks at it.
-    let held = bash(&sb, &cwd);
-    assert!(held.contains("foreign-hook"), "{held}");
-    assert!(held.contains("core.fsmonitor"), "{held}");
+    // Its command is not denied: the calls keep their verdict, and `status`
+    // names it with its verdict and the fix.
+    assert!(!bash(&sb, &cwd).contains("foreign-hook"));
+    let status = status_in(&sb, &cwd, &[]);
+    assert!(status.contains("core.fsmonitor"), "{status}");
+    assert!(status.contains("is new (not accepted)"), "{status}");
+    assert!(status.contains("calls are not held"), "{status}");
+    assert!(status.contains("openmoat hooks accept"), "{status}");
+    let json: serde_json::Value =
+        serde_json::from_str(&status_in(&sb, &cwd, &["--format", "json"])).unwrap();
+    let entries = json["foreign_hooks"].as_array().unwrap();
+    assert!(entries.iter().any(|e| e["holds"] == false), "{entries:?}");
 
     let accepted = output(
         sb.command()
@@ -106,11 +128,37 @@ fn a_changed_git_fsmonitor_holds_calls_for_review_until_accepted() {
         Some("y\n"),
     );
     assert_eq!(accepted.status.code(), Some(OK), "{}", text(&accepted));
-    assert!(!bash(&sb, &cwd).contains("foreign-hook"));
+    assert!(!status_in(&sb, &cwd, &[]).contains("core.fsmonitor"));
 
     std::fs::write(&config, "[core]\n\tfsmonitor = ./.git/other.sh\n").unwrap();
-    let changed = bash(&sb, &cwd);
+    assert!(!bash(&sb, &cwd).contains("foreign-hook"));
+    let changed = status_in(&sb, &cwd, &[]);
     assert!(changed.contains("changed (not accepted)"), "{changed}");
+}
+
+/// `hooks.foreign: hold` in the person's policy restores the hold: any new
+/// or changed one holds the agent's calls for review until accepted.
+#[test]
+fn the_persons_policy_can_hold_calls_for_any_new_hook() {
+    let sb = Sandbox::installed(&[&dir_of(Host::ClaudeCode)]);
+    let cwd = sb.project();
+    let path = sb.home.join(".moat/policy.yaml");
+    let mut policy = std::fs::read_to_string(&path).unwrap();
+    policy.push_str("\nhooks:\n  foreign: hold\n");
+    std::fs::write(&path, policy).unwrap();
+    let repinned = sb.moat_as_person(&["doctor", "--accept"]);
+    assert_eq!(repinned.status.code(), Some(OK), "{}", text(&repinned));
+
+    update_plugin(&sb, "./fmt.sh");
+    let held = bash(&sb, &cwd);
+    assert!(held.contains("foreign-hook"), "{held}");
+    assert!(held.contains("\"ask\""), "{held}");
+    let status = sb.moat(&["status"]);
+    assert_eq!(status.status.code(), Some(USAGE), "{}", text(&status));
+
+    let accepted = sb.moat_approving(&["hooks", "accept"]);
+    assert_eq!(accepted.status.code(), Some(OK), "{}", text(&accepted));
+    assert!(!bash(&sb, &cwd).contains("foreign-hook"));
 }
 
 /// A lock from before the ledger holds nothing; the first `init` records

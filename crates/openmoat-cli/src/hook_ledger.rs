@@ -6,12 +6,14 @@
 //! A plugin update or a settings edit that adds a hook makes the agent run
 //! that hook's command with the person's permissions, at events OpenMoat may
 //! never see; git runs what `.git/config` names before any hook. OpenMoat
-//! cannot stop those programs, but it can refuse to go on as if nothing
-//! changed: while one is new or differs from its pin, `openmoat guard` holds
-//! every call of the agent that loads it for review, or denies them when the
-//! shell classifier denies the hook's command, until a person accepts it
-//! (`openmoat hooks accept`, from a terminal). `openmoat status` and
-//! `openmoat doctor` name each one with that verdict.
+//! cannot stop those programs, but it does not go on as if nothing changed:
+//! while one is new or differs from its pin, `openmoat status`, `openmoat
+//! doctor` and `openmoat watch` name it with the shell classifier's verdict
+//! on its command, until a person accepts it (`openmoat hooks accept`, from
+//! a terminal). Only one whose command the classifier denies changes the
+//! agent's calls: `openmoat guard` denies every call of the agent that loads
+//! it. The person's policy can hold the calls for every one instead
+//! (`hooks.foreign: hold`): review, or deny where the command is denied.
 //!
 //! A lock from before the ledger (`hook_ledger: None`) holds nothing: the
 //! first `openmoat init`, `openmoat hooks accept` or `openmoat doctor
@@ -24,7 +26,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use openmoat_core::rule_id::FOREIGN_HOOK;
-use openmoat_core::{Action, CompiledPolicy, Decision, Verdict};
+use openmoat_core::{Action, CompiledPolicy, Decision, ForeignHooks, Verdict};
 use openmoat_hosts::Host;
 use serde::{Deserialize, Serialize};
 
@@ -118,14 +120,34 @@ pub struct Change {
 }
 
 impl Change {
+    /// Whether it changes the calls of the agent that loads it under
+    /// `mode`: one whose command is denied always does; any does under
+    /// `hooks.foreign: hold`.
+    pub fn holds(&self, mode: ForeignHooks) -> bool {
+        self.verdict == Verdict::Deny || mode == ForeignHooks::Hold
+    }
+
+    /// What it does to the agent's calls until a person accepts it, for the
+    /// fix line under `mode`.
+    pub fn effect(&self, mode: ForeignHooks) -> &'static str {
+        if self.verdict == Verdict::Deny {
+            "until then the agent's calls are denied"
+        } else if mode == ForeignHooks::Hold {
+            "until then the agent's calls are held for review"
+        } else {
+            "the agent's calls are not held (`hooks.foreign: hold` in your policy holds them)"
+        }
+    }
+
     /// One line naming it and its verdict, then what it runs. All of it comes
     /// from the agent's files, so every line goes through
     /// [`crate::render::clean`].
     pub fn describe(&self) -> String {
-        let who = self
-            .found
-            .host
-            .map_or_else(|| "git".to_owned(), |h| h.display_name().to_owned());
+        // A git program's `what` already starts with `git config`.
+        let subject = self.found.host.map_or_else(
+            || self.found.what.clone(),
+            |h| format!("{} {}", h.display_name(), self.found.what),
+        );
         let state = if self.changed { "changed" } else { "is new" };
         let rules = if self.rules.is_empty() {
             String::new()
@@ -133,8 +155,7 @@ impl Change {
             format!(" [{}]", self.rules.join(", "))
         };
         let text = format!(
-            "{who} {} in {} {state} (not accepted); its command classifies as {}{rules}\n    {}",
-            self.found.what,
+            "{subject} in {} {state} (not accepted); its command classifies as {}{rules}\n    {}",
             self.found.file.display(),
             self.verdict.as_str(),
             shown(&self.found.commands)
@@ -155,6 +176,15 @@ pub struct Review {
     pub changes: Vec<Change>,
     /// Pins of scanned files whose entry is gone, which accepting drops.
     pub gone: Vec<String>,
+    /// The person's `hooks.foreign`: which changes hold the agent's calls.
+    pub mode: ForeignHooks,
+}
+
+impl Review {
+    /// Whether one of the changes holds the agent's calls.
+    pub fn holds(&self) -> bool {
+        self.changes.iter().any(|c| c.holds(self.mode))
+    }
 }
 
 /// How the entries `scan` found differ from `pins`, each new or changed one
@@ -176,7 +206,7 @@ pub fn compare(pins: &Pins, scan: &Scan, classify: &Classify<'_>) -> Review {
         changes.push(Change {
             found: found.clone(),
             changed: was_pinned,
-            verdict: verdict.max(Verdict::Review),
+            verdict,
             rules,
         });
     }
@@ -190,6 +220,7 @@ pub fn compare(pins: &Pins, scan: &Scan, classify: &Classify<'_>) -> Review {
         pin_count: pins.len(),
         changes,
         gone,
+        mode: ForeignHooks::default(),
     }
 }
 
@@ -224,6 +255,9 @@ pub fn review(
     let pins = lock.hook_ledger.as_ref().unwrap_or(&empty);
     let mut found = compare(pins, &scan, &|commands| classify(compiled, commands));
     found.recorded = lock.hook_ledger.is_some();
+    // A repository policy or a pack cannot hold the key, so this is the
+    // person's own setting.
+    found.mode = compiled.policy().foreign_hooks();
     found
 }
 
@@ -236,10 +270,12 @@ pub fn review_here(home: &Home, lock: &Lock, hosts: &[Host], cwd: Option<&Path>)
     Ok(review(home, lock, hosts, cwd, &compiled))
 }
 
-/// The hold for a call of `host` from `cwd`: `review`, or `deny` when the
-/// classifier denies one of the new or changed commands, while anything
-/// `host` loads, or the repository's git configuration names, is not the
-/// accepted one; `None` when nothing is, or the lock predates the ledger.
+/// The hold for a call of `host` from `cwd`, while something `host` loads,
+/// or the repository's git configuration names, is not the accepted one:
+/// `deny` when the classifier denies one of the new or changed commands;
+/// under `hooks.foreign: hold`, `review` for any other. `None` when nothing
+/// holds (a new hook whose command is not denied, by default: `status`,
+/// `doctor` and `watch` name it), or the lock predates the ledger.
 pub fn violation(
     home: &Home,
     lock: &Lock,
@@ -249,17 +285,23 @@ pub fn violation(
 ) -> Option<Decision> {
     lock.hook_ledger.as_ref()?;
     let found = review(home, lock, &[host], cwd, compiled);
-    hold(&found.changes)
+    hold(&found.changes, found.mode)
 }
 
-/// The decision that holds calls while `changes` wait for a person.
-fn hold(changes: &[Change]) -> Option<Decision> {
-    let verdict = changes.iter().map(|c| c.verdict).max()?;
+/// The decision that holds calls while those of `changes` that hold under
+/// `mode` wait for a person: the strictest of their verdicts, never weaker
+/// than `review`; `None` when none holds.
+fn hold(changes: &[Change], mode: ForeignHooks) -> Option<Decision> {
+    let holding: Vec<&Change> = changes.iter().filter(|c| c.holds(mode)).collect();
+    let verdict = holding
+        .iter()
+        .map(|c| c.verdict.max(Verdict::Review))
+        .max()?;
     let mut decision = Decision::new(verdict);
     decision.rules.push(FOREIGN_HOOK.to_owned());
     decision
         .reasons
-        .extend(changes.iter().map(Change::describe));
+        .extend(holding.iter().map(|c| c.describe()));
     decision.reasons.push(
         "a person must review it: run `openmoat hooks accept` in a terminal (`openmoat status` \
          lists them)"
@@ -318,6 +360,8 @@ pub struct Recorded {
     /// New and changed entries a person's `init` accepted over an existing
     /// ledger, which `init` names so none is accepted unseen.
     pub accepted: Vec<Change>,
+    /// The person's `hooks.foreign`: what `held` does to the agents' calls.
+    pub mode: ForeignHooks,
 }
 
 /// `init`: record what the set-up hosts load now. With `no_person`, new and
@@ -335,6 +379,7 @@ pub fn record_current(
     let hosts = crate::mcp::set_up_hosts(home, binary);
     let found = review_here(home, &lock, &hosts, cwd)?;
     let first = !found.recorded;
+    let mode = found.mode;
     let (held, accepted): (Vec<Change>, Vec<Change>) =
         found.changes.into_iter().partition(|_| no_person && !first);
     accept(home, &accepted, &found.gone)?;
@@ -346,16 +391,17 @@ pub fn record_current(
         count,
         held,
         accepted,
+        mode,
     })
 }
 
-/// The lines `status` and `doctor` print for `review`.
+/// The lines `status`, `doctor` and `hooks list` print for `review`.
 pub fn lines(review: &Review) -> Vec<String> {
     if !review.recorded {
         return vec![
             "hooks            the agents' other hook commands are not recorded yet: \
              `openmoat hooks accept` shows them and records them, so a new or changed one is \
-             held"
+             named"
                 .to_owned(),
         ];
     }

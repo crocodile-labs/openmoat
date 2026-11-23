@@ -377,9 +377,11 @@ call.
   hook command the agent runs at an event OpenMoat never sees, and git runs what a
   repository's `.git/config` names before any hook. OpenMoat cannot stop those programs
   from running; it records each one in the lock (ADR-109) and, while one is new or
-  changed, holds the calls of the agent that loads it for review, or denies them when
-  its command is one the policy denies, until a person runs `openmoat hooks accept`.
-  A `SessionStart` hook has already run by then. Places the agents' specs do not name
+  changed, names it in `openmoat status`, `doctor` and `watch` until a person runs
+  `openmoat hooks accept`. Only one whose command the policy denies changes the
+  agent's calls (they are denied); any other new hook, harmful or not, runs beside
+  them unheld unless your policy says `hooks.foreign: hold`. A `SessionStart` hook
+  has already run by then. Places the agents' specs do not name
   are not read: Gemini CLI and Qwen Code extensions, GitHub Copilot CLI and Codex
   plugins, other OpenClaw and Hermes Agent plugins, and pi's and OpenCode's user
   extension folders. Calls of tools OpenMoat does not check and MCP calls held by their

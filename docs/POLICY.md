@@ -74,6 +74,9 @@ require:                            # optional: the least protection level of ea
 
 unattended: defer                   # optional, default defer: `review` holds a defer when the agent asks no one (§5.4)
 
+hooks:                              # optional: the agents' other hooks (§5.5)
+  foreign: warn                     #   default warn: a new or changed one is named, and denies calls only when its command is denied; `hold` holds them for any
+
 mcp:                                # optional: how `openmoat mcp proxy` treats a new server (§8)
   trust_first_sight: false          # optional, default false: pin its first tool listing unseen
   browser_open: fetch               # optional, default fetch: a browser MCP page open is a `fetch` (§4); `net` keeps it `net`
@@ -1219,6 +1222,7 @@ your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat prox
 | `kernel-integrity` | deny | a file pinned by `policy.lock` changed, disappeared or was replaced by a symlink (§8); every call is denied until a person re-pins |
 | `settings-drift` | none (audit only) | recorded with the first call of a session decided while the only drift is in Claude Code settings that change no decision (§8); the call's own verdict is unchanged |
 | `mcp-server-changed` | deny | the MCP server this tool belongs to has a definition that differs from its pin, or was added since, or its agent's MCP configuration cannot be parsed (§8); only that server's tool calls are denied, until a person runs `openmoat mcp accept`. Also the audit row (host `mcp-proxy`, tool `mcp__<server>`) of a wrapped server `openmoat mcp proxy` did not start because its command line is not the one an accepted definition gives (ADR-049) |
+| `foreign-hook` | deny or review | a hook command, plugin hook or git program the agent loads is new or changed since a person ran `openmoat hooks accept`, and its command is one the policy denies (deny); with `hooks.foreign: hold`, any such one (review, or deny where denied) (§5.5, ADR-109). Every call of that agent is decided so until a person accepts it; a grant cannot answer it |
 | `mcp-proxy`, `mcp-tool-held`, `mcp-unattributed`, `mcp-server-request` | allow, deny | audit rows of `openmoat mcp proxy` (host `mcp-proxy`, with the session and call id of the hook's decision it matched): a call passed to the server; refused because the tool's or prompt's definition (title, description, input or output schema, annotations) is not the one a person accepted; refused because no hook decision names that exact call (ADR-045); a request the server sent the agent (`sampling/createMessage`, `elicitation/create`, …), recorded under the session the proxy served last, or refused (deny) when a sampling request asks for the session's context (`includeContext` other than `none`, ADR-069). A call the policy denies at the proxy carries the policy's rules (§8) |
 | `mcp-server-text` | allow | a row `openmoat mcp proxy` records under an agent's own host and session, before it passes that session's first call to a wrapped server, for the server's accepted `initialize` instructions (tool `mcp__<server>__initialize`): text the model read that the server wrote, so the session counts as having read untrusted content (ADR-069) |
 | `protection-required` | deny | the agent is below the protection level `require:` asks of it (§9.2): every call, ungoverned tools included, until it meets it; the reason names which policy asks, what is missing and the step that fixes it (ADR-064) |
@@ -1379,6 +1383,33 @@ unattended: review    # default defer
   is the point for a run nobody watches and a stop for one a person watches with the
   prompts off. Set it where agents run unattended (a CI job, a scheduled run, `claude -p`
   in `bypassPermissions`).
+
+### 5.5 Other hooks the agents run (`hooks.foreign`)
+
+OpenMoat records in the policy lock every hook command, plugin hook, program-running
+setting and git program the agents load besides its own hook (ADR-109, USAGE.md "Other
+hooks the agents run"). While one is new or changed and no person has run `openmoat
+hooks accept`, its commands are decided as shell commands under this policy, and:
+
+| `hooks.foreign` | Its command is denied | Anything else (review, defer, allow, a file of code) |
+|---|---|---|
+| `warn` (absent, the default) | every call of the agent that loads it is denied, rule `foreign-hook`; `openmoat status` exits 64 | the calls keep their verdicts; `openmoat status`, `doctor` and `watch` name it as a warning |
+| `hold` | as with `warn` | every call of the agent that loads it is a `review`, rule `foreign-hook`; `status` exits 64 |
+
+```yaml
+hooks:
+  foreign: hold    # default warn
+```
+
+- **Who may set it.** The person's policy only, pinned by the lock like every other key:
+  a repository policy (§10) or a pack (§11) with the key does not parse.
+- **Older OpenMoat.** A release from before this key refuses the policy (unknown keys
+  are rejected, §1), so its guard denies every call: update the binary first.
+- **Why `warn` is the default.** A plugin update or a project's git configuration that
+  adds an ordinary command is common, and the program has usually run before any tool
+  call anyway; holding every call stops the session for something you will almost
+  always accept. A command the policy denies still stops it. Set `hold` where every
+  new hook must wait for a person.
 
 ## 6. The default policy, in one table
 

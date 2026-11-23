@@ -65,8 +65,8 @@ has each agent's case). What happens when the hook fails, case by case and with 
 | Cline CLI | hook only | — | macOS 13+, Linux | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | — | — | runs it when the hook cannot start, crashes or exits non-zero; or times out |
 | goose | hook only | — | macOS 13+, Linux | a deny you approve with `openmoat allow --last` | pinned | — | — | blocks it |
 | Antigravity CLI | hook only | — | macOS 13+, Linux | the agent's own prompt | pinned; stdio servers can be wrapped | — | Antigravity CLI plugins | runs it when the hook times out |
-| Qwen Code | hook only | — | — | the agent's own prompt | pinned; stdio servers can be wrapped | an administrator writes it | — | runs it when the hook times out |
-| Crush | hook only | — | — | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | an administrator writes it | — | runs it when the hook times out |
+| Qwen Code | hook only | — | macOS 13+, Linux | the agent's own prompt | pinned; stdio servers can be wrapped | an administrator writes it | — | runs it when the hook times out |
+| Crush | hook only | — | macOS 13+, Linux | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | an administrator writes it | — | runs it when the hook times out |
 | Continue CLI | not checked yet; use `openmoat run` | — | — | — | — | — | — | — |
 <!-- /generated -->
 

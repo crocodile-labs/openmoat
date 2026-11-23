@@ -135,6 +135,27 @@ fn signed_repository_policies_are_trusted_only_when_asked_for() {
     assert!(Policy::parse("version: 1\nrequire_signed_repo_policy: 1\n").is_err());
 }
 
+/// `hooks.foreign` (ADR-109): a new or changed foreign hook warns unless the
+/// person's policy says `hold`; a repository policy cannot say it.
+#[test]
+fn foreign_hooks_warn_unless_the_persons_policy_holds_them() {
+    assert_eq!(
+        Policy::parse("version: 1\n").unwrap().foreign_hooks(),
+        ForeignHooks::Warn
+    );
+    let hold = Policy::parse("version: 1\nhooks:\n  foreign: hold\n").unwrap();
+    assert_eq!(hold.foreign_hooks(), ForeignHooks::Hold);
+    assert_eq!(
+        Policy::parse("version: 1\nhooks: {}\n")
+            .unwrap()
+            .foreign_hooks(),
+        ForeignHooks::Warn
+    );
+    assert!(Policy::parse("version: 1\nhooks:\n  foreign: review\n").is_err());
+    assert!(Policy::parse("version: 1\nhooks:\n  other: hold\n").is_err());
+    assert!(crate::RepoPolicy::parse("version: 1\nhooks:\n  foreign: hold\n").is_err());
+}
+
 #[test]
 fn mcp_first_sight_is_held_unless_the_policy_trusts_it() {
     assert!(
