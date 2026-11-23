@@ -59,6 +59,7 @@ fn verified(abi: u32) -> LaunchCheck {
         proc_seccomp_filter: Some(true),
         in_bubblewrap: false,
         failure: None,
+        ..LaunchCheck::default()
     }
 }
 
@@ -276,14 +277,63 @@ fn unknown_is_missing_only_after_the_start() {
 /// Each platform's weights add up to 100, and no mechanism is weighted twice.
 #[test]
 fn every_platforms_weights_add_up_to_100() {
-    for os in ["linux", "macos"] {
+    for os in ["linux", "macos", "windows"] {
         let table = weights(os);
         assert_eq!(table.iter().map(|(_, w)| w).sum::<u32>(), 100, "{os}");
         for (i, (m, _)) in table.iter().enumerate() {
             assert!(table[i + 1..].iter().all(|(n, _)| n != m), "{os}: {m:?}");
         }
     }
-    assert_eq!(weights("windows"), []);
+    assert_eq!(weights("freebsd"), []);
+}
+
+/// A Windows run (ADR-115) with its token and job confirmed scores 55: the
+/// network filter and read denial are weighted, not built, and named so.
+#[test]
+fn a_confirmed_windows_run_scores_55_and_names_network_and_reads() {
+    let mut record = port_only();
+    record.os = "windows".to_owned();
+    record.landlock = None;
+    record.network.mode = NetworkMode::ProxyVariables;
+    record.restrictions = vec![
+        Restriction::planned(Mechanism::RestrictedToken, true, true),
+        Restriction::planned(Mechanism::JobObject, true, true),
+        Restriction::planned(Mechanism::WfpNetwork, false, false),
+        Restriction::planned(Mechanism::WindowsReadDeny, false, false),
+    ];
+    record.rescore();
+    assert_eq!(record.score.as_ref().unwrap().points, 55);
+    record.launched(LaunchCheck {
+        restricted_token: Some(true),
+        agent_token_restricted: Some(true),
+        job_object: Some(true),
+        agent_in_job: Some(true),
+        ..LaunchCheck::default()
+    });
+    assert!(record.missing().is_empty(), "{:?}", record.missing());
+    let score = record.score.clone().unwrap();
+    assert_eq!(score.points, 55, "{score:?}");
+    assert!(!score.complete());
+    let line = score.line();
+    assert!(
+        line.contains("wfp_network (not in OpenMoat's Windows tier yet"),
+        "{line}"
+    );
+    assert!(
+        line.contains("windows_read_deny (not in OpenMoat's Windows tier yet"),
+        "{line}"
+    );
+
+    // A token the agent's own process does not show is missing: the run stops.
+    record.launched(LaunchCheck {
+        restricted_token: Some(true),
+        agent_token_restricted: Some(false),
+        job_object: Some(true),
+        agent_in_job: Some(true),
+        ..LaunchCheck::default()
+    });
+    assert_eq!(record.missing(), ["restricted_token"]);
+    assert_eq!(record.score.unwrap().points, 10);
 }
 
 /// The port-only plan on ABI 4: files, the TCP port, seccomp and
@@ -371,7 +421,7 @@ fn a_failed_start_has_nothing_in_force() {
 #[test]
 fn no_sandbox_scores_0() {
     let mut record = port_only();
-    record.os = "windows".to_owned();
+    record.os = "freebsd".to_owned();
     record.rescore();
     let score = record.score.unwrap();
     assert_eq!(score.points, 0);

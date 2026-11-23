@@ -33,6 +33,18 @@ pub const WEIGHTS_LINUX: [(Mechanism, u32); 9] = [
 /// proxy's address alone) and the Mach services in one.
 pub const WEIGHTS_MACOS: [(Mechanism, u32); 1] = [(Mechanism::Seatbelt, 100)];
 
+/// The weights on Windows (ADR-115): the write-restricted token holds writes,
+/// the job object the process tree. The network and reads carry weight too,
+/// and OpenMoat's Windows tier has neither (no WFP filter; a write-restricted
+/// token does not restrict reads), so a Windows run scores at most 55: the
+/// number says how much of a full boundary is missing, not only what is there.
+pub const WEIGHTS_WINDOWS: [(Mechanism, u32); 4] = [
+    (Mechanism::RestrictedToken, 45),
+    (Mechanism::JobObject, 10),
+    (Mechanism::WfpNetwork, 30),
+    (Mechanism::WindowsReadDeny, 15),
+];
+
 /// The weights of `os` (`std::env::consts::OS`); empty where `openmoat run`
 /// has no sandbox.
 #[must_use]
@@ -40,8 +52,16 @@ pub fn weights(os: &str) -> &'static [(Mechanism, u32)] {
     match os {
         "linux" => &WEIGHTS_LINUX,
         "macos" => &WEIGHTS_MACOS,
+        "windows" => &WEIGHTS_WINDOWS,
         _ => &[],
     }
+}
+
+/// Whether OpenMoat's sandbox has `name` at all: the Windows network filter
+/// and read denial are weighted but not built, so they are named as such
+/// rather than as something this system lacks.
+fn built(name: Mechanism) -> bool {
+    !matches!(name, Mechanism::WfpNetwork | Mechanism::WindowsReadDeny)
 }
 
 /// A run's score.
@@ -120,6 +140,15 @@ fn needs(name: Mechanism) -> &'static str {
         }
         Mechanism::IsolatedView => "needs the Isolated tier: bubblewrap, `openmoat run --isolate`",
         Mechanism::Seatbelt => "needs `sandbox-exec`",
+        Mechanism::RestrictedToken => "needs `CreateRestrictedToken` and `CreateProcessAsUserW`",
+        Mechanism::JobObject => "needs a job object the agent can be put in",
+        Mechanism::WfpNetwork => {
+            "a Windows Filtering Platform filter; until then the network goes through the proxy \
+             only for programs that honour HTTP_PROXY and HTTPS_PROXY"
+        }
+        Mechanism::WindowsReadDeny => {
+            "a write-restricted token does not restrict reads, so the hook decides every read"
+        }
     }
 }
 
@@ -144,6 +173,10 @@ pub(super) fn of(record: &EffectiveBoundary) -> ProtectionScore {
         .map(|&(name, weight)| {
             let missing = match record.restriction(name) {
                 None => Some("not part of this run's sandbox".to_owned()),
+                Some(_) if !built(name) => Some(format!(
+                    "not in OpenMoat's Windows tier yet: {}",
+                    needs(name)
+                )),
                 // `--no-isolate` gives the tier's namespace and view up on purpose.
                 Some(r) if !r.available && tier_chosen_away && bubblewrap(name) => {
                     Some(format!("this run does not ask for it: {}", needs(name)))

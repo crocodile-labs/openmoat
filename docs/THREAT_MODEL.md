@@ -305,6 +305,21 @@ something OpenMoat claims to stop.
   account can always change the list of a folder it owns; `doctor` says so. A state file
   given a list of its own is not read. Codex's `unelevated` Windows sandbox does not
   enforce denied reads, which `doctor` reports.
+- **`openmoat run` on native Windows (ADR-115).** The agent runs under a
+  write-restricted token in a kill-on-close job. Against T-writes outside the project
+  (persistence in the profile, another repository, a startup folder) the token holds:
+  Windows checks every write against the token's restricting SIDs too, and only the
+  project, the run's temp directory and `--write` paths grant them, with the policy's
+  literal denies at a root's top (`.git`, `.moat`, CI and editor folders) denied, and the
+  folders above them not renameable. Against the process tree the job holds: nothing the
+  agent starts outlives the run or leaves the job. It does not hold reads (exfiltration
+  of a secret the agent reads is left to the hook and the proxy), the network for a
+  program that ignores the proxy variables (a direct connection, DNS), places granted to
+  `Everyone`, a protected name deeper in the project or created during the run, or
+  OpenMoat's state against reading. The access list of the state directory names your
+  account and `SYSTEM` only, so the token cannot write it, and the run refuses a write
+  root there. The boundary record and the score (at most 55/100) say all of this on every
+  run.
 - **What the Standard tier does not cover.** It is as strong as each host's sandbox
   and OpenMoat's translation, and every host version bump must keep the generated keys
   working (`openmoat doctor` names a weakened setting; the differential suite executes

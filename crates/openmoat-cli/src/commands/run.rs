@@ -23,6 +23,9 @@
 // Each `status()` first marks the descriptors this process inherited
 // close-on-exec (`inherited.rs`, ADR-088).
 mod boundary;
+/// The command line and environment block the Windows tier starts the agent with.
+#[cfg(any(windows, test))]
+mod command_line;
 mod env;
 mod hook_off;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -38,15 +41,20 @@ pub mod score;
 mod temp;
 pub mod tier;
 mod tool_shell;
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 mod unsupported;
+/// The Windows tier (ADR-115); `pub(crate)` for the hook relay's probe.
+#[cfg(windows)]
+pub(crate) mod windows;
 
 #[cfg(target_os = "linux")]
 use linux as platform;
 #[cfg(target_os = "macos")]
 use macos as platform;
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 use unsupported as platform;
+#[cfg(windows)]
+use windows as platform;
 
 use std::ffi::{OsStr, OsString};
 use std::io::Write as _;
@@ -417,7 +425,7 @@ fn planned_environment(
         .collect();
     let inherited = || std::env::vars_os().map(|(name, _)| name);
     let withheld = env::withheld(inherited(), &allowed, &|name| {
-        own.iter().any(|set| name == set.as_str())
+        own.iter().any(|set| env::same_name(name, OsStr::new(set)))
     });
     Ok(env::record(&mode, inherited(), &withheld, &brokered))
 }
@@ -447,6 +455,23 @@ fn resolved(path: &Path) -> String {
 /// in it by default only where it can.
 pub fn unavailable() -> Option<String> {
     platform::unavailable()
+}
+
+/// Whether `openmoat mcp wrap` starts servers under `openmoat run` when
+/// neither `--sandbox` nor `--no-sandbox` is given: where it can sandbox and
+/// its tier suits servers (not Windows' preview tier, ADR-115).
+pub fn mcp_sandbox_default() -> bool {
+    platform::unavailable().is_none() && platform::MCP_SANDBOX_BY_DEFAULT
+}
+
+/// Why `openmoat mcp wrap` leaves servers out of `openmoat run` by default
+/// where a sandbox exists, if it does.
+pub fn mcp_sandbox_off() -> Option<String> {
+    (!platform::MCP_SANDBOX_BY_DEFAULT && platform::unavailable().is_none()).then(|| {
+        "the Windows tier of `openmoat run` is a preview that holds writes only and starts no \
+         batch file such as `npx`; `openmoat mcp wrap --sandbox` asks for it"
+            .to_owned()
+    })
 }
 
 /// Why `moat run` here would restrict the agent's network by port only, if it
@@ -563,7 +588,11 @@ fn notice(
         ""
     };
     // The tests find the port after "proxy on 127.0.0.1:" in either line.
-    let network = if agent.warning().is_some() {
+    let network = if platform::NETWORK == openmoat_core::boundary::NetworkMode::ProxyVariables {
+        "network through OpenMoat's proxy for programs that honour HTTP_PROXY (not held by the \
+         OS)"
+        .to_owned()
+    } else if agent.warning().is_some() {
         format!("network only to port {port} on any host, OpenMoat's proxy")
     } else {
         "network only through OpenMoat's proxy".to_owned()

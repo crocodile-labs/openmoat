@@ -154,13 +154,9 @@ pub fn sandbox(host: Host, os: Os, ev: &Evidence<'_>) -> Cell {
     }
 }
 
-/// Whether `openmoat run` can start the agent on `os`.
-pub fn runs(spec: &HostSpec, os: Os) -> Result<(), String> {
-    if os == Os::Windows {
-        return Err(
-            "`openmoat run` refuses on Windows, where OpenMoat generates no OS sandbox".into(),
-        );
-    }
+/// Whether `openmoat run` can start the agent on an OS: the same answer on
+/// every one since Windows has a tier (ADR-115).
+pub fn runs(spec: &HostSpec, _os: Os) -> Result<(), String> {
     match spec.run {
         RunFacts::Unknown { why } if spec.sandbox.is_none() => Err(why.to_owned()),
         _ => Ok(()),
@@ -204,10 +200,13 @@ pub fn run(host: Host, os: Os, ev: &Evidence<'_>) -> Cell {
     if let Err(why) = runs(spec, os) {
         return absent(format!("none: {why}"));
     }
-    let tier = if os == Os::Linux {
-        "Isolated (Lightweight where bubblewrap cannot run)"
-    } else {
-        "Lightweight (macOS 13 or later)"
+    let tier = match os {
+        Os::Linux => "Isolated (Lightweight where bubblewrap cannot run)",
+        Os::Mac => "Lightweight (macOS 13 or later)",
+        Os::Windows => {
+            "Write-restricted (ADR-115): writes held to the project and `--write` paths; reads \
+             and the network not held by the OS"
+        }
     };
     let text = match command(spec, os) {
         Some(command) => format!("{tier}: `{command}`"),
@@ -255,6 +254,14 @@ pub fn credentials(host: Host, os: Os, ev: &Evidence<'_>) -> Cell {
     let spec = host.spec();
     if runs(spec, os).is_err() {
         return absent("— (no `openmoat run`)");
+    }
+    if os == Os::Windows {
+        return claimed(
+            "everything you can read: the Windows tier does not restrict reads, so other agents' \
+             logins and every variable but a brokered secret are the hook's to hold"
+                .to_owned(),
+            ev.has(Claim::Credentials, host, os),
+        );
     }
     let globs: Vec<String> = spec
         .protect
@@ -349,7 +356,8 @@ pub fn summary(hosts: &[Host], ev: &Evidence<'_>) -> Vec<String> {
                 let tier = match (run(host, os, ev).level, os) {
                     (Level::Absent, _) => "none".to_owned(),
                     (level, Os::Linux) => tier_word("Isolated", level),
-                    (level, _) => tier_word("Lightweight", level),
+                    (level, Os::Mac) => tier_word("Lightweight", level),
+                    (level, Os::Windows) => tier_word("Write-restricted", level),
                 };
                 [
                     word("hook", &hook(host, os, ev), "protected", "none"),

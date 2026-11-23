@@ -35,7 +35,7 @@ use std::path::Path;
 mod windows;
 
 #[cfg(windows)]
-pub use windows::{icacls, protect, read};
+pub use windows::{descriptor, icacls, protect, read};
 
 /// One entry of a DACL as Windows returns it.
 #[derive(Debug, Clone, PartialEq, Eq)]

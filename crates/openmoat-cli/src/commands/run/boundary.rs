@@ -79,7 +79,13 @@ pub fn plan(plan: Plan<'_>) -> EffectiveBoundary {
                 chosen: false,
                 why: why.clone(),
             });
-            NetworkMode::PortOnly
+            // Windows holds no network at all (the proxy variables only);
+            // elsewhere the weaker network is Landlock's port rule.
+            if platform::NETWORK == NetworkMode::ProxyVariables {
+                NetworkMode::ProxyVariables
+            } else {
+                NetworkMode::PortOnly
+            }
         }
         None => platform::NETWORK,
     };

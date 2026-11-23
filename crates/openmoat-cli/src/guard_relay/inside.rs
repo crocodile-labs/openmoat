@@ -12,22 +12,27 @@
 use std::io;
 use std::path::Path;
 
-// `platform` reads this process: `Probe::system()`, and
-// `refused_by_sandbox(error, probe)`, whether the error opening the lock is the
-// one `openmoat run`'s sandbox on this OS gives.
+// `platform` reads this process: `Probe::system()`, `open_lock(path)`, how the
+// lock is opened (for writing on Windows, whose run sandbox holds writes only),
+// and `refused_by_sandbox(error, probe)`, whether the error opening the lock is
+// the one `openmoat run`'s sandbox on this OS gives.
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 mod other;
+#[cfg(windows)]
+mod windows;
 
 #[cfg(target_os = "linux")]
 use linux as platform;
 #[cfg(target_os = "macos")]
 use macos as platform;
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 use other as platform;
+#[cfg(windows)]
+use windows as platform;
 
 pub use platform::Probe;
 
@@ -35,7 +40,7 @@ pub use platform::Probe;
 /// when no state directory can be named) cannot be opened, and the way it
 /// fails is the run's sandbox's.
 pub fn in_run_sandbox(lock: Option<&Path>) -> bool {
-    let error = match lock.map(std::fs::File::open) {
+    let error = match lock.map(platform::open_lock) {
         Some(Ok(_)) => return false,
         Some(Err(error)) => error,
         None => io::Error::from(io::ErrorKind::NotFound),
@@ -74,7 +79,7 @@ mod tests {
         assert!(!refused_by_sandbox(&by_mode, outside));
     }
 
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     #[test]
     fn the_run_sandbox_refusal_is_relayed() {
         let (error, probe) = platform::run_sandbox();

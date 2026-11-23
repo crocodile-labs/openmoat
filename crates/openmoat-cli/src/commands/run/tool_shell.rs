@@ -70,10 +70,14 @@ pub fn off_notice(host: Option<Host>, tools: Option<&ToolShell>) -> Option<&'sta
         host.map(|h| h.spec().tool_token),
         Some(ToolToken::Wrapper { .. })
     );
-    (wrapped && tools.is_none()).then_some(
+    let why = if platform::TOOL_SHELL_GAP.is_some() {
+        "moat run: tool commands keep the hook relay token in this run: there is no shell \
+         wrapper on this system"
+    } else {
         "moat run: tool commands keep the hook relay token in this run: \
-         its write grants include the system temp directory, where the shell wrapper would be",
-    )
+         its write grants include the system temp directory, where the shell wrapper would be"
+    };
+    (wrapped && tools.is_none()).then_some(why)
 }
 
 /// What a run with `host` does with the relay token in tool commands, for
@@ -83,8 +87,11 @@ pub fn token(host: Option<Host>, wrapped: bool) -> boundary::ToolToken {
         None => boundary::ToolToken::UnknownAgent,
         Some(ToolToken::Wrapper { .. }) if wrapped => boundary::ToolToken::Withheld,
         Some(ToolToken::Wrapper { .. }) => boundary::ToolToken::NotWithheld(
-            "the run's write grants include the system temp directory, where the shell \
-             wrapper would be"
+            platform::TOOL_SHELL_GAP
+                .unwrap_or(
+                    "the run's write grants include the system temp directory, where the shell \
+                     wrapper would be",
+                )
                 .to_owned(),
         ),
         Some(ToolToken::Integration) => boundary::ToolToken::WithheldByIntegration,
@@ -96,6 +103,9 @@ pub fn token(host: Option<Host>, wrapped: bool) -> boundary::ToolToken {
 /// Whether [`prepare`] would make a wrapper under `write_roots`, without
 /// making it (`openmoat run --print-boundary`).
 pub fn would_wrap(write_roots: &[String]) -> Result<bool> {
+    if platform::TOOL_SHELL_GAP.is_some() {
+        return Ok(false);
+    }
     let system =
         std::fs::canonicalize(std::env::temp_dir()).context("resolving the temp directory")?;
     Ok(!write_roots.iter().any(|root| system.starts_with(root)))
@@ -108,6 +118,9 @@ pub fn prepare(host: Option<Host>, write_roots: &[String]) -> Result<Option<Tool
     let Some(ToolToken::Wrapper { vars, on_path }) = host.map(|h| h.spec().tool_token) else {
         return Ok(None);
     };
+    if platform::TOOL_SHELL_GAP.is_some() {
+        return Ok(None);
+    }
     let system =
         std::fs::canonicalize(std::env::temp_dir()).context("resolving the temp directory")?;
     let dir = system.join(format!("{DIR_PREFIX}{}", random_hex(8)?.as_str()));

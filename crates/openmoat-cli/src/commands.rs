@@ -161,6 +161,13 @@ pub fn run_port_only_network() -> Option<String> {
     run::port_only_network()
 }
 
+/// Whether this process runs under a restricted token, as the Windows tier
+/// of `openmoat run` starts the agent and its hooks (ADR-115).
+#[cfg(windows)]
+pub fn run_in_restricted_token() -> bool {
+    run::windows::in_restricted_token()
+}
+
 /// Why `openmoat run` cannot sandbox on this machine; `None` when it can.
 pub fn run_unavailable() -> Option<String> {
     run::unavailable()

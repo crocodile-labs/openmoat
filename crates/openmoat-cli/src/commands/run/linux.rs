@@ -335,6 +335,12 @@ pub fn project_open(policy: &Policy, ctx: &EvalContext) -> Option<String> {
 pub use isolate::{inside, isolate};
 pub use launch::{NETWORK, restrictions};
 
+/// None: the tool-shell wrapper (ADR-075) works here.
+pub const TOOL_SHELL_GAP: Option<&str> = None;
+
+/// `openmoat mcp wrap` starts servers under `openmoat run` by default here.
+pub const MCP_SANDBOX_BY_DEFAULT: bool = true;
+
 /// The terminals this process's standard input, output and error are on, as
 /// `/proc` names them (`/dev/pts/3`, `/dev/tty1`); not `/dev/tty` itself.
 pub fn terminals() -> Vec<String> {

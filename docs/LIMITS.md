@@ -59,11 +59,25 @@ Each agent's gaps and the reasons are in
   Claude Code and Cursor on native Windows), an allowed call runs with your permissions,
   so a classifier mistake is a bypass. `openmoat status` and `openmoat doctor` name the
   `openmoat run` command that puts each of them in an OS sandbox, or say why there is none
-  (macOS before 13, Windows, Linux without bubblewrap; OpenClaw's Gateway and the Continue
+  (macOS before 13, Linux without bubblewrap; on Windows the command starts a preview tier
+  that holds writes only, below; OpenClaw's Gateway and the Continue
   CLI have no command, [SANDBOX.md](SANDBOX.md#agents-openmoat-writes-no-sandbox-for)).
   The command is proved with a stand-in program, not the real agent. Claude Code's sandbox covers only `Bash`,
   `PowerShell` and `Monitor`; its file tools, `WebFetch` and MCP servers run outside it.
   Cursor runs some commands outside its sandbox.
+- **`openmoat run` on Windows holds writes and the process tree only (preview, ADR-115).**
+  A write-restricted token refuses writes outside the project, the run's temp directory
+  and `--write` paths, and a job ends every process the agent started. Not covered:
+  **reads** (the token is checked on writes only, so secrets, other agents' logins and
+  OpenMoat's state are readable to commands and the hook alone decides them); **the
+  network** (no Windows Filtering Platform filter: a program that ignores `HTTP_PROXY`
+  connects directly); anything whose access list grants `Everyone` write; denied places
+  inside the project below its top, matched by a glob, or made after the run started; the
+  tool-shell wrapper (tool commands keep the relay token); batch files (`.cmd`/`.bat`,
+  such as npm shims) are not started. A Windows run scores at most 55/100, so
+  `require.run: full-boundary` and `sandbox.strict: true` refuse there. No real agent has
+  been run under it yet: the tests start `cmd.exe`
+  ([SANDBOX.md](SANDBOX.md#openmoat-run-on-windows-preview-writes-only)).
 - **`require.run: full-boundary` is about `openmoat run`.** It refuses a run without an OS
   sandbox or, on Linux, without the Isolated tier (ADR-080). An agent started without
   `openmoat run` is not refused

@@ -12,7 +12,9 @@
 use serde::{Deserialize, Serialize};
 
 mod score;
-pub use score::{ProtectionScore, ScoreItem, WEIGHTS_LINUX, WEIGHTS_MACOS, weights};
+pub use score::{
+    ProtectionScore, ScoreItem, WEIGHTS_LINUX, WEIGHTS_MACOS, WEIGHTS_WINDOWS, weights,
+};
 
 /// The version of the record's JSON form.
 pub const VERSION: u32 = 1;
@@ -91,7 +93,8 @@ pub enum Tier {
     /// The agent's own sandbox and OpenMoat's hooks, without `openmoat run`;
     /// named so a record compares with a hook-only session, never one a run starts.
     Standard,
-    /// Landlock and seccomp, or Seatbelt, over the whole machine.
+    /// Landlock and seccomp, or Seatbelt, over the whole machine; on Windows
+    /// a write-restricted token in a job object, which holds writes only.
     Lightweight,
     /// bubblewrap's own view of the machine around the same rules.
     Isolated,
@@ -144,6 +147,10 @@ pub enum NetworkMode {
     PortOnly,
     /// The Seatbelt profile allows the proxy's address alone (macOS).
     Profile,
+    /// The proxy variables alone (`HTTP_PROXY`, `HTTPS_PROXY`, …): nothing in
+    /// the operating system holds the network, so a program that ignores them
+    /// connects directly (Windows, ADR-115).
+    ProxyVariables,
 }
 
 /// The Landlock part of the record (Linux).
@@ -212,6 +219,20 @@ pub enum Mechanism {
     /// bubblewrap's view of the machine: the project without its denied
     /// paths, the read roots and `--write` paths (the Isolated tier).
     IsolatedView,
+    /// Windows: the agent's write-restricted token (ADR-115). A write needs
+    /// the run's own SIDs to be granted it too, and they are granted only on
+    /// the project, the run's temp directory and `--write` paths.
+    RestrictedToken,
+    /// Windows: the job object the agent and every process it starts are in,
+    /// which kills them all when the run ends and lets none break away.
+    JobObject,
+    /// Windows: a Windows Filtering Platform filter holding the network to
+    /// the proxy. Not part of OpenMoat's Windows tier yet, so never in force.
+    WfpNetwork,
+    /// Windows: reads the policy denies refused by the operating system. A
+    /// write-restricted token does not restrict reads, so never in force;
+    /// the hook decides every read.
+    WindowsReadDeny,
 }
 
 impl Mechanism {
@@ -229,6 +250,10 @@ impl Mechanism {
             Self::NoNewPrivs => "no_new_privs",
             Self::NetworkNamespace => "network_namespace",
             Self::IsolatedView => "isolated_view",
+            Self::RestrictedToken => "restricted_token",
+            Self::JobObject => "job_object",
+            Self::WfpNetwork => "wfp_network",
+            Self::WindowsReadDeny => "windows_read_deny",
         }
     }
 }
@@ -270,7 +295,8 @@ impl Restriction {
     /// for the seccomp filters and `no_new_privs` (`tested`), and for
     /// Landlock's required rights and bubblewrap's namespace and view
     /// (`applied`). Best-effort steps and Seatbelt, which nothing reports,
-    /// are missing only when reported off.
+    /// are missing only when reported off. On Windows the token and the job
+    /// must be confirmed on the agent's own process (`tested`).
     #[must_use]
     pub fn missing(&self, launched: bool) -> bool {
         if !self.configured || !self.available {
@@ -278,7 +304,10 @@ impl Restriction {
         }
         let reported_off = self.applied == Some(false) || self.tested == Some(false);
         let confirmed = match self.name {
-            Mechanism::Seccomp | Mechanism::NoNewPrivs => self.tested == Some(true),
+            Mechanism::Seccomp
+            | Mechanism::NoNewPrivs
+            | Mechanism::RestrictedToken
+            | Mechanism::JobObject => self.tested == Some(true),
             Mechanism::LandlockFilesystem
             | Mechanism::LandlockTcpPort
             | Mechanism::NetworkNamespace
@@ -286,7 +315,9 @@ impl Restriction {
             Mechanism::LandlockScopes
             | Mechanism::LandlockResolveUnix
             | Mechanism::LandlockUdp
-            | Mechanism::Seatbelt => true,
+            | Mechanism::Seatbelt
+            | Mechanism::WfpNetwork
+            | Mechanism::WindowsReadDeny => true,
         };
         reported_off || (launched && !confirmed)
     }
@@ -320,6 +351,21 @@ pub struct LaunchCheck {
     pub proc_seccomp_filter: Option<bool>,
     /// The report came from `openmoat isolated` inside bubblewrap.
     pub in_bubblewrap: bool,
+    /// Windows: the agent's process was created with the write-restricted
+    /// token (`CreateProcessAsUserW` took it); absent from other records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restricted_token: Option<bool>,
+    /// Windows: the agent's own token, read back before it ran, is restricted
+    /// (`IsTokenRestricted`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_token_restricted: Option<bool>,
+    /// Windows: the agent was put in the run's kill-on-close job before it ran.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job_object: Option<bool>,
+    /// Windows: the agent's process, checked before it ran, is in that job
+    /// (`IsProcessInJob`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_in_job: Option<bool>,
     /// Why the launch was stopped, when it was.
     pub failure: Option<String>,
 }
@@ -405,7 +451,13 @@ impl EffectiveBoundary {
                 Mechanism::NetworkNamespace | Mechanism::IsolatedView => {
                     (Some(check.in_bubblewrap), None)
                 }
-                Mechanism::Seatbelt => (None, None),
+                Mechanism::RestrictedToken => {
+                    (check.restricted_token, check.agent_token_restricted)
+                }
+                Mechanism::JobObject => (check.job_object, check.agent_in_job),
+                Mechanism::Seatbelt | Mechanism::WfpNetwork | Mechanism::WindowsReadDeny => {
+                    (None, None)
+                }
             };
             if restriction.configured {
                 restriction.applied = applied;

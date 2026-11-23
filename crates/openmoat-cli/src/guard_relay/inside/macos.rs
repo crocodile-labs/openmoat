@@ -18,6 +18,11 @@ impl Probe {
     }
 }
 
+/// Read the lock: Seatbelt refuses reads of the state directory.
+pub(super) fn open_lock(lock: &std::path::Path) -> io::Result<std::fs::File> {
+    std::fs::File::open(lock)
+}
+
 pub(super) fn refused_by_sandbox(error: &io::Error, _: Probe) -> bool {
     error.raw_os_error() == Some(EPERM)
 }

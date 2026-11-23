@@ -263,7 +263,7 @@ pub(super) fn wrap_plan(
     out: &mut Deferred,
 ) -> Result<WrapPlan> {
     let pending = pending_ids(home, hosts)?;
-    let new_sandbox = sandbox.unwrap_or(super::run::unavailable().is_none());
+    let new_sandbox = sandbox.unwrap_or_else(super::run::mcp_sandbox_default);
     let mut edits = Vec::new();
     let mut left = 0;
     let servers = wrap::user_servers(home, hosts)?;
@@ -342,7 +342,14 @@ pub(super) fn apply_wrap(
     dry_run: bool,
     out: &mut Deferred,
 ) -> Result<usize> {
-    let unavailable = super::run::unavailable();
+    // Why the servers start unconfined: no sandbox here, or (no flag given)
+    // a tier `mcp wrap` does not choose by default (Windows, ADR-115).
+    let unavailable = super::run::unavailable().or_else(|| {
+        sandbox
+            .is_none()
+            .then(super::run::mcp_sandbox_off)
+            .flatten()
+    });
     let done = finish_edits(home, hosts, edits, dry_run, true, out)?;
     let unavailable = unavailable.filter(|_| sandbox.is_none_or(|on| on));
     sandbox_note(edits, unavailable.as_deref(), out)?;

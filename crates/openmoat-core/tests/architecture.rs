@@ -177,10 +177,13 @@ fn modules_use_one_file_style() {
 /// is `forbid` everywhere else. Shrink only: a new entry needs an ADR, and an
 /// entry whose file no longer names the lint fails, so it must be removed.
 /// `openmoat-wasm`'s exports need a fixed symbol name (ADR-046); `openmoat run`
-/// marks the descriptors it inherited close-on-exec by number (ADR-088).
+/// marks the descriptors it inherited close-on-exec by number (ADR-088);
+/// `openmoat run` on Windows makes its token and job and starts the agent
+/// under them with Win32 calls (ADR-115).
 const UNSAFE_ALLOWED: &[&str] = &[
     "openmoat-wasm/src/lib.rs",
     "openmoat-cli/src/commands/run/inherited.rs",
+    "openmoat-cli/src/commands/run/windows/win32.rs",
     "openmoat-cli/src/state_acl/windows/win32.rs",
 ];
 

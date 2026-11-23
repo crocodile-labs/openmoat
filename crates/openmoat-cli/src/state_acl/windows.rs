@@ -44,6 +44,13 @@ pub fn read(dir: &Path) -> Result<(String, String)> {
     Ok((me, super::sddl_of(&descriptor)))
 }
 
+/// The owner and DACL of `path` as Windows returns them, for the entries
+/// `openmoat run` sets (`commands/run/windows.rs`, ADR-115).
+pub fn descriptor(path: &Path) -> Result<super::Descriptor> {
+    win32::read(&wide(path)?)
+        .with_context(|| format!("reading the access list of {}", path.display()))
+}
+
 /// Give `dir` exactly two entries, full control for this account and
 /// `SYSTEM`, with inheritance off (ADR-083), and check that it holds. A
 /// folder that `existed` before is read first and refused when another

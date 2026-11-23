@@ -46,6 +46,9 @@ pub mod seatbelt;
 #[cfg(any(target_os = "linux", test))]
 pub mod seccomp;
 pub mod shared_temp;
+/// The Windows tier's write-restricted token plan (ADR-115).
+#[cfg(any(windows, test))]
+pub mod write_token;
 
 /// The backend that writes `format`: the one list of host sandbox backends,
 /// with their module declarations above. The match is exhaustive, so a format
@@ -184,6 +187,19 @@ pub fn seatbelt_profile(
 ) -> anyhow::Result<seatbelt::Generated> {
     let (ir, grants) = lower_for_session(policy, ctx, grants)?;
     Ok(seatbelt::generate(&ir, &grants))
+}
+
+/// What the write-restricted token of `openmoat run` on Windows may write
+/// (ADR-115); `exists` says whether a place is there now.
+#[cfg(windows)]
+pub fn write_token_plan(
+    policy: &Policy,
+    ctx: &EvalContext,
+    grants: Grants,
+    exists: &dyn Fn(&str) -> bool,
+) -> anyhow::Result<write_token::Generated> {
+    let (ir, grants) = lower_for_session(policy, ctx, grants)?;
+    write_token::generate(&ir, &grants, exists)
 }
 
 /// The Landlock rules `moat run` applies on Linux.

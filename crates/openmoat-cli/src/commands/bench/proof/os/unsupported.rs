@@ -1,5 +1,6 @@
-//! The OS sandbox layer where `openmoat run` refuses (#135): no backend, so
-//! every OS row is NOT TESTED HERE.
+//! The OS sandbox layer where the bench has no backend: every OS row is NOT
+//! TESTED HERE. On Windows `openmoat run` has a preview tier that holds
+//! writes only (ADR-115), and the bench's attacks are POSIX shell scripts.
 
 pub const BACKEND: Option<&str> = None;
 

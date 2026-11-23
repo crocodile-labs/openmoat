@@ -13,6 +13,11 @@ impl Probe {
     }
 }
 
+/// Read the lock.
+pub(super) fn open_lock(lock: &std::path::Path) -> io::Result<std::fs::File> {
+    std::fs::File::open(lock)
+}
+
 pub(super) fn refused_by_sandbox(_: &io::Error, _: Probe) -> bool {
     false
 }

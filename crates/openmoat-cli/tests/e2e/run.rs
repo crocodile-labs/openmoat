@@ -61,6 +61,9 @@ mod temp_dirs;
 /// is shown and on record (ADR-082).
 #[cfg(target_os = "linux")]
 mod unix_sockets;
+/// Windows: the write-restricted token and the job object (ADR-115).
+#[cfg(windows)]
+mod windows_tier;
 
 /// Set for a stock-Linux run, on a machine that has no bubblewrap and keeps
 /// unprivileged user namespaces restricted, as a stock Ubuntu does: there
@@ -224,7 +227,7 @@ pub(crate) fn lightweight_notice(out: &Output) -> bool {
     said.contains("as under `--isolate`") || said.contains("granted entry by entry")
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 #[test]
 fn refuses_where_no_sandbox_can_be_generated() {
     let (sb, project) = installed_with_secret();

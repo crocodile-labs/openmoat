@@ -33,6 +33,11 @@ fn seccomp_filtered(status: &str) -> bool {
         .any(|mode| mode.trim() == "2")
 }
 
+/// Read the lock: Landlock refuses reads of the state directory.
+pub(super) fn open_lock(lock: &std::path::Path) -> io::Result<std::fs::File> {
+    std::fs::File::open(lock)
+}
+
 pub(super) fn refused_by_sandbox(_: &io::Error, probe: Probe) -> bool {
     probe.seccomp_filter
 }

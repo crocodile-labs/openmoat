@@ -27,6 +27,10 @@ pub fn lines(record: &EffectiveBoundary) -> Vec<String> {
         NetworkMode::Namespace => "a network namespace; the proxy is the only way out",
         NetworkMode::PortOnly => "port only: any host on the proxy's port",
         NetworkMode::Profile => "the Seatbelt profile allows the proxy's address alone",
+        NetworkMode::ProxyVariables => {
+            "the proxy variables only: nothing in the OS holds the network, so a program that \
+             ignores HTTP_PROXY connects directly"
+        }
     };
     lines.push(format!("  network: {network}"));
     if let Some(landlock) = &record.landlock {

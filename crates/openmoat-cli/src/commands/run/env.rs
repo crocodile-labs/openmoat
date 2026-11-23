@@ -90,7 +90,7 @@ pub fn apply(
         .collect();
     let inherited = || std::env::vars_os().map(|(name, _)| name);
     let withheld = withheld(inherited(), allowed, &|name| {
-        set_by_run.iter().any(|set| set == name)
+        set_by_run.iter().any(|set| same_name(set, name))
     });
     if mode.scrubbed {
         for name in &withheld {
@@ -279,7 +279,20 @@ impl Allowed {
     }
 
     fn holds(&self, name: &OsStr) -> bool {
-        name.to_str().is_some_and(|n| self.0.contains(n))
+        name.to_str().is_some_and(|n| {
+            self.0.contains(n) || self.0.iter().any(|a| same_name(OsStr::new(a), name))
+        })
+    }
+}
+
+/// Whether two variable names are one: Windows compares them without case
+/// (`Path` is `PATH`), so a scrubbed run there must too, or it would withhold
+/// `Path` and remove what the run itself set under another case.
+pub fn same_name(a: &OsStr, b: &OsStr) -> bool {
+    if cfg!(windows) {
+        a.eq_ignore_ascii_case(b)
+    } else {
+        a == b
     }
 }
 

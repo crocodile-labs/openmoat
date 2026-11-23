@@ -269,7 +269,7 @@ fn evidence_table_is_current() {
          | `openmoat run --isolate`, macOS | not run: refused until the Isolated tier has a virtual machine there (#175) |\n\
          | Claude Code sandbox and Codex profile, macOS | verified with the pinned host binaries (`scripts/ci/host-binaries.sh`); CI does not fetch them |\n\
          | Claude Code sandbox and Codex profile, Linux | verified with the pinned host binaries, bubblewrap and socat installed; CI does not fetch the binaries |\n\
-         | `openmoat run`, Windows | not run: `openmoat run` refuses on Windows, where OpenMoat generates no OS sandbox (#135) |\n\
+         | `openmoat run`, Windows | not run: the scripts are POSIX shell; the Windows tier (a write-restricted token in a job object, ADR-115) holds writes only, and `run/windows_tier.rs` tests it with `cmd.exe` in the `test (windows-latest)` CI job |\n\
          | Claude Code sandbox, Windows | not run: Claude Code's sandbox does not run on native Windows, so `openmoat init` writes no sandbox settings there ([SANDBOX.md](SANDBOX.md)) |\n\
          | Codex profile, Windows | not verified: the scripts and the project's `npm` shim are POSIX shell |\n\
          \nThe Standard tier columns cover the commands the agent runs and the processes they \
@@ -557,9 +557,9 @@ pub mod executing {
 #[test]
 fn hostile_scripts_are_not_run_without_an_os_layer() {
     eprintln!(
-        "skipped: hostile scripts — `openmoat run` refuses on {}, where OpenMoat generates no OS \
-         sandbox (#135; run.rs checks that it refuses), Claude Code's sandbox does not run, and \
-         the scripts are POSIX shell",
+        "skipped: hostile scripts on {}: the scripts are POSIX shell, Claude Code's sandbox \
+         does not run, and `openmoat run` there holds writes only (ADR-115; \
+         run/windows_tier.rs tests it)",
         std::env::consts::OS
     );
 }

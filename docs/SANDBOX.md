@@ -372,6 +372,8 @@ leaves `sandbox.json` alone and `openmoat status` reports Cursor as `hook only`.
 
 On Linux `openmoat run` starts the Isolated tier (below) by default where bubblewrap
 works, and the Lightweight tier otherwise (ADR-080). macOS has the Lightweight tier only.
+Windows has a preview tier that holds writes and the process tree only
+([below](#openmoat-run-on-windows-preview-writes-only), ADR-115).
 
 | Linux, `openmoat run` … | bubblewrap works | bubblewrap missing or blocked |
 |---|---|---|
@@ -396,7 +398,8 @@ tool `boundary`, rule `run-boundary`, its reason the whole record as JSON (ADR-0
 It names the tier asked for and the tier that started, every downgrade (the tier, the
 network, and the project's top when `sandbox.project_top: writable` opened it) with why
 and whether the person chose it, how the network is held
-(`namespace`, `port_only`, or Seatbelt's `profile`), the Landlock ABI, whether tool
+(`namespace`, `port_only`, Seatbelt's `profile`, or on Windows `proxy_variables`, which
+the operating system does not hold), the Landlock ABI, whether tool
 commands get the hook relay token, the environment (`environment`: whether it is
 scrubbed and what chose that, the inherited names that pass, the names withheld and the
 names that hold a brokered placeholder, names only, ADR-105), and for each restriction whether the system has it
@@ -455,7 +458,10 @@ start, only when the launch confirmed it.
 | `landlock_scopes` (ABI 6) | 5 | | | |
 
 On macOS the Seatbelt profile is the whole 100: it holds files, the network (the
-proxy's address alone) and Mach services in one. A score compares runs on one system,
+proxy's address alone) and Mach services in one. On Windows (ADR-115) the weights are
+`restricted_token` 45, `job_object` 10, `wfp_network` 30 and `windows_read_deny` 15; the
+last two are not part of OpenMoat's Windows tier yet, so a Windows run scores at most 55
+and `sandbox.strict: true` refuses every Windows run. A score compares runs on one system,
 not systems. The hook alone scores 0: an allowed call runs with your permissions.
 
 ```bash
@@ -523,7 +529,7 @@ bubblewrap.
   C library falls back to `clone`) and joining an existing one (`setns`, so `nsenter`
   and a container runtime's `exec` fail), and refuses `pidfd_getfd` (copying an open
   file of another process; `pidfd_open` stays). Containers, bubblewrap and Chromium's own
-  sandbox cannot start inside. Windows refuses.
+  sandbox cannot start inside. Windows has its own preview tier (below).
 - **Newer Linux kernels (the Landlock ABI ladder, ADR-082).** `openmoat run` needs
   Landlock ABI 4 and adds what a newer kernel has beside the seccomp filter, never in
   its place, so an older kernel keeps exactly the protection above:
@@ -857,6 +863,46 @@ macOS and Linux (reading keys and credentials, writing outside the project, dire
 connections, DNS, symlinks out of the project, editing the policy), as CI asserts it on
 every pull request, with the Linux gaps marked.
 
+## `openmoat run` on Windows (preview: writes only)
+
+On native Windows `openmoat run` starts the program under a **write-restricted token**,
+in a **job object**, with the proxy variables pointing at the run's proxy (ADR-115). It is
+a preview: it holds writes and the process tree, and nothing else.
+
+```powershell
+openmoat run --write $HOME\.claude -- claude          # the agent's .exe, not an npm .cmd shim
+openmoat run --print-boundary -- claude               # the plan: score 55/100, what is missing
+openmoat doctor                                       # protection  lightweight 55/100; missing: wfp_network (…); windows_read_deny (…)
+```
+
+| What | On Windows |
+|---|---|
+| Writes outside the project, the run's temp directory and `--write` paths | refused by the token. Windows checks a write against the person's SIDs and again against the token's restricting SIDs (`Everyone`, the logon session's, one for the agent's own objects, one per write root); only the roots grant their SID |
+| `.git`, `.moat`, the editors' and CI folders at the project's top | refused: a deny entry for the root's SID on each one that exists when the run starts, and `DELETE` denied on the folders above it |
+| The same names deeper in the project, globs (`*.code-workspace`), places made later | **the hook's alone**; the run's report (`--verbose`) names them |
+| Anything whose access list grants `Everyone` write | writable, as in Codex's Windows sandbox |
+| Reads | **not restricted**: a write-restricted token is checked on writes only. Secrets, other agents' logins and OpenMoat's state are readable to commands; every read deny rule is the hook's alone |
+| Network | **not held by the operating system**: `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` send programs that honour them through the run's proxy; one that ignores them connects directly. The record says `proxy_variables`; `--netns=require` and `require.run: full-boundary` refuse |
+| Processes | the agent starts suspended and inherits only its three standard handles; it is put in a job that no process may leave and that ends every process in it when the run ends; its token and job are read back before it runs (the boundary row's `launch`) |
+| Batch files | refused: `cmd.exe` reads a `.bat`/`.cmd` file's arguments by its own rules. Start the agent's `.exe`, or `node` with the package's script |
+| Tool-shell wrapper (ADR-075) | none: tool commands keep the hook relay token, and the record says so |
+| `--isolate` | refused: there is no Isolated tier on Windows |
+
+**The access-list entries are kept.** The first run in a folder adds one inherited entry
+for that folder's own SID (`S-1-5-21-…`, derived from its path), which Windows hands to
+every file below; in a large tree that takes a while once, and the run says so. Later runs
+find it and change nothing. The SIDs belong to no account, so the entries give no one
+else anything; `icacls <folder>` lists them. A write root at or inside OpenMoat's state
+directory is refused, whose list stays exactly the two entries `init` set (ADR-083).
+
+**Hooks inside the run.** A hook the agent starts can read the state directory but not
+write the audit log, so the guard opens the lock for writing and, when that is refused
+and its own token is restricted, has the run decide the call (ADR-028); a variable or a
+setting cannot make a token restricted.
+
+`openmoat mcp wrap` does not put MCP servers under this tier by default (most start
+through `npx`, a batch file); `openmoat mcp wrap --sandbox` asks for it.
+
 ## `openmoat run --isolate` (Isolated tier, Linux)
 
 On Linux the Isolated tier runs the agent in its own view of the machine, built with
@@ -957,9 +1003,10 @@ OS sandbox: openmoat run --write ~/.gemini -- gemini (docs/SANDBOX.md)
 | Qwen Code | `openmoat run --write ~/.qwen -- qwen` |
 | Crush | `openmoat run --write ~/.local/share/crush --write ~/.cache/crush -- crush` |
 
-On macOS before 13, on Windows, and on Linux without a network namespace (where
-`openmoat run` refuses a `--write` path outside the project) those commands name why
-there is none. OpenClaw and the Continue CLI get no command: OpenClaw's Gateway serves a
+On macOS before 13 and on Linux without a network namespace (where `openmoat run`
+refuses a `--write` path outside the project) those commands name why there is none. On
+Windows they start the preview tier, which holds writes only; start the agent's `.exe`,
+not an npm `.cmd` shim. OpenClaw and the Continue CLI get no command: OpenClaw's Gateway serves a
 local port, which the sandbox does not allow, and which directories `cn` writes was not
 checked.
 

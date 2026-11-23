@@ -98,6 +98,12 @@ pub fn unavailable() -> Option<String> {
 /// How macOS holds the network: the profile allows the proxy's address alone.
 pub const NETWORK: NetworkMode = NetworkMode::Profile;
 
+/// None: the tool-shell wrapper (ADR-075) works here.
+pub const TOOL_SHELL_GAP: Option<&str> = None;
+
+/// `openmoat mcp wrap` starts servers under `openmoat run` by default here.
+pub const MCP_SANDBOX_BY_DEFAULT: bool = true;
+
 /// The restriction a macOS run plans (ADR-089): the Seatbelt profile.
 /// `sandbox-exec` reports nothing back and there is no `/proc`, so it is
 /// never marked applied or tested; the profile is what `openmoat sandbox

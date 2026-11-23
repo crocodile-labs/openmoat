@@ -10,7 +10,7 @@ The `openmoat` binary (and `moat`, `src/bin/moat.rs`): grammar (`cli.rs`), comma
 - `init` is idempotent: never overwrites a policy, never duplicates a hook, always backs up before editing a host file.
 - Commands that re-pin or widen trust refuse without a terminal or with an agent among their parents (AGENTS §7). Never add another way around the terminal check; `MOAT_ASSUME_TTY=1` works only in debug builds.
 - Everything persisted to the audit log passes `openmoat_audit::redact`.
-- Platform code lives in `cfg`-selected files (`commands/run/{macos,linux,unsupported}.rs`), never scattered `cfg`. Paths are slash-separated canonical (`paths.rs`).
+- Platform code lives in `cfg`-selected files (`commands/run/{macos,linux,windows,unsupported}.rs`), never scattered `cfg`. Paths are slash-separated canonical (`paths.rs`).
 - Per-host facts come from the host's spec in `openmoat-hosts`; do not branch on `Host::<Variant>` here.
 
 ## Test
