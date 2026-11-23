@@ -31,9 +31,11 @@ use crate::engine::{CompiledPolicy, Section};
 use crate::kind::Kind;
 use crate::verdict::Verdict;
 use conditional::{Role, Shared};
+use place::{Place, place, unplace};
 
 mod conditional;
 mod differing;
+mod place;
 
 /// Most product states one search visits before it gives up unproven.
 const MAX_STATES: usize = 250_000;
@@ -450,23 +452,24 @@ pub(super) fn search(
         .iter()
         .map(|n| Local::new(n, reps.len()))
         .collect();
-    let start: Vec<(u32, u32)> = (0..locals.len())
-        .filter_map(|m| u32::try_from(m).ok().map(|m| (m, 1)))
+    let start: Vec<Place> = (0..locals.len())
+        .filter_map(|m| u32::try_from(m).ok().map(|m| place(m, 1)))
         .collect();
-    let mut states: HashMap<Vec<(u32, u32)>, usize> = HashMap::from([(start.clone(), 0)]);
+    let mut states: HashMap<Vec<Place>, usize> = HashMap::from([(start.clone(), 0)]);
     let mut parents: Vec<(usize, u8)> = vec![(0, 0)];
     let mut queue = VecDeque::from([(start, 0)]);
     let mut seen_pairs = BTreeSet::new();
     let mut unconfirmed = None;
     let before = found.len();
-    let mut universal: HashMap<(u32, u32), bool> = HashMap::new();
+    let mut universal: HashMap<Place, bool> = HashMap::new();
     let mut stop_at = MAX_STATES;
     let differing = old_side.differing(&new_side);
     while let Some((state, at)) = queue.pop_front() {
         let accepted: BTreeSet<usize> = state
             .iter()
-            .filter(|(m, l)| locals[*m as usize].accept[*l as usize])
-            .map(|(m, _)| *m as usize)
+            .map(|&p| unplace(p))
+            .filter(|&(m, l)| locals[m as usize].accept[l as usize])
+            .map(|(m, _)| m as usize)
             .collect();
         let was = old_side.verdict(&accepted, false);
         let now = new_side.verdict(&accepted, true);
@@ -487,33 +490,32 @@ pub(super) fn search(
         // pattern that may lower a verdict can no longer match (`differing.rs`).
         if differing
             .as_ref()
-            .is_some_and(|d| !state.iter().any(|(m, _)| d.contains(&(*m as usize))))
+            .is_some_and(|d| !state.iter().any(|&p| d.contains(&(unplace(p).0 as usize))))
         {
             continue;
         }
         // No continuation can widen: the new policy holds at least what the
-        // old one gives any of them at most.
-        let mut liveness: HashMap<usize, Live> = HashMap::with_capacity(state.len());
-        for &(m, l) in &state {
-            let always = *universal.entry((m, l)).or_insert_with(|| {
+        // old one gives any of them at most. A matcher not in the state is dead.
+        let mut liveness = vec![Live::Dead; locals.len()];
+        for &p in &state {
+            let (m, l) = unplace(p);
+            let always = *universal.entry(p).or_insert_with(|| {
                 locals[m as usize].universal(&matchers.nfas[m as usize], l, &reps)
             });
-            liveness.insert(m as usize, if always { Live::Always } else { Live::Alive });
+            liveness[m as usize] = if always { Live::Always } else { Live::Alive };
         }
-        let live = |m: usize| liveness.get(&m).copied().unwrap_or(Live::Dead);
+        let live = |m: usize| liveness.get(m).copied().unwrap_or(Live::Dead);
         if new_side.lowest(&live) >= old_side.highest(&live) {
             continue;
         }
         for (class, &byte) in reps.iter().enumerate() {
-            let next: Vec<(u32, u32)> = state
+            let next: Vec<Place> = state
                 .iter()
-                .map(|&(m, l)| {
-                    (
-                        m,
-                        locals[m as usize].step(&matchers.nfas[m as usize], l, class, byte),
-                    )
+                .filter_map(|&p| {
+                    let (m, l) = unplace(p);
+                    let to = locals[m as usize].step(&matchers.nfas[m as usize], l, class, byte);
+                    (to != 0).then(|| place(m, to))
                 })
-                .filter(|&(_, l)| l != 0)
                 .collect();
             if !states.contains_key(&next) {
                 if states.len() >= stop_at && found.len() > before {
