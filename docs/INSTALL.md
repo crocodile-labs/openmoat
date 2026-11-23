@@ -493,7 +493,7 @@ Then, in a terminal of your own:
    sandboxes as `openmoat sandbox sync` does. `openmoat` alone offers the same at a
    terminal.
 
-### From 0.25.0 to the next release
+### From 0.25.0 to 0.26.0
 
 What you will see, and what to run:
 
