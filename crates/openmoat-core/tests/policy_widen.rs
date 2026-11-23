@@ -100,7 +100,14 @@ fn the_upgrade_from_the_0_24_default_only_narrows() {
     for p in &report.proof {
         assert_eq!(p.outcome, Outcome::Proven, "{p:?}");
     }
-    // The reverse is a widening the check names: the decoy-key record readable again.
+}
+
+/// The reverse of the upgrade above is a widening the check names: the
+/// decoy-key record readable again. Its own test, so it runs beside the
+/// upgrade's rather than after it.
+#[test]
+fn the_downgrade_to_the_0_24_default_widens() {
+    let old = Policy::parse(DEFAULT_V0_24_0).unwrap();
     let back = compare_rules(&default(), &old);
     assert!(
         back.widenings
