@@ -23,7 +23,7 @@ pub use checkpoint::{
     check_export,
 };
 pub use key::{ChainKey, hmac_sha256};
-pub use query::{SessionSummary, Summary};
+pub use query::{LEDGER_HOST, LEDGER_SESSION, SessionSummary, Summary, is_ledger};
 pub use redact::{KnownSecrets, MIN_SECRET_LEN, TOKEN_SHAPES, redact, redact_value, token_shape};
 pub use store::{
     AnchorCheck, BreakKind, Cached, ChainBreak, ChainHead, ChainReport, Event, EventId,

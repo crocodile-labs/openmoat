@@ -75,11 +75,41 @@ impl Summary {
     }
 }
 
+/// The host of the rows OpenMoat records about itself, such as the
+/// policy-change ledger's (ADR-117).
+pub const LEDGER_HOST: &str = "openmoat";
+
+/// The session every policy-change ledger row carries (ADR-117), so
+/// `openmoat show --session policy-changes` lists them.
+pub const LEDGER_SESSION: &str = "policy-changes";
+
+/// Whether `event` is a policy-change ledger row: a person's change to the
+/// policy, not an agent's call. Listings and summaries of agents' calls leave
+/// these out; the log, its chain, exports and `show --session` keep them.
+#[must_use]
+pub fn is_ledger(event: &Event) -> bool {
+    event.host == LEDGER_HOST && event.session_id == LEDGER_SESSION
+}
+
+/// The SQL condition that leaves out the ledger's rows ([`is_ledger`]); the
+/// literals are [`LEDGER_HOST`] and [`LEDGER_SESSION`] (a test checks it).
+const NOT_LEDGER: &str = "NOT (host = 'openmoat' AND session_id = 'policy-changes')";
+
+#[cfg(test)]
+#[test]
+fn the_sql_condition_names_the_ledger_constants() {
+    assert_eq!(
+        NOT_LEDGER,
+        format!("NOT (host = '{LEDGER_HOST}' AND session_id = '{LEDGER_SESSION}')")
+    );
+}
+
 impl Store {
-    /// Events at or after `since_ms`, optionally for one host, oldest first.
+    /// Agents' events at or after `since_ms`, optionally for one host, oldest
+    /// first; without the policy-change ledger's rows ([`is_ledger`]).
     pub fn since(&self, since_ms: i64, host: Option<&str>) -> Result<Vec<Event>, StoreError> {
         let mut stmt = self.conn.prepare(&format!(
-            "{} WHERE ts_ms >= ?1 AND (?2 IS NULL OR host = ?2) ORDER BY id",
+            "{} WHERE ts_ms >= ?1 AND (?2 IS NULL OR host = ?2) AND {NOT_LEDGER} ORDER BY id",
             self.select()
         ))?;
         let rows = stmt.query_map(params![since_ms, host], row_to_event)?;

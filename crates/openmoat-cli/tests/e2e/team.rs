@@ -46,10 +46,11 @@ fn team_report_aggregates_verified_exports() {
     let out = a.moat(&["audit", "report", &a_path, &b_path, &a_path]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let t = stdout(&out);
-    // Five decisions, and the policy-change row `allow --last` wrote (ADR-117).
-    assert!(t.contains("6 decisions"), "{t}");
+    // Five decisions: the policy-change rows `allow --last` and the setup
+    // wrote are a person's, not an agent's, and are left out (ADR-117).
+    assert!(t.contains("5 decisions"), "{t}");
     assert!(t.contains("claude-code  2 · 0 · 1 · 2"), "{t}");
-    assert!(t.contains("openmoat     1 · 0 · 0 · 0"), "{t}");
+    assert!(!t.contains("openmoat  "), "{t}");
     assert!(t.contains("secrets-paths"), "{t}");
     assert!(t.contains(&format!("    2  {KEY}")), "{t}");
     assert!(
@@ -58,7 +59,7 @@ fn team_report_aggregates_verified_exports() {
     );
 
     let report = json(&a.moat(&["audit", "report", &a_path, &b_path, "--format", "json"]));
-    assert_eq!(report["summary"]["total"], 6);
+    assert_eq!(report["summary"]["total"], 5);
     assert_eq!(report["top_denies"][0]["action"], KEY);
     assert_eq!(report["false_positive_candidates"][0]["action"], INSTALL);
     assert_eq!(report["sources"].as_array().map(Vec::len), Some(2));
@@ -68,14 +69,18 @@ fn team_report_aggregates_verified_exports() {
 fn team_report_refuses_an_export_that_does_not_verify() {
     let a = machine(&["cargo test", KEY], false);
     let file = export_to(&a, &a, "a.jsonl");
-    let edited = std::fs::read_to_string(&file)
-        .unwrap()
-        .replacen("\"deny\"", "\"allow\"", 1);
+    let exported = std::fs::read_to_string(&file).unwrap();
+    // The line of the first deny, whatever ledger rows (ADR-117) come before it.
+    let line = 1 + exported
+        .lines()
+        .position(|l| l.contains("\"deny\""))
+        .unwrap();
+    let edited = exported.replacen("\"deny\"", "\"allow\"", 1);
     std::fs::write(&file, edited).unwrap();
     let out = a.moat(&["audit", "report", &file.to_string_lossy()]);
     assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
     assert!(
-        text(&out).contains("a.jsonl: line 2 does not verify"),
+        text(&out).contains(&format!("a.jsonl: line {line} does not verify")),
         "{}",
         text(&out)
     );

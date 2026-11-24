@@ -43,8 +43,9 @@ fn at(sb: &Sandbox, now: u64, args: &[&str], input: Option<&str>) -> Output {
     )
 }
 
+/// The ledger's rows as JSON: the table `show` prints has no reasons.
 fn ledger(sb: &Sandbox) -> String {
-    text(&sb.moat(&["show", "--session", "policy-changes"]))
+    text(&sb.moat(&["show", "--session", "policy-changes", "--format", "json"]))
 }
 
 #[test]

@@ -15,7 +15,7 @@ use crate::home::Home;
 
 /// The session id every ledger row carries, so `openmoat show --session
 /// policy-changes` lists them.
-pub const SESSION: &str = "policy-changes";
+pub const SESSION: &str = openmoat_audit::LEDGER_SESSION;
 
 /// Most detail lines one row keeps (the widenings ADR-111 lists): the rest
 /// are counted.
@@ -71,7 +71,7 @@ fn write(home: &Home, command: &str, decision: &Decision) {
     }
     let written = crate::audit_key::open_existing(home).and_then(|store| {
         Ok(store.record(&openmoat_audit::NewEvent {
-            host: "openmoat",
+            host: openmoat_audit::LEDGER_HOST,
             session_id: SESSION,
             call_id: None,
             cwd: None,

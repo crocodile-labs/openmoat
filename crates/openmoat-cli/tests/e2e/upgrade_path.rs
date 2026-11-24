@@ -149,7 +149,8 @@ fn upgrade_from(version: i64) {
     let policy = std::fs::read_to_string(state(&sb, "policy.yaml")).unwrap();
     assert!(policy.contains(MY_RULE), "{policy}");
     pre_tool_use(&sb, &proj, "git status");
-    doctor_sees(&sb, old + 3, 3);
+    // The call, and the policy-change ledger's row for the upgrade (ADR-117).
+    doctor_sees(&sb, old + 4, 4);
     assert_eq!(std::fs::read(&key).unwrap(), made);
 }
 

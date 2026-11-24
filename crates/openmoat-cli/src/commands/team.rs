@@ -82,7 +82,11 @@ pub fn run(args: &TeamReportArgs) -> Result<Code> {
         // (overlapping exports of one machine); count it once.
         for event in exported {
             if seen.insert(event.hash.clone()) {
-                events.push(event.to_event()?);
+                let event = event.to_event()?;
+                // A person's policy change is no agent's decision (ADR-117).
+                if !openmoat_audit::is_ledger(&event) {
+                    events.push(event);
+                }
             }
         }
     }

@@ -97,7 +97,11 @@ keychain entitlement, which `cargo install` builds do not have.
    `gate-refused` row (`deny`) with why. They are ordinary events: hash-chained,
    keyed with the audit key (ADR-101) and covered by the signed checkpoints
    (ADR-110), so a row taken out or changed no longer verifies. `openmoat show
-   --session policy-changes` lists them. A log that cannot take the row is said on
+   --session policy-changes` lists them. They are a person's changes, not an agent's
+   calls, so the listings and summaries of agents' calls leave them out (`show` and
+   its `--since`, `replay`, `report`, `audit report`, the home screen;
+   `openmoat_audit::is_ledger`). The log, its chain, `audit export` and `doctor`'s
+   event count keep them. A log that cannot take the row is said on
    stderr and the change stands (as `snapshot::record`); before `openmoat init` there
    is no log and nothing is written.
 

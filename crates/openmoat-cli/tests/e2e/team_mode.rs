@@ -218,7 +218,8 @@ fn updates_refuse_a_replay_and_wait_for_a_person_to_widen() {
     let out = sb.moat_as_person(&["team", "update", v2.to_str().unwrap()]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let (verdict, reason) = sb.guard_bash("s1", &project, "make release");
-    assert_eq!(verdict, "review", "{reason}");
+    // Claude Code's answer for a review.
+    assert_eq!(verdict, "ask", "{reason}");
     assert!(reason.contains("team:acme:policy:release"), "{reason}");
 
     // The older bundle cannot be put back.
@@ -237,7 +238,7 @@ fn updates_refuse_a_replay_and_wait_for_a_person_to_widen() {
     );
     let declined = sb.moat_as_person(&["team", "update", v3.to_str().unwrap()]);
     assert_eq!(declined.status.code(), Some(USAGE), "{}", text(&declined));
-    assert_eq!(sb.guard_bash("s1", &project, "make release").0, "review");
+    assert_eq!(sb.guard_bash("s1", &project, "make release").0, "ask");
     let accepted = sb.moat_approving(&["team", "update", v3.to_str().unwrap()]);
     assert_eq!(accepted.status.code(), Some(OK), "{}", text(&accepted));
     assert_eq!(sb.guard_bash("s1", &project, "make release").0, "defer");
