@@ -88,6 +88,30 @@ pub fn aws_config(policy: &Policy, moat: &str) -> Option<(String, Option<String>
 }
 
 impl Helpers {
+    /// [`Helpers::prepare`] for `openmoat run`: in the run's own temp
+    /// directory, or the system's, resolved, where the run has none (the
+    /// Isolated tier, which binds the directory in); `git` holds the
+    /// `GIT_CONFIG_*` entries the run already sets, read before the
+    /// environment's.
+    pub fn for_run(
+        policy: &Policy,
+        run_temp: Option<String>,
+        git: &[(String, String)],
+    ) -> Result<Self> {
+        let temp = match run_temp {
+            Some(temp) => PathBuf::from(temp),
+            None => std::fs::canonicalize(std::env::temp_dir())
+                .context("resolving the temp directory for the credential helpers")?,
+        };
+        let lookup = |var: &str| {
+            git.iter()
+                .find(|(name, _)| name == var)
+                .map(|(_, value)| value.clone())
+                .or_else(|| std::env::var(var).ok())
+        };
+        Self::prepare(policy, &temp, &lookup)
+    }
+
     /// The settings for `policy`, written in a new directory in `temp`; `git`
     /// reads the `GIT_CONFIG_*` variables the agent gets so far. Nothing for
     /// a policy without `helper:` secrets.
