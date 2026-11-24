@@ -161,7 +161,7 @@ pub fn add(args: &SecretAddArgs) -> Result<Code> {
         out.finish()?;
         return Ok(Code::Ok);
     }
-    super::edit::apply(&home, &before, &after, &mut out)?;
+    super::edit::apply(&home, "openmoat secret add", &before, &after, &mut out)?;
     out.finish()?;
     super::sandbox::sync()?;
     if secret.terminates() {

@@ -74,21 +74,37 @@ fn edit(home: &Home, draft: &Path, before: &str) -> Result<Code> {
             writeln!(out, "the policy was not changed")?;
             break;
         }
-        apply(home, before, &after, &mut out)?;
+        apply(home, "openmoat edit", before, &after, &mut out)?;
         break;
     }
     out.finish()?;
     Ok(Code::Ok)
 }
 
-/// Keep the previous policy next to it, write the new one and re-pin.
-pub(super) fn apply(home: &Home, before: &str, after: &str, out: &mut Deferred) -> Result<()> {
+/// Keep the previous policy next to it, write the new one and re-pin. A change
+/// that widens (ADR-111), or one the check cannot rank, asks the gate first
+/// and is recorded as `command`'s.
+pub(super) fn apply(
+    home: &Home,
+    command: &str,
+    before: &str,
+    after: &str,
+    out: &mut Deferred,
+) -> Result<()> {
     // A pinned file changed while the editor was open would be accepted unseen.
     integrity::refuse_drift(home, "apply the edit")?;
+    let widened = widenings(before, after);
+    let pass = match &widened {
+        Some(_) => Some(crate::gate::pass(home, command)?),
+        None => None,
+    };
     let path = home.policy_path();
     let backup = home.root().join("policy.yaml.bak");
     write_private(&backup, before.as_bytes())?;
     write_private(&path, after.as_bytes())?;
+    if let (Some(pass), Some(details)) = (pass, widened) {
+        pass.record(home, "the policy file changed", &details);
+    }
     let binary = crate::install::hook_binary()?;
     let lock = integrity::repin(home, &binary, HookPins::Keep)?;
     writeln!(out, "✔ {} updated", path.display())?;
@@ -99,6 +115,21 @@ pub(super) fn apply(home: &Home, before: &str, after: &str, out: &mut Deferred) 
         backup.display()
     )?;
     Ok(())
+}
+
+/// What the change from `before` to `after` widens, one line each (ADR-111);
+/// `None` when it only narrows. A policy either side that cannot be read or
+/// compared counts as a widening: the gate asks rather than guess.
+fn widenings(before: &str, after: &str) -> Option<Vec<String>> {
+    let compared = openmoat_core::Policy::parse(before)
+        .and_then(|old| Ok((old, openmoat_core::Policy::parse(after)?)))
+        .map_err(anyhow::Error::from)
+        .and_then(|(old, new)| crate::widen::compare(&old, &new, &[]));
+    match compared {
+        Ok(report) if !report.widens() && !report.unchecked() => None,
+        Ok(report) => Some(crate::widen::ledger_lines(&report)),
+        Err(error) => Some(vec![format!("not compared: {error:#}")]),
+    }
 }
 
 /// Run `$VISUAL`, `$EDITOR` or the fallback on `draft` and wait for it. The

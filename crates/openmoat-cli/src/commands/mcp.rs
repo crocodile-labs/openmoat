@@ -126,6 +126,9 @@ pub(super) fn review_and_accept(
         )?;
         return Ok(true);
     }
+    // Accepting lets a changed server's or held tool's calls run: the gate asks
+    // (ADR-117).
+    let pass = crate::gate::pass(home, "openmoat mcp accept")?;
     mcp::accept(home, &changes)?;
     let mut count = 0;
     for (path, pins) in &mut held {
@@ -133,6 +136,15 @@ pub(super) fn review_and_accept(
         pins.accept_held();
         pins.save(path)?;
     }
+    let mut accepted: Vec<String> = changes
+        .iter()
+        .map(|c| format!("server {} ({})", c.id, c.host))
+        .collect();
+    accepted.extend(
+        held.iter()
+            .map(|(_, p)| format!("held tools of {}", p.server)),
+    );
+    pass.record(home, "MCP servers and tools accepted", &accepted);
     writeln!(
         out,
         "✔ accepted {} server definition(s) and {count} held tool(s), instructions, prompts or resources",
@@ -426,12 +438,17 @@ fn first_sight_note(
 
 pub fn unwrap(args: &McpUnwrapArgs) -> Result<Code> {
     let home = person_only("unwrap")?;
+    // A server unwrapped starts without OpenMoat's pins on its tools: the gate
+    // asks (ADR-117).
+    let pass = crate::gate::pass(&home, "openmoat mcp unwrap")?;
     let binary = crate::install::hook_binary()?;
     let mut out = Deferred::default();
     let hosts = mcp::set_up_hosts(&home, &binary);
     let applied = unwrap_servers(&home, &hosts, &args.servers, &mut out)?;
     if applied.total() == 0 {
         writeln!(out, "· no wrapped MCP server to unwrap")?;
+    } else {
+        pass.record(&home, "MCP servers unwrapped", &args.servers);
     }
     out.finish()?;
     Ok(applied.code(&args.servers))

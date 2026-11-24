@@ -229,6 +229,7 @@ pub(super) fn key_modes(home: &Home) -> Vec<String> {
         crate::proxy_session::key_path(home),
         crate::proxy_ca::key_path(home),
         crate::audit_key::path(home),
+        crate::gate::path(home),
     ]
     .iter()
     .filter_map(|path| crate::key_file::problem(path))

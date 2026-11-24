@@ -138,9 +138,16 @@ pub fn connect(args: &ConnectArgs) -> Result<Code> {
                 format!("--expires {text} is not a span of 1 to 60 minutes, such as `5m`")
             })?,
     };
-    let (_home, store) = store()?;
+    let (home, store) = store()?;
     let (secrets, options) = fields(spec, args)?;
+    // A channel is a new way held calls get answered: the gate asks (ADR-117).
+    let pass = crate::gate::pass(&home, "openmoat approvals connect")?;
     let account = crate::remote::connect(&store, spec, &secrets, options, expiry_s)?;
+    pass.record(
+        &home,
+        &format!("approvals channel {} connected as {account}", spec.title),
+        &[],
+    );
     let mut out = Deferred::default();
     writeln!(
         out,
@@ -164,7 +171,7 @@ pub fn connect(args: &ConnectArgs) -> Result<Code> {
 /// `openmoat approvals allow <id>`.
 pub fn allow(args: &ApproverArgs) -> Result<Code> {
     person("openmoat approvals allow")?;
-    let (_home, store) = store()?;
+    let (home, store) = store()?;
     let (key, mut settings) = connected(&store)?;
     let spec = REGISTRY.find(&settings.channel)?;
     let id = REGISTRY.approver(spec, &args.user_id)?;
@@ -172,8 +179,12 @@ pub fn allow(args: &ApproverArgs) -> Result<Code> {
     if settings.approver(&id) {
         writeln!(out, "{id} can already approve")?;
     } else {
+        // One more approver is one more way a held call runs: the gate asks
+        // (ADR-117).
+        let pass = crate::gate::pass(&home, "openmoat approvals allow")?;
         settings.approvers.push(id.clone());
         settings.save(&store.settings_path(), &key)?;
+        pass.record(&home, &format!("{id} may approve held calls"), &[]);
         writeln!(
             out,
             "{id} can now approve calls held for review on this machine; `openmoat approvals \

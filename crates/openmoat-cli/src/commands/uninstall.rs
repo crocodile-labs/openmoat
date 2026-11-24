@@ -43,6 +43,12 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
             .filter(|h| HostConfig::for_host(&home, *h).is_ok())
             .collect(),
     };
+    // Taking the hooks out is the widest loosening there is: the gate asks
+    // (ADR-117), and the row is written while the audit log is still the one
+    // the hooks write to.
+    let pass = crate::gate::pass(&home, "openmoat uninstall")?;
+    let names: Vec<String> = hosts.iter().map(|h| h.id().to_owned()).collect();
+    pass.record(&home, "hooks and sandbox settings removed", &names);
     let mut out = Deferred::default();
     // Before the record forgets where each agent is: the wrapped servers point at
     // `moat mcp proxy`, which outlives the hooks only as a dangling path.

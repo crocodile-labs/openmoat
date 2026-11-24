@@ -442,7 +442,14 @@ fn accept(
         writeln!(report.out, "nothing else to accept: lock is intact")?;
         return Ok(());
     }
+    // Re-pinning over drift accepts every changed file: the gate asks (ADR-117).
+    let drifted: Vec<String> = integrity::Lock::load(&home.lock_path()).map_or_else(
+        |error| vec![format!("the lock cannot be read: {error:#}")],
+        |lock| lock.verify().iter().map(ToString::to_string).collect(),
+    );
+    let pass = crate::gate::pass(home, "openmoat doctor --accept")?;
     let lock = integrity::repin(home, binary, HookPins::Keep)?;
+    pass.record(home, "lock re-pinned over drift", &drifted);
     writeln!(
         report.out,
         "✔ lock re-pinned for {} files",

@@ -72,7 +72,14 @@ pub fn trust_key(args: &TrustKeyArgs) -> Result<Code> {
         .collect();
     text.push_str(&line);
     text.push('\n');
+    // A new signer is a new source of trusted policy: the gate asks (ADR-117).
+    let pass = crate::gate::pass(&home, "openmoat policy trust-key")?;
     write_private(&path, text.as_bytes())?;
+    pass.record(
+        &home,
+        &format!("trusted signing key {fingerprint} as {}", args.name),
+        &[],
+    );
     let pinned = repin(&home)?;
     writeln!(
         out,
@@ -85,6 +92,14 @@ pub fn trust_key(args: &TrustKeyArgs) -> Result<Code> {
     writeln!(out, "✔ lock re-pinned ({pinned} files)")?;
     out.finish()?;
     Ok(Code::Ok)
+}
+
+/// `policy` without the rules of the pack `name`.
+fn take_out(policy: &mut openmoat_core::Policy, name: &str) {
+    let own = format!("{}{name}:", packs::PACK_RULE_PREFIX);
+    for groups in [&mut policy.deny, &mut policy.repo_review, &mut policy.allow] {
+        groups.retain(|g| !g.id.starts_with(&own));
+    }
 }
 
 /// `<pack>.sig` beside the pack.
@@ -144,23 +159,31 @@ pub fn install(args: &InstallArgs) -> Result<Code> {
     // pack this one replaces taken out.
     let mut policy = home.load_policy()?;
     let before = policy.clone();
-    let own = format!("{}{name}:", packs::PACK_RULE_PREFIX);
-    for groups in [&mut policy.deny, &mut policy.repo_review, &mut policy.allow] {
-        groups.retain(|g| !g.id.starts_with(&own));
-    }
+    take_out(&mut policy, &name);
     packs::apply(&mut policy, &name, &pack)?;
     // What the pack (or this version of it) widens, shown before it is written
     // (ADR-111).
     let mut out = Deferred::default();
     let report = crate::widen::compare(&before, &policy, &[])?;
-    if report.widens() || report.unchecked() {
+    let pass = if report.widens() || report.unchecked() {
         writeln!(out, "Installing `{name}` widens your policy:")?;
         crate::widen::write_widenings(&mut out, &report, false)?;
+        out.flush()?;
+        // A pack that widens asks the gate too (ADR-117).
+        Some(crate::gate::pass(&home, "openmoat policy install")?)
     } else {
         writeln!(out, "✔ installing `{name}` moves no call toward allow")?;
-    }
+        None
+    };
 
     write_private(&packs::pack_path(&home, &name), text.as_bytes())?;
+    if let Some(pass) = pass {
+        pass.record(
+            &home,
+            &format!("installed policy pack `{name}` signed by {signer}"),
+            &crate::widen::ledger_lines(&report),
+        );
+    }
     write_private(&packs::sig_path(&home, &name), &signature)?;
     let mut installed = Packs::load(&home.packs_path())?;
     let replaced = installed.packs.insert(
@@ -216,7 +239,25 @@ pub fn remove(args: &RemoveArgs) -> Result<Code> {
         packs::pack_path(&home, &args.name),
         packs::sig_path(&home, &args.name),
     ];
+    // Taking out a pack's deny or review rules widens: the gate asks then.
+    let widened = home.load_policy().ok().and_then(|before| {
+        let mut after = before.clone();
+        take_out(&mut after, &args.name);
+        let report = crate::widen::compare(&before, &after, &[]).ok()?;
+        (report.widens() || report.unchecked()).then(|| crate::widen::ledger_lines(&report))
+    });
+    let pass = match &widened {
+        Some(_) => Some(crate::gate::pass(&home, "openmoat policy remove")?),
+        None => None,
+    };
     installed.save(&home.packs_path())?;
+    if let (Some(pass), Some(details)) = (pass, widened) {
+        pass.record(
+            &home,
+            &format!("removed policy pack `{}`", args.name),
+            &details,
+        );
+    }
     for file in &files {
         let _ = fs::remove_file(file);
     }

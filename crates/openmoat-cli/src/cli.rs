@@ -172,6 +172,26 @@ pub enum Command {
         #[command(subcommand)]
         command: HooksCommand,
     },
+    /// A second factor on every command that loosens the protection (ADR-117): once
+    /// set up, `allow`, `trust`, `edit`, `doctor --accept` and the other commands that
+    /// widen or re-pin ask for a code from your authenticator app as well.
+    Gate {
+        #[command(subcommand)]
+        command: GateCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum GateCommand {
+    /// Make a new secret, show it once for your authenticator app, and turn the gate on
+    /// once you type a code the app gives. Refused unless run by a person at an
+    /// interactive terminal.
+    Setup,
+    /// Whether the gate is on, and how many wrong codes count against its limit now.
+    Status,
+    /// Turn the gate off: asks for a code first. Refused unless run by a person at an
+    /// interactive terminal.
+    Remove,
 }
 
 #[derive(Debug, Subcommand)]

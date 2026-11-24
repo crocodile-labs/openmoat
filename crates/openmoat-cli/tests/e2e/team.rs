@@ -46,8 +46,10 @@ fn team_report_aggregates_verified_exports() {
     let out = a.moat(&["audit", "report", &a_path, &b_path, &a_path]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let t = stdout(&out);
-    assert!(t.contains("5 decisions"), "{t}");
+    // Five decisions, and the policy-change row `allow --last` wrote (ADR-117).
+    assert!(t.contains("6 decisions"), "{t}");
     assert!(t.contains("claude-code  2 · 0 · 1 · 2"), "{t}");
+    assert!(t.contains("openmoat     1 · 0 · 0 · 0"), "{t}");
     assert!(t.contains("secrets-paths"), "{t}");
     assert!(t.contains(&format!("    2  {KEY}")), "{t}");
     assert!(
@@ -56,7 +58,7 @@ fn team_report_aggregates_verified_exports() {
     );
 
     let report = json(&a.moat(&["audit", "report", &a_path, &b_path, "--format", "json"]));
-    assert_eq!(report["summary"]["total"], 5);
+    assert_eq!(report["summary"]["total"], 6);
     assert_eq!(report["top_denies"][0]["action"], KEY);
     assert_eq!(report["false_positive_candidates"][0]["action"], INSTALL);
     assert_eq!(report["sources"].as_array().map(Vec::len), Some(2));

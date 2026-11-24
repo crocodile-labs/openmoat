@@ -121,6 +121,34 @@ pub fn write_widenings(out: &mut impl Write, report: &Report, all: bool) -> Resu
     Ok(())
 }
 
+/// Each widening and each widening or unranked setting of `report`, one line
+/// each: what the policy-change ledger records (ADR-117).
+pub fn ledger_lines(report: &Report) -> Vec<String> {
+    let mut lines: Vec<String> = report
+        .widenings
+        .iter()
+        .map(|w| {
+            format!(
+                "widens {}: {} ({}) → {} ({})",
+                w.case,
+                w.before.as_str(),
+                w.before_rules.join(", "),
+                w.after.as_str(),
+                w.after_rules.join(", ")
+            )
+        })
+        .collect();
+    for change in &report.settings {
+        let mark = match change.effect {
+            Effect::Widens => "widens",
+            Effect::Unchecked => "changed, not ranked",
+            Effect::Narrows => continue,
+        };
+        lines.push(format!("{mark}: {}: {}", change.setting, change.what));
+    }
+    lines
+}
+
 /// The whole report: widenings, settings, rule changes and what was proven.
 pub fn write(out: &mut impl Write, report: &Report, all: bool) -> Result<()> {
     write_widenings(out, report, all)?;

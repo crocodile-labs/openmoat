@@ -90,6 +90,25 @@ something OpenMoat claims to stop.
   digest is cached beside the lock by size, modification time and inode; whoever can
   write the state directory can rewrite the lock as well.
 
+- **The person-only check is a terminal and ancestry check; the possession gate adds a
+  code, not a person (ADR-117).** `openmoat allow`, `trust`, `doctor --accept` and the
+  other commands of AGENTS.md §7 refuse without a terminal or with an agent among their
+  parent processes. A line typed into the person's own terminal, or a command started
+  detached from the agent under a pseudo-terminal, passes that check. With `openmoat
+  gate setup` each command that widens or re-pins also needs a six-digit code from the
+  person's authenticator app (RFC 6238; single-use, five wrong codes per 15 minutes),
+  read from the controlling terminal; `--yes` never skips it. What it stops: an agent
+  that gets one such command run but whose own calls cannot read
+  `~/.moat/audit.key.gate` (`kernel-self` denies it, and the host sandboxes generated
+  from it), and a person pasting a command an agent suggested without noticing what it
+  loosens. What it does not stop: a process with the person's full access outside
+  every hook and sandbox (malware running as the user, or an agent that can type any
+  line into the person's terminal while nobody watches), which reads the secret as it
+  could the audit key, or removes it and the state directory and runs `openmoat init`
+  afresh. The secret is an owner-only file, not a keychain item or a hardware key:
+  Touch ID and FIDO2 are future work. Without enrolment nothing changes, and every
+  loosening is still recorded in the audit log's `policy-changes` session.
+
 - **Injected input is linked only where the host reports output, and only for the same
   request.**
   - Claude Code (and the Continue CLI, which runs Claude Code's hooks), Codex

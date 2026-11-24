@@ -183,13 +183,14 @@ pub fn uninstall() -> Result<Code> {
     let home = Home::locate()?;
     let manager = service::manager(&home, &service::PROXY)?;
     let mut out = Deferred::default();
+    // Without the service the proxy's egress checks stop: the gate asks (ADR-117).
+    let pass = crate::gate::pass(&home, "openmoat proxy uninstall")?;
     match manager.uninstall()? {
-        Some(path) => writeln!(
-            out,
-            "✔ {} removed: {}",
-            service::display_name(),
-            path.display()
-        )?,
+        Some(path) => {
+            pass.record(&home, "egress proxy service removed", &[]);
+            let name = service::display_name();
+            writeln!(out, "✔ {name} removed: {}", path.display())?;
+        }
         None => writeln!(out, "· {} was not installed", service::display_name())?,
     }
     out.finish()?;

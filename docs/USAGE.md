@@ -1079,6 +1079,50 @@ container configuration (`runs-later`), pip's, uv's and Bun's user configuration
 the same rule of the new default, so an edit near the top of a rule list no longer stops
 the upgrade.
 
+### Ask for a code before anything is loosened
+
+The commands that loosen your protection run only for a person at a terminal, with no
+agent among the programs that started them. A program that gets a line typed into your
+terminal passes that check. Turn on the gate and each of them also asks for a code from
+the authenticator app on your phone (any app that takes TOTP codes):
+
+```bash
+openmoat gate setup    # shows a link and a key once; type the code your app then shows
+openmoat gate status   # on or off, and wrong codes counted in the last 15 minutes
+openmoat gate remove   # asks for a code, then turns it off
+```
+
+```
+$ openmoat allow --site api.example.com
+Code from your authenticator app to confirm `openmoat allow`: 492039
+✔ added to ~/.moat/policy.d/approved.yaml:
+```
+
+Asked every time, `--yes` included: `allow` (not `--remove` or `--prune`), `trust` (not
+`--revoke`), `doctor --accept` and `init` over drift, `hooks accept` and `mcp accept`
+of something new or changed, `mcp unwrap`, `policy trust-key`, `policy upgrade --undo`,
+`audit checkpoint --new-key`, `uninstall`, `proxy uninstall`, `approvals connect`,
+`approvals allow` and `gate remove`. Asked when the change widens the policy
+([ADR-111](adr/ADR-111-policy-never-widens-check.md)'s check, the one `policy upgrade`
+shows): `edit`, `secret add`, `policy upgrade --accept-widening`, `policy install` and
+`policy remove`. Commands that only tighten, the hooks themselves and answering one held
+call ask nothing. A wrong, missing or already-used code refuses the command (exit 64)
+and changes nothing; after five wrong codes in 15 minutes the gate waits.
+
+Gate on or off, each loosening is recorded in the audit log, with what it changed (each
+case it moves toward allow), the account and whether a code was given; refusals too:
+
+```bash
+openmoat show --session policy-changes
+```
+
+The secret is kept in `~/.moat/audit.key.gate`, owner-only and denied to agents like the
+audit key. A program running as you outside every hook and sandbox can still read it
+([LIMITS.md](LIMITS.md#approvals-and-prompts)). If you lose your phone, remove
+`~/.moat/audit.key.gate` and `~/.moat/gate.json` in your own terminal and run
+`openmoat gate setup` again.
+[ADR-117](adr/ADR-117-loosening-possession-gate.md) has the design.
+
 ## Share rules with your team
 
 Commit `.moat/policy.yaml` at the root of a repository. Its `deny` and `review` rules
@@ -1477,6 +1521,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes; it shows the file, its digest and every rule it adds, and asks `Trust this file? [y/N]` first |
 | `openmoat hooks list` | list the hook commands, plugin hooks, program-running settings and git programs the agents load besides OpenMoat's hook, and what waits for `openmoat hooks accept`; exits 64 while something waits |
 | `openmoat hooks accept` | review each new or changed one, with the shell classifier's verdict, and record it; until then `openmoat status` names it, and the calls of the agent that loads it are denied when that verdict is deny (held for review for any, with `hooks.foreign: hold`) ([ADR-109](adr/ADR-109-foreign-hook-ledger-and-fail-safe-hooks.md)) |
+| `openmoat gate setup` · `openmoat gate status` · `openmoat gate remove` | turn on, check or turn off the code from your authenticator app that every command loosening the policy then asks for ([above](#ask-for-a-code-before-anything-is-loosened), [ADR-117](adr/ADR-117-loosening-possession-gate.md)) |
 | `openmoat mcp accept [<server>]` | review a changed or new MCP server definition, or tools `openmoat mcp proxy` holds, and accept them; until then that server's tool calls are refused |
 | `openmoat mcp wrap [<server>…] [--sandbox \| --no-sandbox] [--dry-run]` · `openmoat mcp unwrap [<server>…]` | run stdio MCP servers through `openmoat mcp proxy`, which starts one only from a definition a person accepted, in `openmoat run`'s sandbox by default where it can sandbox, not on Windows, whose preview tier needs `--sandbox` (`--no-sandbox` opts out; a rewrap keeps the choice unless a flag is given), pins each tool's title, description, input and output schemas and annotations and hides one that changed or that nobody accepted yet, every tool of a server it has not seen included · point them back; `openmoat init --mcp-proxy` wraps every one, `openmoat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md), [ADR-032](adr/ADR-032-mcp-proxy-holds-first-sight.md)) |
 | `openmoat mcp proxy --server <name> [--host <agent>] [--sandbox] [--write PATH]… -- <command>` | the wrapper `openmoat mcp wrap` writes into the agent's configuration; the agent starts it, you do not. `--host` names the agent whose file starts it: only that agent's hook decisions let its calls through (a server wrapped before this option existed gets it the next time you run `openmoat mcp wrap`). It starts the server only when this command line is the one an accepted definition gives; otherwise it answers every request with an error naming `openmoat mcp accept <name>` and exits 1 ([ADR-049](adr/ADR-049-mcp-startup-gate.md)) |

@@ -79,6 +79,9 @@ fn remake(path: &Path) -> &'static str {
     } else if name == Some(crate::audit_signing::KEY_FILE) {
         "run `openmoat audit checkpoint --new-key` in your terminal, and give the new public key \
          `openmoat doctor` shows to whoever checks your checkpoints"
+    } else if name == Some(crate::gate::KEY_FILE) {
+        "the gate's secret may be known: remove the file and OpenMoat's account from your \
+         authenticator app in your terminal, then run `openmoat gate setup` again"
     } else {
         "make a new one (remove the file; `openmoat proxy ca init` for the CA)"
     }

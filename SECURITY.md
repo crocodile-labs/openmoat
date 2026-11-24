@@ -141,5 +141,14 @@ copying a folder that holds such files or other denied paths (`protected-content
 agent's own CLI saves an MCP server or starts an MCP sign-in; per-session credentials
 at both egress proxies, so a session's taint and connection share apply to its
 commands' traffic and other local programs are refused (ADR-027, ADR-044); a warning when an
-installed agent has a published security advisory; redaction before audit storage; owner-only permissions on state files (macOS and Linux); a pure core
+installed agent has a published security advisory; redaction before audit storage; owner-only permissions on state files (macOS and Linux); an
+opt-in second factor (`openmoat gate setup`: a code from an authenticator app, single-use
+and rate-limited) on every command that widens or re-pins the policy, with each such
+change recorded in the signed audit log (ADR-117); a pure core
 with no I/O and no `unsafe`; dependency and licence auditing with `cargo deny`.
+
+The second factor stops a process that gets a loosening command run in your terminal
+but cannot read OpenMoat's state directory (an agent's own calls cannot: `kernel-self`).
+It does not stop malware with your account's full access outside every hook and
+sandbox, which can read the factor's secret file as it can the audit key
+(`docs/THREAT_MODEL.md` §5).

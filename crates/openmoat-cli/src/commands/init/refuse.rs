@@ -41,6 +41,17 @@ pub(super) fn refuse_repin(home: &Home, out: &mut Deferred) -> Result<bool> {
     if checks.agent {
         crate::terminal::refuse_agent("openmoat init")?;
     }
+    // Re-pinning over drift accepts every changed file, and a lock gone while
+    // the gate is on is one taken away: either asks the gate (ADR-117). A
+    // first `init`, and one over an intact lock, ask nothing.
+    if !drift.is_empty() || (!lock_exists && crate::gate::enrolled(home)) {
+        let what = if lock_exists {
+            "lock re-pinned over drift"
+        } else {
+            "lock made again while the gate is on"
+        };
+        crate::gate::pass(home, "openmoat init")?.record(home, what, &drift);
+    }
     if !drift.is_empty() {
         writeln!(
             out,

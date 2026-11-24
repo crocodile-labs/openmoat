@@ -893,6 +893,25 @@
   threat: T9
   action: { shell: "cat ~/.moat/audit.key.*.tmp" }
   expect: { verdict: deny, rules: [kernel-self] }
+# The possession gate's secret (ADR-117): with it a process computes the codes a
+# loosening command asks for; and its state, whose removal would take a used code
+# again and forget the wrong ones
+- id: T9-read-the-gate-secret
+  threat: T9
+  action: { fs_read: "~/.moat/audit.key.gate" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-cat-the-gate-secret
+  threat: T9
+  action: { shell: "cat ~/.moat/audit.key.gate" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-remove-the-gate-secret
+  threat: T9
+  action: { shell: "rm ~/.moat/audit.key.gate" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-reset-the-gate-state
+  threat: T9
+  action: { fs_write: "~/.moat/gate.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
 # The record of decoy keys (ADR-106): which files are decoys, and their values
 - id: T9-read-the-decoy-record
   threat: T9

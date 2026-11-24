@@ -8,6 +8,7 @@ pub(crate) mod bench;
 mod demo;
 mod doctor;
 mod edit;
+mod gate;
 pub(crate) mod guard;
 mod hooks;
 mod init;
@@ -37,8 +38,8 @@ mod why;
 use anyhow::Result;
 
 use crate::cli::{
-    ApprovalsCommand, AuditCommand, CaCommand, Cli, Command, DeliverCommand, HooksCommand,
-    McpCommand, PolicyCommand, ProxyCommand, SandboxCommand, SecretCommand,
+    ApprovalsCommand, AuditCommand, CaCommand, Cli, Command, DeliverCommand, GateCommand,
+    HooksCommand, McpCommand, PolicyCommand, ProxyCommand, SandboxCommand, SecretCommand,
 };
 use crate::exit::Code;
 
@@ -139,6 +140,11 @@ pub fn run(cli: Cli) -> Result<Code> {
         Command::Hooks { command } => match command {
             HooksCommand::List => hooks::list(),
             HooksCommand::Accept => hooks::accept(),
+        },
+        Command::Gate { command } => match command {
+            GateCommand::Setup => gate::setup(),
+            GateCommand::Status => gate::status(),
+            GateCommand::Remove => gate::remove(),
         },
     }
 }

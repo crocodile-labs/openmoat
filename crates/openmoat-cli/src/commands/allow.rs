@@ -221,6 +221,17 @@ fn approve(
         covers_taint,
         for_ms,
     } = approval;
+    // After every question: the code confirms what the person just agreed to.
+    let pass = crate::gate::pass(home, "openmoat allow")?;
+    let what = format!(
+        "{} {}",
+        if always {
+            "permanent rule:"
+        } else {
+            "session grant:"
+        },
+        approvals::describe(action)
+    );
     if always {
         let path = home.overlay_path();
         let mut overlay = Overlay::load(&path)?;
@@ -312,6 +323,7 @@ fn approve(
             )?;
         }
     }
+    pass.record(home, &what, &[]);
     repin(home, checkpoint, out)?;
     // a command rule is the hook's alone; a file rule is also a sandbox grant
     if always && !matches!(action, Action::Shell { .. }) {
@@ -429,10 +441,22 @@ fn change_overlay(home: &Home, args: &AllowArgs, out: &mut Deferred) -> Result<(
     } else {
         verb
     };
+    // Taking a rule out only narrows; adding or extending one asks the gate.
+    let pass = match args.remove {
+        Some(_) => None,
+        None => Some(crate::gate::pass(home, "openmoat allow")?),
+    };
     overlay.save(&path)?;
     if let Err(error) = home.load_policy() {
         before.save(&path)?;
         return Err(error.context(format!("{} left unchanged", path.display())));
+    }
+    if let Some(pass) = pass {
+        pass.record(
+            home,
+            &format!("rule {} {verb} the allow rules", rule.id()),
+            &[],
+        );
     }
     writeln!(out, "✔ {verb} {}:", path.display())?;
     for line in openmoat_core::yaml::to_string(&[&rule])?.lines() {

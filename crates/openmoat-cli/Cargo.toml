@@ -48,6 +48,9 @@ similar.workspace = true
 # the proxy already uses, so no new crate enters the build.
 rustls.workspace = true
 rustls-native-certs.workspace = true
+# HMAC-SHA-1 for the possession gate's one-time codes (RFC 6238, ADR-117): the
+# `ring` the TLS stack and the audit checkpoints already build, so no new crate.
+ring.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true

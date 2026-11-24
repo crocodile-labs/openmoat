@@ -18,6 +18,7 @@ mod delivery;
 mod disturbance;
 mod environment;
 mod exit;
+mod gate;
 mod guard_relay;
 mod hangs;
 mod heartbeat;

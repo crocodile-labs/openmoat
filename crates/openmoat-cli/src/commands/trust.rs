@@ -39,6 +39,7 @@ pub fn run(args: &TrustArgs) -> Result<Code> {
     let path = home.trust_path();
     let mut trust = Trust::load(&path)?;
     let mut out = Deferred::default();
+    let mut pass = None;
     if args.revoke {
         if trust.repos.remove(&repo::root_key(&root)?).is_none() {
             writeln!(out, "{} is not trusted; nothing to revoke", root.display())?;
@@ -82,9 +83,19 @@ pub fn run(args: &TrustArgs) -> Result<Code> {
                 "  note: your policy sets `require_signed_repo_policy: true`, so they apply only while a trusted key signs the file"
             )?;
         }
+        // Revoking only tightens; trusting widens, so it asks the gate.
+        let details = user_widenings(&home, &found);
+        pass = Some((
+            crate::gate::pass(&home, "openmoat trust")?,
+            format!("trusted {}  sha256:{}", found.path.display(), found.digest),
+            details,
+        ));
         trust.repos.insert(found.root, found.digest);
     }
     trust.save(&path)?;
+    if let Some((pass, what, details)) = pass {
+        pass.record(&home, &what, &details);
+    }
     let lock = integrity::repin(&home, &crate::install::hook_binary()?, HookPins::Keep)?;
     writeln!(out, "✔ lock re-pinned ({} files)", lock.entries.len())?;
     out.finish()?;
@@ -177,6 +188,23 @@ fn widening(out: &mut impl std::io::Write, found: &Found, user: &Policy) -> Resu
     Ok(())
 }
 
+/// The ledger's lines for trusting `found` (ADR-117): what [`widening`]
+/// shows; none when the person's policy cannot be read.
+fn user_widenings(home: &Home, found: &Found) -> Vec<String> {
+    let Ok(user) = home.load_policy() else {
+        return Vec::new();
+    };
+    let (Ok(before), Ok(after)) = (
+        found.policy.merge(&user, false),
+        found.policy.merge(&user, true),
+    ) else {
+        return Vec::new();
+    };
+    crate::widen::compare(&before, &after, &[])
+        .map(|report| crate::widen::ledger_lines(&report))
+        .unwrap_or_default()
+}
+
 /// `shell: a, b; net: c`: what one allow group lets through.
 fn patterns(group: &RuleGroup) -> String {
     Kind::ALL
@@ -201,6 +229,23 @@ mod tests {
             text: yaml.to_owned(),
             policy: RepoPolicy::parse(yaml).unwrap(),
         }
+    }
+
+    /// A repository policy nobody trusted is raise-only (ADR-022, ADR-117 §4):
+    /// merged into the default policy it moves no case toward allow, whatever
+    /// allow rules it carries; trusted, the same file does.
+    #[test]
+    fn an_untrusted_repository_policy_only_tightens() {
+        let yaml = "version: 1\nallow:\n  - id: all\n    shell: ['*']\n    fs.read: ['**']\n    \
+                    net: ['*']\nreview:\n  - id: rel\n    shell: ['make release']\n";
+        let user = Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
+        let repo = found(yaml).policy;
+        let untrusted = repo.merge(&user, false).unwrap();
+        let report = crate::widen::compare(&user, &untrusted, &[]).unwrap();
+        assert!(!report.widens(), "{:?}", report.widenings.first());
+        let trusted = repo.merge(&user, true).unwrap();
+        let report = crate::widen::compare(&untrusted, &trusted, &[]).unwrap();
+        assert!(report.widens());
     }
 
     #[test]

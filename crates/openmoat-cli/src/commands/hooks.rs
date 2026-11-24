@@ -104,7 +104,22 @@ pub(in crate::commands) fn review_and_accept(
         writeln!(out, "nothing was accepted; {after}")?;
         return Ok(true);
     }
+    // Accepting a new or changed hook lets its agent's calls run again: the gate
+    // asks (ADR-117). Forgetting removed ones only narrows.
+    let pass = if found.changes.is_empty() {
+        None
+    } else {
+        Some(crate::gate::pass(home, "openmoat hooks accept")?)
+    };
     hook_ledger::accept(home, &found.changes, &found.gone)?;
+    if let Some(pass) = pass {
+        let accepted: Vec<String> = found
+            .changes
+            .iter()
+            .map(hook_ledger::Change::describe)
+            .collect();
+        pass.record(home, "foreign hook commands accepted", &accepted);
+    }
     writeln!(
         out,
         "✔ accepted {} hook command(s); {} removed one(s) forgotten",

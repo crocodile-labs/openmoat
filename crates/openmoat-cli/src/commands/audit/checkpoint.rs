@@ -38,7 +38,17 @@ pub fn run(args: &CheckpointArgs) -> Result<Code> {
     refuse_broken(&store, "sign a checkpoint of")?;
     let mut out = Deferred::default();
     let key = if args.new_key {
+        // A new key re-pins what verifiers trust: the gate asks (ADR-117).
+        let pass = crate::gate::pass(&home, "openmoat audit checkpoint --new-key")?;
         let (key, kept) = audit_signing::rotate(&home)?;
+        pass.record(
+            &home,
+            &format!(
+                "audit signing key replaced by {}",
+                key.verifier().fingerprint()
+            ),
+            &[],
+        );
         if let Some(kept) = kept {
             writeln!(
                 out,

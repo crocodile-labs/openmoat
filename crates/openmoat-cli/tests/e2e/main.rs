@@ -39,6 +39,7 @@ mod escapes;
 mod export;
 #[cfg(unix)]
 mod fail_safe;
+mod gate;
 mod gemini_cli;
 mod goose;
 mod guard;
