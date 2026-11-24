@@ -1,0 +1,2 @@
+### Added
+- A microVM tier for `openmoat run` is designed (ADR-128), not built: `openmoat run --vm -- <agent>` refuses on every system (exit 64), naming the VM monitor this system would use (Virtualization.framework, KVM) or why it has none, the policy's image and the tier's score (0/100, each feature named). The policy's new `sandbox.vm` section pins the guest kernel and root image by SHA-256, and `openmoat policy lint` checks it ([#0](https://github.com/crocodile-labs/openmoat/pull/0)).

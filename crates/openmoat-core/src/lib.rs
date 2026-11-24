@@ -54,6 +54,7 @@ mod staging;
 mod taint;
 pub mod token;
 mod verdict;
+pub mod vm;
 pub mod widen;
 pub mod yaml;
 

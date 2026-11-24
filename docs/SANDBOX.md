@@ -391,6 +391,9 @@ openmoat run --no-isolate --write ~/.claude --write ~/.claude.json -- claude
 The rows are in the audit log under the run's own session (`openmoat show`, host
 `moat-run`, tool `isolation`). On macOS `--no-isolate` changes nothing and writes nothing.
 
+`--vm` asks for the microVM tier, which is a design and refuses on every system
+([below](#the-microvm-tier-design)).
+
 ## The run's boundary record
 
 Every `openmoat run` that starts an agent writes one more row to its audit session:
@@ -462,7 +465,10 @@ proxy's address alone) and Mach services in one. On Windows (ADR-115) the weight
 `restricted_token` 45, `job_object` 10, `wfp_network` 30 and `windows_read_deny` 15; the
 last two are not part of OpenMoat's Windows tier yet, so a Windows run scores at most 55
 and `sandbox.strict: true` refuses every Windows run. A score compares runs on one system,
-not systems. The hook alone scores 0: an allowed call runs with your permissions.
+not systems. The hook alone scores 0: an allowed call runs with your permissions. The
+microVM tier (design, ADR-128) has a table of its own: `vm_hypervisor` 35,
+`vm_proxy_network` 25, `vm_project_only` 20, `vm_guard_relay` 10 and `vm_image_pinned`
+10; none is built, so `openmoat run --vm` shows 0/100 with each named.
 
 ```bash
 openmoat doctor                    # on Linux 7.1 with bubblewrap:
@@ -862,6 +868,49 @@ If the token is wrong, the connection fails or no answer comes within the hook's
 macOS and Linux (reading keys and credentials, writing outside the project, direct
 connections, DNS, symlinks out of the project, editing the policy), as CI asserts it on
 every pull request, with the Linux gaps marked.
+
+## The microVM tier (design)
+
+**Design only: it cannot be used yet.** `openmoat run --vm -- <agent>` refuses on every
+system (exit 64) and starts nothing; it never falls back to another tier. ADR-128 is the
+design: the agent on a kernel of its own in a lightweight VM (Apple
+Virtualization.framework on macOS 12 or later; Firecracker or cloud-hypervisor on KVM on
+Linux; nothing on Windows), seeing the project and `--write` paths but no home
+directory, with no network device (only a vsock port to OpenMoat's proxy), its hook
+reaching `openmoat guard` on the host over vsock, and the guest image pinned by digest
+in your policy (`sandbox.vm`, POLICY.md §9.8). OpenMoat downloads no image.
+
+What is built: the flag and its refusal, which names the VM monitor this system would
+use (or why it has none), your `sandbox.vm` image, and the tier's score; the
+`sandbox.vm` section and its checks in `openmoat policy lint`; the score entries. What is
+left: everything that boots (the monitor on each platform, the guest's init and image
+recipe, the shared project, the vsock bridges, the guest side of the hook, the digest
+check), measurements of start-up cost, and tests that need a hypervisor.
+
+```text
+$ openmoat run --vm -- claude
+openmoat run --vm: the microVM tier is a design (ADR-128) and cannot start an agent yet; nothing was started.
+  this system would use: Apple Virtualization.framework (macOS 15.1)
+  sandbox.vm: not set in your policy (the image to boot)
+  score: 0/100; missing: vm_hypervisor (not built yet (ADR-128): a VM monitor: …); …
+Use `openmoat run -- <agent>` for the OS sandbox (`openmoat doctor` shows its score). Docs: docs/SANDBOX.md "The microVM tier (design)"
+```
+
+### Try it
+
+Nothing here boots or downloads anything; the files are throwaway and are only hashed:
+
+```bash
+mkdir -p /tmp/om-vm && cd /tmp/om-vm
+openmoat run --vm -- true; echo "exit $?"            # the refusal, exit 64
+printf 'kernel' > vmlinux; printf 'root' > rootfs.ext4
+k=$(shasum -a 256 vmlinux | cut -d' ' -f1); r=$(shasum -a 256 rootfs.ext4 | cut -d' ' -f1)
+printf 'version: 1\nsandbox:\n  vm:\n    image:\n      kernel: { path: /tmp/om-vm/vmlinux, sha256: %s }\n      rootfs: { path: /tmp/om-vm/rootfs.ext4, sha256: %s }\n' "$k" "$r" > vm.yaml
+openmoat policy lint vm.yaml                          # ok
+printf 'version: 1\nsandbox:\n  vm:\n    image:\n      kernel: { path: vmlinux, sha256: %s }\n      rootfs: { path: /tmp/om-vm/rootfs.ext4, sha256: %s }\n' "$k" "$r" > bad.yaml
+openmoat policy lint bad.yaml                         # refused: sandbox.vm.image.kernel.path
+cd / && rm -rf /tmp/om-vm                             # undo
+```
 
 ## `openmoat run` on Windows (preview: writes only)
 

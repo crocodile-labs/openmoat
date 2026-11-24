@@ -392,6 +392,11 @@ pub struct SandboxSettings {
     /// alone: a repository policy or a pack has no `sandbox:`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub strict: bool,
+    /// The guest image and size of `openmoat run --vm`'s microVM tier
+    /// (ADR-128, a design: the tier does not boot yet). Read from the
+    /// person's own policy alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vm: Option<crate::vm::VmSettings>,
 }
 
 /// `sandbox.project_hook_off` (ADR-098).
@@ -702,6 +707,7 @@ impl Policy {
             }
         }
         taint::check(self.taint.as_ref())?;
+        crate::vm::check(self.sandbox.as_ref().and_then(|s| s.vm.as_ref()))?;
         staging::check(self.staging.as_ref())?;
         crate::diffscan::check(self.check_diff.as_ref())?;
         require::check(self.require.as_ref())?;

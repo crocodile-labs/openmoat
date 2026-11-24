@@ -12,9 +12,11 @@
 use serde::{Deserialize, Serialize};
 
 mod score;
+mod vm;
 pub use score::{
     ProtectionScore, ScoreItem, WEIGHTS_LINUX, WEIGHTS_MACOS, WEIGHTS_WINDOWS, weights,
 };
+pub use vm::{WEIGHTS_VM, vm_score};
 
 /// The version of the record's JSON form.
 pub const VERSION: u32 = 1;
@@ -233,6 +235,19 @@ pub enum Mechanism {
     /// write-restricted token does not restrict reads, so never in force;
     /// the hook decides every read.
     WindowsReadDeny,
+    /// The microVM tier (ADR-128, not built): the agent runs on a kernel of
+    /// its own under a VM monitor (KVM, Virtualization.framework).
+    VmHypervisor,
+    /// The microVM tier: the guest sees the project and `--write` paths, no
+    /// home directory.
+    VmProjectOnly,
+    /// The microVM tier: no network device; only a vsock port to the proxy.
+    VmProxyNetwork,
+    /// The microVM tier: the hook reaches `openmoat guard` on the host over
+    /// vsock.
+    VmGuardRelay,
+    /// The microVM tier: the kernel and root image match `sandbox.vm.image`.
+    VmImagePinned,
 }
 
 impl Mechanism {
@@ -254,6 +269,11 @@ impl Mechanism {
             Self::JobObject => "job_object",
             Self::WfpNetwork => "wfp_network",
             Self::WindowsReadDeny => "windows_read_deny",
+            Self::VmHypervisor => "vm_hypervisor",
+            Self::VmProjectOnly => "vm_project_only",
+            Self::VmProxyNetwork => "vm_proxy_network",
+            Self::VmGuardRelay => "vm_guard_relay",
+            Self::VmImagePinned => "vm_image_pinned",
         }
     }
 }
@@ -318,6 +338,12 @@ impl Restriction {
             | Mechanism::Seatbelt
             | Mechanism::WfpNetwork
             | Mechanism::WindowsReadDeny => true,
+            // the microVM tier is not built: nothing reports it (ADR-128)
+            Mechanism::VmHypervisor
+            | Mechanism::VmProjectOnly
+            | Mechanism::VmProxyNetwork
+            | Mechanism::VmGuardRelay
+            | Mechanism::VmImagePinned => false,
         };
         reported_off || (launched && !confirmed)
     }
@@ -455,9 +481,14 @@ impl EffectiveBoundary {
                     (check.restricted_token, check.agent_token_restricted)
                 }
                 Mechanism::JobObject => (check.job_object, check.agent_in_job),
-                Mechanism::Seatbelt | Mechanism::WfpNetwork | Mechanism::WindowsReadDeny => {
-                    (None, None)
-                }
+                Mechanism::Seatbelt
+                | Mechanism::WfpNetwork
+                | Mechanism::WindowsReadDeny
+                | Mechanism::VmHypervisor
+                | Mechanism::VmProjectOnly
+                | Mechanism::VmProxyNetwork
+                | Mechanism::VmGuardRelay
+                | Mechanism::VmImagePinned => (None, None),
             };
             if restriction.configured {
                 restriction.applied = applied;

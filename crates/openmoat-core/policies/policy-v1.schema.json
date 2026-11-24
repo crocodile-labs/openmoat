@@ -247,7 +247,41 @@
         "strict": {
           "description": "`openmoat run` starts only with every kernel feature of its protection score in force (§9.7, ADR-108). Your own policy only. Default `false`.",
           "type": "boolean"
+        },
+        "vm": {
+          "description": "The guest image and size of `openmoat run --vm`'s microVM tier (§9.8, ADR-128; a design: the tier does not boot yet). Your own policy only.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["image"],
+          "properties": {
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kernel", "rootfs"],
+              "properties": {
+                "kernel": { "$ref": "#/$defs/vm_file" },
+                "rootfs": { "$ref": "#/$defs/vm_file" },
+                "initrd": { "$ref": "#/$defs/vm_file" },
+                "cmdline": {
+                  "description": "Kernel parameters appended to OpenMoat's own; never `init=` or `rdinit=`.",
+                  "type": "string"
+                }
+              }
+            },
+            "memory_mib": { "type": "integer", "minimum": 256, "maximum": 65536 },
+            "cpus": { "type": "integer", "minimum": 1, "maximum": 64 }
+          }
         }
+      }
+    },
+    "vm_file": {
+      "description": "One file of the microVM image: an absolute or `~/` path and its SHA-256.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string" },
+        "sha256": { "description": "64 lowercase hexadecimal digits (`shasum -a 256 <file>`).", "type": "string" }
       }
     },
     "secret": {

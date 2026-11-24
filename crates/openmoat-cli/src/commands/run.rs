@@ -46,6 +46,7 @@ pub mod tier;
 mod tool_shell;
 #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 mod unsupported;
+pub mod vm;
 /// The Windows tier (ADR-115); `pub(crate)` for the hook relay's probe.
 #[cfg(windows)]
 pub(crate) mod windows;

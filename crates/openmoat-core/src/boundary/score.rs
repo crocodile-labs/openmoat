@@ -61,7 +61,7 @@ pub fn weights(os: &str) -> &'static [(Mechanism, u32)] {
 /// and read denial are weighted but not built, so they are named as such
 /// rather than as something this system lacks.
 fn built(name: Mechanism) -> bool {
-    !matches!(name, Mechanism::WfpNetwork | Mechanism::WindowsReadDeny)
+    !matches!(name, Mechanism::WfpNetwork | Mechanism::WindowsReadDeny) && !super::vm::is_vm(name)
 }
 
 /// A run's score.
@@ -149,6 +149,11 @@ fn needs(name: Mechanism) -> &'static str {
         Mechanism::WindowsReadDeny => {
             "a write-restricted token does not restrict reads, so the hook decides every read"
         }
+        Mechanism::VmHypervisor
+        | Mechanism::VmProjectOnly
+        | Mechanism::VmProxyNetwork
+        | Mechanism::VmGuardRelay
+        | Mechanism::VmImagePinned => super::vm::needs(name),
     }
 }
 

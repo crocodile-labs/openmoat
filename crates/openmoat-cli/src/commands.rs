@@ -115,6 +115,8 @@ pub fn run(cli: Cli) -> Result<Code> {
                 DeliverCommand::Flush(args) => audit::deliver::flush(&args),
             },
         },
+        // The microVM tier (ADR-128) is a design: refused before anything starts.
+        Command::Run(args) if args.tier.vm => Ok(run::vm::refuse()),
         Command::Run(args) => run::run(&args),
         Command::Snapshot(args) => snapshot::run(&args),
         Command::Restore(args) => restore::run(&args),

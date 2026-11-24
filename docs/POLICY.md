@@ -48,6 +48,7 @@ sandbox:                            # optional: what the host sandboxes may read
   project_top: protected            # optional, your own policy only: `writable` opens the project's top without bubblewrap on Linux (§9.4)
   project_hook_off: refuse          # optional, your own policy only: `start` lets `openmoat run` start an agent whose project turns its hook off (§9.5)
   strict: false                     # optional, your own policy only: `true` makes `openmoat run` start only with its whole protection score (§9.7)
+  vm: { image: { kernel: { path: …, sha256: … }, rootfs: { path: …, sha256: … } } }  # optional, design: the microVM tier's image (§9.8)
 
 secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§2.1)
 requests:   [ <request rules>, … ]  # method and path rules for allowed hosts (§2.3)
@@ -2743,6 +2744,30 @@ Only your own policy reads it: a repository policy or a pack with `sandbox:` is
 refused, so a project can neither turn strict mode on for you nor off. It asks more
 than `require.run: full-boundary` (§9.3), which a repository may set and which accepts
 any Landlock ABI from 4.
+
+### 9.8 The microVM tier's image (`sandbox.vm`, design)
+
+The microVM tier (ADR-128, SANDBOX.md "The microVM tier (design)") does not boot yet:
+`openmoat run --vm` refuses on every system and names what this section says. The
+section is read and checked now, so what you write means the same once the tier boots.
+
+```yaml
+sandbox:
+  vm:
+    image:
+      kernel: { path: ~/.local/share/openmoat/vm/vmlinux, sha256: <64 lowercase hex> }
+      rootfs: { path: ~/.local/share/openmoat/vm/rootfs.ext4, sha256: <64 lowercase hex> }
+      initrd: { path: …, sha256: … }   # optional
+      cmdline: "quiet"                  # optional, appended to OpenMoat's own
+    memory_mib: 2048                    # 256 to 65536, default 2048
+    cpus: 2                             # 1 to 64, default 2
+```
+
+`openmoat policy lint` refuses a path that is not absolute or under `~/`, holds a glob
+or `..`; a digest that is not 64 lowercase hexadecimal digits (`shasum -a 256 <file>`);
+memory or CPUs out of range; and a `cmdline` with a control character, `init=` or
+`rdinit=` (OpenMoat's own init must be the guest's first process). OpenMoat downloads no
+image: you name local files. Only your own policy reads it, as for `strict`.
 
 ## 10. Repository policy
 
