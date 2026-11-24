@@ -210,6 +210,7 @@ fn secret(args: &SecretAddArgs) -> Result<Secret> {
         port: None,
         tls: args.tls_terminate.then_some(SecretTls::Terminate),
         allow: args.allow.clone(),
+        helper: None,
     })
 }
 
@@ -230,7 +231,9 @@ fn with_source_deny(policy: &str, secret: &Secret) -> Result<Option<(String, Str
     let (kind, value) = match &secret.source {
         SecretSource::Env(name) => ("env.read", name),
         SecretSource::File(path) => ("fs.read", path),
-        SecretSource::Keychain { .. } | SecretSource::Command(_) => return Ok(None),
+        SecretSource::Keychain { .. } | SecretSource::Command(_) | SecretSource::Mint(_) => {
+            return Ok(None);
+        }
     };
     let id = format!("secret-{}", secret.id);
     let lines: Vec<&str> = policy.lines().collect();

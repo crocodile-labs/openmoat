@@ -59,7 +59,7 @@ mod tunnel;
 mod upstream;
 
 pub use audit::{Connection, RecordError, Recorder};
-pub use broker::{Broker, BrokerError, Carried, Leak, Rotation};
+pub use broker::{Broker, BrokerError, Carried, HandOut, Leak, Rotation};
 pub use decide::{
     DEFAULT_PORTS, Forbidden, address_policy, denied as address_denied, forbidden,
     host as decide_host, host_port as decide_host_port, named as address_named,
@@ -71,6 +71,7 @@ pub use request::{
     MAX_HEADERS, ProxyCredential, Request, RequestError, Target, parse as parse_request,
 };
 pub use requests::{RequestRuleError, Requests};
+pub use server::helper::{HELPER_PREFIX, helper_request};
 pub use server::{Limits, Proxy};
 pub use session::{
     Admitted, AuthError, Credential, CredentialError, MIN_TOKEN_LEN, Sessions, TaintLookup, Trust,

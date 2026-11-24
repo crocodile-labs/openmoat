@@ -422,10 +422,12 @@ fn contains_any_case(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 mod echo;
+mod helper;
 mod route;
 mod value;
 
 pub(crate) use self::echo::{Echo, Holdback, value_came_back};
+pub use self::helper::HandOut;
 pub use self::value::Rotation;
 
 #[cfg(test)]

@@ -105,9 +105,15 @@ fn check_choice(schemas: &Schemas, file: &str, steps: &[Step], failures: &mut Ve
     let (_, node) = walk::at(schemas, file, steps);
     let (bad, declared): (Value, BTreeSet<String>) = if node.get("oneOf").is_some() {
         let branches = node["oneOf"].as_array().unwrap();
+        // A struct variant's name is its one key, a unit variant's its `const`.
         let names = branches
             .iter()
             .flat_map(|b| keys(b, "properties"))
+            .chain(
+                branches
+                    .iter()
+                    .filter_map(|b| b["const"].as_str().map(str::to_owned)),
+            )
             .collect();
         (json!({ UNKNOWN: "x" }), names)
     } else {

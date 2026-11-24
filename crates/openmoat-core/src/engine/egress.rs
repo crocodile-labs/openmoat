@@ -356,6 +356,7 @@ mod tests {
             port: None,
             tls: None,
             allow: Vec::new(),
+            helper: None,
         }];
         let fetch = |url: &str| atoms(&Action::Fetch { url: url.into() }, &[], &secrets);
         assert_eq!(

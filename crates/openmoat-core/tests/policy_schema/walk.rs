@@ -124,11 +124,16 @@ fn visit(
     }
 }
 
-/// A `oneOf` whose every branch is a closed object with one key it requires:
-/// how serde's externally tagged enums look (`source: { env: NAME }`).
+/// A `oneOf` whose every branch is a closed object with one key it requires,
+/// or a string `const` (a unit variant, which serde writes as its name):
+/// how serde's externally tagged enums look (`source: { env: NAME }`,
+/// `helper: aws`).
 fn is_tagged(one_of: &Value) -> bool {
     one_of.as_array().is_some_and(|branches| {
         branches.iter().all(|b| {
+            if b.get("const").is_some_and(Value::is_string) {
+                return true;
+            }
             let props = b.get("properties").and_then(Value::as_object);
             b.get("additionalProperties") == Some(&Value::Bool(false))
                 && props.is_some_and(|p| p.len() == 1)

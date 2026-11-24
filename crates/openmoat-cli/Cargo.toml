@@ -48,9 +48,11 @@ similar.workspace = true
 # the proxy already uses, so no new crate enters the build.
 rustls.workspace = true
 rustls-native-certs.workspace = true
-# HMAC-SHA-1 for the possession gate's one-time codes (RFC 6238, ADR-117): the
-# `ring` the TLS stack and the audit checkpoints already build, so no new crate.
-ring.workspace = true
+# HMAC-SHA-1 for the possession gate's one-time codes (RFC 6238, ADR-117); RS256 for
+# GitHub App and Google service-account JWTs and HMAC-SHA256 for AWS SigV4 in minted
+# secrets (ADR-118, `secrets/mint/`). The `ring` the TLS stack and the audit
+# checkpoints already build, so no new crate enters the build.
+ring = { workspace = true, features = ["alloc"] }
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true

@@ -81,6 +81,23 @@ pub fn add(get: Lookup) -> Result<Vec<(String, String)>> {
     ])
 }
 
+/// The variables that append `entries` (key, value) after those `get`
+/// already holds, in order; nothing for no entries. Fails when
+/// `GIT_CONFIG_COUNT` is not a number. `openmoat run`'s credential helpers
+/// (ADR-118) use it after [`add`].
+pub fn append(get: Lookup, entries: Vec<(String, String)>) -> Result<Vec<(String, String)>> {
+    if entries.is_empty() {
+        return Ok(Vec::new());
+    }
+    let n = count(get)?;
+    let mut vars = vec![(COUNT.to_owned(), (n + entries.len()).to_string())];
+    for (i, (key, value)) in entries.into_iter().enumerate() {
+        vars.push((key_var(n + i), key));
+        vars.push((value_var(n + i), value));
+    }
+    Ok(vars)
+}
+
 /// The inverse of [`add`]: drop every `safe.bareRepository=explicit` entry and
 /// renumber the others. Nothing when there is none or the count is not a number.
 pub fn remove(get: Lookup) -> Vec<Change> {
@@ -200,6 +217,40 @@ mod tests {
         ]);
         assert_eq!(map, expected);
         assert_eq!(remove(&|k| map.get(k).cloned()), Vec::<Change>::new());
+    }
+
+    #[test]
+    fn appended_entries_come_after_the_existing_ones() {
+        let mut map = env(&[("GIT_CONFIG_COUNT", "1"), ("GIT_CONFIG_KEY_0", "user.name")]);
+        added(&mut map);
+        let lookup = map.clone();
+        let entries = vec![
+            ("a.b".to_owned(), String::new()),
+            ("a.b".to_owned(), "c".to_owned()),
+        ];
+        for (k, v) in append(&|k| lookup.get(k).cloned(), entries).unwrap() {
+            map.insert(k, v);
+        }
+        assert_eq!(map["GIT_CONFIG_COUNT"], "4");
+        assert_eq!(map["GIT_CONFIG_KEY_1"], "safe.bareRepository");
+        assert_eq!(
+            (
+                map["GIT_CONFIG_KEY_2"].as_str(),
+                map["GIT_CONFIG_VALUE_2"].as_str()
+            ),
+            ("a.b", "")
+        );
+        assert_eq!(
+            (
+                map["GIT_CONFIG_KEY_3"].as_str(),
+                map["GIT_CONFIG_VALUE_3"].as_str()
+            ),
+            ("a.b", "c")
+        );
+        assert_eq!(
+            append(&|k| lookup.get(k).cloned(), Vec::new()).unwrap(),
+            Vec::<(String, String)>::new()
+        );
     }
 
     #[test]

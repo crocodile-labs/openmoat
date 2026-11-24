@@ -13,8 +13,10 @@ use crate::policy::PolicyError;
 pub use crate::route::{MAX_ROUTES, METHOD_OVERRIDE_HEADERS, PathRefusal, RequestPath, Route};
 
 mod command;
+mod mint;
 
 pub use command::{CommandHome, CommandSource};
+pub use mint::{AWS_CREDENTIALS, AwsSts, GCP_CREDENTIALS, Gcp, GithubApp, Helper, MintSource};
 
 /// What a brokered secret's id is prefixed with where it stands for a rule id
 /// (`secrets.<id>`): lint warnings, policy errors and sandbox losses.
@@ -72,6 +74,12 @@ pub struct Secret {
     /// added. Needs `tls: terminate` or `plain_http`, where requests can be read.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allow: Vec<String>,
+    /// A local helper of a tool (git's credential helper, AWS's
+    /// `credential_process`) that gets the value from the proxy when the tool
+    /// asks for `host`, without TLS termination (ADR-118). The value then
+    /// reaches that tool's process; meant for minted, short-lived values.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helper: Option<Helper>,
 }
 
 /// How a brokered secret reaches HTTPS requests.
@@ -114,6 +122,10 @@ pub enum Source {
     /// A program the person chose, run by `openmoat proxy` only, whose answer
     /// is used for at most a lifetime and refreshed before it ends (ADR-087).
     Command(CommandSource),
+    /// A short-lived credential `openmoat proxy` mints from one the person
+    /// holds, narrowed to what the entry names, and mints again before it
+    /// ends (ADR-118).
+    Mint(MintSource),
 }
 
 impl Source {
@@ -122,7 +134,7 @@ impl Source {
     /// start.
     #[must_use]
     pub fn proxy_only(&self) -> bool {
-        matches!(self, Self::Command(_))
+        matches!(self, Self::Command(_) | Self::Mint(_))
     }
 
     /// Where the value comes from, without anything that may be private:
@@ -134,6 +146,7 @@ impl Source {
             Self::File(path) => format!("file {path}"),
             Self::Keychain { service, .. } => format!("keychain {service}"),
             Self::Command(command) => format!("command {}", command.program()),
+            Self::Mint(mint) => format!("mint {}", mint.provider()),
         }
     }
 }
@@ -284,6 +297,16 @@ fn check_one(secret: &Secret) -> Result<(), String> {
         _ => {}
     }
     check_transport(secret)?;
+    mint::check_helper(secret.helper.as_ref(), &secret.source, &secret.host)?;
+    if matches!(secret.source, Source::Mint(MintSource::AwsSts(_)))
+        && (secret.tls.is_some() || secret.plain_http || !secret.allow.is_empty())
+    {
+        return Err(
+            "an `aws-sts` mint goes through `helper: aws` only: AWS requests are signed by the \
+             client, so `tls`, `plain_http` and `allow` cannot apply"
+                .into(),
+        );
+    }
     match &secret.source {
         Source::File(path) if !(crate::paths::is_absolute(path) || path.starts_with("~/")) => Err(
             format!("source file `{path}` must be absolute or start with `~/`"),
@@ -299,6 +322,7 @@ fn check_one(secret: &Secret) -> Result<(), String> {
             Err("source keychain needs a service and an account without control characters".into())
         }
         Source::Command(command) => command::check(command),
+        Source::Mint(mint) => mint::check(mint),
         _ => Ok(()),
     }
 }

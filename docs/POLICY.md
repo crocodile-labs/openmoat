@@ -298,7 +298,11 @@ sandbox can broker it too, below).
 - **`source`.** `file` is absolute or under `~/`; the value is its contents without the
   trailing newline. `env` is a variable of the `openmoat proxy` process. `keychain` is an item
   in the operating system's keychain. `command` (preview) is a program `openmoat proxy`
-  runs for a short-lived value and runs again before the value expires (§2.2).
+  runs for a short-lived value and runs again before the value expires (§2.2). `mint`
+  (preview) is a short-lived credential the proxy makes from one you hold, narrowed to
+  what the entry names (§2.2.1).
+- **`helper`** (preview, §2.2.1) hands the value to git's credential helper or the AWS
+  tools' `credential_process` inside `openmoat run`, for this secret's host only.
 - **`header`** must be an HTTP header name. Headers that frame the request or the
   connection (`Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Proxy-*`, …)
   are refused. Two secrets cannot set the same header for the same host.
@@ -526,6 +530,124 @@ that an administrator installed.
   secret.
 - **Masking.** Every value it gave (the last five) is masked in the proxy's audit rows,
   and the leak and echo checks look for the value it replaced too.
+
+### 2.2.1 Minted, narrowed credentials (`source: mint`, `helper:`, preview)
+
+GitHub, AWS and Google Cloud each have an official call that turns a credential you hold
+into a narrower one that expires on its own. A `mint` source makes `openmoat proxy` (and
+the proxy of `openmoat run`) make that call itself, outside every sandbox, and broker the
+result like any other value, renewed before it ends
+([ADR-118](adr/ADR-118-minted-audience-bound-credentials.md)). Your own credential is read
+by the proxy only, each time it mints, and sent only to the provider's own endpoint.
+
+```yaml
+secrets:
+  # git push and pull to two repositories, as a GitHub App, for an hour at a time.
+  - id: gh-git
+    host: github.com
+    header: Authorization
+    helper: { git: { username: x-access-token } }
+    source:
+      mint:
+        github-app:
+          app: Iv23liExample              # the App's client ID (or numeric App ID)
+          installation: 12345678          # the installation on your account or organisation
+          key: ~/.config/moat/app.pem     # the App's private key
+          repositories: [openmoat, site]  # names, without the owner
+          permissions: { contents: write, pull_requests: read }
+
+  # Reading one bucket, for 15 minutes at a time.
+  - id: s3
+    host: s3.us-east-1.amazonaws.com
+    header: Authorization
+    helper: aws
+    source:
+      mint:
+        aws-sts:
+          role: arn:aws:iam::123456789012:role/agent
+          region: us-east-1
+          profile: work                   # of ~/.aws/credentials; `default` when unset
+          actions: [s3:GetObject, s3:ListBucket]
+          resources: ["arn:aws:s3:::example-bucket", "arn:aws:s3:::example-bucket/*"]
+          lifetime: 15m                   # 15m to 12h
+
+  # A Google Cloud Storage token for one service account, read only.
+  - id: gcs
+    host: storage.googleapis.com
+    header: Authorization
+    tls: terminate
+    source:
+      mint:
+        gcp:
+          service_account: agent@my-project.iam.gserviceaccount.com
+          scopes: [https://www.googleapis.com/auth/devstorage.read_only]
+          lifetime: 10m                   # 1m to 1h
+
+deny:
+  - id: mint-credentials                  # the agent must not read what the proxy mints from
+    fs.read: ["~/.config/moat/app.pem", "~/.aws/**", "~/.config/gcloud/**"]
+```
+
+| Provider | What it mints | Narrowed to | Lifetime | Starts from |
+|---|---|---|---|---|
+| `github-app` | an installation access token | `repositories` and `permissions`, both required | 1 hour (GitHub's) | the App's private key |
+| `aws-sts` | STS `AssumeRole` credentials | an inline session policy: `actions` on `resources`, both required; never `s3:*` or `*` | 15m to 12h, 15m by default | a profile of `~/.aws/credentials` (or `credentials:`) |
+| `gcp` | a service account access token (`generateAccessToken`) | `scopes`, required | 1m to 1h, 15m by default | `~/.config/gcloud/application_default_credentials.json` (or `credentials:`): `authorized_user` or a `service_account` key |
+
+- **A mint that would not narrow does not load.** Without `repositories` a GitHub token
+  reaches every repository of the installation, without `permissions` every permission
+  of the App; without a session policy an AWS session has all of the role. A GitHub
+  answer that grants a permission the entry does not ask for is refused.
+- **Not from `gh auth token`.** GitHub has no call that narrows an OAuth or personal
+  access token, such as the one `gh auth token` prints: anything made from it can do
+  everything your login can. So a GitHub mint starts from a GitHub App you create and
+  install on the repositories you choose.
+- **Renewal** is §2.2's: `refresh_before` ahead of the end (10 minutes for GitHub, a
+  fifth of the lifetime for the others when unset), retried every 15 seconds on failure,
+  and a request that would get an expired value is refused (`proxy-secret-expired`). The
+  value is used until the earlier of `lifetime` and the provider's own expiry.
+- **Errors** name the provider, its HTTP status and its error code (`AccessDenied`,
+  `Bad credentials`), never a value or the answer's body. At start, a mint that fails stops
+  `openmoat proxy` as any source does.
+- **`openmoat policy lint`** warns when no deny `fs.read` rule covers the file a mint
+  starts from. The default `secrets-paths` rule already denies `~/.aws` and
+  `~/.config/gcloud`; a GitHub App's key needs a rule of your own.
+- **Where it runs.** Only in `openmoat proxy` and the proxy of `openmoat run`, as a
+  `command` source: `openmoat guard` never mints, audit delivery refuses a `mint` source,
+  and Claude Code's broker is never given it.
+
+**`helper:` (inside `openmoat run`).** git over HTTPS keeps its credential inside a
+tunnel the proxy does not open, and the AWS tools sign every request with the secret key,
+so there is no header the proxy could fill in. A secret with `helper:` reaches the tool
+through its own helper protocol instead:
+
+- **`helper: { git: { username: … } }`.** `openmoat run` adds git configuration through
+  `GIT_CONFIG_*` for `https://<host>`: first an empty helper, which drops the helpers your
+  own git configuration names for that host, then `openmoat credential git <id>`. When
+  git asks for that host, the helper asks the run's proxy, which answers only for the
+  secret's own host, exactly. `username` is what git sends with the value
+  (`x-access-token` for a GitHub App token). The host must be a DNS name.
+- **`helper: aws`** (needed by an `aws-sts` mint, which cannot have `tls`, `plain_http` or
+  `allow`, and taken by nothing else). `openmoat run` writes an AWS config file of its own
+  with a profile `openmoat-<id>` whose `credential_process` is
+  `openmoat credential aws <id>`, and points `AWS_CONFIG_FILE` at it; `AWS_PROFILE` names
+  it when the policy has one such secret (otherwise pass `--profile openmoat-<id>`).
+  `AWS_SHARED_CREDENTIALS_FILE` points at an empty file, and `AWS_ACCESS_KEY_ID`,
+  `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` and `AWS_DEFAULT_PROFILE` are removed: the
+  AWS tools would use those before `credential_process`.
+- **Who is answered.** The helper sends one line, `MOAT-HELPER/1`, with the session
+  credential from the run's proxy variables, to the proxy's loopback port; it refuses an
+  address that is not loopback. Each answer, given or refused, is a row in the audit log
+  with rule `proxy-helper`, written before the value is sent. An expired value is never
+  handed out.
+- **What it does not hide.** A value handed to a helper is in the session: any command
+  the agent runs can start `openmoat credential` too and read it, as it could read a
+  token in an environment variable. What bounds it is that it is narrowed, ends within
+  minutes, and goes only where the policy lets the agent connect: where the proxy reads
+  the request (plain HTTP, `tls: terminate`) the value sent to any other host is refused
+  (`proxy-secret`), but inside a tunnel it does not open to another allowed host it is
+  not seen. Use `helper:` for minted values, and keep the hosts the agent may reach few
+  ([LIMITS.md](LIMITS.md)).
 
 ### 2.3 Request rules for allowed hosts (`requests:`)
 

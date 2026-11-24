@@ -34,6 +34,7 @@ fn generated_with(yaml: &str, exists: &dyn Fn(&str) -> bool) -> anyhow::Result<G
         terminals: Vec::new(),
         trust: None,
         tool_shell: None,
+        helpers: None,
     };
     let ir = openmoat_core::ir::lower(&policy, &ctx).expect("lowers");
     generate(&ir, &grants, exists)

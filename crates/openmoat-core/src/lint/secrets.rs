@@ -65,6 +65,20 @@ pub fn exposed_source(policy: &Policy, secret: &crate::Secret) -> Option<String>
         SecretSource::Env(name) => (!listed(&policy.deny, &[Kind::EnvRead], name))
             .then(|| format!("no deny env.read rule covers `{name}`, so the agent can read it")),
         SecretSource::Keychain { .. } => None,
+        SecretSource::Mint(mint) => mint
+            .files()
+            .into_iter()
+            .find(|file| {
+                paths::expand_pattern(file, HOME, Some(PROJECT))
+                    .is_some_and(|p| !listed(&policy.deny, &[Kind::FsRead], &p))
+            })
+            .map(|file| {
+                format!(
+                    "no deny fs.read rule covers `{file}`, the credential the {} mint starts \
+                     from, so the agent can read it",
+                    mint.provider()
+                )
+            }),
         SecretSource::Command(command) => (!write_denied(policy, command.program())).then(|| {
             format!(
                 "no deny fs.write rule covers `{}`, so `openmoat proxy` runs it only when the \

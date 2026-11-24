@@ -5,6 +5,7 @@ mod allowed;
 mod approvals;
 mod audit;
 pub(crate) mod bench;
+mod credential;
 mod demo;
 mod doctor;
 mod edit;
@@ -116,6 +117,7 @@ pub fn run(cli: Cli) -> Result<Code> {
         Command::Snapshot(args) => snapshot::run(&args),
         Command::Restore(args) => restore::run(&args),
         Command::Isolated(args) => run::inside(&args),
+        Command::Credential { command } => credential::run(&command),
         Command::Policy { command } => match command {
             PolicyCommand::Lint(args) => policy::lint(&args),
             PolicyCommand::Check(args) => policy::check(&args),

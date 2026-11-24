@@ -274,11 +274,31 @@
         "allow": {
           "description": "With `tls` or `plain_http`: the only requests that get the value, `METHOD /path` each.",
           "$ref": "#/$defs/strings"
-        }
+        },
+        "helper": { "$ref": "#/$defs/secretHelper" }
       }
     },
+    "secretHelper": {
+      "description": "A tool's local helper that gets the value from `openmoat run`'s proxy, for this secret's host only (§2.1, ADR-118; preview): git's credential helper or AWS's `credential_process`.",
+      "oneOf": [
+        { "const": "aws" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["git"],
+          "properties": {
+            "git": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["username"],
+              "properties": { "username": { "description": "The user name git sends with the value (`x-access-token` for a GitHub App token).", "type": "string" } }
+            }
+          }
+        }
+      ]
+    },
     "secretSource": {
-      "description": "Where OpenMoat reads the value: exactly one of `file`, `env`, `keychain`, `command`.",
+      "description": "Where OpenMoat reads the value: exactly one of `file`, `env`, `keychain`, `command`, `mint`.",
       "oneOf": [
         {
           "type": "object",
@@ -314,6 +334,85 @@
           "additionalProperties": false,
           "required": ["command"],
           "properties": { "command": { "$ref": "#/$defs/commandSource" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mint"],
+          "properties": { "mint": { "$ref": "#/$defs/mintSource" } }
+        }
+      ]
+    },
+    "mintSource": {
+      "description": "A short-lived credential `openmoat proxy` mints from one you hold, narrowed to what the entry names (§2.1, ADR-118; preview): exactly one provider.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["github-app"],
+          "properties": {
+            "github-app": {
+              "description": "A GitHub App installation token (one hour).",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["app", "installation", "key", "repositories", "permissions"],
+              "properties": {
+                "app": { "description": "The App's client ID or numeric App ID.", "type": "string" },
+                "installation": { "description": "The installation's numeric ID.", "type": "integer", "minimum": 1 },
+                "key": { "description": "The App's private key (PEM), absolute or under `~/`.", "type": "string" },
+                "repositories": { "description": "The repositories (names without the owner) the token may reach; 1 to 500.", "$ref": "#/$defs/strings" },
+                "permissions": {
+                  "description": "Each permission the token gets: `read`, `write` or `admin`.",
+                  "type": "object",
+                  "additionalProperties": { "description": "`read`, `write` or `admin`.", "type": "string" }
+                },
+                "refresh_before": { "description": "How long before expiry a new token is minted; 10m when unset.", "type": "string" }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["aws-sts"],
+          "properties": {
+            "aws-sts": {
+              "description": "AWS STS `AssumeRole` credentials with a session policy; needs `helper: aws`.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["role", "region", "actions", "resources"],
+              "properties": {
+                "role": { "description": "The role ARN, arn:aws:iam::<account>:role/<name>.", "type": "string" },
+                "region": { "description": "The region whose STS endpoint is asked.", "type": "string" },
+                "profile": { "description": "The profile of the credentials file; `default` when unset.", "type": "string" },
+                "credentials": { "description": "The credentials file; `~/.aws/credentials` when unset.", "type": "string" },
+                "actions": { "description": "The actions the session may take, `service:Action`; never every action.", "$ref": "#/$defs/strings" },
+                "resources": { "description": "The resource ARNs it may take them on; never `*`.", "$ref": "#/$defs/strings" },
+                "lifetime": { "description": "15m to 12h; 15m when unset.", "type": "string" },
+                "refresh_before": { "description": "A fifth of the lifetime when unset.", "type": "string" }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gcp"],
+          "properties": {
+            "gcp": {
+              "description": "A Google Cloud service account access token (`generateAccessToken`).",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["service_account", "scopes"],
+              "properties": {
+                "service_account": { "description": "The service account's email.", "type": "string" },
+                "credentials": { "description": "The credential that may impersonate it; gcloud's application default credentials when unset.", "type": "string" },
+                "scopes": { "description": "The OAuth scopes the token gets.", "$ref": "#/$defs/strings" },
+                "lifetime": { "description": "1m to 1h; 15m when unset.", "type": "string" },
+                "refresh_before": { "description": "A fifth of the lifetime when unset.", "type": "string" }
+              }
+            }
+          }
         }
       ]
     },

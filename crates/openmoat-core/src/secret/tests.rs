@@ -2,6 +2,8 @@ use crate::policy::{Policy, PolicyError};
 
 use super::{Secret, Source};
 
+mod mint;
+
 fn parse(secrets: &str) -> Result<Policy, PolicyError> {
     Policy::parse(&format!("version: 1\nsecrets:\n{secrets}"))
 }

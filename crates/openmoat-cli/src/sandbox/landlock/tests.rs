@@ -21,6 +21,7 @@ fn generated(yaml: &str) -> Generated {
         terminals: vec!["/dev/pts/3".into()],
         trust: None,
         tool_shell: None,
+        helpers: None,
     };
     let ir = openmoat_core::ir::lower(&policy, &ctx).expect("lowers");
     generate(&ir, &grants).expect("generates")

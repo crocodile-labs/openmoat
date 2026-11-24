@@ -32,7 +32,11 @@ fn renewing_with(program: Program) -> (Broker, Refresher) {
         .renew(Zeroizing::new(FIRST.to_owned()), Duration::from_secs(15))
         .unwrap();
     let refresher = Refresher::new(
-        vec![(program, rotation, Zeroizing::new(FIRST.to_owned()))],
+        vec![(
+            Box::new(program) as Box<dyn crate::secrets::Fetch>,
+            rotation,
+            Zeroizing::new(FIRST.to_owned()),
+        )],
         vec![Zeroizing::new("fake-fixed-value-1234".to_owned())],
     );
     (broker, refresher)

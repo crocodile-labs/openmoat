@@ -27,6 +27,7 @@ fn generated(home: &Path) -> Generated {
         terminals: Vec::new(),
         trust: None,
         tool_shell: None,
+        helpers: None,
     };
     let mut policy = Policy::parse(DEFAULT_POLICY).expect("default policy");
     // No read roots: the temp directory holding the test home is one.

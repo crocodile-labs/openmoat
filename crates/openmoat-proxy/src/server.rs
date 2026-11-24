@@ -12,6 +12,7 @@
 //! coalesced rows (`capacity.rs`).
 
 mod capacity;
+pub(crate) mod helper;
 mod limits;
 mod recheck;
 mod terminate;
@@ -192,6 +193,12 @@ impl Proxy<'_> {
         // The head may hold the session's credential: zeroed once dropped.
         let mut buf = Zeroizing::new(Vec::new());
         let deadline = started + self.limits.handshake_timeout;
+        // A tool's local helper asking for a secret (ADR-118); it carries
+        // the session credential in its line.
+        if local::starts_with(client, helper::HELPER_PREFIX, deadline) {
+            self.helper(client, started);
+            return;
+        }
         // Still counted as waiting to authenticate: the service checks its own token.
         if let Some(local) = self.local
             && !local.prefix().is_empty()

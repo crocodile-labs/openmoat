@@ -135,6 +135,7 @@ fn default_rules(moved_dirs: Vec<(String, String)>) -> Rules {
         terminals: Vec::new(),
         trust: None,
         tool_shell: None,
+        helpers: None,
     };
     let ir = openmoat_core::ir::lower(&policy, &ctx).unwrap();
     landlock::generate(&ir, &grants).unwrap().rules

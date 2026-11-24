@@ -18,7 +18,10 @@ use openmoat_audit::KnownSecrets;
 use openmoat_proxy::Rotation;
 use zeroize::Zeroizing;
 
-use super::command::Program;
+use super::Fetch;
+
+/// What renews one secret: a `command` program or a `mint`.
+type Program = Box<dyn Fetch>;
 
 /// How long after a failed run the program is run again.
 const RETRY: Duration = Duration::from_secs(15);
@@ -193,10 +196,13 @@ impl Renewed {
         {
             let mut values = lock(&shared.values);
             let mine = &mut values.renewed[self.slot];
-            if !mine.contains(&answer.value) {
-                mine.insert(0, answer.value.clone());
-                mine.truncate(MASKED);
+            // The value and its parts (ADR-118), each masked on its own.
+            for value in answer.masked.iter().chain(std::iter::once(&answer.value)) {
+                if !mine.contains(value) {
+                    mine.insert(0, value.clone());
+                }
             }
+            mine.truncate(MASKED * (answer.masked.len() + 1));
             match values.known() {
                 Ok(known) => *lock(&shared.masks) = Some(known),
                 Err(error) => {

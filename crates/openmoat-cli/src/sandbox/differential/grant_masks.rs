@@ -94,6 +94,7 @@ fn grant_masks_deny_inside_grants_what_the_checker_denies() {
             terminals: Vec::new(),
             trust: None,
             tool_shell: None,
+            helpers: None,
         };
         let generated = landlock::generate(&ir, &grants).expect("generates");
         let masks =

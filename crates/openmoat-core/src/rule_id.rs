@@ -177,6 +177,9 @@ pub const PROXY_SECRET: &str = "proxy-secret";
 /// A proxy request that would get a secret whose value has expired and was
 /// not renewed (ADR-087): it is not sent.
 pub const PROXY_SECRET_EXPIRED: &str = "proxy-secret-expired";
+/// A local helper's ask for a secret (ADR-118): handed out to the secret's
+/// own host and tool, or refused.
+pub const PROXY_HELPER: &str = "proxy-helper";
 /// A request to a secret's host that the secret's `allow` rules do not name.
 pub const PROXY_SECRET_ROUTE: &str = "proxy-secret-route";
 /// A destination the proxy refuses whatever the policy says.
@@ -365,6 +368,7 @@ pub const BUILTIN_RULES: &[BuiltinRule] = &[
     quiet(PROXY_SESSION),
     quiet(PROXY_SECRET),
     quiet(PROXY_SECRET_EXPIRED),
+    quiet(PROXY_HELPER),
     quiet(PROXY_SECRET_ROUTE),
     quiet(PROXY_ADDRESS),
     quiet(PROXY_SNI),

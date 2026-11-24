@@ -1743,10 +1743,20 @@ something OpenMoat claims to stop.
   secret OpenMoat does not hold (one only in the agent's environment or files) and of
   no known format is stored as sent; so is a brokered value that was encoded (base64,
   URL escapes), split, or shorter than 8 bytes; a keychain-sourced value, or one from a
-  `command` source (which only the proxy runs, ADR-087), is not masked in guard rows; values from before a secret was added stay in old rows. The
+  `command` source (which only the proxy runs, ADR-087) or a `mint` source (ADR-118), is not masked in guard rows; values from before a secret was added stay in old rows. The
   matcher's copy of the values is not zeroed when the process exits. Redaction limits
   what the log reveals; it does not stop the secret being sent, which is the policy's
   and the proxy's job.
+- **Minted credentials handed to a helper** (ADR-118, preview). A `mint` source keeps the
+  person's own credential (a GitHub App key, AWS keys, a Google credential) in the proxy
+  and hands the session a narrower one that expires within minutes to an hour. A secret
+  with `helper:` puts that minted value into git's or the AWS tools' process, which any
+  command of the session can read by starting `openmoat credential` itself. The proxy
+  answers only the session's own processes, only for the secret's own host (git), and
+  records each answer (`proxy-helper`); a value sent to another host is refused where the
+  proxy reads the request, not inside a tunnel it does not open to another allowed host.
+  The agent's own login stays readable to its child commands (ADR-054). GitHub OAuth and
+  personal access tokens cannot be narrowed, so they are never minted from.
 
 ## 6. How the claims are tested
 

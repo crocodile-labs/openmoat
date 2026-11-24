@@ -16,7 +16,8 @@ pub mod channel;
 pub mod channels;
 mod connect;
 mod gate;
-mod https;
+/// Also the transport of minted secrets (ADR-118, `secrets/mint.rs`).
+pub(crate) mod https;
 pub mod listen;
 pub mod live;
 mod prompt;

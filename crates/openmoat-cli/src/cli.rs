@@ -7,6 +7,7 @@ use openmoat_hosts::Host;
 
 mod approvals;
 mod audit;
+mod credential;
 mod mcp;
 mod policy;
 mod provenance;
@@ -23,6 +24,7 @@ pub use audit::{
     AnchorArgs, AuditCommand, CheckpointArgs, DeliverCommand, DeliverFlushArgs, DeliverStatusArgs,
     DeliverTestArgs, EvidenceArgs, ExportArgs, StatsArgs, TeamReportArgs, VerifyArgs,
 };
+pub use credential::CredentialCommand;
 pub use mcp::{McpAcceptArgs, McpCommand, McpProxyArgs, McpUnwrapArgs, McpWrapArgs};
 pub use policy::{
     ActionKind, CheckArgs, CheckDiffArgs, CompileArgs, DiffArgs, DiffFormat, InstallArgs, LintArgs,
@@ -146,6 +148,13 @@ pub enum Command {
     /// What `openmoat run` starts inside bubblewrap on Linux (not for people).
     #[command(hide = true)]
     Isolated(IsolatedArgs),
+    /// The local credential helper `openmoat run` sets up for git and the AWS tools
+    /// (ADR-118): asks the run's proxy for a minted secret (not for people).
+    #[command(hide = true)]
+    Credential {
+        #[command(subcommand)]
+        command: CredentialCommand,
+    },
     /// Inspect and test policy files.
     Policy {
         #[command(subcommand)]

@@ -83,6 +83,27 @@ pub struct Program {
 pub struct Answer {
     pub value: Zeroizing<String>,
     pub lifetime: Duration,
+    /// Parts of the value the audit log masks on their own too (a minted
+    /// AWS session's secret key and token, ADR-118).
+    pub masked: Vec<Zeroizing<String>>,
+}
+
+impl super::Fetch for Program {
+    fn id(&self) -> &str {
+        Program::id(self)
+    }
+
+    fn refresh_before(&self) -> Duration {
+        Program::refresh_before(self)
+    }
+
+    fn time_limit(&self) -> Duration {
+        Program::time_limit(self)
+    }
+
+    fn fetch(&self) -> Result<Answer> {
+        Program::fetch(self)
+    }
 }
 
 impl Program {
@@ -333,7 +354,11 @@ pub(super) fn parse(out: &[u8], lifetime: Duration, now: u64) -> Result<Answer> 
         "the program's value expires in less than {}s",
         MIN_ANSWER.as_secs()
     );
-    Ok(Answer { value, lifetime })
+    Ok(Answer {
+        value,
+        lifetime,
+        masked: Vec::new(),
+    })
 }
 
 #[cfg(test)]

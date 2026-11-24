@@ -97,6 +97,8 @@ pub fn isolate(
     let port = grants.proxy_port.context("no proxy port")?;
     // The run's CA files are in the temp directory, which starts empty here.
     let trust = grants.trust.clone();
+    // So are the credential helpers' files (ADR-118).
+    let helpers = grants.helpers.clone();
     // The tool-shell wrapper, in a directory of its own outside the empty temp
     // directory (ADR-075).
     let wrapper = grants.tool_shell.as_ref().map(|w| w.dir.clone());
@@ -125,6 +127,7 @@ pub fn isolate(
         .args(
             trust
                 .iter()
+                .chain(helpers.iter())
                 .chain(wrapper.iter())
                 .flat_map(|t| ["--ro-bind", t.as_str(), t.as_str()]),
         )

@@ -104,6 +104,7 @@ mod sandbox_sync;
 mod secret;
 #[cfg(unix)]
 mod secret_command;
+mod secret_mint;
 mod serve;
 mod session_code;
 #[cfg(unix)]

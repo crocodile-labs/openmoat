@@ -236,7 +236,23 @@ Each agent's gaps and the reasons are in
 - **`openmoat guard` does not mask a `command` source's value in its audit rows**
   (preview, ADR-087 §6). Only the proxy has the value, and OpenMoat does not write it to
   a file for the guard to read. A tool call carries the value only if the agent already
-  got hold of it; the proxy's own audit rows mask every value it gave.
+  got hold of it; the proxy's own audit rows mask every value it gave. The same holds for
+  a `mint` source (ADR-118).
+- **A value handed to a `helper:` is readable by the session's commands** (preview,
+  POLICY.md §2.2.1, ADR-118). git and the AWS tools are processes the agent starts, so
+  any command it runs can start `openmoat credential` as they do and print the minted
+  value. The proxy answers only the session's own processes and, for git, only for the
+  secret's host, and records every answer (`proxy-helper`); what bounds the value is its
+  narrowing (repositories and permissions, a session policy, scopes), its lifetime, and
+  the hosts the agent may connect to. Inside a tunnel the proxy does not open, to a host
+  the policy allows, a value sent there is not seen.
+- **The agent's own login stays readable to its child commands** (ADR-054, ADR-118).
+  `openmoat run` lets the agent read its own credential so that it can start; the
+  commands it runs have the same rights, so they can read that login too. Minting narrows
+  the credentials a session is handed, not the one the agent signs in with.
+- **GitHub OAuth and personal access tokens cannot be narrowed** (ADR-118). GitHub has no
+  call that makes a narrower token from one, such as the token `gh auth token` prints, so
+  OpenMoat does not mint from it: a GitHub mint starts from a GitHub App.
 
 ## What the hook does not see
 

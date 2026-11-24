@@ -83,7 +83,9 @@ fn has_entry(root: &Value, secret: &Secret) -> bool {
     let (list, key, value) = match &secret.source {
         SecretSource::Env(name) => ("envVars", "name", name),
         SecretSource::File(path) => ("files", "path", path),
-        SecretSource::Keychain { .. } | SecretSource::Command(_) => return false,
+        SecretSource::Keychain { .. } | SecretSource::Command(_) | SecretSource::Mint(_) => {
+            return false;
+        }
     };
     root.pointer(&format!("/sandbox/credentials/{list}"))
         .and_then(Value::as_array)

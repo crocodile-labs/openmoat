@@ -8,10 +8,13 @@
 mod command;
 mod copy;
 mod keychain;
+mod mint;
 mod program;
 mod refresh;
 #[cfg(all(test, unix))]
 mod stand;
+
+use std::time::Duration;
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_audit::KnownSecrets;
@@ -19,7 +22,21 @@ use openmoat_core::{Policy, Secret, SecretSource};
 use openmoat_proxy::Broker;
 use zeroize::Zeroizing;
 
+pub use mint::encode::base64;
 pub use refresh::{Masks, Refresher};
+
+/// A source whose value has a deadline and is fetched again before it: a
+/// `command` program (ADR-087) or a `mint` (ADR-118).
+pub trait Fetch: Send {
+    /// The secret it answers for.
+    fn id(&self) -> &str;
+    /// How long before the value expires a new one is asked for, at most.
+    fn refresh_before(&self) -> Duration;
+    /// How long one fetch may take.
+    fn time_limit(&self) -> Duration;
+    /// A value now, with how long it may be used.
+    fn fetch(&self) -> Result<command::Answer>;
+}
 
 /// Where the proxy reads secrets from and runs `command` sources (ADR-087).
 pub struct Place<'a> {
@@ -61,16 +78,25 @@ pub fn broker(
     let mut started = Vec::new();
     for secret in &policy.secrets {
         let reading = || format!("reading secret `{}`", secret.id);
-        let value = match &secret.source {
-            SecretSource::Command(source) => {
-                let program = command::Program::prepare(&secret.id, source, policy, place)
-                    .with_context(reading)?;
-                let answer = program.fetch().with_context(reading)?;
+        let fetcher: Option<Box<dyn Fetch>> = match &secret.source {
+            SecretSource::Command(source) => Some(Box::new(
+                command::Program::prepare(&secret.id, source, policy, place)
+                    .with_context(reading)?,
+            )),
+            SecretSource::Mint(source) => {
+                Some(Box::new(mint::Minter::prepare(&secret.id, source, home)))
+            }
+            _ => None,
+        };
+        let value = match (fetcher, &secret.source) {
+            (Some(fetcher), _) => {
+                let answer = fetcher.fetch().with_context(reading)?;
                 let until = std::time::Instant::now() + answer.lifetime;
-                started.push((program, until, answer.value.clone()));
+                fixed.extend(answer.masked);
+                started.push((fetcher, until, answer.value.clone()));
                 answer.value
             }
-            other => {
+            (None, other) => {
                 let value = read(other, home).with_context(reading)?;
                 fixed.push(value.clone());
                 value
@@ -147,6 +173,10 @@ pub fn read(source: &SecretSource, home: &str) -> Result<Zeroizing<String>> {
         SecretSource::Command(source) => bail!(
             "`command` source {} is run by `openmoat proxy` only",
             source.program()
+        ),
+        SecretSource::Mint(source) => bail!(
+            "`mint` source {} is minted by `openmoat proxy` only",
+            source.provider()
         ),
     };
     let end = value.trim_end_matches(['\r', '\n']).len();
