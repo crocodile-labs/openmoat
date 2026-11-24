@@ -1058,7 +1058,7 @@ bundled calls, cases from both policies' rules and a search over every path, hos
 (docs/POLICY.md §8.3). An upgrade that widens is listed case by case and applied only with
 `--accept-widening`; without it nothing changes and the command exits 3. What else the
 release after 0.25.0 changes for you (hooks to rewrite with `openmoat init`, the new
-reviews): [INSTALL.md](INSTALL.md#from-0250-to-0260).
+reviews): [INSTALL.md](INSTALL.md#from-0260-to-0270).
 
 The changes are grouped by what they do, read from the policy before and after:
 

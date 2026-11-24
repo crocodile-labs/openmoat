@@ -493,6 +493,35 @@ Then, in a terminal of your own:
    sandboxes as `openmoat sandbox sync` does. `openmoat` alone offers the same at a
    terminal.
 
+### From 0.26.0 to 0.27.0
+
+What you will see, and what to run:
+
+- **`openmoat policy upgrade` offers the new default rules**: `obfuscated` holds a shell
+  line built to hide what it runs for review (ADR-116), `persistence` names
+  `Set-ExecutionPolicy`, and `kernel-self` keeps agents away from `openmoat team` and
+  from the gate's secret and state files. The upgrade from the 0.26.0 default only
+  narrows.
+- **PowerShell lines are read now** (ADR-116): `pwsh -c '…'` and
+  `powershell -EncodedCommand …` get the same rules as a POSIX line, so a PowerShell
+  listing of `~/.ssh` is denied where it used to be left to the agent.
+- **A slow check is denied, not run** (ADR-120): when OpenMoat cannot decide a call within
+  its deadline (30 s; 25 s for Hermes Agent), it denies it in the agent's own format,
+  where Codex, Copilot CLI, Gemini CLI, Qwen Code, Crush, the Cline CLI and the
+  Antigravity CLI used to run it after their hook timed out.
+- **`openmoat init` asks once per hook-only agent** whether typing its name should start it
+  confined in `openmoat run`'s sandbox (default no); `openmoat confine` and
+  `openmoat confine --off` change it later, and `openmoat status` shows each agent's
+  protection score.
+- **A long session keeps working through an upgrade or a policy change** (ADR-121): calls
+  read on from the session's earlier taint instead of reading the whole session again.
+- **New, all optional**: `openmoat gate setup` adds an authenticator code to every command
+  that loosens the protection, and every policy change is listed by
+  `openmoat show --session policy-changes` (ADR-117); `mint:` secrets hand git and the
+  AWS tools short-lived credentials under `openmoat run` (ADR-118); `openmoat team join`
+  takes a team's signed bundle that can only narrow your policy, and `openmoat inventory`
+  reports this machine's agents and hooks (ADR-119).
+
 ### From 0.25.0 to 0.26.0
 
 What you will see, and what to run:
