@@ -174,7 +174,7 @@ fn commands(call: &Call<'_>) -> Result<Action, HostError> {
     let shell_lines = list.iter().any(|c| matches!(c, Command::Line(_)));
     if call.windows && shell_lines {
         return Ok(Action::ForeignShell {
-            shell: "PowerShell".to_owned(),
+            shell: openmoat_core::POWERSHELL.to_owned(),
             command: lines.join("\n"),
         });
     }

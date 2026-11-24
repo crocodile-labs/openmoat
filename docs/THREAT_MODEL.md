@@ -1477,12 +1477,20 @@ something OpenMoat claims to stop.
 <!-- generated:hosts-workdir -->
 - **Codex chooses where a call runs.** Codex sends a call's own working directory as `cwd` (a shell call's `workdir`, which the model picks) and starts every hook in the session's directory. When the `cwd` lies outside the session's project, `openmoat guard` decides the call from the session's directory, as the command run after a `cd` to the `cwd`, with every relative path taken from it: a write from `~/Library/LaunchAgents` is checked as that path, and a model-chosen directory never decides which directory is the project. A session started outside any project (the home directory) keeps a `cwd` inside a git work tree as its project.
 <!-- /generated -->
-- **PowerShell is not parsed.** Claude Code `PowerShell` is always `unparseable`, which
-  the default policy defers to Claude Code's own prompt (and a `review` catch-all holds it for review);
-  injected input reads its text for the hosts and paths it names, and a planted one makes it
-  need review (POLICY.md §4.1.2). A
-  PowerShell line given to a POSIX shell tool is lexed as POSIX and usually falls through
-  to the catch-all default.
+- **PowerShell is read in preview only.** A PowerShell command is always `unparseable`, which
+  the default policy defers to the agent's own prompt (and a `review` catch-all holds it for review).
+  A minimal reader (ADR-116) adds the atoms of the simple statements it reads, as the POSIX
+  commands that do the same, so a default rule denies or holds them (`Remove-Item -Recurse ~`,
+  `Get-Content` of a key, a download piped into `iex`); a statement with script blocks,
+  parentheses or arrays, here-strings, splatting and cmdlets outside its table add no atom
+  but their literal paths and `$env:` reads. Injected input reads its text for the hosts and
+  paths it names, and a planted one makes it need review (POLICY.md §4.1.2). A PowerShell
+  line given to a POSIX shell tool is lexed as POSIX and usually falls through to the
+  catch-all default.
+- **The obfuscation score is a heuristic.** A line whose score after MITRE DET0505's
+  signals reaches 3 is held for review (`obfuscated`, ADR-116); a line can be written to
+  stay under it, and the score never loosens a verdict. It is calibrated against the
+  conformance suite's allowed fixtures and MoatBench's steps, none of which reaches it.
 - **Pattern lists are incomplete by nature.** Pseudo-terminal routes to `openmoat allow`
   (ADR-011, ADR-014), environment dumps through interpreters (`python -c
   'print(os.environ)'`, ADR-010), and options that run programs (ADR-012) are matched

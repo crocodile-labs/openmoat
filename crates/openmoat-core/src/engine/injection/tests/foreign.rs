@@ -44,6 +44,12 @@ fn a_host_a_page_named_makes_a_powershell_command_to_it_need_review() {
         let action = powershell(command);
         let plain = plain(&action);
         let d = after(&source, SETUP, &action);
+        // the reader reads an upload as `curl -X POST`, which the policy
+        // denies on its own (ADR-116); a deny stays
+        if plain.verdict == Verdict::Deny {
+            assert_eq!(d, plain, "{command}");
+            continue;
+        }
         assert_eq!(d.verdict, Verdict::Review, "{command}: {d:?}");
         assert!(linked(&d), "{command}: {d:?}");
         assert_ne!(

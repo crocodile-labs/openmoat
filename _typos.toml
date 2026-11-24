@@ -43,6 +43,8 @@ set_dumpable_behavior = "set_dumpable_behavior" # rustix's `prctl(PR_SET_DUMPABL
 [default.extend-words]
 # OpenMoat's own rule id and verdict reason.
 unparseable = "unparseable"
+# `` I`nv`oke-Ex`pression ``: PowerShell obfuscation test data (ADR-116).
+pression = "pression"
 # The RustCrypto `sha2`/`digest` API (`Digest::finalize`), used for HMAC-SHA-256.
 finalize = "finalize"
 # serde (`Serialize`, `skip_serializing_if`).

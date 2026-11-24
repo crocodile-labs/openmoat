@@ -9,7 +9,7 @@ use crate::expand::Expansion;
 use crate::host::web;
 use crate::paths;
 use crate::realpath::{PathResolver, physical};
-use crate::shell::{ParseOutcome, ShellContext, Unparsed, classify_globs};
+use crate::shell::{ParseOutcome, ShellContext, Unparsed, classify_globs, powershell};
 
 mod urls;
 
@@ -30,6 +30,17 @@ fn classify_action(
     let outcome = match action {
         Action::Shell { command } => {
             return classify_globs(
+                command,
+                &ShellContext {
+                    home: &ctx.home,
+                    cwd: &[Some(ctx.cwd.clone())],
+                },
+            );
+        }
+        // PowerShell is read as the POSIX commands it does the same as, and
+        // stays `unparseable` whatever it reads (ADR-116)
+        Action::ForeignShell { shell, command } if powershell::is_powershell(shell) => {
+            return powershell::classify(
                 command,
                 &ShellContext {
                     home: &ctx.home,

@@ -90,7 +90,7 @@ pub(super) fn map_on(
             let command = field("command")?;
             if powershell {
                 Action::ForeignShell {
-                    shell: "PowerShell".to_owned(),
+                    shell: openmoat_core::POWERSHELL.to_owned(),
                     command,
                 }
             } else {

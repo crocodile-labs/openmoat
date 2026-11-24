@@ -181,7 +181,7 @@ fn map_tool(tool: &str, input: &Value, cwd: Option<&str>) -> Result<Option<Actio
         },
         "Monitor" => monitor(input)?,
         "PowerShell" => Action::ForeignShell {
-            shell: tool.to_owned(),
+            shell: openmoat_core::POWERSHELL.to_owned(),
             command: field("command")?,
         },
         "Read" => Action::FsRead {

@@ -53,7 +53,7 @@ pub(super) fn map(
             });
         }
         "run_shell_command" if powershell => Action::ForeignShell {
-            shell: "PowerShell".to_owned(),
+            shell: openmoat_core::POWERSHELL.to_owned(),
             command: field("command")?,
         },
         "run_shell_command" => Action::Shell {

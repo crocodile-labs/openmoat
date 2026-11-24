@@ -117,7 +117,7 @@ fn typed(input: Action) -> Action {
 
 fn powershell(command: String) -> Action {
     Action::ForeignShell {
-        shell: "PowerShell".to_owned(),
+        shell: openmoat_core::POWERSHELL.to_owned(),
         command,
     }
 }

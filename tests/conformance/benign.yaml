@@ -3200,3 +3200,21 @@
   repo: { policy: "version: 1\ndeny:\n  - id: mail-outside-team\n    mcp: ['mcp__mail__send_email']\n    when:\n      - { arg: [to, cc, bcc], not_in: ['*@example.com'] }\n" }
   action: { mcp_tool: { name: mcp__mail__send_email, arguments: { to: "Boss <BOSS@example.com>; ann@example.com", subject: "q3" } } }
   expect: { verdict: defer, rules: [default] }
+# PowerShell (ADR-116): read in preview, so never allowed on that reading alone; an
+# everyday line gains no atom a rule holds and stays the agent's own prompt
+- id: benign-powershell-dotnet-build
+  action: { foreign_shell: { shell: PowerShell, command: "dotnet build -c Release" } }
+  expect: { verdict: defer, rules: [unparseable] }
+- id: benign-powershell-list-sources
+  action: { foreign_shell: { shell: PowerShell, command: "Get-ChildItem -Recurse -Filter *.cs src | Select-Object -First 5" } }
+  expect: { verdict: defer, rules: [unparseable] }
+- id: benign-powershell-execution-policy-for-the-process
+  action: { foreign_shell: { shell: PowerShell, command: "Set-ExecutionPolicy Bypass -Scope Process -Force; ./build.ps1" } }
+  expect: { verdict: defer, rules: [unparseable] }
+- id: benign-posix-pwsh-runs-tests
+  action: { shell: "pwsh -NoProfile -Command 'dotnet test'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-obfuscation-score-colour-escapes
+  why: colour escapes and a short commit hash cut are everyday shell, not obfuscation
+  action: { shell: "printf '\\033[32mok\\033[0m %s\\n' \"${GITHUB_SHA:0:7}\"" }
+  expect: { verdict: defer, rules: [default] }

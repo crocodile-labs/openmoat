@@ -54,6 +54,13 @@ impl CompiledPolicy<'_> {
         action: &Action,
         atoms: &[AtomicAction],
     ) -> Option<String> {
+        // a PowerShell line's output is judged on its text (`foreign.rs`), as
+        // before the reader gave it atoms (ADR-116): those only add to its verdict
+        if let Action::ForeignShell { command, .. } = action.shown() {
+            return self
+                .foreign_reads_remote(command)
+                .then(|| format!("the output of `{command}`"));
+        }
         if let Some(exposed) = atoms.iter().find(|atom| UntrustedKind::of(atom).is_some()) {
             let source = match action.shown() {
                 Action::Fetch { url } => format!("the page fetched from {url}"),
@@ -65,14 +72,8 @@ impl CompiledPolicy<'_> {
             };
             return Some(source);
         }
-        let command = match action.shown() {
-            Action::Shell { command } => command,
-            Action::ForeignShell { command, .. } => {
-                return self
-                    .foreign_reads_remote(command)
-                    .then(|| format!("the output of `{command}`"));
-            }
-            _ => return None,
+        let Action::Shell { command } = action.shown() else {
+            return None;
         };
         let reads_remote = atoms.iter().any(|atom| match atom {
             AtomicAction::Net { host } | AtomicAction::Fetch { host } => {

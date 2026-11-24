@@ -39,7 +39,7 @@ pub(super) fn map(call: &Call<'_>) -> Result<Option<Action>, HostError> {
             command: field("command")?,
         },
         "powershell" => Action::ForeignShell {
-            shell: "PowerShell".to_owned(),
+            shell: openmoat_core::POWERSHELL.to_owned(),
             command: field("command")?,
         },
         "read" => read(&path(call, &field("path")?)?),

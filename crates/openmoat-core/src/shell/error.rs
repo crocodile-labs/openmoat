@@ -28,6 +28,9 @@ pub(crate) enum ClassifyError {
     UnknownValue(String),
     #[error("a variable set on the line may hold more than {MAX_DIRS} combinations of values")]
     TooManyValues,
+    /// A PowerShell statement the reader does not read (`shell/powershell.rs`).
+    #[error("PowerShell the reader does not read: {0}")]
+    PowerShell(String),
 }
 
 impl ClassifyError {

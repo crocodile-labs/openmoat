@@ -34,6 +34,7 @@ mod kind;
 pub mod lexer;
 pub mod lint;
 pub mod mcp_flow;
+pub mod obfuscation;
 mod packages;
 mod patch;
 mod paths;
@@ -106,6 +107,7 @@ pub mod mint {
 }
 pub use shell::cwd::leaves_unknown_directory;
 pub use shell::installs::package_atoms;
+pub use shell::powershell::{POWERSHELL, is_powershell};
 pub use shell::push::Push;
 pub use shell::replaced::replaced_files;
 pub use staging::{DEFAULT_OUTSIDE_FOLDERS, DEFAULT_OUTSIDE_READS, StagingSettings};

@@ -374,6 +374,9 @@ fn classify_as_written(
     for code in embedded::commands(&argv, program, &text_operands.data) {
         classify_into(&code, ctx, sink, depth + 1)?;
     }
+    // `powershell -c 'Remove-Item -Recurse ~'`: the line it runs is read as
+    // PowerShell too (ADR-116)
+    super::powershell::nested(&argv, ctx, sink, depth);
 
     if MAKES.contains(&program) {
         return make::classify(&argv, ctx, sink, depth);

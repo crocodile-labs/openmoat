@@ -9,6 +9,7 @@
 //! sets with every value it took (`merge_variants`). Any other use of one
 //! keeps its `env.read` and leaves the path unknown (`Sink::paths`).
 
+mod slice;
 mod trim;
 
 use std::ops::Range;
@@ -16,6 +17,7 @@ use std::ops::Range;
 use super::{SimpleCommand, classify_as_written};
 use crate::lexer::Word;
 use crate::shell::{ClassifyError, MAX_DIRS, ShellContext, Sink};
+use slice::Slice;
 use trim::Trim;
 
 /// Classify `cmd` once for each value of the known variables it uses; `false`
@@ -241,6 +243,19 @@ pub(super) fn expand(
     if used.is_empty() {
         return Ok(None);
     }
+    // `${!r}` may name any of them: each is substituted with every value it holds
+    let indirect = cmd
+        .words
+        .iter()
+        .chain(&cmd.stdin)
+        .any(|w| w.text.contains("${!"));
+    if indirect {
+        for local in known {
+            if !used.iter().any(|u| u.0 == local.0) {
+                used.push(local);
+            }
+        }
+    }
     let count = used.iter().map(|u| u.1.len().max(1)).product::<usize>();
     if count * separators.len() > MAX_DIRS {
         return Err(ClassifyError::TooManyValues);
@@ -251,24 +266,36 @@ pub(super) fn expand(
         let mut out = cmd.clone();
         // per word, the text unquoted references put there: the shell splits it
         let mut fields = vec![Vec::new(); out.words.len()];
-        for (name, values) in &used {
-            let value = values
-                .get(rest % values.len().max(1))
-                .map_or("", String::as_str);
-            rest /= values.len().max(1);
+        let chosen: Vec<(&str, &str)> = used
+            .iter()
+            .map(|(name, values)| {
+                let value = values
+                    .get(rest % values.len().max(1))
+                    .map_or("", String::as_str);
+                rest /= values.len().max(1);
+                (name.as_str(), value)
+            })
+            .collect();
+        let lookup = |target: &str| {
+            chosen
+                .iter()
+                .find(|(n, _)| *n == target)
+                .map(|(_, v)| (*v).to_owned())
+        };
+        for &(name, value) in &chosen {
             for (w, f) in out.words.iter_mut().zip(fields.iter_mut()) {
-                substitute(w, name, value, f)?;
+                substitute(w, name, value, f, &lookup)?;
             }
             // a here-string and a redirection target are not split
             for w in &mut out.stdin {
-                substitute(w, name, value, &mut Vec::new())?;
+                substitute(w, name, value, &mut Vec::new(), &lookup)?;
             }
             for text in out.reads.iter_mut().chain(out.writes.iter_mut()) {
                 let mut w = Word {
                     text: std::mem::take(text),
                     ..Word::default()
                 };
-                substitute(&mut w, name, value, &mut Vec::new())?;
+                substitute(&mut w, name, value, &mut Vec::new(), &lookup)?;
                 *text = w.text;
             }
         }
@@ -350,7 +377,9 @@ fn uses(
     let mut found = false;
     for (_, at) in references(text, name, literal, unquoted) {
         match at {
-            Ref::Plain | Ref::Braced | Ref::Trimmed(..) => found = true,
+            Ref::Plain | Ref::Braced | Ref::Trimmed(..) | Ref::Sliced(..) | Ref::Indirect(_) => {
+                found = true;
+            }
             Ref::Transformed => return Err(ClassifyError::UnknownValue(text.to_owned())),
         }
     }
@@ -362,6 +391,11 @@ enum Ref {
     Braced,
     /// `${name#pattern}` and its kin, with the length of the whole expansion.
     Trimmed(Trim, usize),
+    /// `${name:offset:length}`, with the length of the whole expansion (`slice.rs`).
+    Sliced(Slice, usize),
+    /// `${!name}`: the variable `name`'s value names, with the length of the
+    /// whole expansion.
+    Indirect(usize),
     Transformed,
 }
 
@@ -381,11 +415,21 @@ fn references(
             continue;
         }
         let rest = &text[pos + 1..];
-        if let Some(body) = rest.strip_prefix('{') {
+        if rest
+            .strip_prefix("{!")
+            .and_then(|b| b.strip_prefix(name))
+            .is_some_and(|a| a.starts_with('}'))
+        {
+            out.push((pos, Ref::Indirect(4 + name.len())));
+        } else if let Some(body) = rest.strip_prefix('{') {
             if let Some(after) = body.strip_prefix(name) {
                 match after.chars().next() {
                     Some('}') => out.push((pos, Ref::Braced)),
                     Some(c) if !is_name(c) => {
+                        if let Some((slice, used)) = Slice::parse(after) {
+                            out.push((pos, Ref::Sliced(slice, 2 + name.len() + used)));
+                            continue;
+                        }
                         let read = Trim::parse(after).and_then(|(trim, used)| {
                             let len = 2 + name.len() + used;
                             let whole = unquoted
@@ -415,6 +459,7 @@ fn substitute(
     name: &str,
     value: &str,
     fields: &mut Vec<Range<usize>>,
+    lookup: &dyn Fn(&str) -> Option<String>,
 ) -> Result<(), ClassifyError> {
     let refs = references(&word.text, name, &word.literal, &word.unquoted);
     let mut trimmed = false;
@@ -428,6 +473,29 @@ fn substitute(
                     .apply(value)
                     .ok_or_else(|| ClassifyError::UnknownValue(word.text.clone()))?;
                 (len, kept)
+            }
+            Ref::Sliced(slice, len) => {
+                trimmed = true;
+                let kept = slice
+                    .apply(value)
+                    .ok_or_else(|| ClassifyError::UnknownValue(word.text.clone()))?;
+                (len, kept)
+            }
+            // `r=v; ${!r}` is `$v`: its value when it is known, else the
+            // variable itself, whose read is still an atom (`${GITHUB_TOKEN}`)
+            Ref::Indirect(len) => {
+                let target = value;
+                let is_name = target.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+                    && target
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'_');
+                if !is_name {
+                    return Err(ClassifyError::UnknownValue(word.text.clone()));
+                }
+                (
+                    len,
+                    lookup(target).unwrap_or_else(|| format!("${{{target}}}")),
+                )
             }
             Ref::Transformed => continue,
         };

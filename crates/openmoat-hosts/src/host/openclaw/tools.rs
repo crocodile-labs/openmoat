@@ -160,7 +160,7 @@ fn exec(call: &Call<'_>) -> Result<Action, HostError> {
     let command = crate::input_str(call.params, call.tool, "command")?;
     if call.windows {
         return Ok(Action::ForeignShell {
-            shell: "PowerShell".to_owned(),
+            shell: openmoat_core::POWERSHELL.to_owned(),
             command,
         });
     }

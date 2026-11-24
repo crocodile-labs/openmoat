@@ -72,7 +72,8 @@ fn the_default_policy_is_proven_against_itself() {
 /// and `hooks accept` (ADR-109, ADR-110), and the outside benchmarks' gaps
 /// (ADR-112) grew `secrets-paths` and `persistence` and added three review
 /// rules, and staging holds a send of packed or private data (ADR-113,
-/// `staging-egress`). Every change holds more, nothing else.
+/// `staging-egress`), and a line written to hide what it runs is held
+/// (ADR-116, `obfuscated`). Every change holds more, nothing else.
 #[test]
 fn the_upgrade_from_the_0_24_default_only_narrows() {
     let old = Policy::parse(DEFAULT_V0_24_0).unwrap();
@@ -92,6 +93,7 @@ fn the_upgrade_from_the_0_24_default_only_narrows() {
             ("review", "persistence", "changed"),
             ("deny", "secrets-paths", "changed"),
             ("review", "credential-egress", "added"),
+            ("review", "obfuscated", "added"),
             ("review", "staging-egress", "added"),
             ("review", "stops-system", "added"),
             ("review", "system-files", "added")

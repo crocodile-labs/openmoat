@@ -63,6 +63,7 @@ mod embedded;
 mod error;
 pub(crate) mod executes;
 mod extract;
+mod fold;
 pub(crate) mod git;
 mod in_place;
 pub(crate) mod installs;
@@ -73,6 +74,7 @@ mod make;
 mod operands;
 mod options;
 mod path_options;
+pub(crate) mod powershell;
 mod process_env;
 pub(crate) mod push;
 pub(crate) mod replaced;
@@ -221,13 +223,28 @@ pub fn classify_globs(
     ctx: &ShellContext<'_>,
 ) -> (ParseOutcome, Vec<(AtomicAction, bool)>) {
     let mut sink = Sink::default();
-    let mut stopped = commands::classify_into(command, ctx, &mut sink, 0).err();
+    // a line written to hide what it runs is held whatever it runs (ADR-116)
+    let assessed = crate::obfuscation::assess(command, crate::obfuscation::Dialect::Posix);
+    let mut stopped = if assessed.obfuscated() {
+        sink.push(obfuscated_atom(&assessed)).err()
+    } else {
+        None
+    };
+    stopped = stopped.or(commands::classify_into(command, ctx, &mut sink, 0).err());
     // `cat${IFS}~/.ssh/id_rsa`: the shell splits words where `$IFS` expands. The
     // line is classified a second time with it read as a space, and both sets of
     // actions count, so the split never loosens the verdict.
     let split = command.replace("${IFS}", " ").replace("$IFS", " ");
     if split != command {
         let again = commands::classify_into(&split, ctx, &mut sink, 0).err();
+        stopped = stopped.or(again);
+    }
+    // `"$(printf %s rm)" -rf ~`: a substitution whose output is known text
+    // (`fold.rs`) is classified as that text too; again both sets count
+    if let Some(folded) = fold::substitutions(command)
+        && folded != command
+    {
+        let again = commands::classify_into(&folded, ctx, &mut sink, 0).err();
         stopped = stopped.or(again);
     }
     let needs_review =
@@ -247,6 +264,17 @@ pub fn classify_globs(
     };
     (outcome, sink.globs)
 }
+
+/// The `@obfuscated <signals>` atom of a line the obfuscation score holds
+/// (`crate::obfuscation`), which the default rule `obfuscated` names.
+pub(crate) fn obfuscated_atom(assessed: &crate::obfuscation::Assessment) -> AtomicAction {
+    AtomicAction::Shell {
+        argv: vec![OBFUSCATED.to_owned(), assessed.signals.join(" ")],
+    }
+}
+
+/// The tag of [`obfuscated_atom`].
+pub(crate) const OBFUSCATED: &str = "@obfuscated";
 
 /// All lowercase letters, digits and `_`, with one letter at least: a shell
 /// variable by convention, not an environment variable.

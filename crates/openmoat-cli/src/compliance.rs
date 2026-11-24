@@ -232,11 +232,12 @@ pub const GROUPS: &[Group] = &[
         title: "Running code the agent did not show",
         does: "deny piping downloaded or decoded content into a shell and a program that \
                resolves to another path than its pin, and work handed to WSL from Windows; hold \
-               for review running opaque code, a file the session wrote or a container handed \
-               the host",
+               for review running opaque code, a command line written to hide what it runs, a \
+               file the session wrote or a container handed the host",
         covers: Covers::Rules(&[
             "pipe-to-shell",
             "opaque-code",
+            "obfuscated",
             SESSION_WRITTEN_CODE,
             EXECUTABLES,
             "container-host",
