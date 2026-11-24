@@ -611,7 +611,8 @@ pub struct RunArgs {
     /// service the agent serves, such as OpenClaw's Gateway. It may bind no other
     /// port and no other address. On Linux the port is forwarded from this
     /// machine's loopback into the sandbox's network; refused where the sandbox
-    /// has no network of its own (bubblewrap) and on Windows.
+    /// has no network of its own (bubblewrap), on macOS (its sandbox would let a
+    /// bind to every address through) and on Windows.
     #[arg(long, value_name = "PORT", value_parser = clap::value_parser!(u16).range(1024..))]
     pub listen: Option<u16>,
 
