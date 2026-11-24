@@ -366,6 +366,9 @@ deny:
       # remote approvals (ADR-078): the channel's credential and the key every
       # request, answer and approver list is signed with
       - "~/.moat/remote/**"
+      # remote MCP servers a person named (ADR-127): each one's pinned URL and the
+      # token OpenMoat adds for it, which the agent must never hold
+      - "~/.moat/mcp-remote/**"
       # the decoy keys `openmoat init` planted (ADR-106): which files are decoys
       # and what they hold, which an agent hunting for keys would read first
       - "~/.moat/canaries.json"
@@ -375,6 +378,7 @@ deny:
       - "**/.moat/proxy.key*"
       - "**/.moat/proxy-ca/**"
       - "**/.moat/remote/**"
+      - "**/.moat/mcp-remote/**"
     fs.write:
       # the state and host directories themselves: renaming, deleting or replacing
       # one with a link removes every pinned file and hook inside it at once
@@ -620,9 +624,10 @@ deny:
       # a provenance note is the person's record of what agents wrote (ADR-056)
       - "{moat,openmoat} provenance * --write-notes*"
       - "*/{moat,openmoat} provenance * --write-notes*"
-      # a changed or new MCP server, or a wrapped one, is a person's to accept (ADR-026)
-      - "{moat,openmoat} mcp {accept,wrap,unwrap}*"
-      - "*/{moat,openmoat} mcp {accept,wrap,unwrap}*"
+      # a changed or new MCP server, or a wrapped one, is a person's to accept (ADR-026);
+      # a remote server's URL and token are a person's to pin (ADR-127)
+      - "{moat,openmoat} mcp {accept,wrap,unwrap,login}*"
+      - "*/{moat,openmoat} mcp {accept,wrap,unwrap,login}*"
       # a new or changed hook command or plugin hook is a person's to accept (ADR-109)
       - "{moat,openmoat} hooks accept*"
       - "*/{moat,openmoat} hooks accept*"

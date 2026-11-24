@@ -2540,6 +2540,10 @@
   threat: T9
   action: { shell: "openmoat mcp proxy --help" }
   expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-mcp-login-help
+  why: the usage of the person's command runs nothing (ADR-127)
+  action: { shell: "openmoat mcp login --help" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
 - id: benign-openmoat-policy-lint
   threat: T9
   action: { shell: "openmoat policy lint x.yaml" }

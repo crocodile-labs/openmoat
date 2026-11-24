@@ -25,7 +25,10 @@ pub use audit::{
     DeliverTestArgs, EvidenceArgs, ExportArgs, StatsArgs, TeamReportArgs, VerifyArgs,
 };
 pub use credential::CredentialCommand;
-pub use mcp::{McpAcceptArgs, McpCommand, McpProxyArgs, McpUnwrapArgs, McpWrapArgs};
+pub use mcp::{
+    McpAcceptArgs, McpCommand, McpLoginArgs, McpProxyArgs, McpRemoteArgs, McpUnwrapArgs,
+    McpWrapArgs,
+};
 pub use policy::{
     ActionKind, CheckArgs, CheckDiffArgs, CompileArgs, DiffArgs, DiffFormat, InstallArgs, LintArgs,
     MigrateArgs, PolicyCommand, RemoveArgs, TrustKeyArgs, UpgradeArgs,

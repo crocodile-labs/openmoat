@@ -1371,9 +1371,74 @@ $ openmoat audit export --session 9f2c…
 
   Its tool calls are refused, and a wrapped one does not start, until you accept it again.
 
-The gateway covers stdio servers. A remote (HTTP) server is checked by the hook alone, and
-its results are not kept for the flow check. Tool results reach the model as the server
-sent them (they mark the session untrusted).
+The gateway covers stdio servers, and remote servers you name (below). A remote (HTTP)
+server the agent reaches directly is checked by the hook alone, and its results are not
+kept for the flow check. Tool results reach the model as the server sent them (they mark
+the session untrusted).
+
+### Remote MCP servers
+
+Preview (ADR-127). A remote server (Streamable HTTP, `https://…/mcp`) can go through the
+same gateway as a stdio server: its tools and identity pinned, every call held for the
+hook's decision, every result checked. You name the server once in your own terminal;
+OpenMoat pins its URL and keeps its token in its own state directory, which the agents
+cannot read, and adds the token to each request itself. The agent's configuration holds
+only the command that starts the gateway, never the token.
+
+```bash
+openmoat mcp login linear --url https://mcp.linear.app/mcp
+```
+
+```text
+https://mcp.linear.app:443 issues tokens through: https://mcp.linear.app
+Token for `linear` (hidden; empty for a server without sign-in):
+OpenMoat will reach `linear` only at https://mcp.linear.app:443, adding the token to each request; the agent never holds the token.
+Pin it? [y/N] y
+Pinned. Point the agent's configuration for `linear` at the gateway:
+  {"command": "openmoat", "args": ["mcp", "remote", "--server", "linear", "--url", "https://mcp.linear.app/mcp"]}
+```
+
+Then replace the server's `url` entry in the agent's MCP configuration with that stdio
+entry (`openmoat mcp wrap` does not rewrite remote entries yet), run `openmoat mcp
+accept`, start the agent, and accept the server's tools the first time it lists them.
+
+What the gateway checks before anything is sent:
+
+- the URL is the one you pinned (an agent that edits its configuration to another URL
+  gets every request refused, naming `openmoat mcp login`);
+- `https`, or plain `http` only to `127.0.0.1` or `[::1]`; no user name or password in
+  the URL; no address in an unusual notation (`2852039166`);
+- every address the name resolves to: loopback, private and shared (`100.64.0.0/10`)
+  addresses only when an allow rule names the address (`net: ["127.0.0.1:8931"]` for a
+  server on this machine), link-local and the cloud metadata services never; the
+  connection goes to one of exactly the addresses checked;
+- no deny rule of your policy names the host; no redirect is followed.
+
+`openmoat mcp login` reads the server's sign-in metadata (RFC 9728, over `https`, through
+the same checks) to name where its tokens come from; it does not sign in for you. Get a
+token there (a personal API key or an OAuth access token) and type it at the prompt, or
+pass `--no-token` for a server without sign-in.
+
+#### Try it
+
+Without a server: name a local one, see the gateway refuse a moved URL and an address no
+rule names, then undo. Run it in a terminal, not from an agent (both commands refuse
+an agent):
+
+```bash
+openmoat mcp login demo --url http://127.0.0.1:9/mcp --no-token     # answer y
+# the agent's side: a moved URL is refused, naming the pinned one
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+  openmoat mcp remote --server demo --url http://127.0.0.1:10/mcp
+# the pinned URL, but no allow rule names 127.0.0.1:9: answered with error -32603, no connection
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+  openmoat mcp remote --server demo --url http://127.0.0.1:9/mcp
+openmoat mcp login demo --url http://127.0.0.1:9/mcp --forget         # undo
+```
+
+Limits: no sign-in flow (you bring the token); Streamable HTTP only, not the older
+HTTP+SSE transport; no stream for messages the server starts on its own; no
+`Mcp-Param-*` headers; one connection per request ([LIMITS.md](LIMITS.md)).
 
 ## If OpenMoat gets in your way
 

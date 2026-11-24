@@ -36,7 +36,7 @@ protect) are on [openmoat.dev/docs](https://openmoat.dev/docs/).
 | Document | What it covers |
 |---|---|
 | [PROTECTION.md](PROTECTION.md) | What protects each agent on Linux, macOS and Windows (hook, what happens when it fails, its own sandbox, the `openmoat run` tier, MCP servers, what a command can read in a run) and the tests behind each claim (generated; do not edit) |
-| [LIMITS.md](LIMITS.md) | What OpenMoat does not stop: approvals and prompts, sandboxes and allowed code (`openmoat run` on Windows holds no reads or network), what the hook does not see (remote MCP servers have no gateway), agents that skip or change the check, the limits of single checks |
+| [LIMITS.md](LIMITS.md) | What OpenMoat does not stop: approvals and prompts, sandboxes and allowed code (`openmoat run` on Windows holds no reads or network), what the hook does not see (remote MCP servers have a gateway only once a person names them), agents that skip or change the check, the limits of single checks |
 | [THREAT_MODEL.md](THREAT_MODEL.md) | What is defended, how the hook and the OS layers answer each threat class, and the known limits |
 | [EVIDENCE.md](EVIDENCE.md) | What the OS layer stops in an allowed project script, per OS (generated; do not edit) |
 | [COVERAGE.md](COVERAGE.md) | The conformance fixtures per threat class (generated; do not edit) |

@@ -65,6 +65,7 @@ mod lock_settings;
 mod mcp;
 mod mcp_gateway;
 mod mcp_init_wrap;
+mod mcp_remote;
 mod mcp_startup;
 mod mcp_status;
 mod moatbench;

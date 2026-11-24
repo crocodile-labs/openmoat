@@ -19,6 +19,24 @@ pub enum McpCommand {
     /// tool whose definition changed until `openmoat mcp accept`, and record every tool
     /// call in the audit log.
     Proxy(McpProxyArgs),
+    /// Run one remote MCP server (Streamable HTTP) through OpenMoat (preview; started by
+    /// the agent from its configuration, not by people): refuse a URL other than the one
+    /// `openmoat mcp login` pinned, add the pinned token to each request so the agent never
+    /// holds it, reach only addresses that are not local, private or link-local unless an
+    /// allow rule names them, and check every message as `openmoat mcp proxy` does.
+    #[command(after_help = "Example (in the agent's MCP configuration):\n  \
+        openmoat mcp remote --server linear --url https://mcp.linear.app/mcp\n\
+        Docs: docs/USAGE.md \"Remote MCP servers\"")]
+    Remote(McpRemoteArgs),
+    /// Name a remote MCP server for `openmoat mcp remote` (preview): pin its URL and keep
+    /// the token you type in OpenMoat's state directory, which agents cannot read. Shows
+    /// where the server's tokens come from, and asks first. Refused unless run from an
+    /// interactive terminal, and over a drifted lock.
+    #[command(after_help = "Example:\n  \
+        openmoat mcp login linear --url https://mcp.linear.app/mcp\n  \
+        openmoat mcp login linear --url https://mcp.linear.app/mcp --forget   # undo\n\
+        Docs: docs/USAGE.md \"Remote MCP servers\"")]
+    Login(McpLoginArgs),
     /// Point stdio MCP servers in the agents' user configuration at `openmoat mcp proxy`,
     /// backing the files up first. Refused unless run from an interactive terminal.
     Wrap(McpWrapArgs),
@@ -57,6 +75,42 @@ pub struct McpProxyArgs {
     /// The server's command and arguments, after `--`.
     #[arg(required = true, last = true, value_name = "COMMAND")]
     pub command: Vec<std::ffi::OsString>,
+}
+
+#[derive(Debug, Args)]
+pub struct McpRemoteArgs {
+    /// The server's name in the agent's configuration, as `openmoat mcp login` named it.
+    #[arg(long)]
+    pub server: String,
+
+    /// The agent whose configuration starts the server: only that agent's hook
+    /// decisions let its calls through.
+    #[arg(long, value_parser = super::parse_host())]
+    pub host: Option<openmoat_hosts::Host>,
+
+    /// The server's Streamable HTTP endpoint: `https://…`, or `http://127.0.0.1:<port>/…`
+    /// for a server on this machine that an allow rule names. Must be the URL
+    /// `openmoat mcp login` pinned.
+    #[arg(long)]
+    pub url: String,
+}
+
+#[derive(Debug, Args)]
+pub struct McpLoginArgs {
+    /// The server's name, as the agent's configuration will give it to `openmoat mcp remote`.
+    pub server: String,
+
+    /// The server's Streamable HTTP endpoint (`https://mcp.example.com/mcp`).
+    #[arg(long)]
+    pub url: String,
+
+    /// The server needs no token: pin the URL alone.
+    #[arg(long)]
+    pub no_token: bool,
+
+    /// Remove the server's pinned URL and token.
+    #[arg(long, conflicts_with = "no_token")]
+    pub forget: bool,
 }
 
 #[derive(Debug, Args)]

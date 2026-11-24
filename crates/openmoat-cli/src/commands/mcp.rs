@@ -22,9 +22,13 @@ use crate::mcp::{self, Change};
 use crate::render::{Deferred, Named, clean};
 
 mod gate;
+mod login;
 mod proxy;
+mod remote;
 
+pub use login::run as login;
 pub use proxy::run as proxy;
+pub use remote::run as remote;
 
 fn person_only(command: &str) -> Result<Home> {
     crate::terminal::refuse_agent(&format!("openmoat mcp {command}"))?;

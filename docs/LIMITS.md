@@ -289,12 +289,17 @@ Each agent's gaps and the reasons are in
   named with what to set by hand; a goose extension of inline Python has no command to
   wrap. `openmoat status` lists the
   servers that start outside OpenMoat.
-- **The MCP gateway covers local stdio servers only.** Remote (HTTP) MCP servers, plugin
-  servers and managed MCP configuration are checked by the hook alone: their
-  definitions are pinned, their calls decided, but nothing pins what they list, holds
-  their tokens or checks where their OAuth discovery leads. A remote gateway is designed
-  as future work in [ADR-114](adr/ADR-114-mcp-2026-07-28-and-package-provenance.md)
-  (token custody, no token passthrough, SSRF-safe discovery) and not built.
+- **The MCP gateway covers stdio servers, and remote servers only once a person names
+  them.** A remote (Streamable HTTP) server goes through the gateway when a person runs
+  `openmoat mcp login` and points the agent at `openmoat mcp remote` (preview,
+  [ADR-127](adr/ADR-127-remote-mcp-gateway.md)); `openmoat mcp wrap` does not rewrite a
+  remote definition yet. A remote server the agent reaches directly, plugin servers and
+  managed MCP configuration are checked by the hook alone: their definitions are pinned,
+  their calls decided, but nothing pins what they list or holds their tokens. The remote
+  gateway does not sign in for you (you type a token the server's authorization server
+  issued; the OAuth authorization code flow is not built), speaks only Streamable HTTP
+  (not the older HTTP+SSE transport), opens no stream for messages the server starts,
+  sends no `Mcp-Param-*` header, and sends each request on its own connection.
 - **A package release is read offline, from what the package manager left.** A wrapped
   or unwrapped stdio server's release is recorded when you accept it, from `npx`'s and
   `uv tool`'s own files and an image digest on the command line

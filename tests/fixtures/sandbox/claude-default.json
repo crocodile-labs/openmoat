@@ -184,6 +184,7 @@
         "/**/.moat/delivery",
         "/**/.moat/delivery/**",
         "/Users/me/.moat/remote",
+        "/Users/me/.moat/mcp-remote",
         "/Users/me/.moat/canaries.json",
         "/**/.moat/audit.db*",
         "/**/.moat/audit.key*",
@@ -192,7 +193,9 @@
         "/**/.moat/proxy-ca",
         "/**/.moat/proxy-ca/**",
         "/**/.moat/remote",
-        "/**/.moat/remote/**"
+        "/**/.moat/remote/**",
+        "/**/.moat/mcp-remote",
+        "/**/.moat/mcp-remote/**"
       ],
       "denyWrite": [
         "/Users/me/.ssh",

@@ -30,6 +30,7 @@ pub mod outside;
 pub mod pins;
 pub mod provenance;
 pub mod relay;
+pub mod remote;
 pub mod servers;
 pub mod startup;
 pub mod status;

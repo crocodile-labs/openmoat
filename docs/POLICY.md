@@ -2105,7 +2105,7 @@ mcp:
 ```
 
 `openmoat policy lint` warns while `flow_trusted` lists a server. Limits: only wrapped servers
-are seen as sources (an unwrapped, remote HTTP, plugin or managed server's results are not
+are seen as sources (an unwrapped server's, a remote HTTP one's not run through `openmoat mcp remote` (§8, USAGE.md "Remote MCP servers"), a plugin or managed server's results are not
 recorded), and text the agent rewrites (a paraphrase, an encoded or split address, a copy of
 fewer than eight words) is not found.
 
