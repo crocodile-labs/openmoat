@@ -17,7 +17,7 @@ use crate::home::{Home, user_home};
 use crate::protection::os_sandbox::RunHere;
 use crate::render::Deferred;
 use crate::report::Paths;
-use crate::start::{self, Shim, rc};
+use crate::start::{self, enable, rc};
 
 /// Whether `init` asks these questions: only of a person at a terminal, never
 /// with `--yes`, `--hooks-only` or `--format json` (which prints no question),
@@ -89,8 +89,9 @@ fn decoys_diff(offers: &[Offer], paths: &Paths, out: &mut Deferred) -> Result<()
     Ok(())
 }
 
-/// The sandboxed-start question, when an agent set up here can start in
-/// `openmoat run` and has no shim yet.
+/// The sandboxed-start questions, one per agent set up here that can start
+/// in `openmoat run` and has no shim yet (ADR-108 §8): each shows the
+/// protection score it has and would have, and only `y` turns it on.
 fn sandboxed_start(
     home: &Home,
     binary: &Path,
@@ -105,107 +106,46 @@ fn sandboxed_start(
     }
     let dir = start::shim_dir(home);
     let shell = std::env::var("SHELL").ok();
-    let rc_file = rc::file(user, shell.as_deref());
-    let lines = rc::lines(&dir, user);
-    let names: Vec<&str> = shims.iter().map(|s| s.name).collect();
-    let writes = match &rc_file {
+    let writes = match rc::file(user, shell.as_deref()) {
         Some(file) => format!(
-            "writes {} shim(s) to {} and 2 lines to {}",
-            shims.len(),
+            "a yes writes a shim to {} and, once, 2 lines to {}",
             paths.path(&dir),
-            paths.path(file)
+            paths.path(&file)
         ),
         None => format!(
-            "writes {} shim(s) to {}; you add one line to your shell's start-up file",
-            shims.len(),
+            "a yes writes a shim to {}; you add one line to your shell's start-up file",
             paths.path(&dir)
         ),
     };
-    let question = format!(
-        "  Sandboxed start  make typing {} start it in `openmoat run`'s sandbox? It {writes}  \
-         [y/N/d] ",
-        names.join(", ")
-    );
-    // What each agent has today, so the choice is made per agent (ADR-108).
-    for shim in &shims {
-        writeln!(
-            out,
-            "  {:<16} hook only: no OS boundary, so a classifier mistake is a bypass; with \
-             sandboxed start, typing `{}` starts it confined",
+    writeln!(
+        out,
+        "  Sandboxed start  these agents run with the hook only: an allowed call runs with your \
+         permissions, so a classifier mistake is a bypass. `openmoat run` confines them; {writes}"
+    )?;
+    let score = crate::commands::run_default_score();
+    let mut chosen = Vec::new();
+    for shim in shims {
+        let question = format!(
+            "  {:<16} {}: {}?  [y/N/d] ",
             shim.host.display_name(),
-            shim.name
-        )?;
+            enable::score_change(score),
+            enable::what_starts(&shim)
+        );
+        let one = std::slice::from_ref(&shim);
+        if yes(&question, out, |out| enable::diff(home, one, user, out))? {
+            chosen.push(shim);
+        }
     }
-    let shown = |out: &mut Deferred| start_diff(&shims, &dir, rc_file.as_deref(), &lines, out);
-    if !yes(&question, out, shown)? {
+    if chosen.is_empty() {
         writeln!(
             out,
-            "  sandboxed start  not set up: {} stay(s) hook only; `openmoat status` shows the \
-             command that starts each confined",
-            names.join(", ")
+            "  sandboxed start  not set up; `openmoat confine <agent>` turns it on later, and \
+             `openmoat status` shows the command that starts each agent confined"
         )?;
         return Ok(false);
     }
-    start::write(home, &shims)?;
-    let Some(file) = rc_file else {
-        writeln!(
-            out,
-            "! sandboxed start  shims in {}; add this line to your shell's start-up file, then \
-             open a new shell: {}",
-            paths.path(&dir),
-            lines.lines().last().unwrap_or_default()
-        )?;
-        return Ok(true);
-    };
-    let mut record = start::Record::load(home)?;
-    // Lines written by an earlier `init` stay where they are, one file only.
-    let written = match &record.rc {
-        Some(earlier) => Err(earlier.path.clone()),
-        None => Ok(rc::add(home, &file, &lines)?),
-    };
-    let rc_note = match written {
-        Ok(Some(written)) => {
-            let backup = if written.created {
-                "a new file".to_owned()
-            } else {
-                let backup = crate::install::backup_path(&file, crate::install::HOOK_BACKUP);
-                format!("backup {}", paths.path(&backup))
-            };
-            record.rc = Some(written);
-            record.save(home)?;
-            format!("{} puts it first on PATH ({backup})", paths.path(&file))
-        }
-        Ok(None) => format!("{} already puts it first on PATH", paths.path(&file)),
-        Err(earlier) => format!("{} already puts it first on PATH", paths.path(&earlier)),
-    };
-    writeln!(
-        out,
-        "✔ sandboxed start  {}: shims in {}; {rc_note}; open a new shell to use it",
-        names.join(", "),
-        paths.path(&dir)
-    )?;
+    enable::enable(home, &chosen, (user, paths), out)?;
     Ok(true)
-}
-
-/// What `d` shows for sandboxed start: each shim whole, and the lines added
-/// to the start-up file.
-fn start_diff(
-    shims: &[Shim],
-    dir: &Path,
-    rc_file: Option<&Path>,
-    lines: &str,
-    out: &mut Deferred,
-) -> Result<()> {
-    for shim in shims {
-        writeln!(out, "--- {} (new file)", dir.join(shim.name).display())?;
-        for line in shim.text.lines() {
-            writeln!(out, "+ {line}")?;
-        }
-    }
-    if let Some(file) = rc_file {
-        write!(out, "{}", rc::diff(file, lines))?;
-    }
-    Ok(())
 }
 
 /// Ask `question` until it is answered; `d` runs `diff` and asks again. Only

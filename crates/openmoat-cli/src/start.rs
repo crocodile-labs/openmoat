@@ -23,6 +23,7 @@ use crate::home::Home;
 use crate::integrity::sha256_hex;
 use crate::protection::os_sandbox::{self, RunCommand, RunHere};
 
+pub mod enable;
 pub mod rc;
 mod shim;
 #[cfg(test)]
@@ -227,7 +228,13 @@ impl Starts {
     /// The row's text for an agent whose command is `name`.
     pub fn line(&self, name: &str, dir: &Path) -> String {
         match self {
-            Self::Sandboxed => format!("typing `{name}` starts it in `openmoat run`"),
+            Self::Sandboxed => match served_by(name) {
+                Some((serve, what)) => format!(
+                    "typing `{name} {serve}` starts {what} in `openmoat run`; its other commands \
+                     start as before"
+                ),
+                None => format!("typing `{name}` starts it in `openmoat run`"),
+            },
             Self::Outside(found) if found.as_os_str().is_empty() => format!(
                 "a shim is in {}, but this shell's PATH does not include it: open a new shell, \
                  or put {} first on PATH",
@@ -257,6 +264,21 @@ impl Starts {
     pub fn needs_attention(&self) -> bool {
         *self != Self::Sandboxed
     }
+}
+
+/// For the command `name` of a host that serves a port (ADR-108 §7), the
+/// argument whose command the shim confines and what serves.
+fn served_by(name: &str) -> Option<(&'static str, &'static str)> {
+    Host::EVERY.into_iter().find_map(|host| {
+        let spec = host.spec();
+        let listen = spec.run_listen?;
+        match spec.run {
+            openmoat_hosts::RunFacts::Known { program, args, .. } if program == name => {
+                Some((*args.first()?, listen.what))
+            }
+            _ => None,
+        }
+    })
 }
 
 /// What `openmoat uninstall` did with one shim.

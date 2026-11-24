@@ -22,6 +22,7 @@ fn generated(yaml: &str) -> Generated {
         trust: None,
         tool_shell: None,
         helpers: None,
+        listen: None,
     };
     let ir = openmoat_core::ir::lower(&policy, &ctx).expect("lowers");
     generate(&ir, &grants).expect("generates")

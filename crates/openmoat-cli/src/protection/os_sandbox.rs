@@ -11,6 +11,8 @@ use serde::Serialize;
 use crate::home::Home;
 use crate::install::HostConfig;
 
+mod listen;
+
 /// How an agent without a sandbox of its own can get one here.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "state", rename_all = "kebab-case")]
@@ -88,6 +90,8 @@ pub(crate) struct RunCommand {
     pub program: &'static str,
     /// The arguments it needs before the person's own.
     pub args: &'static [&'static str],
+    /// The one loopback port it serves (`--listen`, ADR-108 §7).
+    pub listen: Option<u16>,
 }
 
 /// The way to an OS sandbox for `host` on this system.
@@ -97,7 +101,7 @@ pub(super) fn of(home: &Home, host: Host, here: &RunHere) -> Result<OsSandbox> {
         Err(none) => return Ok(none),
     };
     let user = crate::home::user_home()?;
-    let command = line(run.start, &run.writes, run.program, run.args, &user);
+    let command = line(&run, &user);
     let note = (wrapped_servers(home, host)? > 0)
         .then(|| "its wrapped MCP servers do not start inside `openmoat run`".to_owned());
     Ok(OsSandbox::Command { command, note })
@@ -130,6 +134,16 @@ pub(crate) fn command(
             ),
         }));
     }
+    let listen = match host.spec().run_listen {
+        Some(serves) => {
+            let settings = HostConfig::for_host(home, host)?.settings_path;
+            match listen::port(&serves, &settings, |name| std::env::var(name).ok()) {
+                Ok(port) => Some(port),
+                Err(why) => return Ok(Err(OsSandbox::Unavailable { why })),
+            }
+        }
+        None => None,
+    };
     let user = crate::home::user_home()?;
     let mut paths = Vec::with_capacity(writes.len());
     for write in writes {
@@ -140,6 +154,7 @@ pub(crate) fn command(
         writes: paths,
         program,
         args,
+        listen,
     }))
 }
 
@@ -168,16 +183,20 @@ fn wrapped_servers(home: &Home, host: Host) -> Result<usize> {
         .count())
 }
 
-/// `start --write <path>… -- program args…`, a path below `user` as `~/…`.
-fn line(start: &str, paths: &[PathBuf], program: &str, args: &[&str], user: &Path) -> String {
-    let mut words = vec![start.to_owned()];
-    for path in paths {
+/// `start [--listen <port>] --write <path>… -- program args…`, a path below
+/// `user` as `~/…`.
+fn line(run: &RunCommand, user: &Path) -> String {
+    let mut words = vec![run.start.to_owned()];
+    if let Some(port) = run.listen {
+        words.push(format!("--listen {port}"));
+    }
+    for path in &run.writes {
         words.push("--write".to_owned());
         words.push(word(path, user));
     }
     words.push("--".to_owned());
-    words.push(program.to_owned());
-    words.extend(args.iter().map(|a| (*a).to_owned()));
+    words.push(run.program.to_owned());
+    words.extend(run.args.iter().map(|a| (*a).to_owned()));
     words.join(" ")
 }
 
@@ -207,16 +226,21 @@ mod tests {
     #[test]
     fn a_path_below_the_home_is_written_with_a_tilde() {
         let user = Path::new("/Users/me");
-        let line = line(
-            "openmoat run",
-            &[PathBuf::from("/Users/me/.gemini"), PathBuf::from("/x/.y")],
-            "gemini",
-            &["--flag"],
-            user,
-        );
+        let mut run = RunCommand {
+            start: "openmoat run",
+            writes: vec![PathBuf::from("/Users/me/.gemini"), PathBuf::from("/x/.y")],
+            program: "gemini",
+            args: &["--flag"],
+            listen: None,
+        };
         assert_eq!(
-            line,
+            line(&run, user),
             "openmoat run --write ~/.gemini --write /x/.y -- gemini --flag"
+        );
+        run.listen = Some(18789);
+        assert_eq!(
+            line(&run, user),
+            "openmoat run --listen 18789 --write ~/.gemini --write /x/.y -- gemini --flag"
         );
     }
 

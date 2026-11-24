@@ -28,6 +28,7 @@ fn generated(home: &Path) -> Generated {
         trust: None,
         tool_shell: None,
         helpers: None,
+        listen: None,
     };
     let mut policy = Policy::parse(DEFAULT_POLICY).expect("default policy");
     // No read roots: the temp directory holding the test home is one.
@@ -238,6 +239,7 @@ allow:
         write: vec![p("proj"), p(".agent")],
         list: Vec::new(),
         connect_port: Some(18080),
+        bind_port: None,
     };
     let masks = grant_masks(&ir, &rules, &[p("proj")]).unwrap();
     assert_eq!(
@@ -439,6 +441,7 @@ fn a_linked_agent_folder_keeps_its_hook_settings_read_only() {
         write: vec![p("proj"), p("real-claude")],
         list: Vec::new(),
         connect_port: Some(18080),
+        bind_port: None,
     };
     let masks = grant_masks(&ir, &rules, &[p("proj")]).unwrap();
     assert!(
@@ -508,6 +511,7 @@ allow:
         write: vec![p("proj")],
         list: Vec::new(),
         connect_port: Some(18080),
+        bind_port: None,
     };
     let mut masks = grant_masks(&ir, &rules, &[p("proj")]).unwrap();
     masks.sort_by(|a, b| path_of(a).cmp(path_of(b)));

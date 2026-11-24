@@ -160,6 +160,90 @@ command as the fix; a warning, so the status stays healthy.
 
 Every one held before this change; none needed a fix in the proxy.
 
+### 7. One loopback port to listen on: OpenClaw under `openmoat run`
+
+*Added 2026-11-23, before this ADR was accepted; it replaces §5's "OpenClaw stays
+`Unknown`".*
+
+OpenClaw's tools run in its Gateway, a long-running server on one local port. Its
+documentation (<https://docs.openclaw.ai/gateway>) gives the port's order: "`--port` →
+`OPENCLAW_GATEWAY_PORT` → `gateway.port` → named-profile default → `18789`", and the
+default bind mode `loopback`; `openclaw gateway` runs it in the foreground.
+
+- **The fact.** `HostSpec::run_listen: Option<RunListen>` names what listens, the
+  default port, the variable, the key in the hook file and the variable under which the
+  default is not known (`OPENCLAW_PROFILE`: a named profile derives its port). OpenClaw's
+  `RunFacts` become `Known { program: "openclaw", args: ["gateway"], writes: [ConfigDir] }`.
+  `openmoat status` resolves the port as OpenClaw does (variable, then `gateway.port` in
+  `openclaw.json`, then 18789) and prints `openmoat run --listen 18789 --write
+  ~/.openclaw -- openclaw gateway`; with a profile and no port set it offers no command
+  and says why. Only ports from 1024 are accepted.
+- **The capability.** `openmoat run --listen PORT` lets the confined processes bind and
+  accept on that one port, on loopback only. They may still connect only to the proxy:
+  not to the listened port, so a command cannot drive the Gateway through it.
+  - macOS: the Seatbelt profile adds `(allow network-bind (local ip "localhost:PORT"))`
+    and `(allow network-inbound (local ip "localhost:PORT"))`. `localhost` matches the
+    loopback addresses alone, so a bind to `0.0.0.0`, `::`, another address or another
+    port stays denied.
+  - Linux, with a network namespace (the Isolated tier, and the Lightweight tier where
+    bubblewrap works): Landlock ABI 4 grants `BindTcp` on that port alone. The
+    namespace's only interface is its loopback, so whatever address the Gateway binds
+    there is reachable from nowhere else. `openmoat run` listens on this machine's
+    `127.0.0.1:PORT` and hands each connection to `moat isolated` inside through a Unix
+    socket in the session's private directory; `moat isolated` connects to the port on
+    the namespace's loopback. The agent's seccomp filter refuses it any Unix socket, so
+    only `moat isolated` uses that socket. A port already in use outside stops the run
+    before the agent starts.
+  - Linux without a namespace (port-only network): refused. Landlock restricts a bind by
+    port only, on every address, so the port would be open to the network.
+  - Windows: refused; the tier holds the network by the proxy variables alone (ADR-115).
+- **Clients.** The Gateway's clients (the browser Control UI, the apps, `openclaw tui`
+  started outside) reach it on loopback as before. A client started inside the same or
+  another `openmoat run` cannot: the sandbox reaches the proxy alone, and the proxy
+  refuses loopback. So a sandboxed-start shim for a host with `run_listen` confines its
+  serving command alone (`openclaw gateway`, with or without options); every other
+  `openclaw` command starts the real program as before. The browser tool's control
+  service listens on a port of its own and is not granted: it does not start inside
+  `openmoat run`. A Gateway installed as a service (`openclaw onboard --install-daemon`)
+  is started by launchd or systemd, not by the shim, and runs with the hook only.
+- **Attack tests.** Unit: the profile has one bind and one inbound rule, for
+  `localhost:PORT`, and still one outbound rule, for the proxy; Landlock's rules carry the
+  bind port alone; the forward relays both ways and refuses a port in use. End to end
+  (macOS and Linux CI): inside `openmoat run --listen`, a bind to the port on
+  `127.0.0.1` works, and a bind to another port, to `0.0.0.0` on the port and a
+  connection to the port are refused.
+
+### 8. Confining by default is asked, per agent
+
+*Added 2026-11-23.* Of the 14 agents, 11 are hook only by default. Sandboxed start (ADR-106)
+stays opt-in, default no, never silent:
+
+- **`openmoat init`**, of a person at a terminal (the same conditions as ADR-106 §1),
+  says once why hook only is a gap and asks per agent, with the score difference this
+  system gives (§2):
+
+  ```
+    Sandboxed start  these agents run with the hook only: an allowed call runs with your permissions, so a classifier mistake is a bypass. `openmoat run` confines them; a yes writes a shim to ~/.moat/bin and, once, 2 lines to ~/.zshrc
+    Gemini CLI       hook only 0/100 → openmoat run 100/100: typing `gemini` starts it confined?  [y/N/d]
+    OpenClaw         hook only 0/100 → openmoat run 100/100: typing `openclaw gateway` starts its Gateway confined; its other commands start as before?  [y/N/d]
+  ```
+
+  Only `y` or `yes` is a yes; `d` shows that agent's shim and the start-up file's lines.
+  `--yes`, `--hooks-only`, `--format json`, a dry run and unattended runs are never asked
+  and change nothing, as before.
+- **`openmoat confine <agent>…|--all`** does the same later. Typing it is the yes; it
+  prints the score difference and every file it writes, then re-pins the lock (the
+  shims are state files). `openmoat confine --off <agent>…|--all` deletes the shims that
+  are still as written, and the `PATH` lines with the last. Both are person-only: refused
+  from an agent, without a terminal and over a drifted lock, as every command that
+  re-pins is. An agent that cannot be confined is named with why (its own sandbox, not
+  set up, no command, not on `PATH`); with nothing done for named agents the exit is 64.
+- **`openmoat status` and `openmoat doctor`** add the score to each hook-only agent's
+  row in `Agents`: `protection 0/100` for the hook alone, `protection N/100 with
+  sandboxed start` when this shell finds its shim first. Agents with their own sandbox
+  from OpenMoat keep their row: this score measures `openmoat run`. `--format json`
+  carries it as `score: {points, sandboxed_start}`.
+
 ## Consequences
 
 - One more restriction (`landlock_udp`) and an optional `score` in the boundary record's

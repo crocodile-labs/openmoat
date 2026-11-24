@@ -201,6 +201,9 @@ pub fn namespaced(
     report.allowances.retain(|a| a.rule != TCP_PORT_ALLOWANCE);
     let session = Session::create(placeholders, shared)?;
     relay_to_proxy(&session.socket, port)?;
+    if let Some(listen) = rules.bind_port {
+        super::serve::forward_in(&super::serve::socket_beside(&session.socket), listen)?;
+    }
     let moat = std::env::current_exe()
         .and_then(std::fs::canonicalize)
         .context("locating the moat binary")?;

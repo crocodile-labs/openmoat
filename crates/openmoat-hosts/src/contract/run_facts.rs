@@ -31,6 +31,27 @@ impl RunFacts {
     };
 }
 
+/// The one loopback TCP port a host serves while it runs, which `openmoat run
+/// --listen` lets it bind and accept on and nothing else (ADR-108 §7). Found
+/// as the host finds it: its variable, then its configuration file's key,
+/// then its default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RunListen {
+    /// What listens, in a few words (`its Gateway`).
+    pub what: &'static str,
+    /// The port when nothing sets one.
+    pub default_port: u16,
+    /// The variable that sets the port, which outranks the file.
+    pub variable: &'static str,
+    /// The key path of the port in the host's hook file ([`crate::InstallSpec`]'s
+    /// configuration file), a JSON or JSON5 object.
+    pub key: &'static [&'static str],
+    /// A variable under which the default is not [`Self::default_port`] (a
+    /// named profile's port is derived from its name): with it set and no port
+    /// in the variable or the file, no port is assumed.
+    pub moved_by: &'static str,
+}
+
 /// One directory a host writes outside the project ([`RunFacts::Known`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunWrite {

@@ -16,6 +16,7 @@ fn run(program: &'static str) -> RunCommand {
         writes: vec![PathBuf::from("/Users/me/.gemini")],
         program,
         args: &[],
+        listen: None,
     }
 }
 
@@ -49,6 +50,58 @@ fn a_shim_runs_openmoat_run_around_the_real_program_by_absolute_paths() {
     assert!(shim.text.contains("openmoat uninstall"), "{}", shim.text);
     // A quote in a path stays one word.
     assert_eq!(shim::quote("/a b/o'x"), "'/a b/o'\\''x'");
+}
+
+/// A host that serves a port (OpenClaw, ADR-108 §7): `openclaw gateway`, with
+/// or without options, starts in `openmoat run --listen`; every other command,
+/// `openclaw gateway status` included, starts the real program as before.
+#[cfg(unix)]
+#[test]
+fn a_serving_hosts_shim_confines_its_server_alone() {
+    let (dir, _home, _user) = dirs();
+    let log = dir.path().join("log");
+    let fake = |name: &str, tag: &str| {
+        let path = dir.path().join(name);
+        let text = format!("#!/bin/sh\necho \"{tag} $*\" >> '{}'\n", log.display());
+        crate::home::write_private_program(&path, text.as_bytes()).unwrap();
+        path
+    };
+    let moat = fake("openmoat", "moat");
+    let real = fake("openclaw", "real");
+    let run = RunCommand {
+        start: "openmoat run",
+        writes: vec![PathBuf::from("/Users/me/.openclaw")],
+        program: "openclaw",
+        args: &["gateway"],
+        listen: Some(18789),
+    };
+    let shim = Shim::new(Host::OpenClaw, &moat, &real, &run);
+    let path = dir.path().join("shim");
+    crate::home::write_private_program(&path, shim.text.as_bytes()).unwrap();
+    for args in [
+        &["gateway"][..],
+        &["gateway", "--verbose"],
+        &["gateway", "status"],
+        &["tui"],
+        &[],
+    ] {
+        let status = std::process::Command::new(&path)
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "{args:?}");
+    }
+    let real = real.display();
+    assert_eq!(
+        fs::read_to_string(&log).unwrap(),
+        format!(
+            "moat run --listen 18789 --write /Users/me/.openclaw -- {real} gateway\n\
+             moat run --listen 18789 --write /Users/me/.openclaw -- {real} gateway --verbose\n\
+             real gateway status\n\
+             real tui\n\
+             real \n"
+        )
+    );
 }
 
 #[cfg(unix)]

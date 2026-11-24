@@ -1002,18 +1002,51 @@ OS sandbox: openmoat run --write ~/.gemini -- gemini (docs/SANDBOX.md)
 | Antigravity CLI | `openmoat run --write ~/.gemini/antigravity-cli -- agy` |
 | Qwen Code | `openmoat run --write ~/.qwen -- qwen` |
 | Crush | `openmoat run --write ~/.local/share/crush --write ~/.cache/crush -- crush` |
+| OpenClaw | `openmoat run --listen 18789 --write ~/.openclaw -- openclaw gateway` ([below](#openclaw-under-openmoat-run)) |
 
 On macOS before 13 and on Linux without a network namespace (where `openmoat run`
 refuses a `--write` path outside the project) those commands name why there is none. On
 Windows they start the preview tier, which holds writes only; start the agent's `.exe`,
-not an npm `.cmd` shim. OpenClaw and the Continue CLI get no command: OpenClaw's Gateway serves a
-local port, which the sandbox does not allow, and which directories `cn` writes was not
-checked.
+not an npm `.cmd` shim. OpenClaw gets no command on Windows, whose tier cannot hold a
+listening port to loopback. The Continue CLI gets none: which directories `cn` writes was
+not checked.
 
 `openmoat status` lists each agent with a command and no sandboxed-start shim under
 `Needs your attention` (ADR-108): `hook only: no OS boundary`, with that one command as
-the fix. A warning: the status stays healthy. `openmoat init` names the same, per agent,
-before it asks whether typing the agent's name should start it confined (ADR-106).
+the fix. A warning: the status stays healthy. Its `Agents` row carries the protection
+score as the agent starts here (`protection 0/100`, or `N/100 with sandboxed start`).
+`openmoat init` asks per agent, with the score it has and would have, whether typing the
+agent's name should start it confined (ADR-106, ADR-108 §8; no unless you type `y`), and
+`openmoat confine <agent>` or `--off <agent>` turns that on or off later.
+
+#### OpenClaw under `openmoat run`
+
+OpenClaw's tools run in its Gateway, a server on one local port (`--port`, then
+`OPENCLAW_GATEWAY_PORT`, then `gateway.port` in `openclaw.json`, then 18789, per
+<https://docs.openclaw.ai/gateway>). `openmoat run --listen PORT` lets the confined
+processes bind and accept on that one port, on loopback only (ADR-108 §7):
+
+| Where | How the port is held |
+|---|---|
+| macOS 13 or later | the Seatbelt profile allows `network-bind` and `network-inbound` on `localhost:PORT` alone; a bind to `0.0.0.0`, `::` or another port is denied |
+| Linux, Isolated tier or Lightweight with bubblewrap | Landlock grants a bind to that port alone, inside the agent's own network namespace whose only interface is loopback; `openmoat run` listens on this machine's `127.0.0.1:PORT` and forwards each connection in through a Unix socket only `moat isolated` can use |
+| Linux without a network namespace | refused: Landlock restricts a bind by port only, on every address, so the port would be open to the network |
+| Windows | refused: the tier holds the network by the proxy variables alone |
+
+`openmoat status` finds the port as OpenClaw does and prints the command; with
+`OPENCLAW_PROFILE` set and no port named, it offers none and says why. Started with no
+`--listen`, `openmoat run -- openclaw` says the Gateway will not be able to listen.
+
+What changes for OpenClaw's clients: the browser Control UI, the apps and an `openclaw
+tui` started outside reach the Gateway as before. Inside a sandbox nothing reaches it:
+the sandbox's only destination is the proxy, which refuses loopback. So a sandboxed-start
+shim confines `openclaw gateway` (with or without options) alone; every other
+`openclaw` command, `openclaw gateway status` included, starts the real program as
+before, under the hook. Not covered: the browser tool's control service, which listens on
+a port of its own (the browser tool does not start inside `openmoat run`), and a Gateway
+installed as a service (`openclaw onboard --install-daemon`), which launchd or systemd
+starts with the hook only. A port already in use stops a Linux run before the Gateway
+starts.
 
 What the command does not do for you:
 

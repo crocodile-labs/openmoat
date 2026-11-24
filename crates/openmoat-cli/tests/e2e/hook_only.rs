@@ -40,11 +40,22 @@ fn status_and_doctor_name_the_way_to_a_sandbox_or_why_there_is_none() {
                 assert_eq!(state, "unknown", "{host}: {sandbox}");
                 assert_eq!(sandbox["why"], why, "{host}");
             }
-            RunFacts::Known { program, .. } if state == "command" => {
+            RunFacts::Known { program, args, .. } if state == "command" => {
                 let command = sandbox["command"].as_str().unwrap_or_default();
                 assert!(command.starts_with("openmoat run"), "{host}: {command}");
                 assert!(command.contains(" --write "), "{host}: {command}");
-                assert!(command.ends_with(&format!("-- {program}")), "{command}");
+                let tail = std::iter::once(program).chain(args.iter().copied());
+                let tail = tail.collect::<Vec<_>>().join(" ");
+                assert!(command.ends_with(&format!("-- {tail}")), "{command}");
+                // A host that serves a port names it, at its default here
+                // (ADR-108 §7).
+                if let Some(listen) = host.spec().run_listen {
+                    let flag = format!("--listen {}", listen.default_port);
+                    assert!(command.contains(&flag), "{host}: {command}");
+                }
+                // The hook alone scores 0 in `--format json` (ADR-108 §8).
+                assert_eq!(agent["score"]["points"], 0, "{host}: {agent}");
+                assert_eq!(agent["score"]["sandboxed_start"], false, "{host}");
                 // `status` puts it in `Needs your attention` with that one
                 // command, and the run stays healthy (ADR-108).
                 let out = sb.moat(&["status"]);
@@ -56,6 +67,7 @@ fn status_and_doctor_name_the_way_to_a_sandbox_or_why_there_is_none() {
                     shown.contains("hook only: no OS boundary"),
                     "{host}: {shown}"
                 );
+                assert!(shown.contains("protection 0/100"), "{host}: {shown}");
                 let first = command
                     .split_whitespace()
                     .take(3)

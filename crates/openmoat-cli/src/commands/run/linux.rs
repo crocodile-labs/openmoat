@@ -45,6 +45,8 @@ mod isolate;
 mod launch;
 /// `moat run`: the agent's own network namespace, where bubblewrap runs.
 mod netns;
+/// `moat run --listen`: the agent's port, forwarded from this machine's loopback.
+mod serve;
 
 /// The first ABI that restricts TCP connections (Linux 6.7). An older kernel
 /// is refused rather than run with the network open.
@@ -227,6 +229,9 @@ pub fn confine(
             Ok(agent)
         }
         Err(port_only) => {
+            if let (Some(port), Some((_, why))) = (generated.rules.bind_port, &port_only) {
+                bail!("{}", listen_refusal(port, why));
+            }
             if let Some((_, why)) = &port_only {
                 // Only the namespace's mounts keep these from commands inside
                 // a `--write` path: without it, refuse rather than leave them open.
@@ -403,11 +408,35 @@ fn refuse_exposed(state: &Path, rules: &Rules, isolated: bool) -> Result<()> {
     }
 }
 
+/// Why `--listen` is refused without a network namespace (`why`): Landlock
+/// restricts a bind by port only, so the agent's port would be open on every
+/// address of this machine, its network included.
+fn listen_refusal(port: u16, why: &str) -> String {
+    format!(
+        "`openmoat run --listen {port}` needs a network of the agent's own, and {why}: Landlock \
+         restricts a bind by port only, so port {port} would be reachable from the network, not \
+         only from this machine. Install bubblewrap (`apt install bubblewrap`) and allow \
+         unprivileged user namespaces"
+    )
+}
+
+/// The Landlock port rules of `rules`: a connection to the proxy's port, and
+/// a bind to `--listen`'s port.
+fn net_ports(rules: &Rules) -> impl Iterator<Item = NetPort> {
+    let connect = rules
+        .connect_port
+        .map(|port| NetPort::new(port, AccessNet::ConnectTcp));
+    let bind = rules
+        .bind_port
+        .map(|port| NetPort::new(port, AccessNet::BindTcp));
+    connect.into_iter().chain(bind)
+}
+
 /// `command`, to start with `rules` and the seccomp filter applied.
 fn restricted(rules: &Rules, report: Report, command: Command) -> Result<Confined> {
-    let ports = rules
-        .connect_port
-        .map(|port| Ok(NetPort::new(port, AccessNet::ConnectTcp)));
+    // Connections to the proxy's port alone; a bind to `--listen`'s port
+    // alone (ADR-108 §7), every other bind refused, as `BindTcp` is handled.
+    let ports = net_ports(rules).map(Ok);
     let build = || -> Result<RulesetCreated, RulesetError> {
         Ruleset::default()
             .set_compatibility(CompatLevel::HardRequirement)

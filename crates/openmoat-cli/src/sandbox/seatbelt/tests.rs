@@ -14,6 +14,7 @@ fn session(proxy_port: Option<u16>) -> Grants {
         trust: None,
         tool_shell: None,
         helpers: None,
+        listen: None,
     }
 }
 
@@ -115,6 +116,42 @@ fn the_keychain_is_never_reachable_and_the_proxy_is_the_only_exit() {
     assert!(profile.ends_with("(allow network-outbound (remote ip \"localhost:18080\"))\n"));
     let closed = generated(DEFAULT_POLICY, None).profile;
     assert!(!closed.contains("network-outbound"), "{closed}");
+}
+
+/// `openmoat run --listen` (ADR-108 §7): bind and accept on the one port on
+/// loopback, nothing on any other port or address, and still only the proxy
+/// to connect to (not the listened port: a command cannot reach the service
+/// through it).
+#[test]
+fn listen_allows_one_loopback_port_and_nothing_else() {
+    let grants = Grants {
+        listen: Some(18789),
+        ..session(Some(18080))
+    };
+    let listening = generated_with(DEFAULT_POLICY, &grants);
+    let profile = &listening.profile;
+    assert!(profile.contains("(allow network-bind (local ip \"localhost:18789\"))"));
+    assert!(profile.contains("(allow network-inbound (local ip \"localhost:18789\"))"));
+    assert_eq!(profile.matches("network-bind").count(), 1, "{profile}");
+    assert_eq!(profile.matches("network-inbound").count(), 1, "{profile}");
+    assert_eq!(profile.matches("network-outbound").count(), 1, "{profile}");
+    assert!(
+        !profile.contains("remote ip \"localhost:18789\""),
+        "{profile}"
+    );
+    for wider in ["local ip \"*", "localhost:*", "(allow network*"] {
+        assert!(!profile.contains(wider), "{wider}: {profile}");
+    }
+    let listed = listening
+        .report
+        .allowances
+        .iter()
+        .find(|a| a.rule == LISTEN_ALLOWANCE)
+        .expect("listed");
+    assert_eq!(listed.patterns, ["localhost:18789"]);
+    // Without the flag, no bind at all.
+    let plain = generated(DEFAULT_POLICY, Some(18080)).profile;
+    assert!(!plain.contains("network-bind"), "{plain}");
 }
 
 /// ADR-028: the hooks' decisions come over the proxy's port, so the profile

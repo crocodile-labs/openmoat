@@ -152,6 +152,9 @@ pub struct Grants {
         expect(dead_code, reason = "only the Linux `--isolate` tier binds it in")
     )]
     pub helpers: Option<String>,
+    /// `moat run --listen`: the one TCP port commands may bind and accept
+    /// connections on, on loopback only (ADR-108 §7).
+    pub listen: Option<u16>,
 }
 
 /// The paths the tool-shell wrapper needs (`commands/run/tool_shell.rs`).

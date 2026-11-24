@@ -67,11 +67,21 @@ Each agent's gaps and the reasons are in
   so a classifier mistake is a bypass. `openmoat status` and `openmoat doctor` name the
   `openmoat run` command that puts each of them in an OS sandbox, or say why there is none
   (macOS before 13, Linux without bubblewrap; on Windows the command starts a preview tier
-  that holds writes only, below; OpenClaw's Gateway and the Continue
-  CLI have no command, [SANDBOX.md](SANDBOX.md#agents-openmoat-writes-no-sandbox-for)).
-  The command is proved with a stand-in program, not the real agent. Claude Code's sandbox covers only `Bash`,
+  that holds writes only, below; the Continue CLI has no command, nor has OpenClaw on
+  Windows, [SANDBOX.md](SANDBOX.md#agents-openmoat-writes-no-sandbox-for)).
+  The command is proved with a stand-in program, not the real agent. Confining stays
+  your choice: `openmoat init` asks per agent and `openmoat confine` turns it on later;
+  until then each such agent's row says `protection 0/100`. Claude Code's sandbox covers only `Bash`,
   `PowerShell` and `Monitor`; its file tools, `WebFetch` and MCP servers run outside it.
   Cursor runs some commands outside its sandbox.
+- **OpenClaw under `openmoat run` confines the Gateway only (preview, ADR-108 §7).**
+  `--listen` lets the sandbox serve one loopback port; nothing inside a sandbox can
+  connect to it, so the sandboxed-start shim confines `openclaw gateway` and every other
+  `openclaw` command (the Gateway's clients, `openclaw agent --local` included) starts
+  with the hook only. The browser tool's own control port is not granted, so the browser
+  tool does not start in the sandbox; a Gateway installed as a launchd or systemd service
+  does not go through the shim. Linux without a network namespace and Windows refuse
+  `--listen`.
 - **`openmoat run` on Windows holds writes and the process tree only (preview, ADR-115).**
   A write-restricted token refuses writes outside the project, the run's temp directory
   and `--write` paths, and a job ends every process the agent started. Not covered:

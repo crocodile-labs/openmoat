@@ -135,5 +135,16 @@ blocks the call.
 
 ## Sandbox
 
-None: hook only. `openmoat status` names none: OpenClaw's Gateway serves a local port, and
-`openmoat run`'s sandbox allows no listening socket (ADR-076).
+None of its own: hook only. `openmoat status` names the command that confines the
+Gateway, where the tools run: `openmoat run --listen 18789 --write ~/.openclaw --
+openclaw gateway` (ADR-108 §7). `--listen` lets the sandbox bind and accept on that one
+port on loopback alone; the port is found as OpenClaw finds it (`OPENCLAW_GATEWAY_PORT`,
+then `gateway.port` in `openclaw.json`, then 18789, <https://docs.openclaw.ai/gateway>),
+and with `OPENCLAW_PROFILE` set and no port named no command is offered. On Linux the
+port is forwarded from this machine's loopback into the sandbox's network namespace;
+without a namespace, and on Windows, the run is refused. A sandboxed-start shim
+(`openmoat init`, `openmoat confine openclaw`) confines `openclaw gateway` alone: the
+other commands are the Gateway's clients, which a sandbox reaching only the proxy would
+cut off from it. The browser tool's control service, on a port of its own, is not
+granted, and a Gateway installed as a service is started with the hook only. Not yet run
+with a real Gateway under `openmoat run` (preview).

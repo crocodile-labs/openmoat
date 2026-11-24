@@ -159,9 +159,14 @@ pub fn sandbox(host: Host, os: Os, ev: &Evidence<'_>) -> Cell {
 
 /// Whether `openmoat run` can start the agent on an OS: the same answer on
 /// every one since Windows has a tier (ADR-115).
-pub fn runs(spec: &HostSpec, _os: Os) -> Result<(), String> {
+pub fn runs(spec: &HostSpec, os: Os) -> Result<(), String> {
     match spec.run {
         RunFacts::Unknown { why } if spec.sandbox.is_none() => Err(why.to_owned()),
+        // The Windows tier cannot let one loopback port listen alone (ADR-108 §7).
+        _ if spec.run_listen.is_some() && os == Os::Windows => Err(format!(
+            "{} serves a local port, which the Windows tier of `openmoat run` does not allow",
+            spec.run_listen.map_or("it", |l| l.what)
+        )),
         _ => Ok(()),
     }
 }
@@ -180,6 +185,9 @@ fn command(spec: &HostSpec, os: Os) -> Option<String> {
     let mut line = String::from("openmoat run");
     if os == Os::Linux {
         line.push_str(" --isolate");
+    }
+    if let Some(listen) = spec.run_listen {
+        let _ = write!(line, " --listen {}", listen.default_port);
     }
     for write in writes {
         let path = match write {

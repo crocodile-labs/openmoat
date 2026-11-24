@@ -35,6 +35,7 @@ fn generated_with(yaml: &str, exists: &dyn Fn(&str) -> bool) -> anyhow::Result<G
         trust: None,
         tool_shell: None,
         helpers: None,
+        listen: None,
     };
     let ir = openmoat_core::ir::lower(&policy, &ctx).expect("lowers");
     generate(&ir, &grants, exists)

@@ -110,6 +110,9 @@ pub fn isolate(
     refuse_exposed(state, &generated.rules, true)?;
     let session = Session::create(&generated.placeholders, shared)?;
     relay_to_proxy(&session.socket, port)?;
+    if let Some(listen) = generated.rules.bind_port {
+        super::serve::forward_in(&super::serve::socket_beside(&session.socket), listen)?;
+    }
     let moat = std::env::current_exe().and_then(std::fs::canonicalize)?;
     let (moat, dir) = (path_string(&moat), path_string(&session.dir));
     let mut command = Command::new(&bwrap);
@@ -239,6 +242,10 @@ pub fn inside(args: &IsolatedArgs) -> Result<Code> {
             });
         }
     });
+    // The agent's `--listen` port, reached from outside (ADR-108 §7).
+    if let Some(listen) = rules.bind_port {
+        super::serve::serve_inside(super::serve::socket_beside(&args.socket), listen);
+    }
     // Ctrl-C belongs to the agent, as outside.
     signal_hook::flag::register(
         signal_hook::consts::SIGINT,
@@ -365,6 +372,7 @@ impl Drop for Session {
             shared.finish(remove_placeholder);
         }
         let _ = std::fs::remove_file(&self.socket);
+        let _ = std::fs::remove_file(super::serve::socket_beside(&self.socket));
         let _ = std::fs::remove_file(&self.report);
         let _ = std::fs::remove_file(self.dir.join("file"));
         let _ = std::fs::remove_dir(self.dir.join("dir"));

@@ -44,6 +44,8 @@ const PLATFORM_WRITE: [&str; 3] = ["/dev/null", "/dev/zero", "/dev/tty"];
 
 /// The allowance listed when the proxy's port is reachable on any host.
 pub const TCP_PORT_ALLOWANCE: &str = "landlock.tcp-port";
+/// The allowance listed for `openmoat run --listen`.
+pub const LISTEN_ALLOWANCE: &str = "landlock.listen";
 /// The allowance listed for denied paths inside a granted directory.
 pub const INSIDE_GRANTS_ALLOWANCE: &str = "landlock.inside-grants";
 
@@ -61,6 +63,12 @@ pub struct Rules {
     pub list: Vec<String>,
     /// The only TCP port connections may go to.
     pub connect_port: Option<u16>,
+    /// The only TCP port a socket may be bound to (`openmoat run --listen`,
+    /// ADR-108 §7); none without it. Landlock restricts a bind by port only,
+    /// so `openmoat run` grants it only inside a network namespace of the
+    /// agent's own, whose one interface is loopback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bind_port: Option<u16>,
 }
 
 /// Generated rules.
@@ -78,6 +86,7 @@ pub fn generate(ir: &Enforcement, grants: &Grants) -> anyhow::Result<Generated> 
     let mut g = Generated {
         rules: Rules {
             connect_port: grants.proxy_port,
+            bind_port: grants.listen,
             ..Rules::default()
         },
         report: Report::default(),
@@ -143,6 +152,19 @@ pub fn generate(ir: &Enforcement, grants: &Grants) -> anyhow::Result<Generated> 
                        reachable on any host";
         g.report
             .allowance(Kind::Net, TCP_PORT_ALLOWANCE, Vec::new(), message);
+    }
+    if let Some(port) = grants.listen {
+        let message = format!(
+            "`openmoat run --listen {port}`: commands may bind port {port} alone, inside a \
+             network of their own whose only interface is loopback; OpenMoat forwards this \
+             machine's loopback port {port} to it"
+        );
+        g.report.allowance(
+            Kind::Net,
+            LISTEN_ALLOWANCE,
+            vec![format!("localhost:{port}")],
+            &message,
+        );
     }
     g.report.proxy_only(&ir.egress.net);
     Ok(g)

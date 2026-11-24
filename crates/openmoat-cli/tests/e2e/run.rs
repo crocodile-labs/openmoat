@@ -16,6 +16,9 @@ mod bypass;
 /// Files open in the launcher stay out of the sandbox (ADR-088).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod inherited_fds;
+/// `--listen`: one loopback port to serve, and no other bind (ADR-108 §7).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod listen;
 /// Linux: the network reaches only the proxy on loopback.
 #[cfg(target_os = "linux")]
 mod network;

@@ -68,6 +68,10 @@ pub enum Command {
     /// Remove OpenMoat's hooks and sandbox settings from the agents, restoring the
     /// backups `openmoat init` took. Refused unless run from an interactive terminal.
     Uninstall(UninstallArgs),
+    /// Make typing a hook-only agent's name start it in `openmoat run`'s sandbox, or
+    /// with `--off` start it as before (ADR-108). Refused unless run by a person at a
+    /// terminal.
+    Confine(ConfineArgs),
     /// Decide one hook request from stdin (invoked by host hooks, not by people).
     Guard(GuardArgs),
     /// Show one audit event, a session, or the most recent events.
@@ -345,6 +349,19 @@ impl InitMcpArgs {
 }
 
 #[derive(Debug, Args)]
+pub struct ConfineArgs {
+    /// The agents, by id (`gemini-cli`, `openclaw`, …).
+    #[arg(value_parser = parse_host(), required_unless_present = "all", conflicts_with = "all")]
+    pub agents: Vec<Host>,
+    /// Every agent set up here that `openmoat run` can start.
+    #[arg(long)]
+    pub all: bool,
+    /// Remove the agents' shims instead, so typing their names starts them as before.
+    #[arg(long)]
+    pub off: bool,
+}
+
+#[derive(Debug, Args)]
 pub struct UninstallArgs {
     /// Hosts to remove OpenMoat from. Defaults to every supported host.
     #[arg(long, value_delimiter = ',', value_parser = parse_host())]
@@ -589,6 +606,14 @@ pub struct RunArgs {
     /// the agent's own state (`~/.claude`); deny rules still win. Repeatable.
     #[arg(long = "write", value_name = "PATH")]
     pub writes: Vec<PathBuf>,
+
+    /// The one TCP port the agent may listen on, on loopback only: a local
+    /// service the agent serves, such as OpenClaw's Gateway. It may bind no other
+    /// port and no other address. On Linux the port is forwarded from this
+    /// machine's loopback into the sandbox's network; refused where the sandbox
+    /// has no network of its own (bubblewrap) and on Windows.
+    #[arg(long, value_name = "PORT", value_parser = clap::value_parser!(u16).range(1024..))]
+    pub listen: Option<u16>,
 
     /// Print every place the sandbox is stricter or wider than the policy.
     #[arg(long)]

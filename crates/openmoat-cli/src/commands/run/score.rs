@@ -100,9 +100,27 @@ pub fn tiers() -> Vec<TierScore> {
     out
 }
 
+/// The planned score of the tier a plain `openmoat run` starts here (the
+/// strongest that can start), what `openmoat init`, `openmoat confine` and
+/// `openmoat status` compare the hook alone with; `None` where `openmoat run`
+/// has no sandbox.
+pub fn default_run() -> Option<u32> {
+    tiers().into_iter().find_map(|t| t.score).map(|s| s.points)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Where `openmoat run` can start, the default tier has a score; where
+    /// it cannot, there is none.
+    #[test]
+    fn the_default_run_is_scored_where_it_can_start() {
+        match platform::unavailable() {
+            Some(_) => assert_eq!(default_run(), None),
+            None => assert!(default_run().is_some_and(|p| p <= 100)),
+        }
+    }
 
     /// The hook alone is always last and scores 0; every tier here that can
     /// start has a score of at most 100.

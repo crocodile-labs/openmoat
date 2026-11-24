@@ -15,7 +15,7 @@ use openmoat_hosts::Host;
 /// The questions' openings, as [`squash`] leaves them: one space between
 /// words, whatever the padding of the label column.
 const DECOYS: &str = "Decoy keys plant";
-const START: &str = "Sandboxed start make typing";
+const START: &str = "Sandboxed start these agents run with the hook only";
 
 /// `openmoat init` as a person at a terminal answering `answers`.
 fn init_answering(sb: &Sandbox, answers: &str) -> Output {
@@ -193,8 +193,12 @@ fn sandboxed_start_writes_a_shim_and_the_path_lines_on_a_yes() {
         assert!(!sb.home.join(".moat/bin").exists(), "{shown}");
         return;
     }
-    // The offer names what the agent has today, per agent (ADR-108).
-    assert!(shown.contains("hook only: no OS boundary"), "{shown}");
+    // The offer is asked per agent, with the score it has and would have (ADR-108 §8).
+    assert!(shown.contains("hook only 0/100 → openmoat run"), "{shown}");
+    assert!(
+        shown.contains(&format!("typing `{program}` starts it confined?")),
+        "{shown}"
+    );
     let shim = sb.home.join(".moat/bin").join(program);
     let text_of_shim = fs::read_to_string(&shim).unwrap();
     assert!(
@@ -214,6 +218,12 @@ fn sandboxed_start_writes_a_shim_and_the_path_lines_on_a_yes() {
         "{}",
         text(&status)
     );
+    // Its `Agents` row carries the score sandboxed start brings (ADR-108 §8).
+    assert!(
+        stdout(&status).contains("/100 with sandboxed start"),
+        "{}",
+        text(&status)
+    );
     // From one that does not, it says what that shell finds first.
     let status = output(sb.command().arg("status").env("PATH", &path), None);
     assert!(stdout(&status).contains("finds"), "{}", text(&status));
@@ -224,6 +234,106 @@ fn sandboxed_start_writes_a_shim_and_the_path_lines_on_a_yes() {
     assert!(
         !zshrc.exists(),
         "init created it, so it goes: {}",
+        text(&out)
+    );
+}
+
+/// `openmoat confine` (ADR-108 §8): a person turns sandboxed start on for a
+/// hook-only agent after `init`, and `--off` takes it back; refused without a
+/// terminal; an agent with its own OpenMoat sandbox is named with why.
+#[cfg(unix)]
+#[test]
+fn confine_turns_sandboxed_start_on_and_off_for_a_person_only() {
+    let host = Host::GeminiCli;
+    let openmoat_hosts::RunFacts::Known { program, .. } = host.spec().run else {
+        panic!("{host:?} has an `openmoat run` command")
+    };
+    let sb = Sandbox::installed(&[&dir_of(host), &dir_of(Host::ClaudeCode)]);
+    let bin = sb.home.join("tools");
+    fs::create_dir_all(&bin).unwrap();
+    let agent = bin.join(program);
+    fs::write(&agent, "#!/bin/sh\necho 0.40.0\n").unwrap();
+    let runnable = <fs::Permissions as std::os::unix::fs::PermissionsExt>::from_mode(0o755);
+    fs::set_permissions(&agent, runnable).unwrap();
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let confine = |args: &[&str], person: bool| {
+        let mut cmd = sb.command();
+        cmd.arg("confine")
+            .args(args)
+            .env("PATH", &path)
+            .env("SHELL", "/bin/zsh");
+        if person {
+            cmd.env("MOAT_ASSUME_TTY", "1");
+        }
+        output(&mut cmd, None)
+    };
+    let shim = sb.home.join(".moat/bin").join(program);
+
+    // Without a terminal: refused, nothing written.
+    let out = confine(&[host.id()], false);
+    assert_ne!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(!shim.exists(), "{}", text(&out));
+
+    // Claude Code has its own sandbox from OpenMoat: named with why, exit 64.
+    let out = confine(&[Host::ClaudeCode.id()], true);
+    assert_eq!(
+        out.status.code(),
+        Some(crate::common::USAGE),
+        "{}",
+        text(&out)
+    );
+    assert!(
+        squash(&stdout(&out)).contains("OpenMoat writes this agent's own OS sandbox"),
+        "{}",
+        text(&out)
+    );
+
+    let out = confine(&[host.id()], true);
+    let shown = squash(&stdout(&out));
+    if shown.contains("cannot be confined here") {
+        // macOS before 13, or Linux without what `openmoat run` needs here.
+        assert!(!shim.exists(), "{shown}");
+        return;
+    }
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(shown.contains("hook only 0/100 → openmoat run"), "{shown}");
+    assert!(shown.contains("✔ sandboxed start"), "{shown}");
+    let text_of_shim = fs::read_to_string(&shim).unwrap();
+    assert!(
+        text_of_shim.contains(&format!("-- '{}' \"$@\"", agent.display())),
+        "{text_of_shim}"
+    );
+    let zshrc = sb.home.join(".zshrc");
+    assert!(
+        fs::read_to_string(&zshrc)
+            .unwrap()
+            .contains("export PATH=\"$HOME/.moat/bin:$PATH\"")
+    );
+    // A second time (which, as `--off` below, refuses a drifted lock: the
+    // re-pin kept it whole): confined already, nothing to do.
+    let again = confine(&[host.id()], true);
+    assert_eq!(
+        again.status.code(),
+        Some(crate::common::USAGE),
+        "{}",
+        text(&again)
+    );
+    assert!(
+        squash(&stdout(&again)).contains("confined already"),
+        "{}",
+        text(&again)
+    );
+
+    let out = confine(&["--off", host.id()], true);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(!shim.exists(), "{}", text(&out));
+    assert!(
+        !zshrc.exists(),
+        "confine created it, so it goes: {}",
         text(&out)
     );
 }

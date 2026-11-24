@@ -26,6 +26,10 @@ impl Shim {
     pub fn new(host: Host, binary: &Path, program: &Path, run: &RunCommand) -> Self {
         let mut words = vec![quote(&binary.display().to_string())];
         words.extend(run_words(run).into_iter().map(str::to_owned));
+        if let Some(port) = run.listen {
+            words.push("--listen".to_owned());
+            words.push(port.to_string());
+        }
         for write in &run.writes {
             words.push("--write".to_owned());
             words.push(quote(&write.display().to_string()));
@@ -34,15 +38,37 @@ impl Shim {
         words.push(quote(&program.display().to_string()));
         words.extend(run.args.iter().map(|a| quote(a)));
         words.push("\"$@\"".to_owned());
-        let text = format!(
-            "#!/bin/sh\n\
-             # OpenMoat: `{name}` starts {agent} in `openmoat run`'s sandbox (ADR-106).\n\
-             # Written by `openmoat init`; `openmoat uninstall` removes it.\n\
-             exec {}\n",
-            words.join(" "),
-            name = run.program,
-            agent = host.display_name(),
-        );
+        let text = match (run.listen, run.args.first()) {
+            // A host that serves a port (OpenClaw's Gateway, ADR-108 §7): its
+            // serving command alone starts in the sandbox; its other commands
+            // are the server's clients, which the sandbox would cut off from it.
+            (Some(_), Some(serve)) => format!(
+                "#!/bin/sh\n\
+                 # OpenMoat: `{name} {serve}` starts {agent}'s server in `openmoat run`'s sandbox \
+                 (ADR-106, ADR-108).\n\
+                 # Its other commands start as before. Written by `openmoat init` or `openmoat \
+                 confine`; `openmoat confine --off` and `openmoat uninstall` remove it.\n\
+                 if [ \"$1\" = {serve_word} ]; then\n\
+                 \x20 case \"$2\" in ''|-*) shift; exec {} ;; esac\n\
+                 fi\n\
+                 exec {real} \"$@\"\n",
+                words.join(" "),
+                name = run.program,
+                agent = host.display_name(),
+                serve_word = quote(serve),
+                real = quote(&program.display().to_string()),
+            ),
+            _ => format!(
+                "#!/bin/sh\n\
+                 # OpenMoat: `{name}` starts {agent} in `openmoat run`'s sandbox (ADR-106).\n\
+                 # Written by `openmoat init` or `openmoat confine`; `openmoat confine --off` and \
+                 `openmoat uninstall` remove it.\n\
+                 exec {}\n",
+                words.join(" "),
+                name = run.program,
+                agent = host.display_name(),
+            ),
+        };
         Self {
             host,
             name: run.program,

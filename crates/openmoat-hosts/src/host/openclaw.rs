@@ -158,9 +158,31 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         vars: &["SHELL"],
         on_path: false,
     },
-    run: crate::RunFacts::Unknown {
-        why: "its Gateway serves a local port, which `openmoat run`'s sandbox does not allow",
+    // The state directory holds the configuration, the agents' databases and
+    // the default workspace (`~/.openclaw/workspace`,
+    // <https://docs.openclaw.ai/help/environment>); `openclaw gateway` runs
+    // the Gateway in the foreground (<https://docs.openclaw.ai/gateway>), where
+    // its tools run. The other `openclaw` commands are the Gateway's clients,
+    // which a sandbox that reaches only the proxy would cut off from it: a
+    // sandboxed-start shim starts `openclaw gateway` alone in `openmoat run`.
+    run: crate::RunFacts::Known {
+        program: "openclaw",
+        args: &["gateway"],
+        writes: &[crate::RunWrite::ConfigDir],
     },
+    // <https://docs.openclaw.ai/gateway>: the port is "`--port` →
+    // `OPENCLAW_GATEWAY_PORT` → `gateway.port` → named-profile default →
+    // `18789`", and the default bind mode is `loopback`. The browser tool's
+    // control service listens on a port of its own derived from it
+    // (<https://docs.openclaw.ai/gateway/config-browser-ui-desktop>), which is
+    // not granted: the browser tool does not start inside `openmoat run`.
+    run_listen: Some(crate::RunListen {
+        what: "its Gateway",
+        default_port: 18789,
+        variable: "OPENCLAW_GATEWAY_PORT",
+        key: &["gateway", "port"],
+        moved_by: "OPENCLAW_PROFILE",
+    }),
     run_env: &[
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
@@ -176,6 +198,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         "OPENCLAW_CONFIG_PATH",
         "OPENCLAW_WORKSPACE_DIR",
         "OPENCLAW_PROFILE",
+        "OPENCLAW_GATEWAY_PORT",
     ],
     weekly: weekly::WEEKLY,
     hook_off: hook_off::HOOK_OFF,

@@ -149,6 +149,7 @@ fn a_hook_only_agent_with_a_command_needs_attention() {
         limit: None,
         required: None,
         os_sandbox: Some(sandbox),
+        score: None,
         hook_failure: None,
     };
     let agents = [
@@ -178,5 +179,51 @@ fn a_hook_only_agent_with_a_command_needs_attention() {
     assert!(
         left[0].text.contains("no `openmoat run` command"),
         "{left:?}"
+    );
+}
+
+/// This system's reason `openmoat run` has no sandbox (a macOS too old),
+/// shared by every agent, is one short row naming them all, not the long
+/// reason once per agent; a reason one agent alone has keeps its own row.
+#[test]
+fn a_reason_every_agent_shares_is_one_short_row() {
+    use crate::protection::{Level, OsSandbox, Protection};
+    let why = "`openmoat run` needs macOS 13 or later; this Mac has macOS 12.7, whose \
+               `sandbox-exec` cannot read the sandbox profile. The agent was not started.";
+    let agent = |host: &'static str, why: &str| Protection {
+        host,
+        name: host,
+        level: Level::HookOnly,
+        reason: None,
+        gaps: "",
+        limit: None,
+        required: None,
+        os_sandbox: Some(OsSandbox::Unavailable {
+            why: why.to_owned(),
+        }),
+        score: None,
+        hook_failure: None,
+    };
+    let agents = [
+        agent("gemini-cli", why),
+        agent("pi", why),
+        agent("goose", "its own reason"),
+        agent("openclaw", why),
+    ];
+    let rows = os_sandbox_rows(&agents);
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert_eq!(rows[0].label, "openmoat run");
+    assert_eq!(
+        rows[0].text,
+        "no OS sandbox for gemini-cli, pi, openclaw: `openmoat run` needs macOS 13 or later"
+    );
+    assert_eq!(rows[1].label, "goose");
+    assert!(rows[1].text.ends_with("its own reason"), "{rows:?}");
+    // One agent alone keeps the whole reason.
+    let one = os_sandbox_rows(&agents[..1]);
+    assert_eq!(one.len(), 1);
+    assert!(
+        one[0].text.contains("cannot read the sandbox profile"),
+        "{one:?}"
     );
 }

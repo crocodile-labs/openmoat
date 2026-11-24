@@ -48,6 +48,7 @@ fn grants() -> Grants {
         trust: None,
         tool_shell: None,
         helpers: None,
+        listen: None,
     }
 }
 

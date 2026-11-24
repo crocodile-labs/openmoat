@@ -30,7 +30,7 @@ pub use contract::{
     McpNames, McpReader, McpServer, McpSpec, McpSyntax, Meta, OtherHooks, Paths, Platform, Plugin,
     PluginDir, PluginFile, PluginHooks, PluginSpec, ProcessSpec, ProjectFile, ProjectOff,
     ProjectSettingsSpec, Protect, Proves, ProxySessions, RelaxedCheck, RelaxedKey, Reviews,
-    RunFacts, RunWrite, Runner, RunsLater, SandboxFormat, SandboxSpec, SessionDir, SessionOverride,
+    RunFacts, RunListen, RunWrite, Runner, RunsLater, SandboxFormat, SandboxSpec, SessionDir, SessionOverride,
     Sessions, SettingsFile, SettingsReader, StandAside, Started, SystemFile, SystemSettingsSpec,
     ToolRow, ToolToken, Unanswered, Unseen, UsernsProfileFix, Version, Weekly, WeeklyInstall,
     WeeklyPayload, WeeklyRun, WeeklyRuns, WindowsSandboxLevel, WindowsSandboxMode,

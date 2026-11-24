@@ -112,6 +112,35 @@ fn every_hook_only_host_says_what_openmoat_run_needs() {
     }
 }
 
+/// A host that serves a port under `openmoat run` has a command, an
+/// unprivileged default port, its port variable passed through the run's
+/// allowlist, and a key in its hook file (ADR-108 §7). OpenClaw's Gateway is
+/// the one such host, on the port its documentation names.
+#[test]
+fn a_host_that_listens_names_its_one_port() {
+    let mut listening = Vec::new();
+    for host in HOSTS {
+        let spec = host.spec();
+        let Some(listen) = spec.run_listen else {
+            continue;
+        };
+        listening.push(host);
+        assert!(matches!(spec.run, RunFacts::Known { .. }), "{host:?}");
+        assert!(listen.default_port >= 1024, "{host:?}");
+        assert!(spec.run_env.contains(&listen.variable), "{host:?}");
+        assert!(!listen.key.is_empty(), "{host:?}");
+        assert!(
+            spec.install.is_some(),
+            "{host:?}: the key is read from its hook file"
+        );
+    }
+    assert_eq!(listening, [Host::OpenClaw]);
+    let listen = Host::OpenClaw.spec().run_listen.unwrap();
+    assert_eq!(listen.default_port, 18789);
+    assert_eq!(listen.variable, "OPENCLAW_GATEWAY_PORT");
+    assert_eq!(listen.key, ["gateway", "port"]);
+}
+
 /// What a host's spec lets through `openmoat run`'s allowlist are names, and
 /// never a cloud provider's credentials, which it exists to withhold (ADR-077).
 #[test]

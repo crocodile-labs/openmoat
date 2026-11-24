@@ -6,6 +6,7 @@ mod approvals;
 mod audit;
 pub(crate) mod bench;
 mod credential;
+mod confine;
 mod demo;
 mod doctor;
 mod edit;
@@ -60,6 +61,7 @@ pub fn run(cli: Cli) -> Result<Code> {
     match command {
         Command::Init(args) => init::run(&args),
         Command::Uninstall(args) => uninstall::run(&args),
+        Command::Confine(args) => confine::run(&args),
         Command::Guard(args) => Ok(guard::run(&args)),
         Command::Show(args) => show::run(&args),
         Command::Watch(args) => watch::run(&args),
@@ -183,6 +185,12 @@ pub fn run_port_only_network() -> Option<String> {
 #[cfg(windows)]
 pub fn run_in_restricted_token() -> bool {
     run::windows::in_restricted_token()
+}
+
+/// The planned protection score of a plain `openmoat run` here (ADR-108 §2);
+/// `None` where it has no sandbox.
+pub fn run_default_score() -> Option<u32> {
+    run::score::default_run()
 }
 
 /// Why `openmoat run` cannot sandbox on this machine; `None` when it can.

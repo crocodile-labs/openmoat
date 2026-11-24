@@ -81,11 +81,37 @@ pub struct Protection {
     /// can get one (ADR-076).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub os_sandbox: Option<OsSandbox>,
+    /// The protection score (ADR-108 §2) of the agent as it starts when its
+    /// name is typed here, for an agent at `hook only` that OpenMoat writes no
+    /// sandbox for: 0 for the hook alone, `openmoat run`'s planned score with
+    /// a sandboxed-start shim this shell finds (ADR-108 §8).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub score: Option<Score>,
     /// What the agent does with a call when the hook fails, for an agent
     /// whose hook is installed (ADR-079); `fails_open` names the cases in
     /// which the call runs unchecked.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hook_failure: Option<Failure>,
+}
+
+/// An agent's protection score, and whether sandboxed start brings it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Score {
+    /// 0 to 100.
+    pub points: u32,
+    /// Typing the agent's name starts it in `openmoat run` (a shim).
+    pub sandboxed_start: bool,
+}
+
+impl Score {
+    /// The words the `Agents` rows add: `protection 0/100`.
+    pub fn words(self) -> String {
+        if self.sandboxed_start {
+            format!("protection {}/100 with sandboxed start", self.points)
+        } else {
+            format!("protection {}/100", self.points)
+        }
+    }
 }
 
 impl Protection {
@@ -117,12 +143,16 @@ struct Inputs {
     policy: Option<Policy>,
     /// What `openmoat run` can do here, found for the first agent that needs it.
     run_here: std::cell::OnceCell<os_sandbox::RunHere>,
+    /// The planned score of a plain `openmoat run` here and the agents whose
+    /// shim this shell finds first, found for the first agent that needs them.
+    started: std::cell::OnceCell<(Option<u32>, Vec<String>)>,
 }
 
 impl Inputs {
     fn load(home: &Home) -> Self {
         Self {
             run_here: std::cell::OnceCell::new(),
+            started: std::cell::OnceCell::new(),
             plan: home
                 .load_policy()
                 .ok()
@@ -211,6 +241,14 @@ fn protection(home: &Home, binary: &Path, inputs: &Inputs, host: Host) -> Result
             os_sandbox::of(home, host, here)
         })
         .transpose()?;
+    let score = (level == Level::HookOnly && !writes_sandbox(host)).then(|| {
+        let (run, shimmed) = inputs.started.get_or_init(|| started(home));
+        let sandboxed_start = shimmed.iter().any(|id| id == host.id());
+        Score {
+            points: run.filter(|_| sandboxed_start).unwrap_or(0),
+            sandboxed_start,
+        }
+    });
     // Asked only of an agent whose hook is in place: whether its version
     // reads the flag that blocks a failed hook can take a `--version` run.
     let hook_failure = level
@@ -225,8 +263,27 @@ fn protection(home: &Home, binary: &Path, inputs: &Inputs, host: Host) -> Result
         limit: host.spec().limit,
         required,
         os_sandbox,
+        score,
         hook_failure,
     })
+}
+
+/// The planned score of a plain `openmoat run` here, and the ids of the
+/// agents whose sandboxed-start shim this shell's `PATH` finds first.
+fn started(home: &Home) -> (Option<u32>, Vec<String>) {
+    let path = crate::environment::absolute_search_path();
+    let shimmed = crate::start::report(home, &path)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|(_, starts)| *starts == crate::start::Starts::Sandboxed)
+        .map(|(shim, _)| shim.host)
+        .collect::<Vec<_>>();
+    let run = if shimmed.is_empty() {
+        None
+    } else {
+        crate::commands::run_default_score()
+    };
+    (run, shimmed)
 }
 
 /// The row for `host`, which OpenMoat found but cannot hook (`moat status`
@@ -567,6 +624,7 @@ mod tests {
             limit: None,
             required: None,
             os_sandbox: None,
+            score: None,
             hook_failure: None,
         };
         assert_eq!(

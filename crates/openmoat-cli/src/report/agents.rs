@@ -60,6 +60,12 @@ pub fn agent_table(agents: &[Protection], attention: &Attention, verbose: bool) 
             Some(through) => format!("{text} · {through}"),
             None => text,
         };
+        // How much of the OS boundary is in force as it starts here (ADR-108):
+        // the gap stays in view.
+        let text = match agent.score {
+            Some(score) => format!("{text} · {}", score.words()),
+            None => text,
+        };
         table.rows.push(Row::new(mark, agent.name, text));
         if let Some(required) = &agent.required {
             table.rows.push(required_row(agent.name, required));
@@ -83,16 +89,58 @@ pub fn os_sandbox_rows(agents: &[Protection]) -> Vec<Row> {
 }
 
 /// [`os_sandbox_rows`] less the agents `shown` names, whose command is in
-/// `Needs your attention` already ([`hook_only_rows`]).
+/// `Needs your attention` already ([`hook_only_rows`]). A reason `openmoat
+/// run` has no sandbox that two or more agents share (this system's, such as
+/// a macOS release too old) is one short row, not one long row per agent.
 pub fn os_sandbox_rows_but(agents: &[Protection], shown: &[&str]) -> Vec<Row> {
-    agents
+    let listed: Vec<&Protection> = agents
         .iter()
-        .filter(|agent| !shown.contains(&agent.host))
-        .filter_map(|agent| {
-            let sandbox = agent.os_sandbox.as_ref()?;
-            Some(Row::new(Mark::Info, agent.name, sandbox.line()))
-        })
-        .collect()
+        .filter(|agent| !shown.contains(&agent.host) && agent.os_sandbox.is_some())
+        .collect();
+    let shared = |why: &str| {
+        listed
+            .iter()
+            .filter(
+                |a| matches!(&a.os_sandbox, Some(OsSandbox::Unavailable { why: w }) if w == why),
+            )
+            .count()
+            > 1
+    };
+    let mut rows = Vec::new();
+    let mut grouped: Vec<&str> = Vec::new();
+    for agent in &listed {
+        let Some(sandbox) = agent.os_sandbox.as_ref() else {
+            continue;
+        };
+        match sandbox {
+            OsSandbox::Unavailable { why } if shared(why) => {
+                if grouped.contains(&why.as_str()) {
+                    continue;
+                }
+                grouped.push(why);
+                rows.push(shared_row(&listed, why));
+            }
+            _ => rows.push(Row::new(Mark::Info, agent.name, sandbox.line())),
+        }
+    }
+    rows
+}
+
+/// The one row for the agents in `listed` that share `why`: their names and
+/// the reason's first clause (`needs macOS 13 or later`); `openmoat doctor`
+/// gives the rest.
+fn shared_row(listed: &[&Protection], why: &str) -> Row {
+    let names: Vec<&str> = listed
+        .iter()
+        .filter(|a| matches!(&a.os_sandbox, Some(OsSandbox::Unavailable { why: w }) if w == why))
+        .map(|a| a.name)
+        .collect();
+    let short = why.split_once("; ").map_or(why, |(first, _)| first);
+    Row::new(
+        Mark::Info,
+        "openmoat run",
+        format!("no OS sandbox for {}: {short}", names.join(", ")),
+    )
 }
 
 /// `openmoat status`'s `Needs your attention` rows for agents only the hook

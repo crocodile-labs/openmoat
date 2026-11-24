@@ -63,7 +63,7 @@ pub use protect::{Helper, Paths, ProcessSpec, Protect, RunsLater};
 pub use relaxed::{KeyShape, RelaxedCheck, RelaxedKey};
 pub use reviews::{Reviews, Unseen};
 pub(crate) use reviews::{answer, decided};
-pub use run_facts::{RunFacts, RunWrite};
+pub use run_facts::{RunFacts, RunListen, RunWrite};
 pub(crate) use settings::set;
 pub use settings::{SettingsFile, SettingsReader};
 pub use system_settings::{SystemFile, SystemSettingsSpec};
@@ -233,6 +233,10 @@ pub struct HostSpec {
     /// What `openmoat run` needs to start the host, for a host with no OS
     /// sandbox of its own (ADR-076).
     pub run: RunFacts,
+    /// The one loopback port the host serves under `openmoat run`, for a host
+    /// that listens (OpenClaw's Gateway); `None` for every host that only
+    /// connects out (ADR-108 §7).
+    pub run_listen: Option<RunListen>,
     /// The inherited environment variables the host needs under `openmoat
     /// run`'s allowlist (ADR-077, which names the source of each), beside the
     /// variable that moves its configuration directory. Names the host's own

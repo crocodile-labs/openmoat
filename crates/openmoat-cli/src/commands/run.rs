@@ -34,6 +34,8 @@ mod inherited;
 mod isolation;
 #[cfg(target_os = "linux")]
 mod linux;
+/// `--listen` before anything starts (ADR-108 §7).
+mod listen;
 #[cfg(target_os = "macos")]
 mod macos;
 mod release_age;
@@ -115,6 +117,9 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let owner = Owner::of(&name.to_string_lossy(), &path_string(&program));
     // Before anything starts: the level the policy requires of this program.
     let strict = required::check(&home, &ctx, owner, &name.to_string_lossy())?;
+    // `--listen` (ADR-108 §7): where nothing in the system holds the network,
+    // nothing can keep a listening socket to loopback either.
+    listen::check(args.listen, owner)?;
     // The tier (ADR-080): on Linux the Isolated one where bubblewrap works.
     let tier = isolation::choose(Asked::of(args), &platform::isolation(), strict.as_deref())?;
     if args.print_boundary {
@@ -179,6 +184,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         trust: trust.as_ref().map(|t| path_string(t.dir())),
         tool_shell: tool_shell.as_ref().map(tool_shell::ToolShell::grant),
         helpers: helpers.dir(),
+        listen: args.listen,
     };
     let state = home.root();
     // The agent runs inside the sandbox and must read its own login there; every
