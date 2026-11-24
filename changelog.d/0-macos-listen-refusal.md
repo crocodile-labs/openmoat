@@ -1,0 +1,2 @@
+### Changed
+- `openmoat run --listen` stays refused on macOS, now with the reason recorded in ADR-122: no Seatbelt filter keeps a listening port off the unspecified address, and sockets `openmoat run` could hold there would end with the run while a process the agent left behind keeps its sandbox. The refusal names how to start the agent instead (the same command, without `openmoat run`, under its hook) and where this is explained ([#0](https://github.com/crocodile-labs/openmoat/pull/0)).

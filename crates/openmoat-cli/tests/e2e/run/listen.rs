@@ -3,8 +3,8 @@
 //! (only the proxy is reachable), are refused. The agent's network namespace
 //! has loopback alone, so there it may bind any address, reachable from
 //! nowhere else. Linux without a namespace, and macOS (whose Seatbelt filter
-//! lets a bind to every address on the port through), refuse `--listen`
-//! before anything starts.
+//! lets a bind to every address on the port through, ADR-122), refuse
+//! `--listen` before anything starts.
 
 use std::net::{Ipv4Addr, TcpListener};
 
@@ -75,6 +75,9 @@ fn listen_allows_one_loopback_port_and_no_other_bind() {
         // the port could be reachable from the network: refused.
         assert_eq!(out.status.code(), Some(USAGE), "{shown}");
         assert!(stderr(&out).contains("refused on macOS"), "{shown}");
+        // what to do instead, and where it is explained
+        assert!(stderr(&out).contains("under its hook"), "{shown}");
+        assert!(stderr(&out).contains("ADR-122"), "{shown}");
         assert!(!stdout(&out).contains("loopback="), "{shown}");
         return;
     }
