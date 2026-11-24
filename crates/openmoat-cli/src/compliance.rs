@@ -192,8 +192,9 @@ pub const GROUPS: &[Group] = &[
         does: "deny a known token or a brokered secret sent to a host that is not its own, \
                a payment card number sent off the machine, a push that publishes a \
                secret, and hold for review what a session that read secret material sends out, \
-               a send after it read private data and untrusted content, and a send of what it \
-               packed or copied out of private files",
+               a send after it read private data and untrusted content, a send of what it \
+               packed or copied out of private files, and one MCP server's data sent through \
+               another server's acting tool",
         covers: Covers::Rules(&[
             "token-egress",
             "placeholder-egress",
@@ -203,6 +204,7 @@ pub const GROUPS: &[Group] = &[
             SESSION_TAINT,
             LETHAL_TRIFECTA,
             STAGING_EGRESS,
+            "data-flow",
             PUSH_SECRET,
             PROXY_SECRET,
             PROXY_SECRET_ROUTE,

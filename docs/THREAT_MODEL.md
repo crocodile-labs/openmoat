@@ -185,7 +185,9 @@ something OpenMoat claims to stop.
   `resources/read`, of `prompts/get`, and of host tools (`WebFetch`, `Bash` output) are not
   recorded. A match needs a piece copied as it was: an address with its scheme, host and
   path, an email address, a token of 20 or more characters, or eight words. A paraphrase,
-  an address split, encoded or with its path changed, or a shorter copy is not found. Past
+  an address split, encoded or with its path changed, or a shorter copy is not found; the
+  default `data-flow` review (preview, ADR-126) holds an acting tool of one server after
+  any other server's result the hook saw, wrapped or not, with no piece to match. Past
   the first 1 MiB of a result, or 256 pieces of it, nothing more is kept. A tool's pinned
   annotations decide whether it acts, so an accepted definition that calls a sending tool
   read-only is believed. Text kept for one session is not looked up for another.

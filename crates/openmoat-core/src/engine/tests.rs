@@ -4,6 +4,7 @@ mod executed;
 mod fetch;
 mod glob;
 mod installs;
+mod labels;
 mod moved_dirs;
 mod personal;
 mod staging;

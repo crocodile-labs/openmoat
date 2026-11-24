@@ -182,7 +182,10 @@ Which agents and operating systems each feature works with: [docs/FEATURES.md](d
 By risk: secrets read or sent, data sent to unlisted hosts, instructions planted in what
 the agent reads, a send after the same session read both private data and content someone
 else wrote (`lethal-trifecta`, held for review even to an allowed host), data packed or
-copied before it is sent (`staging-egress`), code that runs later (CI, git hooks, login items, `PATH`), look-alike
+copied before it is sent (`staging-egress`), one MCP server's data sent through another
+server's tool however it was reworded (`data-flow`, preview: data labels by source, which
+a rule names as `@data-flow <label> <sink> *`, [docs/POLICY.md §4.7](docs/POLICY.md#47-data-labels-rules-on-where-data-from-a-source-may-go-preview);
+try `openmoat policy check '@data-flow mcp:tickets mcp-send mcp:slack'`), code that runs later (CI, git hooks, login items, `PATH`), look-alike
 packages, downloaded or hidden code, containers handed the host, changes to the system's
 own folders and processes, destructive commands.
 Every rule and how to change it: [docs/POLICY.md](docs/POLICY.md); a rule can also test a

@@ -3218,3 +3218,36 @@
   why: colour escapes and a short commit hash cut are everyday shell, not obfuscation
   action: { shell: "printf '\\033[32mok\\033[0m %s\\n' \"${GITHUB_SHA:0:7}\"" }
   expect: { verdict: defer, rules: [default] }
+
+# Data labels (ADR-126): the default rule names one MCP server's data reaching
+# another server's acting tool, nothing else
+- id: benign-flow-github-issue-then-github-pull-request
+  why: a server's own tool sending its own data is `same-source`
+  session:
+    - mcp_tool: mcp__github__get_issue
+  action: { mcp_tool: mcp__github__create_pull_request }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-flow-docs-fetch-then-chat-post
+  why: web content then a chat post is two parts of the trifecta, and no default label rule names `web`
+  session:
+    - fetch: "https://docs.rs/serde"
+  action: { mcp_tool: mcp__slack__post_message }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-flow-browser-tab-list-then-chat-post
+  why: a browser's tab list is metadata, which brings no label
+  session:
+    - mcp_tool: "mcp__claude-in-chrome__tabs_context_mcp"
+  action: { mcp_tool: mcp__slack__post_message }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-flow-mcp-result-then-read-only-tool
+  why: a tool that only reads sends nothing
+  session:
+    - mcp_tool: mcp__tickets__get_issue
+  action: { mcp_tool: mcp__github__get_file_contents }
+  expect: { verdict: allow, rules: [safe-mcp] }
+- id: benign-flow-mcp-result-then-project-edit
+  why: an ordinary source file is not a sink
+  session:
+    - mcp_tool: mcp__tickets__get_issue
+  action: { fs_write: "/p/src/lib.rs" }
+  expect: { verdict: allow, rules: [project-fs] }

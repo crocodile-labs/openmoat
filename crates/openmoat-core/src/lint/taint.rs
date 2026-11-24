@@ -25,10 +25,52 @@ pub(super) fn metadata_tools(policy: &Policy, out: &mut Vec<Warning>) {
     });
 }
 
+/// One warning per `allow` or `defer` group that names a `@data-flow` atom
+/// (ADR-126): only deny and review rules decide those atoms, so the pattern
+/// does nothing, and whoever wrote it may believe a flow is allowed or
+/// reviewed.
+pub(super) fn data_flow_outside_review(policy: &Policy, out: &mut Vec<Warning>) {
+    let atom = crate::DATA_FLOW_ATOM;
+    for group in policy.allow.iter().chain(&policy.defer) {
+        if group.shell.iter().any(|p| p.trim_start().starts_with(atom)) {
+            out.push(Warning {
+                rule: group.id.clone(),
+                message: format!(
+                    "`{atom}` patterns decide only in `deny` and `review` groups; here they do \
+                     nothing. Move them, for example `review: [{{ id: web-data-leaves, shell: \
+                     [\"{atom} web publish *\"] }}]` (docs/POLICY.md §4.7)"
+                ),
+            });
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::lint::warnings;
     use crate::policy::Policy;
+
+    #[test]
+    fn a_data_flow_pattern_in_an_allow_group_is_named() {
+        let w = warnings(
+            &Policy::parse(
+                "version: 1\nallow:\n  - id: flows\n    shell: ['@data-flow web publish *']\n",
+            )
+            .unwrap(),
+        );
+        assert!(
+            w.iter()
+                .any(|w| w.rule == "flows" && w.message.contains("POLICY.md §4.7")),
+            "{w:?}"
+        );
+        let quiet = warnings(
+            &Policy::parse(
+                "version: 1\nreview:\n  - id: flows\n    shell: ['@data-flow web publish *']\n",
+            )
+            .unwrap(),
+        );
+        assert!(!quiet.iter().any(|w| w.rule == "flows"), "{quiet:?}");
+    }
 
     #[test]
     fn added_metadata_tools_are_named_and_the_built_in_list_is_quiet() {

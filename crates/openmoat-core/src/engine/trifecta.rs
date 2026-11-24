@@ -81,6 +81,32 @@ const PUBLISHERS: &[(&str, &[&str])] = &[
     ("uv", &["publish"]),
 ];
 
+/// The kind of place a call can send data to (ADR-113 §1), as the data-flow
+/// atoms name it (ADR-126).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum EgressSink {
+    /// A connection to or fetch from a host off this machine.
+    Network,
+    /// A web search: the query leaves.
+    WebSearch,
+    /// A command that publishes (`git push`, `npm publish`).
+    Publish,
+    /// An MCP tool that acts (`mcp:<server>`).
+    McpSend,
+}
+
+impl EgressSink {
+    /// The word the data-flow atom carries.
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Self::Network => "network",
+            Self::WebSearch => "web-search",
+            Self::Publish => "publish",
+            Self::McpSend => "mcp-send",
+        }
+    }
+}
+
 /// Words in an MCP tool's name that make it act rather than read (ADR-061).
 pub(super) const ACTING: &[&str] = &[
     "send", "post", "upload", "create", "write", "put", "publish", "share", "comment", "message",
@@ -125,10 +151,23 @@ impl CompiledPolicy<'_> {
     /// leaves), an MCP tool that acts (`mcp:<server>`), and a command that
     /// publishes (`git-push`, `npm-publish`). Each once, in the order found.
     pub(super) fn egress_targets(&self, action: &Action, atoms: &[AtomicAction]) -> Vec<String> {
-        let mut out: Vec<String> = Vec::new();
-        let mut add = |target: String| {
-            if !out.contains(&target) {
-                out.push(target);
+        self.egress_sinks(action, atoms)
+            .into_iter()
+            .map(|(_, target)| target)
+            .collect()
+    }
+
+    /// [`Self::egress_targets`] with the kind of sink each target is, for the
+    /// data-flow atoms (ADR-126).
+    pub(super) fn egress_sinks(
+        &self,
+        action: &Action,
+        atoms: &[AtomicAction],
+    ) -> Vec<(EgressSink, String)> {
+        let mut out: Vec<(EgressSink, String)> = Vec::new();
+        let mut add = |sink: EgressSink, target: String| {
+            if !out.iter().any(|(_, t)| *t == target) {
+                out.push((sink, target));
             }
         };
         for atom in atoms {
@@ -136,12 +175,14 @@ impl CompiledPolicy<'_> {
                 AtomicAction::Net { host } | AtomicAction::Fetch { host }
                     if !host::is_loopback(host) =>
                 {
-                    add(host.clone());
+                    add(EgressSink::Network, host.clone());
                 }
-                AtomicAction::WebSearch { .. } => add("web-search".to_owned()),
+                AtomicAction::WebSearch { .. } => {
+                    add(EgressSink::WebSearch, "web-search".to_owned());
+                }
                 AtomicAction::Shell { argv } => {
                     if let Some(publish) = publishes(argv) {
-                        add(publish);
+                        add(EgressSink::Publish, publish);
                     }
                 }
                 _ => {}
@@ -149,7 +190,7 @@ impl CompiledPolicy<'_> {
         }
         for push in self.pushes(action) {
             let words: Vec<&str> = push.argv.iter().take(2).map(String::as_str).collect();
-            add(words.join("-"));
+            add(EgressSink::Publish, words.join("-"));
         }
         if let Action::McpTool {
             name,
@@ -165,7 +206,7 @@ impl CompiledPolicy<'_> {
                 .to_ascii_lowercase();
             if !writes.is_empty() || !hosts.is_empty() || ACTING.iter().any(|w| tool.contains(w)) {
                 let server = name.split("__").nth(1).unwrap_or(name);
-                add(format!("mcp:{server}"));
+                add(EgressSink::McpSend, format!("mcp:{server}"));
             }
         }
         out
@@ -229,7 +270,7 @@ impl CompiledPolicy<'_> {
 
 /// Whether every secret of `taint` belongs to `target`, its own host: a
 /// brokered secret may go there.
-fn owned_by_secrets(taint: &Taint, target: &str) -> bool {
+pub(super) fn owned_by_secrets(taint: &Taint, target: &str) -> bool {
     !taint.secrets.is_empty()
         && taint.secrets.iter().all(|s| {
             s.host

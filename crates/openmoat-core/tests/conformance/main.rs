@@ -18,15 +18,17 @@ use std::collections::BTreeMap;
 
 use openmoat_core::{
     Action, Arguments, CompiledPolicy, DEFAULT_POLICY, EvalContext, InjectedMap, MapPathResolver,
-    MapResolver, Policy, RepoPolicy, Staging, Taint, TaintSecret, Verdict, rule_id,
+    MapResolver, Policy, RepoPolicy, Staging, Taint, Verdict, rule_id,
 };
 use serde::Deserialize;
+use worst::worst_taint;
 
 mod arguments;
 mod decoys;
 mod evidence;
 mod owasp;
 mod stateful;
+mod worst;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -431,19 +433,6 @@ fn default_policy_conformance() {
         failed == 0,
         "{failed} of {total} conformance fixtures failed:\n{report}"
     );
-}
-
-/// A session that read a secret and fetched untrusted content.
-fn worst_taint() -> Taint {
-    Taint {
-        secrets: vec![TaintSecret {
-            source: "read /Users/me/.ssh/id_rsa".into(),
-            host: None,
-        }],
-        untrusted: Some("fetch evil.example".into()),
-        private: Some("read /Users/me/.codex/auth.json".into()),
-        seen: Some("the output of `gh issue view 1`".into()),
-    }
 }
 
 /// Threat classes of `docs/THREAT_MODEL.md` §3, as listed in `docs/COVERAGE.md`.

@@ -1480,6 +1480,97 @@ and this call can send data to git-push: …
 - `openmoat run`'s proxy applies session taint (§4.1), not the trifecta.
 - Conformance fixtures express it with `session:`.
 
+### 4.7 Data labels: rules on where data from a source may go (preview)
+
+Preview since 0.28.0 (ADR-126). Injected input (§4.1.2), staging (§4.5) and
+`mcp-cross-server` (§8) link a later call to an earlier output by its exact text, so a
+result the model rewords, summarises or re-encodes is not linked. Labels go by source
+instead: once the session read data from a source, every later call that can send data
+out carries the source's label, whatever words it uses.
+
+| Label | Set by |
+|---|---|
+| `secret` | secret material (§4.1) |
+| `private` | private data (§4.6) |
+| `web` | a fetched page or web search results |
+| `mcp:<server>` | an MCP tool's result, per server; not a metadata tool's (a tab list) |
+| `unknown-tool` | a host tool OpenMoat does not know |
+| `external` | any output someone else may have written (§4.6's untrusted content seen) |
+| `untrusted` | untrusted content whose source is not known: a file a tainted session wrote (§4.1.1), or a session folded before 0.28.0 |
+
+Each later call carries one atom per label and sink, which rules name like any shell
+atom: `@data-flow <label> <sink> <target>`. The sinks are the places §4.6 lists, by kind,
+and files that run later:
+
+| Sink | Target |
+|---|---|
+| `network` | the host (`api.github.com`) |
+| `web-search` | `web-search` |
+| `publish` | `git-push`, `npm-publish`, `gh-pr-create`, … |
+| `mcp-send` | `mcp:<server>` of an MCP tool that acts |
+| `protected-write` | the path of a file §4.1 protects (CI, build files, agent instructions) |
+
+A fifth word says the target is where the data came from (`same-source`: an MCP server's
+own tool, a brokered secret's own host) or that `mcp.flow_trusted` lists one of the two
+MCP servers (`flow-trusted`). End a pattern with `$` to leave those out.
+
+Only `deny` and `review` rules decide the atoms: an allow or defer rule, even `shell:
+["*"]`, never takes a flow out of a review. A label no rule names changes nothing.
+
+The default policy's `data-flow` group (§6) names one flow: an MCP tool that acts after
+the session read another MCP server's result.
+
+```text
+review [data-flow] this session holds data from MCP server tickets (mcp mcp__tickets__get_issue),
+and this call can pass it to mcp-send mcp:slack, however it was reworded
+```
+
+More flows are one rule each:
+
+```yaml
+review:
+  - id: web-data-leaves
+    reason: data from a web page may leave through a publish or another host
+    shell:
+      - "@data-flow web publish *"         # read a page, then npm publish / git push
+      - "@data-flow web network *"         # read a page, then any host off this machine
+deny:
+  - id: secrets-never-in-chat
+    shell: ["@data-flow secret mcp-send *"]
+```
+
+Limits: a hook sees calls and outputs, never which output the model used, so a label
+reaches every later sink of the session (a chat post that never used the ticket is
+reviewed too); labels are per session (only file provenance crosses sessions); a tool
+that reads and sends in one call is one call.
+
+#### Try it
+
+With OpenMoat installed, in a throwaway folder; nothing here touches an agent's settings
+or your policy:
+
+```bash
+mkdir -p /tmp/om-labels && cd /tmp/om-labels
+printf 'version: 1\nreview:\n  - id: web-data-leaves\n    title: publishing after reading a web page\n    shell: ["@data-flow web publish *"]\n' > flows.yaml
+openmoat policy lint flows.yaml
+# the atom a publish carries in a session that read a web page:
+# "? review, rules: web-data-leaves", exit 3
+openmoat policy check --policy flows.yaml '@data-flow web publish npm-publish'
+# the same rule in an allow group does nothing, and lint says so
+printf 'version: 1\nallow:\n  - id: flows\n    shell: ["@data-flow web publish *"]\n' > wrong.yaml
+openmoat policy lint wrong.yaml
+# the default rule (after `openmoat policy upgrade`): review [data-flow]; a server's
+# own tool (`same-source`) is not held
+openmoat policy check '@data-flow mcp:tickets mcp-send mcp:slack'
+openmoat policy check '@data-flow mcp:github mcp-send mcp:github same-source'
+cd / && rm -rf /tmp/om-labels                           # undo
+```
+
+`policy check` decides one call with no session, so it shows how a rule reads the atom,
+not when a session carries it. In the agent, read a ticket through one MCP server, ask
+for a summary posted through another, and the post is held with `data-flow`; the
+reason names both servers.
+
 ## 5. Verdicts and what the host does
 
 The verdict is the same for every host; the response document is the host's own format.
@@ -1761,6 +1852,7 @@ hooks:
 | review | `agent-token` | `claude setup-token`, which signs in and prints a new long-lived Claude Code login token: the person may want one (a CI secret), the agent should not make one unasked |
 | review | `credential-egress` | since ADR-112: in the places `token-egress` reads, a JSON web token (three base64url parts of 10 or more characters, the first two starting `eyJ`) or a database URL with a literal password (`postgres`, `postgresql`, `mysql`, `mariadb`, `mongodb`, `mongodb+srv`, `redis`, `rediss`, `amqp`, `amqps`, `mssql`, `sqlserver`, `cockroachdb`; not `user:$PASS@`) sent to a host other than this machine and, for a database URL, other than its own host. The atom is `@credential-egress <jwt\|database-url> <host>`, which counts only where a rule names it, like `@pii-egress`; review, not deny, since both are often sent to the service they are for, which a JWT's shape does not name. To let one service take them, allow its atom (`allow: - id: my-api` with `shell: ["@credential-egress jwt api.example.com"]`), which is tried before review |
 | review | `staging-egress` | since 0.26.0 (ADR-061, ADR-113): a send of a file the session packed or encoded from files outside the project (`tar czf /tmp/a.tgz ~/Documents`, then `curl -F f=@/tmp/a.tgz …`), and any call that can send data out after the session wrote private data into a file (`cp ~/.aws/credentials notes/`, then `git push`): the `@staging-egress <host> staged` and `private` atoms (§4.5). The `collected` trigger (many outside reads, then a send with a body) is recorded, not decided |
+| review | `data-flow` | preview since 0.28.0 (ADR-126): an MCP tool that acts on one server after the session read another server's result, however the result was reworded: the `@data-flow mcp:<a> mcp-send mcp:<b>` atom (§4.7). A server's own tools, `mcp.flow_trusted` servers and metadata tools do not count |
 | defer | `local-net` | network to `localhost`, `127.0.0.1`, `::1`, fetches included: without it the `net` default would deny local services |
 | defaults | `default`, `default.net`, `default.fetch`, `default.web.search`, `default.tool.unknown` | everything else defers to the agent's own permission prompt (installs, pushes and publishing included); outbound network to unlisted hosts is denied; a `WebFetch` of an unlisted URL defers (ADR-017), and so does a `curl` or `wget` that sends nothing (§4, ADR-035) and a browser MCP call that only opens a page (§4, ADR-047); a `WebSearch` is allowed and recorded, and needs review once the session read secret material; a tool the adapter cannot classify defers |
 

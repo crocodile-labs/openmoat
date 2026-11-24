@@ -577,7 +577,11 @@ call.
   a relative path placed against the directory it was read in are linked; a host by
   another name, a command with its flags re-ordered or other words, and anything the
   model paraphrases, encodes or summarises are not
-  ([POLICY.md §4.1.2](POLICY.md#412-injected-input), ADR-113). Only the output of the shell,
+  ([POLICY.md §4.1.2](POLICY.md#412-injected-input), ADR-113). Data labels (preview,
+  ADR-126) follow the source instead of the text, but only where a rule names the flow:
+  the default policy names one (an MCP server's result, then another server's acting
+  tool), and a label reaches every later sink of the session, since the hook cannot tell
+  which output a call used ([POLICY.md §4.7](POLICY.md#47-data-labels-rules-on-where-data-from-a-source-may-go-preview)). Only the output of the shell,
   fetches, searches, MCP resource reads and MCP tools is read (every tool's on Copilot), each kept up to fixed
   bounds, so a page full of decoys can push a planted host out. Fetches, searches and MCP
   calls themselves are not checked against it, and an install without the

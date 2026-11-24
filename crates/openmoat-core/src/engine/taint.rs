@@ -53,6 +53,12 @@ pub struct Taint {
     /// result. One part of the lethal trifecta (ADR-113).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seen: Option<String>,
+    /// Where the data the session holds came from, by source, not by text
+    /// (ADR-126): `web`, `mcp:<server>`, `secret`, …, each with the first call
+    /// that brought it in. [`Taint::label_set`] adds the ones the other facts
+    /// imply.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<super::labels::Label>,
 }
 
 /// Where untrusted content a session read came from: the one list of what
@@ -123,6 +129,9 @@ impl Taint {
         }
         if self.seen.is_none() {
             self.seen = other.seen;
+        }
+        for label in other.labels {
+            self.add_label(&label.name, &label.source);
         }
     }
 }
@@ -202,6 +211,21 @@ impl CompiledPolicy<'_> {
         });
         if !metadata {
             taint.seen = self.output_source_in(action, atoms);
+        }
+        if let Some(secret) = taint.secrets.first().map(|s| s.source.clone()) {
+            taint.add_label(super::labels::LABEL_SECRET, &secret);
+        }
+        if let Some(private) = taint.private.clone() {
+            taint.add_label(super::labels::LABEL_PRIVATE, &private);
+        }
+        for atom in atoms {
+            if let Some(kind) = self.taints(atom) {
+                let name = super::labels::untrusted_label(kind, atom);
+                taint.add_label(&name, &atom.describe());
+            }
+        }
+        if let Some(seen) = taint.seen.clone() {
+            taint.add_label(super::labels::LABEL_EXTERNAL, &seen);
         }
         taint
     }
@@ -302,11 +326,13 @@ impl CompiledPolicy<'_> {
             .iter()
             .filter_map(|atom| self.matched_rules(atom))
             .filter(|hit| matches!(hit.verdict, Verdict::Deny | Verdict::Review));
-        self.atoms(action, paths)
-            .0
+        let atoms = self.atoms(action, paths).0;
+        let flows = self.label_flows(action, &atoms, taint);
+        atoms
             .iter()
             .filter_map(|atom| self.tainted(atom, taint))
             .chain(encoded)
+            .chain(flows)
             .fold(decision, |mut acc, next| {
                 acc.merge(next);
                 acc

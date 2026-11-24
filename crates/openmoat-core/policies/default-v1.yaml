@@ -1730,6 +1730,17 @@ review:
     title: sending data the session packed or copied out of private files
     why: collect, pack and send is how data leaves in steps that each look ordinary
     shell: ["@staging-egress * staged $", "@staging-egress * private $"]
+  # Data labels (ADR-126). `@data-flow <label> <sink> <target>` atoms on each
+  # place a call can send data, once the session holds data from a source:
+  # labels go by source, so a reworded or summarised result still carries its
+  # label. An MCP tool that acts on one server after the session read another
+  # server's result (a ticket's text posted to chat) needs review; a server's
+  # own tools (`same-source`) and a browser's tab lists do not count
+  - id: data-flow
+    reason: an MCP tool sends data after the session read another MCP server's result
+    title: passing one MCP server's data to another
+    why: an injected instruction in one server's result can move its data out through another server, in words no exact match finds
+    shell: ["@data-flow mcp:* mcp-send mcp:* $"]
 
 # Installs, publishing and pushes are not listed: they match no rule, so the agent's
 # own prompt decides them like any other unlisted call (ADR-025).

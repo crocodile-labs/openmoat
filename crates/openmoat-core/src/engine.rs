@@ -22,6 +22,7 @@ mod contents;
 mod context;
 mod egress;
 mod injection;
+mod labels;
 mod packages;
 mod sections;
 mod staging;
@@ -29,6 +30,7 @@ mod taint;
 mod trifecta;
 
 use atoms::{checked_atoms, value_read_atoms};
+pub use labels::{DATA_FLOW_ATOM, Label};
 pub(crate) use sections::Section;
 pub use staging::{STAGING_ATOM, Staging};
 pub use taint::{Secret, Taint, UntrustedKind};
