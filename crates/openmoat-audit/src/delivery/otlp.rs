@@ -47,6 +47,50 @@ pub fn logs(
     serde_json::to_vec(&body).map_err(StoreError::Encode)
 }
 
+/// The instrumentation scope of an inventory's records (ADR-119).
+const INVENTORY_SCOPE: &str = "openmoat.inventory";
+
+/// One `ExportLogsServiceRequest` holding each of `events`, the OCSF events
+/// of one machine's inventory, as an `INFO` record whose body is the event's
+/// JSON, from the same resource as [`logs`]. The caller masks the events.
+pub fn inventory(
+    origin: Origin<'_>,
+    sent_ms: i64,
+    events: &[Value],
+) -> Result<Vec<u8>, StoreError> {
+    let observed = nanos(sent_ms);
+    let mut log_records = Vec::new();
+    for event in events {
+        let class = event.get("class_uid").and_then(Value::as_i64).unwrap_or(0);
+        let text = serde_json::to_string(event).map_err(StoreError::Encode)?;
+        log_records.push(json!({
+            "timeUnixNano": observed,
+            "observedTimeUnixNano": observed,
+            "severityNumber": INFO,
+            "severityText": "INFO",
+            "body": { "stringValue": text },
+            "attributes": [
+                string("openmoat.kind", "inventory"),
+                int("ocsf.class_uid", class),
+            ],
+        }));
+    }
+    let body = json!({
+        "resourceLogs": [{
+            "resource": { "attributes": [
+                string("service.name", "openmoat"),
+                string("service.version", origin.version),
+                string("host.name", origin.machine),
+            ]},
+            "scopeLogs": [{
+                "scope": { "name": INVENTORY_SCOPE, "version": origin.version },
+                "logRecords": log_records,
+            }],
+        }],
+    });
+    serde_json::to_vec(&body).map_err(StoreError::Encode)
+}
+
 fn record(r: &Delivered, observed: &str) -> Value {
     let (severity, text) = match r.verdict.as_str() {
         "deny" => (WARN, "WARN"),

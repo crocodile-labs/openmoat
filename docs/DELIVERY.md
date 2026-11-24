@@ -84,6 +84,8 @@ sinks:
   never this one) or `{ keychain: { service: …, account: … } }`. `{ env: … }` is refused: the
   background run starts from the agent's hook, in the agent host's environment.
 - `ca_file:` must be inside the state directory too.
+- `inventory: true` (optional, off by default) also lets `openmoat inventory --deliver` send
+  this sink the machine's inventory as OCSF events ([TEAM.md](TEAM.md#send-it-to-your-collector)).
 - Addresses that are link-local, cloud metadata or not unicast are refused whatever the
   name; private and loopback addresses are allowed. No redirect is followed and no
   `HTTPS_PROXY` is read.

@@ -12,6 +12,7 @@ mod policy;
 mod provenance;
 mod serve;
 mod snapshot;
+mod team;
 
 mod timeline;
 
@@ -30,6 +31,7 @@ pub use policy::{
 pub use provenance::{DiffProvenanceArgs, ProvenanceArgs, ProvenanceLevel};
 pub use serve::ServeArgs;
 pub use snapshot::{RestoreArgs, SnapshotArgs};
+pub use team::{InventoryArgs, InventoryFormat, TeamCommand, TeamJoinArgs, TeamUpdateArgs};
 
 pub use timeline::{Only, WatchArgs, WhyArgs};
 
@@ -43,7 +45,8 @@ pub use timeline::{Only, WatchArgs, WhyArgs};
                   The hook decides each call; the operating system also bounds commands inside the\n\
                   agents' sandboxes `openmoat init` configures and under `openmoat run`. Outside them an\n\
                   allowed command runs with your permissions (`openmoat status` shows each agent's level).\n\
-                  Exit codes: 0 allow/ok, 1 the agent `run` started failed, 2 deny, 3 review (unresolved),\n\
+                  Exit codes: 0 allow/ok, 1 the agent `run` started failed (or `inventory --check` found\n\
+                  drift), 2 deny, 3 review (unresolved),\n\
                   64 usage or configuration error\n\
                   (`guard` exits 2 instead, so a broken hook blocks rather than fails open).\n\n\
                   Run `openmoat` alone to see what is protected and answer anything that needs you:\n\
@@ -172,6 +175,16 @@ pub enum Command {
         #[command(subcommand)]
         command: HooksCommand,
     },
+    /// A team's signed policy bundle as a managed layer over your policy (ADR-119):
+    /// join it, update it, leave it. Nothing is sent anywhere.
+    Team {
+        #[command(subcommand)]
+        command: TeamCommand,
+    },
+    /// This machine's state for a team: agents and versions, hooks and whether they
+    /// run, protection levels, MCP servers and their pins, policy and lock, latest
+    /// checkpoint. Redacted; reads files only, sends nothing unless `--deliver`.
+    Inventory(InventoryArgs),
     /// A second factor on every command that loosens the protection (ADR-117): once
     /// set up, `allow`, `trust`, `edit`, `doctor --accept` and the other commands that
     /// widen or re-pin ask for a code from your authenticator app as well.

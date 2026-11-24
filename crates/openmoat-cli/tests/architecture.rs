@@ -231,6 +231,49 @@ fn only_the_audit_key_module_opens_the_log_for_writing() {
     );
 }
 
+/// Team mode and the inventory (ADR-119) take every fact about an agent from
+/// its spec (`Host::ALL`, `HostSpec`): none of their files names an agent by
+/// its id or its name in a string, and none branches on a `Host::` variant,
+/// so a new agent is inventoried and checked without editing them.
+#[test]
+fn team_mode_and_the_inventory_name_no_agent() {
+    let mut files = Vec::new();
+    for dir in [src().join("team"), src().join("commands").join("inventory")] {
+        rust_files(&dir, &mut files);
+    }
+    for file in [
+        src().join("team.rs"),
+        src().join("commands").join("inventory.rs"),
+        src().join("commands").join("team_mode.rs"),
+        src().join("cli").join("team.rs"),
+    ] {
+        files.push(file);
+    }
+    let mut offenders = Vec::new();
+    for file in &files {
+        let text = fs::read_to_string(file).unwrap();
+        for (n, line) in text.lines().enumerate() {
+            let line = line.trim_start();
+            if line.starts_with("//") {
+                continue;
+            }
+            let named = openmoat_hosts::Host::EVERY.iter().any(|host| {
+                let spec = host.spec();
+                line.contains(&format!("\"{}\"", spec.id))
+                    || line.contains(&format!("\"{}\"", spec.display_name))
+            });
+            let variant = line.contains("Host::")
+                && !line.contains("Host::ALL")
+                && !line.contains("Host::EVERY")
+                && !line.contains("Host::from_str");
+            if named || variant {
+                offenders.push(format!("{}:{}", relative(file), n + 1));
+            }
+        }
+    }
+    assert_eq!(offenders, Vec::<String>::new());
+}
+
 /// `found` against `allowed`: nothing over its count, no entry above what the
 /// code now has.
 fn check_only_shrinks(found: &BTreeMap<String, usize>, allowed: &[(&str, usize)], list: &str) {

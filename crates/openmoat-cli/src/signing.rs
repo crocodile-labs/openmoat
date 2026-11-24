@@ -35,6 +35,11 @@ pub const EARLIER_NAMESPACE: &str = "openmoat-policy";
 /// The namespace a policy pack's signature is made and checked in.
 pub const PACK_NAMESPACE: &str = "openmoat-pack";
 
+/// The namespace a team bundle's manifest is signed and checked in (ADR-119):
+/// a key a team signs its bundles with signs no pack or repository policy by
+/// that signature, and the reverse.
+pub const TEAM_NAMESPACE: &str = "openmoat-team-bundle";
+
 /// What a signature is over, which decides its namespace.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Signed {
@@ -42,6 +47,8 @@ pub enum Signed {
     RepoPolicy,
     /// A pack `moat policy install` installs.
     Pack,
+    /// A team bundle's manifest `openmoat team join` and `update` install.
+    TeamBundle,
 }
 
 impl Signed {
@@ -51,6 +58,7 @@ impl Signed {
         match self {
             Self::RepoPolicy => NAMESPACE,
             Self::Pack => PACK_NAMESPACE,
+            Self::TeamBundle => TEAM_NAMESPACE,
         }
     }
 }
@@ -105,6 +113,44 @@ pub fn principals(signers: &str) -> Vec<String> {
 /// The allowed-signers line trusting `key` (the text of a `.pub` file) for
 /// [`NAMESPACE`] and [`PACK_NAMESPACE`] only, under `principal`.
 pub fn signer_line(principal: &str, key: &str) -> Result<String> {
+    check_principal(principal)?;
+    let line = key
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty() && !l.starts_with('#'))
+        .context("the key file is empty")?;
+    let mut words = line.split_whitespace();
+    let (Some(kind), Some(blob)) = (words.next(), words.next()) else {
+        bail!("not an OpenSSH public key: expected `<type> <base64> [comment]`");
+    };
+    check_key(kind, blob)?;
+    Ok(format!(
+        "{principal} namespaces=\"{NAMESPACE},{PACK_NAMESPACE}\" {kind} {blob}"
+    ))
+}
+
+/// The allowed-signers line trusting the key of `entry`, an allowed-signers
+/// line as a team publishes it (`<principal> [options] <type> <base64>
+/// [comment]`), for [`TEAM_NAMESPACE`] only: whatever options the entry
+/// carried are replaced, so the key signs no pack or repository policy here.
+pub fn team_signer_line(entry: &str) -> Result<String> {
+    let words: Vec<&str> = entry.split_whitespace().collect();
+    let Some((principal, rest)) = words.split_first() else {
+        bail!("the signer is empty: give an allowed-signers line, `<name> <type> <base64>`");
+    };
+    check_principal(principal)?;
+    let at = rest
+        .iter()
+        .position(|w| key_type(w))
+        .context("the signer names no OpenSSH key: expected `<name> <type> <base64>`")?;
+    let (kind, blob) = (rest[at], rest.get(at + 1).copied().unwrap_or_default());
+    check_key(kind, blob)?;
+    Ok(format!(
+        "{principal} namespaces=\"{TEAM_NAMESPACE}\" {kind} {blob}"
+    ))
+}
+
+fn check_principal(principal: &str) -> Result<()> {
     let valid = !principal.is_empty()
         && principal.len() <= MAX_PRINCIPAL_LEN
         && principal
@@ -116,27 +162,25 @@ pub fn signer_line(principal: &str, key: &str) -> Result<String> {
              (an email address works)"
         );
     }
-    let line = key
-        .lines()
-        .map(str::trim)
-        .find(|l| !l.is_empty() && !l.starts_with('#'))
-        .context("the key file is empty")?;
-    let mut words = line.split_whitespace();
-    let (Some(kind), Some(blob)) = (words.next(), words.next()) else {
-        bail!("not an OpenSSH public key: expected `<type> <base64> [comment]`");
-    };
-    let known = ["ssh-", "ecdsa-sha2-", "sk-ssh-", "sk-ecdsa-"]
+    Ok(())
+}
+
+/// Whether `word` names a key type `ssh-keygen` signs with.
+fn key_type(word: &str) -> bool {
+    ["ssh-", "ecdsa-sha2-", "sk-ssh-", "sk-ecdsa-"]
         .iter()
-        .any(|p| kind.starts_with(p));
-    let base64 = blob
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || "+/=".contains(c));
-    if !known || !base64 {
+        .any(|p| word.starts_with(p))
+}
+
+fn check_key(kind: &str, blob: &str) -> Result<()> {
+    let base64 = !blob.is_empty()
+        && blob
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "+/=".contains(c));
+    if !key_type(kind) || !base64 {
         bail!("not an OpenSSH public key: `{kind}` is not a key type ssh-keygen signs with");
     }
-    Ok(format!(
-        "{principal} namespaces=\"{NAMESPACE},{PACK_NAMESPACE}\" {kind} {blob}"
-    ))
+    Ok(())
 }
 
 /// Whether two allowed-signers lines trust the same key under the same

@@ -626,6 +626,9 @@ deny:
       # a new or changed hook command or plugin hook is a person's to accept (ADR-109)
       - "{moat,openmoat} hooks accept*"
       - "*/{moat,openmoat} hooks accept*"
+      # a team's bundle and its key decide what the guard holds for every later call (ADR-119)
+      - "{moat,openmoat} team {join,update,leave}*"
+      - "*/{moat,openmoat} team {join,update,leave}*"
       # the read-only browser view: its link opens the audit log to whoever holds it,
       # and it listens until stopped (ADR-066)
       - "{moat,openmoat} serve*"
@@ -648,22 +651,22 @@ deny:
       # (`*moat` inside a quoted command line covers `openmoat` too)
       - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * {moat,openmoat} sandbox sync*"
       - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * */{moat,openmoat} sandbox sync*"
-      - "script * {moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "script * */{moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "script * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
-      - "expect * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
-      - "unbuffer * {moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "unbuffer * */{moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "*/script * {moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "*/script * */{moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "*/script * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
-      - "*/expect * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "script * {moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall}*"
+      - "script * */{moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall}*"
+      - "script * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "expect * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "unbuffer * {moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall}*"
+      - "unbuffer * */{moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall}*"
+      - "*/script * {moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall}*"
+      - "*/script * */{moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall}*"
+      - "*/script * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "*/expect * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
       # Python's pty module, terminal multiplexers and macOS Terminal scripting (ADR-014)
-      - "{python*,*/python*} * '*pty*spawn*(*moat*{allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
-      - "{tmux,*/tmux,screen,*/screen} * {moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "{tmux,*/tmux,screen,*/screen} * */{moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "{tmux,*/tmux,screen,*/screen} * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
-      - "{osascript,*/osascript} * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "{python*,*/python*} * '*pty*spawn*(*moat*{allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "{tmux,*/tmux,screen,*/screen} * {moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall}*"
+      - "{tmux,*/tmux,screen,*/screen} * */{moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall}*"
+      - "{tmux,*/tmux,screen,*/screen} * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "{osascript,*/osascript} * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,team,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
       # a bare `openmoat` or `moat` (the home screen asks to accept drift or approve a
       # review) under the same wrappers; patterns are prefixes, so these deny any command
       # of either name run in them

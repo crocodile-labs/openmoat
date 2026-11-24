@@ -667,3 +667,25 @@ exits, and `openmoat restore` puts them back ([USAGE.md](USAGE.md#put-the-projec
 - **Lost files after the retention.** Per project the newest 50 snapshots are kept, none
   older than 14 days (the newest always). The store holds old contents of the project's
   files on this machine until then; `openmoat uninstall --purge` deletes it.
+
+## Team mode
+
+A team bundle and the inventory ([TEAM.md](TEAM.md), ADR-119) work without a server, and
+so without anything that can act on a machine from outside it.
+
+- **Updates wait for a person.** Only `openmoat team update`, from the person's terminal,
+  installs a newer bundle: an MDM tool or a script that places one in the folder changes
+  nothing until then, and `openmoat inventory --check` reports that it waits. A rule the
+  team adds today reaches a machine when its person updates.
+- **The signer is trusted as given.** `openmoat team join --signer` trusts the key it is
+  handed, for team bundles only. A wrong key, taken from a place the team does not
+  control, trusts someone else's bundle; joining prints the signer and the rules it
+  brings.
+- **A bundle narrows only.** It cannot allow anything or set a setting it does not list;
+  a team's allow rules go in a pack each person installs. One team per machine.
+- **The inventory is the machine's own report.** A machine whose person removes OpenMoat
+  or stops the scheduled job reports nothing; a missing report is the signal. The inventory holds no host name, so a fleet tool matches machines by the
+  delivery configuration's `machine:` or by where it collected the file.
+- **Versions are what the agents' programs report** on the search path of whoever runs
+  the inventory; an agent installed elsewhere, or one whose program cannot be asked,
+  reports `unknown`.

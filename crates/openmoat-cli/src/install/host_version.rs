@@ -198,6 +198,21 @@ fn advisory_line(name: &str, version: Version, affecting: &[&Advisory]) -> Optio
     ))
 }
 
+/// The version `host`'s program on the search path reports, as
+/// `major.minor.patch`, for `openmoat inventory`: the program its spec names
+/// for its version gate or its advisories; `None` when it names none, none
+/// is found, or its version cannot be read.
+pub fn reported(host: Host) -> Option<String> {
+    let spec = host.spec();
+    let gate = spec.install.as_ref().and_then(|i| i.versions.as_ref());
+    let program = gate
+        .map(|g| g.program)
+        .into_iter()
+        .chain([spec.advisories.program])
+        .find(|p| !p.is_empty())?;
+    version(program).map(dotted)
+}
+
 fn dotted((major, minor, patch): Version) -> String {
     format!("{major}.{minor}.{patch}")
 }

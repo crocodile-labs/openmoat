@@ -177,6 +177,18 @@ impl Home {
         self.root.join("policy.d").join("packs")
     }
 
+    /// The team bundle `openmoat team join` installed (`team.rs`, ADR-119):
+    /// its name, serial, signer and manifest digest; pinned by the lock.
+    pub fn team_path(&self) -> PathBuf {
+        self.root.join("team.json")
+    }
+
+    /// Where the joined team's manifest, signature, rule files and signing
+    /// key are kept; every file in it is pinned by the lock.
+    pub fn team_dir(&self) -> PathBuf {
+        self.root.join("team")
+    }
+
     /// When and where `moat audit anchor` last recorded the log's head; for
     /// `moat doctor` only, so not pinned.
     pub fn anchor_path(&self) -> PathBuf {
@@ -232,31 +244,42 @@ impl Home {
     /// Load and lint the installed user policy, with `moat allow` rules merged
     /// in; from the bytes the lock check kept when it kept them.
     pub fn load_policy(&self) -> Result<Policy> {
+        self.load_policy_with_team(crate::team::Layer::Joined)
+    }
+
+    /// [`Self::load_policy`] with `team` as its team layer: the joined one,
+    /// none, or a bundle `openmoat team update` compares with (ADR-119).
+    pub fn load_policy_with_team(&self, team: crate::team::Layer<'_>) -> Result<Policy> {
         let path = self.policy_path();
-        if let Some(bytes) = self.kept.get(&path) {
-            return self.with_merged(context::parse_policy(bytes.to_vec(), &path)?);
-        }
-        if !path.is_file() {
-            bail!("no policy at {}; run `openmoat init`", path.display());
-        }
-        self.load_policy_at(&path)
+        let policy = match self.kept.get(&path) {
+            Some(bytes) => context::parse_policy(bytes.to_vec(), &path)?,
+            None if !path.is_file() => {
+                bail!("no policy at {}; run `openmoat init`", path.display())
+            }
+            None => context::load_policy(&path)?,
+        };
+        self.with_layers(policy, team)
     }
 
     /// Load and lint the policy file at `path` as if it were installed, with
     /// `moat allow` rules merged in (`moat edit` checks its draft this way).
     pub fn load_policy_at(&self, path: &Path) -> Result<Policy> {
-        self.with_merged(context::load_policy(path)?)
+        self.with_layers(context::load_policy(path)?, crate::team::Layer::Joined)
     }
 
-    /// `policy` with the `moat allow` rules in force now and installed packs
-    /// merged in. A rule or directory grant whose `--for` ended, or whose window
-    /// cannot be read, is left out (ADR-007, amendment of 2026-11-08); the
-    /// clock is the only thing this adds to a load, no file.
-    fn with_merged(&self, mut policy: Policy) -> Result<Policy> {
+    /// `policy` with the `moat allow` rules in force now, installed packs and
+    /// the `team` layer merged in. A rule or directory grant whose `--for`
+    /// ended, or whose window cannot be read, is left out (ADR-007, amendment
+    /// of 2026-11-08); the clock is the only thing this adds to a load, no file.
+    fn with_layers(&self, mut policy: Policy, team: crate::team::Layer<'_>) -> Result<Policy> {
         let mut overlay = crate::approvals::Overlay::load_in(self)?.in_force(crate::time::now_ms());
         let merging = || format!("merging {}", self.overlay_path().display());
         merge_allow(&mut policy, std::mem::take(&mut overlay.allow)).with_context(merging)?;
         crate::packs::merge_installed(self, &mut policy)?;
+        // The team's managed layer (ADR-119): deny and review rules and the
+        // settings it requires, which only narrow; merged before the
+        // directory grants, so a grant leaves out what the team holds.
+        crate::team::merge(self, &mut policy, team)?;
         // A directory grant leaves out what this policy, packs included, holds
         // for review in it (ADR-007, amendment of 2026-11-07).
         let dirs = overlay.dir_rules(&policy, self).with_context(merging)?;

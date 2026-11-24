@@ -20,10 +20,33 @@ use serde_json::Value;
 
 use crate::{EventId, ExportedEvent, KnownSecrets, StoreError};
 
-pub use otlp::{Rejected, logs as otlp_logs, rejected as otlp_rejected};
+pub use otlp::{
+    Rejected, inventory as otlp_inventory, logs as otlp_logs, rejected as otlp_rejected,
+};
 
 /// The `format` of a webhook body; a new body shape gets a new value.
 pub const WEBHOOK_FORMAT: &str = "openmoat-delivery-v1";
+
+/// The `format` of a webhook body carrying an inventory (ADR-119).
+pub const INVENTORY_FORMAT: &str = "openmoat-inventory-delivery-v1";
+
+/// The webhook body of one machine's inventory: `{"format", "machine",
+/// "version", "sent_ms", "events"}`, the events its OCSF ones, masked by the
+/// caller. The CLI signs these exact bytes.
+pub fn webhook_inventory(
+    origin: Origin<'_>,
+    sent_ms: i64,
+    events: &[Value],
+) -> Result<Vec<u8>, StoreError> {
+    serde_json::to_vec(&serde_json::json!({
+        "format": INVENTORY_FORMAT,
+        "machine": origin.machine,
+        "version": origin.version,
+        "sent_ms": sent_ms,
+        "events": events,
+    }))
+    .map_err(StoreError::Encode)
+}
 
 /// Where a batch comes from: the machine's name in the person's delivery
 /// configuration and the sending build's version.

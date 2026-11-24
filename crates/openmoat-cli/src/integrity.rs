@@ -266,8 +266,10 @@ fn state_files(home: &Home) -> Vec<PathBuf> {
 /// Another re-pin keeps their pins and never adds them, so a file planted
 /// there is never trusted by a re-pin made for something else.
 pub fn signing_files(home: &Home) -> Vec<PathBuf> {
-    let mut files = vec![home.signers_path(), home.packs_path()];
+    let mut files = vec![home.signers_path(), home.packs_path(), home.team_path()];
     files.extend(crate::packs::installed_files(home));
+    // The joined team's bundle and key (ADR-119).
+    files.extend(crate::team::installed_files(home));
     files
 }
 

@@ -106,53 +106,76 @@ impl Ready {
         gaps: &[Gap],
         now_ms: i64,
     ) -> Result<Sent> {
-        let (body, content_type) = match sink.kind {
-            Kind::Otlp => (
-                delivery::otlp_logs(origin, now_ms, records, gaps)?,
-                "application/json",
-            ),
-            Kind::Webhook => (
-                delivery::webhook_body(origin, now_ms, records, gaps)?,
-                "application/json",
-            ),
+        let body = match sink.kind {
+            Kind::Otlp => delivery::otlp_logs(origin, now_ms, records, gaps)?,
+            Kind::Webhook => delivery::webhook_body(origin, now_ms, records, gaps)?,
         };
-        let mut headers: Vec<(&str, String)> = vec![("Content-Type", content_type.to_owned())];
+        let batch = batch_name(sink, records, gaps);
+        Ok(self.post(sink, origin, &body, now_ms, batch))
+    }
+
+    /// Send `events`, one machine's inventory as OCSF events already masked,
+    /// to `sink` in its format (ADR-119).
+    pub fn send_inventory(
+        &self,
+        sink: &Sink,
+        origin: Origin<'_>,
+        events: &[serde_json::Value],
+        now_ms: i64,
+    ) -> Result<Sent> {
+        let body = match sink.kind {
+            Kind::Otlp => delivery::otlp_inventory(origin, now_ms, events)?,
+            Kind::Webhook => delivery::webhook_inventory(origin, now_ms, events)?,
+        };
+        let batch = format!("{}-inventory-{now_ms:x}", sink.id);
+        Ok(self.post(sink, origin, &body, now_ms, batch))
+    }
+
+    /// POST `body` to `sink` with its headers, signed for a webhook.
+    fn post(
+        &self,
+        sink: &Sink,
+        origin: Origin<'_>,
+        body: &[u8],
+        now_ms: i64,
+        batch: String,
+    ) -> Sent {
+        let mut headers: Vec<(&str, String)> =
+            vec![("Content-Type", "application/json".to_owned())];
         headers.push(("User-Agent", format!("openmoat/{}", origin.version)));
         if let Some(key) = &self.key {
             headers.push((sign::TIMESTAMP, now_ms.to_string()));
             headers.push((
                 sign::SIGNATURE,
-                sign::signature(key.as_bytes(), now_ms, &body),
+                sign::signature(key.as_bytes(), now_ms, body),
             ));
-            headers.push((sign::DELIVERY, batch_name(sink, records, gaps)));
+            headers.push((sign::DELIVERY, batch));
         }
         let mut all: Vec<(&str, &str)> = headers.iter().map(|(n, v)| (*n, v.as_str())).collect();
         all.extend(self.headers.iter().map(|(n, v)| (n.as_str(), v.as_str())));
-        Ok(
-            match self.poster.post(&sink.endpoint, &all, &body, STEP_TIMEOUT) {
-                Ok(answer) if answer.accepted() => accepted(sink.kind, answer.body.as_deref()),
-                Ok(answer) if answer.status == TOO_LARGE => Sent::TooLarge,
-                Ok(answer) if answer.retryable() => Sent::Retry {
-                    why: format!("HTTP {}", answer.status),
-                    retry_after_s: answer.retry_after_s,
-                },
-                Ok(answer) => Sent::Refused {
-                    why: format!("HTTP {}", answer.status),
-                },
-                // Network and TLS failures may pass; a URL or address the
-                // client refuses will not.
-                Err(
-                    e @ (openmoat_proxy::PostError::Address { .. }
-                    | openmoat_proxy::PostError::PlainOffMachine { .. }
-                    | openmoat_proxy::PostError::Url(_)
-                    | openmoat_proxy::PostError::Header(_)),
-                ) => Sent::Refused { why: e.to_string() },
-                Err(e) => Sent::Retry {
-                    why: e.to_string(),
-                    retry_after_s: None,
-                },
+        match self.poster.post(&sink.endpoint, &all, body, STEP_TIMEOUT) {
+            Ok(answer) if answer.accepted() => accepted(sink.kind, answer.body.as_deref()),
+            Ok(answer) if answer.status == TOO_LARGE => Sent::TooLarge,
+            Ok(answer) if answer.retryable() => Sent::Retry {
+                why: format!("HTTP {}", answer.status),
+                retry_after_s: answer.retry_after_s,
             },
-        )
+            Ok(answer) => Sent::Refused {
+                why: format!("HTTP {}", answer.status),
+            },
+            // Network and TLS failures may pass; a URL or address the
+            // client refuses will not.
+            Err(
+                e @ (openmoat_proxy::PostError::Address { .. }
+                | openmoat_proxy::PostError::PlainOffMachine { .. }
+                | openmoat_proxy::PostError::Url(_)
+                | openmoat_proxy::PostError::Header(_)),
+            ) => Sent::Refused { why: e.to_string() },
+            Err(e) => Sent::Retry {
+                why: e.to_string(),
+                retry_after_s: None,
+            },
+        }
     }
 }
 

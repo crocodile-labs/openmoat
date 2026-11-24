@@ -61,6 +61,7 @@ mod start;
 )]
 mod state_acl;
 mod taint;
+mod team;
 mod terminal;
 mod time;
 mod trust;

@@ -2653,3 +2653,42 @@ openmoat policy remove team
 - All three commands must be run from a terminal, refuse while the lock shows drift, and
   are denied to agents by `kernel-self` (`openmoat policy *`). Without `ssh-keygen` they
   refuse with a message saying so; nothing else changes.
+
+## 12. The team's managed layer
+
+`openmoat team join` installs a team's signed bundle as a layer over your policy
+([TEAM.md](TEAM.md), ADR-119). Its rule files have a repository policy's shape (§10)
+without `allow`, signed through one manifest in the namespace `openmoat-team-bundle`.
+Every load of the policy merges the layers in this order:
+
+1. your `policy.yaml`;
+2. your `openmoat allow` rules in force;
+3. installed packs (§11);
+4. the team's layer: its deny rules join yours, its review rules join the list tried
+   before every allow rule (`team:<team>:<file>:<id>`), its `require:` raises the
+   level (§9.2), its `requests:` deny lists join yours (§2.3), and its `settings:`
+   raise yours to the stricter value;
+5. your directory grants, which leave out what any of the above holds for review;
+6. in a project, its repository policy (§10).
+
+So nothing in your own policy widens past the team's layer: a deny is absolute (§4),
+a team review is tried before your allow rules, `openmoat allow` rules and directory
+grants, and each setting is the stricter of yours and the team's:
+
+| `settings:` key | Its only accepted value | In force |
+|---|---|---|
+| `sandbox.strict` | `true` | on |
+| `sandbox.package_min_release_age_days` | 1 or more | the larger of yours and the team's; yours of 0 (off) counts as none |
+| `hooks.foreign` | `hold` | `hold` |
+| `unattended` | `review` | `review` |
+| `mcp.trust_first_sight` | `false` | off |
+| `mcp.allow_sampling` | `false` | off |
+
+The layer cannot allow anything: a rule file with an `allow` list, or a setting given
+its weaker value, does not parse. The manifest, its signature, the team's key, each rule
+file and `~/.moat/team.json` are pinned by the lock; a change after `team join` or
+`team update` is drift and every call is denied (`kernel-integrity`). `openmoat team
+update` refuses a bundle whose `serial` is not above the installed one, and waits for
+your answer when the new bundle widens your policy (§8.3). Team deny rules reach the
+host sandboxes at the next `openmoat sandbox sync`, as a pack's do; review rules are
+hook only.

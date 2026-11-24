@@ -12,6 +12,7 @@ mod gate;
 pub(crate) mod guard;
 mod hooks;
 mod init;
+mod inventory;
 mod mcp;
 mod miswired_hook;
 mod overview;
@@ -30,6 +31,7 @@ mod show;
 mod snapshot;
 mod status;
 mod team;
+mod team_mode;
 mod trust;
 mod uninstall;
 mod watch;
@@ -40,6 +42,7 @@ use anyhow::Result;
 use crate::cli::{
     ApprovalsCommand, AuditCommand, CaCommand, Cli, Command, DeliverCommand, GateCommand,
     HooksCommand, McpCommand, PolicyCommand, ProxyCommand, SandboxCommand, SecretCommand,
+    TeamCommand,
 };
 use crate::exit::Code;
 
@@ -146,6 +149,12 @@ pub fn run(cli: Cli) -> Result<Code> {
             GateCommand::Status => gate::status(),
             GateCommand::Remove => gate::remove(),
         },
+        Command::Team { command } => match command {
+            TeamCommand::Join(args) => team_mode::join(&args),
+            TeamCommand::Update(args) => team_mode::update(&args),
+            TeamCommand::Leave => team_mode::leave(),
+        },
+        Command::Inventory(args) => inventory::run(&args),
     }
 }
 

@@ -3950,6 +3950,28 @@
   threat: T9
   action: { shell: "script -q /dev/null openmoat hooks accept" }
   expect: { verdict: deny, rules: [kernel-self] }
+# `openmoat team join|update|leave` installs or removes a team's layer and re-pins the
+# lock; an agent that joined its own bundle or left the team's would choose its rules (ADR-119)
+- id: T9-agent-joins-a-team-bundle
+  threat: T9
+  action: { shell: "openmoat team join /tmp/bundle --signer 'me ssh-ed25519 AAAA'" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-leaves-the-team-by-path
+  threat: T9
+  action: { shell: "/usr/local/bin/openmoat team leave" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-updates-the-team-bundle-as-moat
+  threat: T9
+  action: { shell: "moat team update ~/src/other-bundle" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-script-wraps-openmoat-team-update
+  threat: T9
+  action: { shell: "script -q /dev/null openmoat team update" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-tmux-quoted-openmoat-team-leave
+  threat: T9
+  action: { shell: "tmux new-session -d 'openmoat team leave'" }
+  expect: { verdict: deny, rules: [kernel-self] }
 # `moat mcp accept` lets a changed or new MCP server run its tools; `wrap` and
 # `unwrap` rewrite what the agent host starts (ADR-026)
 - id: T9-agent-accepts-a-changed-mcp-server

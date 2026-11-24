@@ -61,6 +61,8 @@ struct SinkFile {
     headers: Vec<HeaderFile>,
     #[serde(default)]
     ca_file: Option<String>,
+    #[serde(default)]
+    inventory: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -121,6 +123,9 @@ pub struct Sink {
     pub headers: Vec<Header>,
     /// A CA to verify the endpoint with instead of the system's roots.
     pub ca_file: Option<PathBuf>,
+    /// Whether `openmoat inventory --deliver` sends this sink the machine's
+    /// inventory too (ADR-119); off unless the file says `inventory: true`.
+    pub inventory: bool,
 }
 
 /// The checked configuration.
@@ -270,6 +275,7 @@ fn check_sink(sink: SinkFile, home: &Home) -> Result<Sink> {
         secret,
         headers,
         ca_file,
+        inventory: sink.inventory,
     })
 }
 

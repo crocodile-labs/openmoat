@@ -65,8 +65,13 @@ impl Kept {
 /// its pin from the bytes that matched instead of from disk.
 pub fn verify_state(home: &Home, lock: &Lock) -> (Vec<Drift>, Home) {
     let mut files = super::state_files(home);
-    files.push(home.packs_path());
-    let (drift, kept) = lock.verify_keeping(&files, &[home.packs_dir()]);
+    files.extend([home.packs_path(), home.team_path()]);
+    let dirs = [
+        home.packs_dir(),
+        home.team_dir(),
+        crate::team::rules_dir(home),
+    ];
+    let (drift, kept) = lock.verify_keeping(&files, &dirs);
     (drift, home.keeping(kept))
 }
 

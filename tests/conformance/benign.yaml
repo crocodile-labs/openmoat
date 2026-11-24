@@ -1826,6 +1826,13 @@
 - id: benign-openmoat-status-plugins
   action: { shell: "openmoat status --format json" }
   expect: { verdict: defer, rules: [default] }
+# the inventory and its drift check read files only and stay the agent's to run (ADR-119)
+- id: benign-openmoat-inventory
+  action: { shell: "openmoat inventory --format ocsf" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-openmoat-inventory-check
+  action: { shell: "openmoat inventory --check ./team-bundle" }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-taskset-build
   action: { shell: "taskset -c 0 cargo build" }
   expect: { verdict: defer, rules: [default] }

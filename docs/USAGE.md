@@ -1168,6 +1168,19 @@ in the policy sets each rule to `deny`, `review` or `off`. With `--base`, a chan
 makes `.moat/policy.yaml` decide any call less strictly fails with `diff-widens`. The repository's `action.yml`
 runs it on GitHub ([MERGE_CHECK.md](MERGE_CHECK.md)).
 
+For rules and settings every machine of a team must have, the team publishes a signed
+bundle in a repository or a path its MDM tool manages, and each person joins it once.
+It only narrows: your own policy can make it stricter, never wider. `openmoat
+inventory` reports what a machine has, and `--check` exits 1 when it differs from the
+bundle, for a scheduled job ([TEAM.md](TEAM.md)):
+
+```bash
+openmoat team join ~/src/acme-openmoat --signer "security@acme.example ssh-ed25519 AAAA…"
+openmoat team update                                   # after the team publishes a newer one
+openmoat inventory --check ~/src/acme-openmoat         # 0 as required, 1 drift
+openmoat inventory --format ocsf                       # OCSF events for a fleet tool
+```
+
 ## MCP servers through the gateway
 
 The hook decides every MCP tool call an agent makes. `openmoat mcp proxy` also stands
@@ -1533,6 +1546,8 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat policy migrate [--file PATH] [--dry-run] [--yes]` | rewrite a policy in the current policy schema, changing no rule; keeps `<file>.before-migrate` (docs/POLICY.md §1.1) |
 | `openmoat policy trust-key <key.pub> --name <who>` | trust an SSH public key to sign policy packs (and signed repository policies, where the policy asks for them); signatures are made with `ssh-keygen -Y sign -n openmoat-pack` for a pack and `-n openmoat-repo-policy` for a repository policy |
 | `openmoat policy install <pack.yaml> [--sig <file>] [--name <name>]` · `openmoat policy remove <name>` | install a signed policy pack after its signature verifies; its rules apply as `pack:<name>:<id>` · take it out again |
+| `openmoat team join <folder> --signer "<name> <type> <base64>"` · `team update [<folder>]` · `team leave` | install a team's signed bundle as a layer over your policy that only narrows: its deny and review rules (`team:<team>:<file>:<id>`) and the settings it requires · install its newer bundle (a higher `serial`, verified against the team's key; a change that widens waits for your answer) · remove it after showing what that widens; person-only ([TEAM.md](TEAM.md)) |
+| `openmoat inventory [--format json\|ocsf]` · `--check <folder> [--format json]` · `--deliver` | this machine's agents, versions, hooks and their liveness, protection levels and scores, MCP servers with pins and package releases, policy and team, lock and latest checkpoint, redacted; reads files only · exit 1 when the machine differs from what the team's bundle requires, 64 when the bundle does not verify · send the OCSF events to the delivery sinks that say `inventory: true` ([TEAM.md](TEAM.md#inventory)) |
 | `openmoat sandbox show` · `openmoat sandbox sync` | see the host sandbox settings the policy compiles to · write and re-pin them for the agents whose hook is installed |
 | `openmoat bench [--host …] [--hook <command>] [--verbose] [--format json]` | send the bundled MoatBench scenarios to OpenMoat in a throwaway home, or to any hook command with `--hook` and `--host`, and print the scorecard; the scenarios' commands never run ([MOATBENCH.md](MOATBENCH.md#reproduce-it-openmoat-bench)) |
 | `openmoat bench --report [--host …] [--scratch-dir DIR] [--format json\|markdown]` | the proof report: each security promise per layer (policy decision, host model from OpenMoat's golden payloads, real host, OS sandbox, network boundary) as PASS, FAIL or NOT TESTED HERE with the reason; the OS rows run the attacks under `openmoat run` in the throwaway home; exits 1 when an exercised layer fails ([MOATBENCH.md](MOATBENCH.md#proof-report-openmoat-bench---report)) |
