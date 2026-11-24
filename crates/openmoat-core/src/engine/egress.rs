@@ -31,8 +31,15 @@ use crate::secret::Secret;
 use crate::{host, personal, shell, token};
 
 mod encoded;
+mod hostname;
 
 pub(super) use encoded::atoms as encoded_atoms;
+pub(super) use hostname::HOST_DATA_ATOM;
+
+/// First word of an atom for a known token or credential found only once an
+/// encoding of what is sent is undone (ADR-123): base64, hex, URL encoding,
+/// zero-width characters.
+const ENCODED_SECRET_ATOM: &str = "@encoded-secret";
 
 /// First word of an atom for a token sent to a host not its service's.
 const TOKEN_ATOM: &str = "@token-egress";
@@ -82,6 +89,19 @@ pub(super) fn atoms(
                 push(&mut out, PERSONAL_ATOM, class.id(), host);
             }
         }
+        for host in hosts.iter().filter(|h| hostname::carries_data(h)) {
+            let atom = AtomicAction::Shell {
+                argv: vec![HOST_DATA_ATOM.to_owned(), host.clone()],
+            };
+            if !out.contains(&atom) {
+                out.push(atom);
+            }
+        }
+        for text in &send.texts {
+            for (id, host) in encoded_secrets(text, &hosts) {
+                push(&mut out, ENCODED_SECRET_ATOM, id, host);
+            }
+        }
         for text in send.texts {
             for shape in token::shapes_in(text) {
                 for host in hosts.iter().filter(|h| !shape.owns(h)) {
@@ -113,12 +133,63 @@ pub(super) fn atoms(
     out
 }
 
-/// Whether `atom` is a `@pii-egress` or `@credential-egress` atom: it carries
-/// a verdict only where a rule names it, never the policy's defaults, so a
-/// policy without such a rule decides as it did before.
+/// Whether `atom` is a `@pii-egress`, `@credential-egress`, `@encoded-secret`
+/// or `@host-data` atom: it carries a verdict only where a rule names it,
+/// never the policy's defaults, so a policy without such a rule decides as it
+/// did before.
 pub(super) fn counts_where_named(atom: &AtomicAction) -> bool {
+    const NAMED: [&str; 4] = [
+        PERSONAL_ATOM,
+        CREDENTIAL_ATOM,
+        ENCODED_SECRET_ATOM,
+        HOST_DATA_ATOM,
+    ];
     matches!(atom, AtomicAction::Shell { argv }
-        if argv.first().is_some_and(|w| w == PERSONAL_ATOM || w == CREDENTIAL_ATOM))
+        if argv.first().is_some_and(|w| NAMED.contains(&w.as_str())))
+}
+
+/// The host of a `@host-data` atom, which counts only for a host no allow
+/// rule lists (ADR-123).
+pub(super) fn host_data(atom: &AtomicAction) -> Option<&str> {
+    match atom {
+        AtomicAction::Shell { argv } if argv.first().is_some_and(|w| w == HOST_DATA_ATOM) => {
+            argv.get(1).map(String::as_str)
+        }
+        _ => None,
+    }
+}
+
+/// Each known token or credential (its id) that `text` holds only once an
+/// encoding is undone ([`token::decode`]), with each of `hosts` it may not go
+/// to: not its service's, and for a credential not this machine.
+fn encoded_secrets<'h>(text: &str, hosts: &'h [String]) -> Vec<(&'static str, &'h str)> {
+    let plain: Vec<&str> = token::shapes_in(text)
+        .map(|s| s.id)
+        .chain(token::credentials::in_text(text).iter().map(|c| c.id))
+        .collect();
+    let mut out = Vec::new();
+    for decoded in token::decode::decoded(text) {
+        for shape in token::shapes_in(&decoded).filter(|s| !plain.contains(&s.id)) {
+            out.extend(
+                hosts
+                    .iter()
+                    .filter(|h| !shape.owns(h))
+                    .map(|h| (shape.id, h.as_str())),
+            );
+        }
+        for found in token::credentials::in_text(&decoded) {
+            if plain.contains(&found.id) {
+                continue;
+            }
+            let to = hosts
+                .iter()
+                .filter(|h| !found.owns(h) && !host::is_loopback(h));
+            out.extend(to.map(|h| (found.id, h.as_str())));
+        }
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
 }
 
 fn push(out: &mut Vec<AtomicAction>, first: &str, what: &str, host: &str) {

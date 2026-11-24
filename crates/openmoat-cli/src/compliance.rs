@@ -193,14 +193,17 @@ pub const GROUPS: &[Group] = &[
                a payment card number sent off the machine, a push that publishes a \
                secret, and hold for review what a session that read secret material sends out, \
                a send after it read private data and untrusted content, a send of what it \
-               packed or copied out of private files, and one MCP server's data sent through \
-               another server's acting tool",
+               packed or copied out of private files, one MCP server's data sent through \
+               another server's acting tool, a token hidden by an encoding, and encoded \
+               data in the name of a host no rule allows",
         covers: Covers::Rules(&[
             "token-egress",
             "placeholder-egress",
             "encoded-egress",
             "card-egress",
             "credential-egress",
+            "encoded-secret-egress",
+            "hostname-data",
             SESSION_TAINT,
             LETHAL_TRIFECTA,
             STAGING_EGRESS,

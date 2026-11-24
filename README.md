@@ -179,7 +179,9 @@ Which agents and operating systems each feature works with: [docs/FEATURES.md](d
 | Hidden or obfuscated commands, and PowerShell, are read | nothing to run: on by default after `openmoat policy upgrade` | [See it decide](#see-it-decide) |
 | A slow check is denied, never run unchecked | nothing to run: on by default | [docs/LIMITS.md](docs/LIMITS.md) |
 
-By risk: secrets read or sent, data sent to unlisted hosts, instructions planted in what
+By risk: secrets read or sent (also hidden by base64, hex or URL encoding, held for review:
+`openmoat policy check --kind fetch '<url>'` shows it), data sent to unlisted hosts or
+in a host name's labels, instructions planted in what
 the agent reads, a send after the same session read both private data and content someone
 else wrote (`lethal-trifecta`, held for review even to an allowed host), data packed or
 copied before it is sent (`staging-egress`), one MCP server's data sent through another
@@ -281,12 +283,13 @@ re-run, last published OpenMoat 0.19.0
 ([results](https://github.com/crocodile-labs/moatbench/tree/main/runs/2026-11-09-openmoat-0.19.0)).
 
 **Attack sets written by others (decision engine, default policy).** 0.25.0 → 0.26.0
-(the rules this measurement led to, ADR-112) → 0.27.0:
+(the rules this measurement led to, ADR-112) → 0.27.0 → the next release (ADR-123:
+secrets hidden by an encoding and data in host names, held for review):
 
 | Benchmark | Cases | Denied | Denied or held | Allowed | False positives |
 |---|--:|--:|--:|--:|--:|
-| RedCode-Exec (inline code that acts on the machine) | 900 | 19.8% → 22.1% → 22.1% | 50.0% → 68.9% → 69.1% | 0 | – |
-| agent-egress-bench | 122 of 192 | 47.5% → 50.0% → 50.0% | 47.5% → 54.1% → 54.9% | 1 | 12 of 37 in each |
+| RedCode-Exec (inline code that acts on the machine) | 900 | 19.8% → 22.1% → 22.1% → 22.1% | 50.0% → 68.9% → 69.1% → 69.1% | 0 | – |
+| agent-egress-bench | 122 of 192 | 47.5% → 50.0% → 50.0% → 50.0% | 47.5% → 54.1% → 54.9% → 68.9% | 1 | 12 of 37 in each |
 
 The same RedCode-Exec code written to a file and then run is left to the OS sandbox; the
 denied false positives are all hosts the policy does not list. Every case not stopped is

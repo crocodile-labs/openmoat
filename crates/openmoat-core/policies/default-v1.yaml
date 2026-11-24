@@ -1722,6 +1722,29 @@ review:
     title: sending a login token or a database password off this machine
     why: whoever receives it can sign in as you, or into that database
     shell: ["@credential-egress *"]
+  # `@encoded-secret <kind> <host>` atoms (ADR-123): a token `token-egress` knows or a
+  # credential `credential-egress` knows, found only once what is sent is decoded (URL
+  # encoding once or more, base64 or base64url, hex with or without `-` or `:` between
+  # bytes, zero-width characters between letters, up to four layers), going to a host
+  # that is not its own; loopback is left out for credentials as above. Held for review,
+  # not denied: the decoded text is a reading of what is sent, and the same shapes are
+  # matched in it as in plain text (POLICY.md §3)
+  - id: encoded-secret-egress
+    reason: sends a token or password hidden by an encoding to a host that is not its own
+    title: sending a token or password hidden by an encoding
+    why: an encoding hides a secret from a reader, not from whoever receives it
+    shell: ["@encoded-secret *"]
+  # `@host-data <host>` atoms (ADR-123), only for a host no allow rule lists: a host
+  # whose labels below its last two are hex or base32 of 16 characters or more, 24 or
+  # more letters and digits with four of each, or two or more hex or base32 labels of
+  # 8 or more holding 24 together (`<hex>.exfil.example`). Looking the name up hands
+  # those labels to the domain's name server before any connection, so a `GET` the
+  # policy leaves to the agent sends them too
+  - id: hostname-data
+    reason: sends what looks like encoded data in a host name to a host no rule allows
+    title: sending data in a host name
+    why: looking a name up hands its labels to that domain's name server, before any connection is made
+    shell: ["@host-data *"]
   # Staging (ADR-061, accepted by ADR-113). `@staging-egress <host> <trigger>`
   # atoms on a send of a session that collected data: `staged`, the send names a
   # file the session packed or encoded from files outside the project (`tar czf

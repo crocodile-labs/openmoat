@@ -227,6 +227,7 @@ fn starts_with(chars: &[char], prefix: &str) -> bool {
 }
 
 pub mod credentials;
+pub(crate) mod decode;
 
 #[cfg(test)]
 mod tests;

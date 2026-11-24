@@ -3,6 +3,7 @@ mod defer;
 mod executed;
 mod fetch;
 mod glob;
+mod hidden;
 mod installs;
 mod labels;
 mod moved_dirs;

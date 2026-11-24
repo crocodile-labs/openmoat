@@ -96,6 +96,8 @@ fn the_upgrade_from_the_0_24_default_only_narrows() {
             ("deny", "secrets-paths", "changed"),
             ("review", "credential-egress", "added"),
             ("review", "data-flow", "added"),
+            ("review", "encoded-secret-egress", "added"),
+            ("review", "hostname-data", "added"),
             ("review", "obfuscated", "added"),
             ("review", "staging-egress", "added"),
             ("review", "stops-system", "added"),

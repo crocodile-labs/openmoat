@@ -3255,3 +3255,38 @@
     - mcp_tool: mcp__tickets__get_issue
   action: { fs_write: "/p/src/lib.rs" }
   expect: { verdict: allow, rules: [project-fs] }
+# ADR-123: what decodes to no secret, a token going to its own service, and hosts
+# whose labels are names or short ids stay as they were
+- id: benign-bench-cdn-host
+  action: { fetch: "https://cdn.fixture.example.com/ajax/libs/lodash.js/4.17.21/lodash.min.js" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-cloudfront-distribution-host
+  action: { fetch: "https://d111111abcdef8.cloudfront.net/assets/app.js" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-project-ref-host
+  action: { fetch: "https://abcdefghijklmnopqrst.supabase.co/rest/v1/items" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-deploy-preview-host
+  action: { fetch: "https://5f3c2b1a0d9e8f7a6b5c4d3e--site.netlify.app/" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-codespace-port-host
+  action: { fetch: "https://fuzzy-space-waffle-5g4rxj9p7wc7xyz-3000.app.github.dev/" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-base64-json-cursor-in-query
+  why: a page cursor in base64 decodes to JSON with no secret in it
+  action: { fetch: "https://api.example.com/items?cursor=eyJwYWdlIjoyLCJzb3J0IjoibmFtZSJ9" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-bench-data-url-image-in-query
+  action: { fetch: "https://api.fixture.example.com/upload?format=png&data=data%3Aimage%2Fpng%3Bbase64%2CiVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAABlklEQVR4" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-sha256-and-uuid-in-path
+  action: { fetch: "https://example.test/a/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855/u/550e8400-e29b-41d4-a716-446655440000" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-presigned-url-key-id-to-aws
+  why: an AWS key id URL-encoded in a presigned URL goes to AWS, its own service
+  action: { fetch: "https://bucket.s3.amazonaws.com/f.txt?X-Amz-Credential=AKIA0000FAKE0000TEST%2F20260101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-basic-auth-token-to-github
+  why: a GitHub token in a base64 Basic header goes to GitHub
+  action: { shell: "curl -s -H 'Authorization: Basic eC1hY2Nlc3MtdG9rZW46Z2hwX0ZBS0VmYWtlMDAwMEZBS0VmYWtlMDAwMA==' https://api.github.com/user" }
+  expect: { verdict: defer, rules: [default] }
