@@ -1,4 +1,0 @@
-### Changed
-- `openmoat init` asks about sandboxed start per agent, showing the protection score it has and would have (`hook only 0/100 → openmoat run 100/100`); the answer is still no unless you type `y`, and `--yes` and `--format json` ask nothing ([#0](https://github.com/crocodile-labs/openmoat/pull/0)).
-- `openmoat status` and `openmoat doctor` show each hook-only agent's protection score in its `Agents` row, `protection 0/100` for the hook alone (`score` in `--format json`) ([#0](https://github.com/crocodile-labs/openmoat/pull/0)).
-- `openmoat status` and `openmoat doctor` say once, in one short line, why `openmoat run` has no sandbox on this system (such as a macOS before 13) when several agents share the reason, instead of the whole reason under each agent ([#0](https://github.com/crocodile-labs/openmoat/pull/0)).

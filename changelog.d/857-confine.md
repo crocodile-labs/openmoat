@@ -1,0 +1,3 @@
+### Added
+- OpenClaw's Gateway can run under `openmoat run`: `openmoat run --listen PORT` lets the sandbox bind and accept on that one port on loopback alone (Seatbelt on macOS; Landlock and a forward into the agent's network namespace on Linux; refused without a namespace and on Windows), and `openmoat status` prints `openmoat run --listen 18789 --write ~/.openclaw -- openclaw gateway`, with the port found as OpenClaw finds it ([#857](https://github.com/crocodile-labs/openmoat/pull/857)).
+- `openmoat confine <agent>…|--all` makes typing a hook-only agent's name start it in `openmoat run`'s sandbox, and `openmoat confine --off` takes that back; person-only ([#857](https://github.com/crocodile-labs/openmoat/pull/857)).
