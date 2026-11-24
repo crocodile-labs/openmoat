@@ -952,6 +952,14 @@ setting cannot make a token restricted.
 `openmoat mcp wrap` does not put MCP servers under this tier by default (most start
 through `npx`, a batch file); `openmoat mcp wrap --sandbox` asks for it.
 
+**Why the network and reads are not held yet** ([ADR-124](adr/ADR-124-windows-network-and-reads-not-yet.md)).
+Adding a Windows Filtering Platform filter needs administrator rights, which `openmoat
+run` does not have, and no documented filter condition picks out one run's processes
+under a write-restricted token. That token is checked on writes only, so it cannot deny
+a read without denying the person too. Both wait for an opt-in setup, done once by an
+administrator, that starts the agent as a dedicated local account. Until then the score
+stays at most 55, and `sandbox.strict: true` refuses a Windows run.
+
 ## `openmoat run --isolate` (Isolated tier, Linux)
 
 On Linux the Isolated tier runs the agent in its own view of the machine, built with
