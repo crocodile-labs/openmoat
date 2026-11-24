@@ -324,6 +324,80 @@ fn a_removal_nothing_covers_is_still_fewer_interruptions() {
     );
 }
 
+/// 0.26.0 → 0.27.0 as the maintainer met it: 15 `kernel-self` lines gained
+/// `team` in their `{…}` list. That is one broadening, shown once under "New
+/// protections", never as 15 patterns no longer denied.
+#[test]
+fn a_list_that_gained_an_entry_is_one_broadening_not_a_removal() {
+    let v0_26_0 = include_str!("default-v0.26.0.yaml").replace("\r\n", "\n");
+    let after = openmoat_core::DEFAULT_POLICY.replace("\r\n", "\n");
+    let summary = summarise(&v0_26_0, &after, &[], false);
+    let mut shown = Vec::new();
+    summary.write(&mut shown).unwrap();
+    let shown = String::from_utf8(shown).unwrap();
+    println!("{shown}");
+    assert!(
+        summary.fewer.iter().all(|l| !l.contains("kernel-self")),
+        "{shown}"
+    );
+    assert!(!shown.contains("no longer denies"), "{shown}");
+    assert!(
+        summary
+            .protections
+            .contains(&"`kernel-self`: 15 patterns now also cover `team`".to_owned()),
+        "{shown}"
+    );
+    // The two `team join|update|leave` lines are new, not broadenings.
+    assert!(
+        summary
+            .protections
+            .contains(&"`kernel-self` now also denies 2 patterns".to_owned()),
+        "{shown}"
+    );
+}
+
+/// A true removal stays one, beside a broadening in the same group; a
+/// broadened allow pattern and a broadened exception go where they lead.
+#[test]
+fn a_removal_beside_a_broadening_is_still_named() {
+    let before = "version: 1
+deny:
+  - id: self
+    shell: [\"x {allow,trust}*\", \"y {a,b}*\", \"z *\"]
+allow:
+  - id: tools
+    shell: [\"git {status,log}\"]
+    fs.write: [\"${project}/**\", \"!${project}/{.git}/**\"]
+";
+    let after = "version: 1
+deny:
+  - id: self
+    shell: [\"x {allow,team,trust}*\", \"y {a,c}*\"]
+allow:
+  - id: tools
+    shell: [\"git {status,log,diff}\"]
+    fs.write: [\"${project}/**\", \"!${project}/{.git,.vscode}/**\"]
+";
+    let summary = summarise(before, after, &[], false);
+    assert_eq!(
+        summary.protections,
+        [
+            "`self`: 1 pattern now also covers `team`",
+            "`self` now also denies `y {a,c}*`",
+            "`tools`: 1 exception now also covers `.vscode`",
+        ],
+        "{summary:?}"
+    );
+    assert_eq!(
+        summary.fewer,
+        [
+            "`self` no longer denies `y {a,b}*`, `z *`",
+            "`tools`: 1 pattern now also covers `diff`",
+        ],
+        "{summary:?}"
+    );
+}
+
 #[test]
 fn comments_are_read_as_yaml_reads_them() {
     assert_eq!(strip_comment("  - id: x # note"), "  - id: x ");

@@ -28,6 +28,11 @@ pub enum PolicyCommand {
     /// line you changed; shows the diff and asks first. An upgrade that moves a call toward
     /// allow is listed case by case and applied only with --accept-widening (exit 3
     /// without it). Refused unless run from an interactive terminal, except with --dry-run.
+    #[command(
+        after_help = "Example: openmoat policy upgrade --dry-run   (what the new default \
+                            adds, grouped; changes nothing)\n\
+                            Docs: https://github.com/crocodile-labs/openmoat/blob/main/docs/USAGE.md#after-upgrading-openmoat"
+    )]
     Upgrade(UpgradeArgs),
     /// Rewrite a policy file in the current policy schema (`version:`), changing no rule:
     /// shows the diff, asks, and keeps the previous file beside it. Refused unless run from

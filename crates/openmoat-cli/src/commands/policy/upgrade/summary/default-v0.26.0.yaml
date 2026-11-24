@@ -1,0 +1,1784 @@
+# OpenMoat default policy, schema v1 (docs/POLICY.md).
+# Evaluation: deny → allow → review → defer → defaults. Strictest verdict wins across
+# the atomic actions of one tool call. `${project}` is the trusted project root.
+# `defer` leaves the call to the agent's own permission prompt (ADR-025): OpenMoat
+# denies what must never happen and stays quiet about the rest.
+# Deny rules are absolute (allow can never override them), so deny-by-default
+# for a whole kind is expressed via `defaults`, with allow rules as the holes.
+version: 1
+defaults:
+  "*": defer         # no rule matched: the agent's own permission prompt decides (ADR-025)
+  net: deny          # outbound network: only hosts listed under allow
+  fetch: defer       # a host fetch tool (WebFetch) reading an unlisted URL: no request body (ADR-017)
+  web.search: allow  # a host search tool (WebSearch): recorded; needs review after a secret read (session taint)
+  tool.unknown: defer  # a host tool OpenMoat cannot classify; what its arguments name is checked too
+
+deny:
+  - id: secrets-paths
+    reason: secret material
+    title: reading or changing your keys and credential files
+    why: a key or token that leaves this machine cannot be taken back
+    fs.read: &secret-paths
+      - "~/.ssh/**"
+      - "~/.aws/**"
+      - "~/.gnupg/**"
+      - "~/.config/gh/**"
+      - "~/.netrc"
+      # netrc-style logins of Emacs and other tools, plain or encrypted
+      - "~/.authinfo"
+      - "~/.authinfo.gpg"
+      - "~/.docker/config.json"
+      # Podman, Buildah and Skopeo registry logins. The copy under
+      # $XDG_RUNTIME_DIR is left out: a glob there makes Codex's Linux sandbox
+      # scan /run/user, which fails on directories it cannot read.
+      - "~/.config/containers/auth.json"
+      # the DigitalOcean CLI's API token
+      - "~/.config/doctl/config.yaml"
+      - "~/.kube/**"
+      - "~/.config/gcloud/**"
+      - "~/.azure/**"
+      # package-registry and git credential stores
+      - "~/.git-credentials"
+      - "~/.npmrc"
+      - "~/.pypirc"
+      - "~/.cargo/credentials"
+      - "~/.cargo/credentials.toml"
+      - "~/.gem/credentials"
+      # database client passwords, Vault and Terraform tokens
+      - "~/.pgpass"
+      - "~/.my.cnf"
+      - "~/.mylogin.cnf"
+      - "~/.vault-token"
+      - "~/.terraform.d/credentials.tfrc.json"
+      # password managers and keyrings: 1Password CLI, pass, GNOME Keyring
+      - "~/.config/op/**"
+      - "~/.password-store/**"
+      - "~/.local/share/keyrings/**"
+      # shell history holds pasted tokens and passwords
+      - "~/.zsh_history"
+      - "~/.bash_history"
+      - "**/.env"
+      - "**/.env.*"
+      - "**/.envrc"
+      # committed templates of .env carry no values
+      - "!**/.env.example"
+      - "!**/.env.sample"
+      - "!**/.env.template"
+      - "!**/.env.dist"
+      - "!**/.env.*.example"
+      - "!**/.env.*.sample"
+      - "!**/.env.*.template"
+      - "~/Library/Keychains/**"
+      # the system's password hashes (Linux `shadow`, `gshadow`, their `-` backups
+      # and PAM's old passwords; BSD and macOS `master.passwd`) and the SSH
+      # server's host private keys, whose `.pub` halves stay readable; on macOS
+      # `/etc` is `/private/etc`. `/etc/passwd` is world-readable and not listed
+      - "/etc/{shadow,shadow-,gshadow,gshadow-,master.passwd,security/opasswd}"
+      - "/private/etc/{shadow,shadow-,gshadow,gshadow-,master.passwd,security/opasswd}"
+      - "/etc/ssh/ssh_host_{rsa,dsa,ecdsa,ed25519}_key"
+      - "/private/etc/ssh/ssh_host_{rsa,dsa,ecdsa,ed25519}_key"
+    fs.write: *secret-paths
+    # commands that print a stored token or password
+    shell:
+      - "{gh,*/gh} auth token*"
+      - "{gh,*/gh} auth status * --show-token*"
+      - "{gh,*/gh} auth status * -t*"
+      - "{gh,*/gh} auth status {--show-token,-t}*"
+      - "{gcloud,*/gcloud} auth print-access-token*"
+      - "{gcloud,*/gcloud} auth print-identity-token*"
+      - "{gcloud,*/gcloud} auth application-default print-access-token*"
+      - "{az,*/az} account get-access-token*"
+      - "{aws,*/aws} configure export-credentials*"
+      - "{aws,*/aws} configure get *secret*"
+      # `--raw` prints the kubeconfig's tokens and keys, which it otherwise redacts
+      - "{kubectl,*/kubectl} * config view * --raw*"
+      - "git credential fill*"
+      - "git credential-* get*"
+      - "{security,*/security} find-{generic,internet}-password -{w,g}*"
+      - "{security,*/security} find-{generic,internet}-password * -{w,g}*"
+      - "{security,*/security} dump-keychain*"
+      # the Linux keyring's equivalent (libsecret), where GitHub Copilot CLI,
+      # Gemini CLI and Codex keep their logins when they use it
+      - "{secret-tool,*/secret-tool} lookup*"
+      # Vault secrets and the stored Vault token, 1Password values, Heroku's token
+      - "{vault,*/vault} kv get*"
+      - "{vault,*/vault} read*"
+      - "{vault,*/vault} print token*"
+      - "{op,*/op} read*"
+      - "{op,*/op} item get * --reveal*"
+      - "{heroku,*/heroku} auth:token*"
+      # `pass NAME` shows a password like `pass show NAME`, `pass grep` prints
+      # decrypted lines; the commands that only list, add, move or remove entries
+      # (and `pass` alone, which lists them) print no password
+      - "{pass,*/pass} ?*"
+      - "!{pass,*/pass} {ls,list,find,search,init,insert,add,rm,remove,delete,mv,rename,cp,copy,git,help,version,--help,-h,--version}"
+  # Maven and Gradle settings: repository passwords, signing keys, tokens. Not in
+  # secrets-paths, whose paths the OS sandboxes deny too: `mvn` and `gradle` run
+  # inside them must read these files. `hook_only` (ADR-034) denies the agent's own
+  # reads and writes (a shell command naming them, file and MCP tools) and leaves
+  # the sandboxes as they are; the build commands themselves keep their verdict.
+  - id: build-credentials
+    reason: build tool credentials
+    title: reading or changing your build tools' credentials
+    why: these files hold the passwords and tokens that publish under your name
+    hook_only: true
+    fs.read: &build-credentials
+      - "~/.m2/settings.xml"
+      - "~/.m2/settings-security.xml"
+      - "~/.gradle/gradle.properties"
+    fs.write: *build-credentials
+  # Kerberos ticket caches where MIT Kerberos and Heimdal keep them by default, a
+  # file or a directory collection: with one anyone can act as you on the network
+  # services it covers. `hook_only` (ADR-034) for the host sandboxes, which cannot
+  # deny a glob inside the temp folder they grant (Codex's Linux sandbox lists
+  # every folder below a deny glob, Cursor's would lose `/tmp`); `openmoat run`
+  # applies it in its own sandbox and adds the cache `KRB5CCNAME` names
+  - id: kerberos-tickets
+    reason: a Kerberos ticket cache
+    title: reading or changing your Kerberos tickets
+    why: with a ticket anyone can act as you on the services it covers
+    hook_only: true
+    fs.read: &kerberos-tickets
+      - "/tmp/krb5cc_*"
+      - "/tmp/krb5cc_*/**"
+    fs.write: *kerberos-tickets
+  # Where each supported agent keeps its login, provider keys and OAuth tokens.
+  # The hook denies the agent's own tools reading or writing them (a shell
+  # command naming them, file and MCP tools), and every OS sandbox denies them
+  # to the commands the agent runs (ADR-054). The agents' own sandboxes confine
+  # only those commands, so the agent itself still signs in; under `openmoat run`
+  # the agent runs inside the sandbox, which keeps that agent's own login
+  # readable and denies the others'. The paths are generated from each agent's
+  # spec (`crates/openmoat-hosts/tests/protect.rs`); a moved agent directory
+  # (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, …) is followed as for `kernel-self`
+  - id: agent-credentials
+    reason: an AI agent's own login, API keys or OAuth tokens
+    title: reading or changing an AI agent's login or API keys
+    why: with them anyone can act as that agent, on your account
+    fs.read: &agent-credentials
+      # Claude Code: its login where it keeps it in a file (Linux and Windows, and
+      # macOS when the Keychain refuses it) and the Anthropic profiles `ant auth
+      # login` writes (docs: Authentication, Credential management)
+      - "~/.claude/.credentials.json"
+      - "~/.config/{anthropic,anthropic/**}"
+      # Codex: its login (ChatGPT tokens or API key) and the file its MCP OAuth
+      # tokens fall back to without a keyring (`codex-rs/login/src/auth/storage.rs`,
+      # `rmcp-client/src/oauth.rs`)
+      - "~/.codex/{auth.json,.credentials.json}"
+      # Continue CLI: the hub login older releases kept (`src/auth/workos.ts`) and
+      # the MCP sign-ins of `mcp-remote`, which `cn` starts for a remote server that
+      # asks for one (`src/services/MCPService.ts`)
+      - "~/.continue/auth.json"
+      - "~/.mcp-auth/**"
+      # OpenClaw: the databases of model sign-ins and MCP OAuth sessions, the
+      # channel credentials, the file secret store and the older sign-in files
+      # (`docs/gateway/security/secrets-and-storage.md`; its `.env` is
+      # `secrets-paths`')
+      - "~/.openclaw/{state/openclaw.sqlite*,agents/*/agent/openclaw-agent.sqlite*,agents/*/agent/auth.json,agents/*/agent/codex-home,agents/*/agent/codex-home/**,credentials,credentials/**,secrets.json,auth-profiles.json,auth-state.json,mcp-oauth,mcp-oauth/**}"
+      # GitHub Copilot CLI: `config.json`, where its login goes when there is no
+      # keychain, and the fallback stores of MCP sign-ins and MCP secrets
+      # (docs: Authenticate Copilot CLI, config-dir reference)
+      - "~/.copilot/{config.json,mcp-oauth-config,mcp-oauth-config/**,mcp-secrets,mcp-secrets/**}"
+      # pi: its provider keys and OAuth tokens, the API keys `models.json` may
+      # hold and its MCP sign-ins (`packages/coding-agent/src/config.ts`,
+      # `docs/models.md`, `src/extensions/mcp/oauth.ts`)
+      - "~/.pi/agent/{auth.json,models.json,mcp-auth.json}"
+      # Gemini CLI: its Google sign-in, the MCP and A2A OAuth tokens (in
+      # `~/.cache/.gemini` under the macOS Seatbelt sandbox) and the file its
+      # keychain falls back to, whose key the agent could derive
+      # (`core/src/config/storage.ts`, `services/fileKeychain.ts`)
+      - "~/.gemini/{oauth_creds.json,mcp-oauth-tokens.json,a2a-oauth-tokens.json,gemini-credentials.json}"
+      - "~/.cache/.gemini/{mcp-oauth-tokens.json,a2a-oauth-tokens.json}"
+      # OpenCode: its provider keys and OAuth tokens, its MCP sign-ins and the
+      # database holding its account tokens, in its data directory on every OS
+      # (`packages/opencode/src/auth/index.ts`, `mcp/auth.ts`,
+      # `core/src/database/database.ts`; `XDG_DATA_HOME` moving it is not followed)
+      - "~/.local/share/opencode/{auth.json,mcp-auth.json,opencode*.db*}"
+      # Hermes Agent: the secret files and folders its own file tools refuse
+      # (`agent/file_safety.py`; its `.env` is `secrets-paths`'), in its home and
+      # in each profile; its terminal tool reaches them, which this rule closes
+      - "~/.hermes/{auth.json,auth.lock,.anthropic_oauth.json,webhook_subscriptions.json,auth/google_oauth.json,cache/bws_cache.json,mcp-tokens,mcp-tokens/**,vault,vault/**,webapp,webapp/**,browser-profile,browser-profile/**,profiles/*/auth.json,profiles/*/.anthropic_oauth.json,profiles/*/webhook_subscriptions.json,profiles/*/auth/google_oauth.json,profiles/*/cache/bws_cache.json,profiles/*/mcp-tokens,profiles/*/mcp-tokens/**,profiles/*/vault,profiles/*/vault/**,profiles/*/webapp,profiles/*/webapp/**,profiles/*/browser-profile,profiles/*/browser-profile/**}"
+      # Cline: the provider keys the CLI stores and its connectors' credentials
+      # (`resolveProviderSettingsPath`, `resolveConnectorsDbPath` in
+      # `sdk/packages/shared/src/storage/paths.ts`)
+      - "~/.cline/data/{settings/providers.json,db/connectors.db}"
+      # goose: the provider keys it keeps in a file when the keyring is off
+      # (`GOOSE_DISABLE_KEYRING`; `config/base.rs`)
+      - "~/.config/goose/secrets.yaml"
+      # Antigravity CLI: the MCP OAuth tokens (`/docs/mcp`). The account's
+      # sign-in is in the OS keyring (`/docs/install`), not a file
+      - "~/.gemini/antigravity/mcp_oauth_tokens.json"
+      # Qwen Code: its Qwen OAuth sign-in (the file name Gemini CLI uses, not
+      # verified)
+      - "~/.qwen/oauth_creds.json"
+      # Crush: the data directory's `crush.json`, which can hold providers' API keys
+      - "~/.local/share/crush/crush.json"
+    fs.write: *agent-credentials
+    # the agents' commands that print a stored key or token: pi's, and OpenCode
+    # 2's export of every stored credential
+    shell:
+      - "{pi,*/pi} auth print-api-key*"
+      - "{pi,*/pi} auth print-bearer-token*"
+      - "{opencode,*/opencode,opencode2,*/opencode2} auth export*"
+  - id: env-secrets
+    reason: secret environment variable
+    title: reading a secret environment variable
+    why: its value is a credential, and once printed it stays in the agent's context
+    env.read: ["*_KEY", "*_TOKEN", "*_SECRET", "*_PASSWORD", "AWS_*", "GITHUB_TOKEN", "NPM_TOKEN",
+      # passwords and connection strings that carry one; other `*_URL`s are not secret
+      "*_PASS", "*_PASSWD", "*_PWD", "PGPASSWORD", "*_CREDENTIALS", "*_DSN",
+      "DATABASE_URL", "*_DATABASE_URL", "REDIS_URL", "MONGODB_URI", "MONGO_URL"]
+  - id: env-dump
+    reason: prints every environment variable, secrets included
+    title: printing every environment variable
+    why: the output includes every secret the environment holds
+    shell:
+      - "env $"
+      - "env -0 $"
+      - "env --null $"
+      - "*/env $"
+      - "printenv $"
+      - "printenv -0 $"
+      - "printenv --null $"
+      - "*/printenv $"
+      - "set $"
+      - "export $"
+      - "export -p $"
+      - "declare $"
+      - "declare -p $"
+      - "declare -x $"
+      - "typeset $"
+      - "typeset -p $"
+      - "typeset -x $"
+      # `@proc-environ <path>` atoms: a read of `/proc/<pid>/environ`
+      - "@proc-environ *"
+      # `@process-environ <program> <word>` atoms: `ps` or `pargs` asked to print
+      # other processes' environments (`ps eww`, `ps -E`, `pargs -e`; not
+      # `ps -e`, every process; shell/process_env.rs)
+      - "@process-environ *"
+      # `@env-dump <expression>` atoms: inline interpreter code that reads the
+      # whole environment (`print(os.environ)`, `console.log(process.env)`)
+      - "@env-dump *"
+  - id: env-poison
+    reason: changes how later commands resolve or load code
+    title: changing how later commands find or load code
+    why: a changed PATH, preload or editor makes later commands run other code
+    # the classifier leaves out an assignment whose value changes nothing: an editor
+    # set to `true`, `:` or `cat`, and `PATH` kept as `$PATH` or set to system
+    # directories only (`shell/tokens.rs`)
+    # `CURL_HOME`, `XDG_CONFIG_HOME` and `WGETRC` move the configuration files curl and
+    # wget read on every run (`.curlrc`, `wgetrc`), which can add a body or an upload to
+    # a download the hook sees as a plain fetch (ADR-035); `shell-rc` denies writing the
+    # files in their usual place. `XDG_CONFIG_HOME` also moves git's `config`
+    env.set: ["PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_*", "NODE_OPTIONS", "PYTHONPATH", "GIT_*", "EDITOR", "VISUAL", "BASH_ENV", "ENV", "PROMPT_COMMAND", "MOAT_*",
+      "CURL_HOME", "XDG_CONFIG_HOME", "WGETRC", "SYSTEM_WGETRC"]
+  - id: pipe-to-shell
+    reason: executes remote or decoded content
+    title: running downloaded or decoded code
+    why: what runs is not what anyone read
+    # a pipeline whose consumer runs its stdin as its program is also reported
+    # as `<stages> | <interpreter>` with the consumer's options dropped
+    # (shell/commands/pipelines.rs; `source`/`.` of stdin and `xargs <interpreter>`
+    # count), so `$` matches it whatever they are, and not an interpreter given
+    # its program on the line (`| python3 -c CODE`, `| node -e CODE`), which
+    # reads the stream as data
+    shell:
+      - "curl * | {sh,bash,zsh,dash,ksh,fish,source,.} $"
+      - "curl * | {python*,node,perl,ruby,php,deno,bun,pwsh} $"
+      - "wget * | {sh,bash,zsh,dash,ksh,fish,source,.} $"
+      - "wget * | {python*,node,perl,ruby,php,deno,bun,pwsh} $"
+      # decoder stages are reported as a canonical `<decoder> -d | <interpreter>` pipeline
+      - "* -d | {sh,bash,zsh,dash,ksh,fish,source,.} $"
+      - "* -d | {python*,node,perl,ruby,php,deno,bun,pwsh} $"
+      - "eval *"
+  - id: destructive
+    reason: irreversible damage
+    title: something that cannot be undone
+    why: it erases work, history or a disk, or runs as the administrator, with no way back
+    # removing, moving or replacing the home directory or the root itself, however the
+    # command spells the path (`~/`, `$HOME`, `${HOME}`, `/Users/me/`, `~/x/..`); paths
+    # below them are not matched
+    # and the raw disks under `/dev`, which no build writes
+    fs.write: ["~", "/", "/dev/disk*", "/dev/rdisk*", "/dev/sd*", "/dev/nvme*", "/dev/mmcblk*", "/dev/vd*", "/dev/xvd*"]
+    shell:
+      # what that cannot see: an unexpanded `*` operand (the shell expands it to every
+      # entry) and `//` (canonicalised as a network root); shell-only, so no OS layer
+      # receives these spellings (`[{]`, `[}]` and `[*]` are literal characters)
+      - "rm * {//,/[*],~/[*],$HOME/[*],$[{]HOME[}]/[*]}"
+      - "rm -rf --no-preserve-root*"
+      # git takes an unambiguous prefix of a long option (`--del` is `--delete`), so
+      # `--for*` and `--de*`: no other `git push` option starts with either
+      - "git push --for*"
+      - "git push -f*"
+      # a `+` refspec, and force flags after the remote or bundled with other short options
+      - "git push * +*"
+      - "git push * --for*"
+      - "git push * -f*"
+      - "git push * -[!o-]*f*"
+      # deleting a remote branch: an empty source refspec (`:main`), `--delete`, `-d`
+      - "git push * :?*"
+      - "git push * --de*"
+      - "git push * -d*"
+      - "git push * -[!o-]*d*"
+      - "git reset --hard*"
+      - "git clean -fdx*"
+      - "git stash drop*"
+      - "git stash clear*"
+      - "sudo *"
+      - "mkfs*"
+      - "dd if=*"
+      - "shutdown *"
+      - "reboot"
+  - id: kernel-self
+    reason: OpenMoat protects its own policy, hooks and binary
+    title: changing or stopping OpenMoat itself
+    why: an agent that can change its own checks is no longer checked
+    # the state an agent has no reason to read: the audit log, the lock and what
+    # it pins of trust, approvals and MCP pins. The policy itself stays readable;
+    # moat's own commands read these as the person, outside any sandbox
+    fs.read:
+      - "~/.moat/audit.db*"
+      # the audit key (ADR-101), the temporary file it is written through and the
+      # keys kept for logs moved aside: with one a process that can write the
+      # audit log rewrites it so that it still verifies
+      - "~/.moat/audit.key*"
+      - "~/.moat/policy.lock"
+      - "~/.moat/hosts.json"
+      - "~/.moat/approvals.json"
+      - "~/.moat/trust.json"
+      - "~/.moat/allowed_signers"
+      - "~/.moat/mcp/**"
+      # the key `openmoat proxy` checks session credentials with (ADR-044): who
+      # reads it can make one for any session, a clean one included; and the
+      # temporary file it is first written to (`proxy.key.<pid>.<nanos>.tmp`)
+      - "~/.moat/proxy.key*"
+      # the proxy CA (ADR-043): with its key a process could sign for the hosts
+      # `tls: terminate` names
+      - "~/.moat/proxy-ca/**"
+      # workspace snapshots (ADR-085): old contents of the project's files, and the
+      # names of files an agent deleted
+      - "~/.moat/snapshots/**"
+      - "**/.moat/snapshots/**"
+      # audit delivery (ADR-081): the webhook's HMAC key and the collector's
+      # token, which `delivery.yaml` may read from here only
+      - "~/.moat/delivery/**"
+      - "**/.moat/delivery/**"
+      # remote approvals (ADR-078): the channel's credential and the key every
+      # request, answer and approver list is signed with
+      - "~/.moat/remote/**"
+      # the decoy keys `openmoat init` planted (ADR-106): which files are decoys
+      # and what they hold, which an agent hunting for keys would read first
+      - "~/.moat/canaries.json"
+      - "**/.moat/audit.db*"
+      - "**/.moat/audit.key*"
+      - "**/.moat/policy.lock"
+      - "**/.moat/proxy.key*"
+      - "**/.moat/proxy-ca/**"
+      - "**/.moat/remote/**"
+    fs.write:
+      # the state and host directories themselves: renaming, deleting or replacing
+      # one with a link removes every pinned file and hook inside it at once
+      - "~/.moat"
+      - "~/.claude"
+      - "~/.codex"
+      - "~/.cursor"
+      - "**/.moat"
+      - "**/.claude"
+      - "**/.codex"
+      - "**/.cursor"
+      - "~/.moat/**"
+      # OpenMoat's user services (the proxy's and the approvals listener's, ADR-094):
+      # their unit or plist, a systemd drop-in beside it or in the runtime control
+      # and transient folders, any of which changes what the service runs
+      - "~/.config/systemd/user/*moat-*"
+      - "~/.config/systemd/user/*moat-*/**"
+      - "/run/user/*/systemd/*/*moat-*"
+      - "/run/user/*/systemd/*/*moat-*/**"
+      - "~/Library/LaunchAgents/dev.openmoat.*"
+      - "~/.claude/settings.json"
+      - "~/.claude/settings.local.json"
+      - "~/.codex/**"
+      - "~/.cursor/hooks.json"
+      - "~/.cursor/sandbox.json"
+      - "**/.claude/settings.json"
+      - "**/.claude/settings.local.json"
+      - "**/.cursor/hooks.json"
+      - "**/.cursor/sandbox.json"
+      - "**/.codex/hooks.json"
+      # Claude Code: OpenMoat's plugin as its marketplace installs it, and that
+      # marketplace's clone
+      - "~/.claude/plugins/cache/crocodile-labs/openmoat"
+      - "~/.claude/plugins/cache/crocodile-labs/openmoat/**"
+      - "~/.claude/plugins/marketplaces/crocodile-labs"
+      - "~/.claude/plugins/marketplaces/crocodile-labs/**"
+      # Cursor: OpenMoat's plugin, wherever below its plugins folder Cursor keeps it
+      - "~/.cursor/plugins/**/openmoat"
+      - "~/.cursor/plugins/**/openmoat/**"
+      # OpenClaw: the state directory, its configuration (which loads OpenMoat's
+      # plugin) and the plugin `moat init` writes; its workspace inside stays
+      # writable, and its `.env` is `secrets-paths`' (`**/.env`)
+      - "~/.openclaw"
+      - "~/.openclaw/openclaw.json"
+      - "~/.openclaw/openmoat"
+      - "~/.openclaw/openmoat/**"
+      # OpenClaw's control-plane database: its exec approvals, plugin state and the
+      # cron jobs its Gateway runs (an OpenClaw `cron` add or update is decided as a
+      # write of it), so an agent cannot approve its own commands there
+      - "~/.openclaw/state/**"
+      # OpenClaw: OpenMoat's ClawHub package, below its state directory or in an npm
+      # folder
+      - "~/.openclaw/**/openmoat-clawhub"
+      - "~/.openclaw/**/openmoat-clawhub/**"
+      - "**/node_modules/@openmoat/openclaw"
+      - "**/node_modules/@openmoat/openclaw/**"
+      # GitHub Copilot CLI: its configuration directory, the hooks directory whose
+      # every file it loads (OpenMoat's included), and the user and repository
+      # settings whose `disableAllHooks` turns them all off; its session folders
+      # stay writable
+      - "~/.copilot"
+      - "~/.copilot/hooks"
+      - "~/.copilot/hooks/**"
+      - "~/.copilot/settings.json"
+      - "~/.copilot/config.json"
+      - "**/.copilot"
+      - "**/.copilot/hooks"
+      - "**/.copilot/hooks/**"
+      - "**/.copilot/settings.json"
+      - "**/.copilot/config.json"
+      - "**/.github/copilot/settings.json"
+      - "**/.github/copilot/settings.local.json"
+      # GitHub Copilot CLI: OpenMoat's plugin, from a marketplace or straight from
+      # its repository
+      - "~/.copilot/installed-plugins/*/openmoat"
+      - "~/.copilot/installed-plugins/*/openmoat/**"
+      - "~/.copilot/installed-plugins/_direct/*openmoat*"
+      - "~/.copilot/installed-plugins/_direct/*openmoat*/**"
+      # pi: the agent directory, OpenMoat's extension in it, the settings that
+      # can turn the extension off and the trust decisions that load a project's
+      # own extensions; other extensions need review (`runs-later`)
+      - "~/.pi"
+      - "~/.pi/agent"
+      - "~/.pi/agent/extensions"
+      - "~/.pi/agent/extensions/openmoat.js"
+      - "~/.pi/agent/settings.json"
+      - "~/.pi/agent/trust.json"
+      # pi: OpenMoat's package, in whichever npm folder holds it
+      - "~/.pi/agent/**/@openmoat/pi"
+      - "~/.pi/agent/**/@openmoat/pi/**"
+      - "**/node_modules/@openmoat/pi"
+      - "**/node_modules/@openmoat/pi/**"
+      # Gemini CLI: its directory, the settings that hold OpenMoat's hook (a
+      # project's are merged over them and can turn hooks off) and the folder
+      # trust list, which decides whether settings hooks run at all
+      - "~/.gemini"
+      - "**/.gemini"
+      - "~/.gemini/settings.json"
+      - "~/.gemini/trustedFolders.json"
+      - "**/.gemini/settings.json"
+      # Gemini CLI: OpenMoat's extension
+      - "~/.gemini/extensions/openmoat"
+      - "~/.gemini/extensions/openmoat/**"
+      # OpenCode: its configuration directory, OpenMoat's plugin and the plugin
+      # folders around it, the configuration files whose `plugin` list loads
+      # plugins and whose `-openmoat` removes OpenMoat's (`config` is the old TOML
+      # one OpenCode moves into `config.json`), and OpenCode 2's background service
+      # settings, whose `env` it starts with; other plugins need review (`runs-later`)
+      - "~/.config/opencode"
+      - "~/.config/opencode/plugins"
+      - "~/.config/opencode/plugins/openmoat.js"
+      - "~/.config/opencode/plugin"
+      - "~/.config/opencode/config.json"
+      - "~/.config/opencode/opencode.json"
+      - "~/.config/opencode/opencode.jsonc"
+      - "~/.config/opencode/config"
+      - "~/.config/opencode/service.json"
+      - "~/.config/opencode/service*.json"
+      # OpenCode also reads `~/.opencode` as a configuration directory, with its
+      # own plugin folders and configuration files
+      - "~/.opencode"
+      - "~/.opencode/plugins"
+      - "~/.opencode/plugin"
+      - "~/.opencode/opencode.json"
+      - "~/.opencode/opencode.jsonc"
+      # OpenCode: OpenMoat's npm plugin, in whichever npm folder holds it
+      - "**/node_modules/@openmoat/opencode"
+      - "**/node_modules/@openmoat/opencode/**"
+      # Hermes Agent: its home: the `config.yaml` that holds OpenMoat's hook, the
+      # hook allowlist without which a gateway, cron or ACP session skips it, the
+      # `.env` that can set `HERMES_SAFE_MODE`, the sticky profile, the plugins and
+      # hooks it runs in its own process, and the folder of its profiles (another
+      # profile's files need review, `runs-later`; `HERMES_HOME` moves these to the one in use)
+      - "~/.hermes"
+      - "~/.hermes/config.yaml"
+      - "~/.hermes/shell-hooks-allowlist.json"
+      - "~/.hermes/.env"
+      - "~/.hermes/active_profile"
+      - "~/.hermes/plugins"
+      - "~/.hermes/plugins/**"
+      - "~/.hermes/hooks"
+      - "~/.hermes/hooks/**"
+      - "~/.hermes/agent-hooks"
+      - "~/.hermes/agent-hooks/**"
+      - "~/.hermes/profiles"
+      # Cline: its configuration directory, the hooks directories it runs every
+      # file of (OpenMoat's `PreToolUse` among them) and its plugins, which run in
+      # its own process (`CLINE_DIR` moves `~/.cline`)
+      - "~/.cline"
+      - "~/.cline/hooks"
+      - "~/.cline/hooks/**"
+      - "~/.cline/plugins"
+      - "~/.cline/plugins/**"
+      - "~/Documents/Cline/Hooks"
+      - "~/Documents/Cline/Hooks/**"
+      # goose: its configuration (`config.yaml` turns plugins and extensions on
+      # and off), the plugin settings that can turn OpenMoat's plugin off, and
+      # the plugin directories whose `hooks/hooks.json` it runs: the person's,
+      # with OpenMoat's own, and a project's, which can replace it
+      - "~/.config/goose"
+      - "~/.config/goose/config.yaml"
+      - "~/.config/goose/settings.json"
+      - "**/.config/goose/settings.json"
+      - "**/.config/goose/settings.local.json"
+      - "~/.agents/plugins"
+      - "~/.agents/plugins/**"
+      - "**/.agents/plugins"
+      - "**/.agents/plugins/**"
+      # Antigravity CLI: the hook file that holds OpenMoat's hook (shared with the
+      # Antigravity app and IDE), its settings (`permissions`, `toolPermission`,
+      # `trustedWorkspaces`, `enableTerminalSandbox`), a project's hook and MCP
+      # files, which load from the repository, and the plugins that can add hooks
+      - "~/.gemini/config"
+      - "~/.gemini/config/hooks.json"
+      - "~/.gemini/config/mcp_config.json"
+      - "~/.gemini/config/plugins"
+      - "~/.gemini/config/plugins/**"
+      - "~/.gemini/antigravity-cli"
+      - "~/.gemini/antigravity-cli/settings.json"
+      - "**/.agents/hooks.json"
+      - "**/.agents/mcp_config.json"
+      # Qwen Code: its directory, the settings that hold OpenMoat's hook and a
+      # project's, which are merged over them and can turn hooks off
+      - "~/.qwen"
+      - "**/.qwen"
+      - "~/.qwen/settings.json"
+      - "**/.qwen/settings.json"
+      # Crush: its global configuration, which holds OpenMoat's hook, the `crushrc`
+      # beside it, a Bash script it runs at start, and the data directory's
+      # `crush.json`, merged with them
+      - "~/.config/crush"
+      - "~/.config/crush/crush.json"
+      - "~/.config/crush/crushrc"
+      - "~/.local/share/crush/crush.json"
+      - "**/.moat/**"
+      # the binary every installed hook runs, by its name and by `moat`, the name it
+      # had up to 0.7.0, which still runs it
+      - "**/bin/moat"
+      - "**/bin/moat.exe"
+      - "**/bin/openmoat"
+      - "**/bin/openmoat.exe"
+      # Scoop: apps/<package>/current (the junction hooks run through) and each
+      # apps/<package>/<version> it may point at (ADR-016)
+      - "**/apps/moat/current"
+      - "**/apps/moat/*/moat.exe"
+      - "**/apps/openmoat/current"
+      - "**/apps/openmoat/*/moat.exe"
+      - "**/apps/openmoat/*/openmoat.exe"
+    # each command by either name: `openmoat`, or `moat`, its name up to 0.7.0
+    shell:
+      - "{moat,openmoat} policy *"
+      - "{moat,openmoat} init*"
+      - "{moat,openmoat} doctor*"
+      - "{moat,openmoat} allow*"
+      - "{moat,openmoat} trust*"
+      - "{moat,openmoat} edit*"
+      - "*/{moat,openmoat} policy *"
+      - "*/{moat,openmoat} init*"
+      - "*/{moat,openmoat} doctor*"
+      - "*/{moat,openmoat} allow*"
+      - "*/{moat,openmoat} trust*"
+      - "*/{moat,openmoat} edit*"
+      - "{moat,openmoat} uninstall*"
+      - "*/{moat,openmoat} uninstall*"
+      - "{moat,openmoat} sandbox sync*"
+      - "*/{moat,openmoat} sandbox sync*"
+      # a service installed or removed runs or stops the proxy for every later session
+      - "{moat,openmoat} proxy {install,uninstall}*"
+      - "*/{moat,openmoat} proxy {install,uninstall}*"
+      # a new proxy CA decides which HTTPS the proxy reads and signs for (ADR-043)
+      - "{moat,openmoat} proxy ca *"
+      - "*/{moat,openmoat} proxy ca *"
+      # a brokered secret's host is where its value goes
+      - "{moat,openmoat} secret*"
+      - "*/{moat,openmoat} secret*"
+      # a channel, an approver or an answer from another device is the person's (ADR-078)
+      - "{moat,openmoat} approvals*"
+      - "*/{moat,openmoat} approvals*"
+      # an audit anchor is the person's record of the log, kept outside it (ADR-031),
+      # and a signed checkpoint the person's signed statement of it (ADR-110)
+      - "{moat,openmoat} audit {anchor,checkpoint}*"
+      - "*/{moat,openmoat} audit {anchor,checkpoint}*"
+      # a provenance note is the person's record of what agents wrote (ADR-056)
+      - "{moat,openmoat} provenance * --write-notes*"
+      - "*/{moat,openmoat} provenance * --write-notes*"
+      # a changed or new MCP server, or a wrapped one, is a person's to accept (ADR-026)
+      - "{moat,openmoat} mcp {accept,wrap,unwrap}*"
+      - "*/{moat,openmoat} mcp {accept,wrap,unwrap}*"
+      # a new or changed hook command or plugin hook is a person's to accept (ADR-109)
+      - "{moat,openmoat} hooks accept*"
+      - "*/{moat,openmoat} hooks accept*"
+      # the read-only browser view: its link opens the audit log to whoever holds it,
+      # and it listens until stopped (ADR-066)
+      - "{moat,openmoat} serve*"
+      - "*/{moat,openmoat} serve*"
+      # workspace snapshots are the person's record of the project (ADR-085): an agent
+      # that restored one would undo the person's work, and one that took them would
+      # push the person's out of the retention
+      - "{moat,openmoat} {restore,snapshot}*"
+      - "*/{moat,openmoat} {restore,snapshot}*"
+      # taken out again: the read-only forms `openmoat-readonly` allows. `policy lint`
+      # and `policy check` read a file or a command and the policy, which stays
+      # readable; `--help`/`-h` right after a one- or two-word command prints the
+      # usage and runs nothing (clap stops there). `[!-]*` is one word, not `*`, which
+      # is any number: with a value before it (`allow -- --help`) the command may run.
+      # The wrappers below name no `--help`, so a wrapped command stays denied
+      - "!{moat,openmoat,*/moat,*/openmoat} policy {lint,check}"
+      - "!{moat,openmoat,*/moat,*/openmoat} [!-]* {--help,-h}"
+      - "!{moat,openmoat,*/moat,*/openmoat} {policy,mcp,proxy,sandbox,audit} [!-]* {--help,-h}"
+      # pseudo-terminal wrappers that fake the terminal `allow`/`edit`/`secret`/`trust`/`uninstall`/`sandbox sync`/`doctor --accept`/`mcp accept`/`proxy ca init`/`proxy install` require
+      # (`*moat` inside a quoted command line covers `openmoat` too)
+      - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * {moat,openmoat} sandbox sync*"
+      - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * */{moat,openmoat} sandbox sync*"
+      - "script * {moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "script * */{moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "script * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "expect * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "unbuffer * {moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "unbuffer * */{moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "*/script * {moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "*/script * */{moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "*/script * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "*/expect * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      # Python's pty module, terminal multiplexers and macOS Terminal scripting (ADR-014)
+      - "{python*,*/python*} * '*pty*spawn*(*moat*{allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "{tmux,*/tmux,screen,*/screen} * {moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "{tmux,*/tmux,screen,*/screen} * */{moat,openmoat} {allow,approvals,doctor,edit,hooks,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "{tmux,*/tmux,screen,*/screen} * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "{osascript,*/osascript} * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      # a bare `openmoat` or `moat` (the home screen asks to accept drift or approve a
+      # review) under the same wrappers; patterns are prefixes, so these deny any command
+      # of either name run in them
+      - "{script,*/script,unbuffer,*/unbuffer,tmux,*/tmux,screen,*/screen} * {moat,*/moat,openmoat,*/openmoat}"
+      - "{script,*/script,tmux,*/tmux,screen,*/screen} * '{moat,*/moat,openmoat,*/openmoat}'*"
+      - "{expect,*/expect} * '*spawn {moat,*/moat,openmoat,*/openmoat}{;,\n,'}*"
+      - "{python*,*/python*} * '*pty*spawn*(*\"{moat,*/moat,openmoat,*/openmoat}\"{],)}*'"
+      - "{osascript,*/osascript} * '*\"{moat,*/moat,openmoat,*/openmoat}\"*'"
+      # `openmoat serve` inside a quoted command line of the same wrappers (ADR-066)
+      - "{script,*/script,tmux,*/tmux,screen,*/screen,expect,*/expect,osascript,*/osascript} * '*moat serve*'"
+      - "{python*,*/python*} * '*pty*spawn*(*moat*serve*'"
+      # the hook and the MCP gateway themselves, which only a host runs (as its hook, from
+      # its plugin, or as an MCP server's command) where no hook sees it. Run by an
+      # agent, `guard` records decisions and MCP tickets for payloads the agent wrote and
+      # writes a session's proxy credential where the payload says, and `guard
+      # --heartbeat` (ADR-042) could hide that another agent's plugin never loaded
+      - "{moat,*/moat,openmoat,*/openmoat} guard*"
+      - "{moat,*/moat,openmoat,*/openmoat} mcp proxy*"
+      # changing one of OpenMoat's user services, which only its own install and
+      # uninstall commands do (ADR-094): every systemd unit is `*moat-*`
+      # (`moat-proxy`, `openmoat-approvals`) and every launchd label `dev.openmoat.*`.
+      # Stopping, restarting, editing or replacing one, loading another plist for it,
+      # or setting the environment every service the manager starts gets
+      - "{systemctl,*/systemctl} * {stop,disable,mask,kill,edit,revert,restart,try-restart,reload-or-restart,try-reload-or-restart,reenable,link,set-property,start,enable} * *moat-*"
+      - "{systemctl,*/systemctl} * {set-environment,unset-environment,import-environment}*"
+      - "{launchctl,*/launchctl} {bootout,bootstrap,unload,load,disable,enable,remove,kill,kickstart,submit,stop,start} * *dev.openmoat.*"
+      - "{launchctl,*/launchctl} {setenv,unsetenv}*"
+      # starting the proxy or the approvals listener as a service by hand, outside
+      # the unit or plist its install command wrote
+      - "{systemd-run,*/systemd-run} * {moat,*/moat,openmoat,*/openmoat} {approvals,proxy}*"
+      - "{launchctl,*/launchctl} submit * {moat,*/moat,openmoat,*/openmoat} {approvals,proxy}*"
+      # starting OpenCode without its plugins, OpenMoat's among them (`--pure`, or
+      # `OPENCODE_PURE` below), replacing the OpenCode the person runs with another
+      # major version, whose plugin API OpenMoat's plugin must serve
+      # (`upgrade --major`), changing the plugins of the global configuration, which
+      # OpenCode 1 loads before OpenMoat's and OpenCode 2 lets remove it (OpenCode
+      # 1's `plugin --global`; OpenCode 2's `plugin add`, `remove` and `update`), or
+      # setting the environment OpenCode 2's background service starts with, which
+      # can move its configuration away from OpenMoat's plugin (`service set env`)
+      - "{opencode,*/opencode} * --pure*"
+      - "{npx,*/npx,bunx,*/bunx,pnpx,*/pnpx} * opencode-ai* * --pure*"
+      - "{opencode,*/opencode,opencode2,*/opencode2} upgrade * --major*"
+      - "{opencode,*/opencode} {plugin,plug} * --global*"
+      - "{opencode,*/opencode} {plugin,plug} * -g*"
+      - "{opencode,*/opencode} {plugin,plug} * -[!-]*g*"
+      - "{opencode,*/opencode,opencode2,*/opencode2} {plugin,plug} {add,remove,update}"
+      - "{opencode,*/opencode,opencode2,*/opencode2} service {set,unset}"
+      # Hermes Agent's own commands that take OpenMoat's hook out of `config.yaml` or
+      # its allowlist (a running gateway drops it within a minute), turn approvals off,
+      # enable plugins, set `HERMES_SAFE_MODE`, or make a profile without the hook the
+      # one later sessions use
+      - "{hermes,*/hermes} config set {hooks,approvals,plugins,HERMES_SAFE_MODE}*"
+      - "{hermes,*/hermes} * config set {hooks,approvals,plugins,HERMES_SAFE_MODE}*"
+      - "{hermes,*/hermes} hooks revoke*"
+      - "{hermes,*/hermes} * hooks revoke*"
+      - "{hermes,*/hermes} profile use*"
+      - "{hermes,*/hermes} * profile use*"
+    # `OPENCODE_PURE` starts OpenCode without its plugins, and `HERMES_SAFE_MODE`
+    # starts Hermes Agent with no shell hook, OpenMoat's included in both;
+    # `OPENCODE_CONFIG_DIR` moves OpenCode 2's configuration directory away from
+    # OpenMoat's plugin (and adds one with plugins of its own to OpenCode 1), and
+    # `OPENCODE_CONFIG` and `OPENCODE_CONFIG_CONTENT` add configuration whose
+    # `-openmoat` removes the plugin in OpenCode 2
+    env.set: ["OPENCODE_PURE", "HERMES_SAFE_MODE", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG",
+      "OPENCODE_CONFIG_CONTENT"]
+  # the folders above a file `kernel-self` protects that hold no agent directory of
+  # their own: renaming `.github` (or `.github/copilot`) away and back edits
+  # `.github/copilot/settings.json` under another name. `hook_only` (ADR-034): a
+  # sandboxed command may still create a `.github` (a clone, a package that has one)
+  - id: agent-folders
+    reason: renaming or removing this folder moves agent settings OpenMoat protects
+    title: moving or removing an agent's settings folder
+    why: it would take settings OpenMoat protects out of its sight
+    hook_only: true
+    fs.write: ["**/.github", "**/.github/copilot"]
+  # the agents' system-wide settings, which outrank the user's and the project's:
+  # Claude Code's managed settings (`managed-settings.json`, `managed-settings.d/`,
+  # `managed-mcp.json`), Gemini CLI's system settings and defaults, Codex's
+  # `requirements.toml`, and the places an administrator's hooks live, which
+  # `openmoat init --managed` may write (GitHub Copilot CLI's `policy.d`, Cursor's
+  # enterprise `hooks.json`, OpenCode's system folder; ADR-098). One can turn every
+  # hook off or add its own. An
+  # administrator deploys them; where the folder is writable (`/etc/claude-code` on
+  # WSL, a loosely permissioned `ProgramData`) the agent could too. `hook_only`
+  # (ADR-034): the OS sandboxes grant no write there anyway
+  - id: managed-settings
+    reason: an agent's system-wide settings outrank the user's and can turn OpenMoat's hooks off; an administrator deploys them
+    title: changing an agent's system-wide settings
+    why: they outrank your own and can switch OpenMoat's hooks off for every later session
+    hook_only: true
+    fs.write:
+      # the folders of each agent's system-wide settings, generated from its spec
+      # Claude Code
+      - "/Library/Application Support/ClaudeCode/**"
+      - "/etc/claude-code/**"
+      - "C:/Program Files/ClaudeCode/**"
+      # Codex
+      - "/etc/codex/**"
+      - "C:/ProgramData/OpenAI/Codex/**"
+      # Cursor
+      - "/Library/Application Support/Cursor/**"
+      - "/etc/cursor/**"
+      - "C:/ProgramData/Cursor/**"
+      # GitHub Copilot CLI
+      - "/etc/github-copilot/policy.d/**"
+      - "C:/ProgramData/GitHub/Copilot/policy.d/**"
+      # Gemini CLI
+      - "/Library/Application Support/GeminiCli/**"
+      - "/etc/gemini-cli/**"
+      - "C:/ProgramData/gemini-cli/**"
+      # OpenCode
+      - "/Library/Application Support/opencode/**"
+      - "/etc/opencode/**"
+      - "C:/ProgramData/opencode/**"
+      # Qwen Code
+      - "/Library/Application Support/QwenCode/**"
+      - "/etc/qwen-code/**"
+      - "C:/ProgramData/qwen-code/**"
+      # Crush
+      - "/etc/crush/**"
+  # Windows: work handed to the Windows Subsystem for Linux. A command inside a
+  # WSL distribution reads the distribution's own files (its `~/.ssh`, its shell
+  # start-up files), which no Windows path in this policy names, and reaches the
+  # Windows drives through `/mnt/c` beside them. `@wsl <launcher>` atoms: `wsl`,
+  # `wslg`, `wslconfig`, `bash.exe` in the system folders, a listed distribution's
+  # own launcher, read as Win32 reads a path, also in a `cmd`, PowerShell or
+  # `start` line; `@wsl share`: a word naming the `\\wsl$` or `\\wsl.localhost`
+  # share (`net use Z: \\wsl$\Ubuntu`). The paths: the share as file tools and
+  # redirections name it, `wsl$` or `wsl.localhost` as any component of a UNC path
+  # (the `\\?\UNC\`, `\\.\UNC\` and `GLOBALROOT` forms); and reading the
+  # launchers themselves (the system folders, `WinSxS` and the Store WSL's `Program
+  # Files\WSL`, on `C:`), so a copy under another name is denied too, and hard links
+  # made to them (`fsutil hardlink`, `mklink /H`, `New-Item -ItemType HardLink`) (ADR-083).
+  # A runner line built at run time is held by `opaque-code`. `hook_only`: no
+  # sandbox grants these
+  - id: wsl-crossing
+    reason: hands work to the Windows Subsystem for Linux, whose files and commands no Windows rule names
+    title: running commands or opening files inside WSL from Windows
+    why: inside WSL a command reaches files this policy names only by their Windows paths
+    hook_only: true
+    shell: ["@wsl *"]
+    fs.read: ["//wsl$", "//wsl$/**", "//wsl.localhost", "//wsl.localhost/**",
+      "//**/wsl$", "//**/wsl$/**", "//**/wsl.localhost", "//**/wsl.localhost/**",
+      "C:/Windows/{System32,Sysnative,SysWOW64}/{wsl,wslg,wslconfig,bash}.exe",
+      "C:/Windows/WinSxS/**/{wsl,wslg,wslconfig,bash}.exe", "C:/Program Files/WSL/*.exe"]
+    fs.write: ["//wsl$", "//wsl$/**", "//wsl.localhost", "//wsl.localhost/**",
+      "//**/wsl$", "//**/wsl$/**", "//**/wsl.localhost", "//**/wsl.localhost/**"]
+  - id: shell-rc
+    reason: edits persist into every future shell session
+    title: editing your shell's start-up files
+    why: what is written there runs in every shell you open from now on
+    # the login and logout files, the other shells' startup files (fish, csh, tcsh,
+    # ksh, mksh) and the drop-in folders many rc files source, which run on the
+    # same schedule; and the files curl and wget read on every run, which can add
+    # a body or an upload to each later call (`data = @~/.ssh/id_rsa`):
+    # `~/.config/wget/` is wget2's
+    fs.write: ["~/.zshrc", "~/.bashrc", "~/.bash_profile", "~/.profile", "~/.zprofile", "~/.zshenv",
+      "~/.zlogin", "~/.zlogout", "~/.bash_login", "~/.bash_logout", "~/.bashrc.d/**", "~/.zshrc.d/**",
+      "~/.config/fish/config.fish", "~/.config/fish/conf.d/**", "~/.config/fish/functions/**",
+      "~/.login", "~/.cshrc", "~/.tcshrc", "~/.kshrc", "~/.mkshrc",
+      "~/.curlrc", "~/_curlrc", "~/.config/curlrc", "~/.wgetrc", "~/.config/wget/**"]
+  - id: cloud-metadata
+    reason: instance metadata and link-local services hand out cloud credentials
+    title: reaching the cloud metadata service
+    why: it hands out this machine's cloud credentials
+    # a `net` deny also covers `fetch` (ADR-017), so a fetch tool cannot read them either
+    net: ["169.254.*", "fe80:*", "fd00:ec2::254", "100.100.100.200", "metadata.google.internal", "metadata.goog"]
+  - id: token-egress
+    reason: sends a known kind of token to a host that is not its service's
+    title: sending a token to a host that is not its service's
+    why: whoever receives a token can use it
+    # `@token-egress <service> <host>` atoms: a GitHub, OpenAI/Anthropic, AWS, Slack,
+    # Google, npm or GitLab token in a URL, a web search, or the arguments of a
+    # command that connects to a host (POLICY.md §3); also an AWS secret access key
+    # given by its name (`aws_secret_access_key=…`) sent anywhere but AWS, and a
+    # PEM private key (a PEM `BEGIN … PRIVATE KEY` header) sent off this machine
+    shell: ["@token-egress *"]
+  - id: placeholder-egress
+    reason: sends a brokered secret's placeholder to a host the proxy does not put that secret in
+    title: sending a brokered secret's placeholder to another host
+    why: the placeholder stands for a secret only its own host may receive
+    # `@placeholder-egress <id> <host>` atoms: `moat-secret:<id>:placeholder` going
+    # anywhere but the secret's `host` (POLICY.md §2.1)
+    shell: ["@placeholder-egress *"]
+  - id: encoded-egress
+    reason: sends a long encoded value in a URL after the session read secret material
+    title: sending a long encoded value after reading a secret
+    why: it may be that secret, encoded so it is not recognised
+    # `@encoded-egress <host>` atoms, added only once the session read a secret: a URL a
+    # fetch, browser or MCP tool opens that carries 80 or more characters of base64 or
+    # hex (POLICY.md §4.1, ADR-047)
+    shell: ["@encoded-egress *"]
+  - id: card-egress
+    reason: sends a payment card number to a host off this machine
+    title: sending a payment card number off this machine
+    why: a card number an agent sends out cannot be taken back
+    # `@pii-egress card <host>` atoms: 13 to 19 digits with a card brand's prefix and
+    # length that pass the Luhn check, in the places `token-egress` reads, written in
+    # a card's printed groups or in a card's context (a card field's value, or sent
+    # with a security code or expiry), so a bare id in a URL is none; loopback
+    # hosts and processors' published test numbers are left out (POLICY.md §4.4,
+    # ADR-052). `@pii-egress emails <host>` (ten or more distinct mail addresses in
+    # one send) has no default rule: add one to deny or review
+    shell: ["@pii-egress card *"]
+
+allow:
+  - id: project-fs
+    # the root itself too: a search with no path reads the whole project
+    fs.read: ["${project}", "${project}/**"]
+    # a `.git` at any depth is a repository git follows (a `gitdir:` file, a planted
+    # directory), so writing one needs review like the root's own `.git`
+    fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/**/.git/**", "!${project}/.moat/**",
+      # what CI, a commit or the agent host runs later, outside any sandbox (`runs-later` needs review)
+      "!${project}/**/.github/workflows/**", "!${project}/**/.gitlab-ci.yml", "!${project}/**/.circleci/**", "!${project}/**/azure-pipelines.yml", "!${project}/**/Jenkinsfile", "!${project}/**/.buildkite/**", "!${project}/**/.husky/**", "!${project}/**/.pre-commit-config.yaml", "!${project}/**/lefthook.yml", "!${project}/**/.lefthook.yml",
+      # the editors' project configuration, whose tasks, launch and run configurations and
+      # program settings the editor runs (`runs-later` needs review)
+      "!${project}/**/.vscode/**", "!${project}/**/.vscode", "!${project}/**/*.code-workspace",
+      "!${project}/**/.idea/**", "!${project}/**/.idea", "!${project}/**/*.run.xml",
+      # package-manager and build configuration that runs code (`runs-later` needs review)
+      "!${project}/**/.npmrc", "!${project}/**/.yarnrc", "!${project}/**/.yarnrc.yml", "!${project}/**/.cargo/config.toml", "!${project}/**/.cargo/config", "!${project}/**/bunfig.toml",
+      # the folders a repository's `core.hooksPath` usually names, with the folders themselves
+      "!${project}/**/.githooks/**", "!${project}/**/.git-hooks/**", "!${project}/**/githooks/**", "!${project}/**/git-hooks/**",
+      "!${project}/**/.githooks", "!${project}/**/.git-hooks", "!${project}/**/githooks", "!${project}/**/git-hooks",
+      # what every Python start runs, a project's `.venv` included
+      "!${project}/**/site-packages/*.pth", "!${project}/**/dist-packages/*.pth",
+      "!${project}/**/sitecustomize.py", "!${project}/**/usercustomize.py",
+      # each agent's files in a project that run later (`runs-later` needs review), from its spec
+      # Claude Code
+      "!${project}/**/.claude/hooks/**", "!${project}/**/.mcp.json",
+      "!${project}/**/.claude/agents/**", "!${project}/**/.claude/skills/**",
+      "!${project}/**/.claude/commands/**",
+      # Codex
+      "!${project}/**/.codex/config.toml",
+      # Cursor
+      "!${project}/**/.cursor/mcp.json",
+      # OpenClaw
+      "!${project}/**/.openclaw/extensions/**",
+      # GitHub Copilot CLI
+      "!${project}/**/.github/hooks/**", "!${project}/**/.github/mcp.json",
+      "!${project}/**/.github/agents/**", "!${project}/**/.github/hooks",
+      # pi
+      "!${project}/**/.pi/extensions/**", "!${project}/**/.pi/mcp.json",
+      "!${project}/**/.pi/settings.json", "!${project}/**/.pi", "!${project}/**/.pi/extensions",
+      # Gemini CLI
+      "!${project}/**/.gemini/policies/**", "!${project}/**/.gemini/commands/**",
+      "!${project}/**/.gemini/agents/**",
+      # OpenCode
+      "!${project}/**/.opencode/plugins/**", "!${project}/**/.opencode/plugin/**",
+      "!${project}/**/.opencode/tools/**", "!${project}/**/.opencode/tool/**",
+      "!${project}/**/.opencode/commands/**", "!${project}/**/.opencode/command/**",
+      "!${project}/**/.opencode/agents/**", "!${project}/**/.opencode/agent/**",
+      "!${project}/**/.opencode/modes/**", "!${project}/**/.opencode/mode/**",
+      "!${project}/**/.opencode/skills/**", "!${project}/**/.opencode/skill/**",
+      "!${project}/**/.opencode/opencode.json", "!${project}/**/.opencode/opencode.jsonc",
+      "!${project}/**/opencode.json", "!${project}/**/opencode.jsonc",
+      "!${project}/**/.opencode/package.json", "!${project}/**/.opencode",
+      "!${project}/**/.opencode/plugins", "!${project}/**/.opencode/plugin",
+      # Hermes Agent
+      "!${project}/**/.hermes/plugins/**", "!${project}/**/.hermes",
+      "!${project}/**/.hermes/plugins",
+      # Cline CLI
+      "!${project}/**/.clinerules/hooks/**", "!${project}/**/.cline/hooks/**",
+      "!${project}/**/.clinerules", "!${project}/**/.clinerules/hooks", "!${project}/**/.cline",
+      "!${project}/**/.cline/hooks",
+      # Qwen Code
+      "!${project}/**/.qwen/**",
+      # Crush
+      "!${project}/**/crush.json", "!${project}/**/.crush.json", "!${project}/**/crushrc",
+      "!${project}/**/.crushrc", "!${project}/**/.crush/**",
+      # Agent Skills, loaded by Codex, Cursor, GitHub Copilot CLI, pi, Gemini CLI,
+      # OpenCode, goose, Antigravity CLI, Crush:
+      "!${project}/**/.agents/skills/**", "!${project}/**/.agents", "!${project}/**/.agents/skills",
+      # a virtual environment's interpreter and a dev container's host command
+      "!${project}/**/.venv/bin/**", "!${project}/**/venv/bin/**", "!${project}/**/.venv/bin", "!${project}/**/venv/bin",
+      "!${project}/**/.devcontainer/**", "!${project}/**/.devcontainer", "!${project}/**/.devcontainer.json"]
+  # each agent's own temporary folders, whose files it writes and reads back
+  # itself; reads there do not count as collecting files (`staging`)
+  - id: agent-temp
+    fs.read:
+      # each agent's temporary folders, generated from its spec
+      # Claude Code: the output of its background commands, which it reads back
+      # with `cat` (`/tmp/claude-<uid>/`)
+      - "/tmp/claude-*/**"
+      - "/private/tmp/claude-*/**"
+  - id: dev-shell
+    shell:
+      - "git status*"
+      - "git diff*"
+      - "git log*"
+      - "git show*"
+      - "git branch*"
+      - "git add *"
+      - "git commit *"
+      - "git checkout *"
+      - "git switch *"
+      - "git fetch*"
+      - "git pull*"
+      - "git rebase *"
+      - "git merge *"
+      # each path is an fs.write atom, so `.git`, `.moat` and hook settings need review or are denied
+      - "git restore *"
+      - "git stash*"
+      # read-only subcommands; only the forms that print are listed
+      - "git ls-files*"
+      - "git ls-tree *"
+      - "git rev-parse *"
+      - "git rev-list *"
+      - "git merge-base *"
+      - "git cat-file *"
+      - "git blame *"
+      - "git grep *"
+      - "git describe*"
+      - "git shortlog*"
+      - "git check-ignore *"
+      - "git worktree list*"
+      - "git reflog $"
+      - "git reflog show*"
+      # listing tags; a list option makes any further word a pattern, and git refuses
+      # to combine it with creating, deleting or verifying
+      - "git tag $"
+      - "git tag {-l,--list,--contains,--no-contains,--merged,--no-merged,--points-at}"
+      - "git tag -n*"
+      # `git remote show` and `git remote update` contact the remote
+      - "git remote $"
+      - "git remote {-v,--verbose} $"
+      - "git remote get-url *"
+      # reading config: git takes options only before the first name, so the read
+      # action must come first, after at most one scope option or the file it reads;
+      # git refuses a second action, so no write can follow
+      - "git config {--get,--get-all,--get-regexp,--list,-l}"
+      - "git config {--global,--local,--system,--worktree,--show-origin,--show-scope,--null,-z,--name-only,--includes} {--get,--get-all,--get-regexp,--list,-l}"
+      - "git config {-f,--file,--blob} ?* {--get,--get-all,--get-regexp,--list,-l}"
+      - "git config {--file=*,--blob=*} {--get,--get-all,--get-regexp,--list,-l}"
+      - "git config {get,list}"
+      # `git config <section>.<key>` with nothing after it prints the value, as
+      # `--get` does; a value after it, or a subcommand (`edit`, which has no
+      # `.`), writes and needs review
+      - "git config [a-zA-Z0-9]*.?* $"
+      - "git config {--global,--local,--system,--worktree,--show-origin,--show-scope,--includes} [a-zA-Z0-9]*.?* $"
+      - "ls*"
+      - "cat *"
+      - "head *"
+      - "tail *"
+      - "grep *"
+      - "rg *"
+      - "find *"
+      - "pwd"
+      - "echo *"
+      - "which *"
+      - "printf *"
+      # `command -v`/`-V` and `type` only print how a name resolves
+      - "command -v *"
+      - "command -V *"
+      - "type *"
+      - "true"
+      - "jq *"
+      # moving around and everyday file operations; every path operand is also an
+      # fs atom (resolved through cd and symlinks), so outside the project these need review
+      - "cd"
+      - "cd *"
+      - "pushd *"
+      - "popd"
+      - "mkdir *"
+      - "touch *"
+      - "cp *"
+      - "mv *"
+      - "rm *"
+      - "npm test*"
+      - "npm run *"
+      - "pnpm test*"
+      - "pnpm run *"
+      - "pnpm build*"
+      - "pnpm lint*"
+      - "pnpm typecheck*"
+      - "pnpm exec *"
+      - "yarn exec *"
+      - "yarn test*"
+      - "yarn run *"
+      - "yarn build*"
+      - "yarn lint*"
+      - "cargo build*"
+      - "cargo test*"
+      - "cargo check*"
+      - "cargo clippy*"
+      - "cargo fmt*"
+      - "cargo run*"
+      - "cargo doc*"
+      - "cargo bench*"
+      - "cargo nextest*"
+      - "cargo tree*"
+      - "cargo metadata*"
+      - "go test*"
+      - "go build*"
+      - "go vet*"
+      - "swift test*"
+      - "swift build*"
+      - "pytest*"
+      - "python -m pytest*"
+      - "python3 -m pytest*"
+      # the directory operands are fs.write atoms, so outside the project these need review
+      - "python -m venv *"
+      - "python3 -m venv *"
+      # the project's own virtual environment, as written: any other spelling or file needs review
+      - "source .venv/bin/activate $"
+      - ". .venv/bin/activate $"
+      - "source venv/bin/activate $"
+      - ". venv/bin/activate $"
+      - "make $"
+      - "make test*"
+      - "make build*"
+      - "make check*"
+      - "make lint*"
+      # other ecosystems' build and test commands run the project's own code, like
+      # `cargo test`; paths in their arguments are fs atoms, so outside the project
+      # these need review
+      - "mvn {test,compile,package,verify}"
+      - "{./gradlew,gradle} {test,build,check}"
+      - "dotnet {build,test,run}"
+      - "bundle exec rspec"
+      - "rspec"
+      - "rake test"
+      - "php artisan test"
+      - "phpunit"
+      - "cmake {-B,-S}*"
+      - "cmake --build *"
+      - "ctest"
+      - "terraform {fmt,validate}"
+      - "swift run*"
+      # a module path or version (`go run x@latest`) downloads code: only local packages
+      - "go run {.,./*,*.go}"
+      # a project script: the script is an fs.read atom, resolved through symlinks
+      - "{python,python3} *.py"
+      # options that only change buffering, bytecode or which paths Python trusts,
+      # each a word of its own: `-Ic` would run code
+      - "{python,python3} {-I,-u,-B,-E,-s,-S,-O} *.py"
+      - "{python,python3} {-I,-u,-B,-E,-s,-S,-O} {-I,-u,-B,-E,-s,-S,-O} *.py"
+      - "node *.{js,mjs,cjs}"
+      # the wrapped command is classified on its own (`uv run pytest` is also `pytest`)
+      - "uv run *"
+      # the build runs in a container; the options that reach the host are excluded
+      - "docker build *"
+      # options that run another program or write outside the command's own output (ADR-012)
+      # a recursive removal is judged by the paths it writes: a project subdirectory is
+      # allowed, `.git`, `~` and anything outside need review or are denied. `project-fs` also allows
+      # the root itself, so a recursive removal holds for review every spelling that may name
+      # it: `.`, an absolute or home path, a variable, `..`, and an unexpanded `*` or
+      # `.*` (every entry). Checkouts that discard uncommitted work stay at review
+      - "!rm * -*[rR]* * {.,./,/*,~*,$*,*..*,[*],./[*],.[*],./.[*]}"
+      - "!rm * {.,./,/*,~*,$*,*..*,[*],./[*],.[*],./.[*]} * -*[rR]*"
+      - "!git restore * {.,./,[*],:*}"
+      - "!git restore * --pathspec-f*"
+      - "!git checkout * ."
+      - "!git checkout * -- *"
+      - "!git checkout * -f*"
+      - "!git checkout * --force*"
+      # `printf -v NAME` assigns a variable instead of printing
+      - "!printf -v*"
+      - "!find * -exec*"
+      - "!find * -ok*"
+      - "!find * -delete*"
+      - "!find * -fprint*"
+      - "!find * -fls*"
+      - "!rg * --pre"
+      - "!rg * --pre=*"
+      - "!git * --upload-pack*"
+      - "!git * --receive-pack*"
+      - "!go * -exec*"
+      - "!go * -toolexec*"
+      - "!go * -vettool*"
+      - "!cargo * --config*"
+      # a `plugin:goal` (`exec:exec`, `antrun:run`) runs what the command line names
+      - "!mvn * *:*"
+      # msbuild switches written `-switch:value` load loggers or write files the
+      # command line does not show as paths; `@file` reads more switches from a file
+      - "!dotnet * -*:*"
+      - "!dotnet * @*"
+      # `-e`/`-p`/`--execute*` run Ruby from the command line; `-g`/`--system` load ~/.rake
+      - "!rake * -[eEpg]*"
+      - "!rake * -[!-]*[eEpg]*"
+      - "!rake * --e*"
+      - "!rake * --sy*"
+      # `cmake -E` runs a built-in command (`cmake -E rm -rf …`), `-P` a script; words
+      # after `--` go to the native build tool (`make --eval`)
+      - "!cmake * -[EP]*"
+      - "!cmake * --"
+      # dashboards submit results over the network; scripts and `--build-and-test` run commands
+      - "!ctest * -[DMTS]*"
+      - "!ctest * --{dashboard,build-*,test-command,script*,extra-submit,submit-index}*"
+      - "!go run * *@*"
+      # `--with` installs more packages into the run
+      - "!uv run * --with*"
+      # build secrets, the SSH agent, host networking and entitlements, output written
+      # to the host, extra build contexts, and pushes reach beyond the container
+      - "!docker build * --{secret,ssh,build-context,net,allow,security-opt,output,push,cache-to}*"
+      - "!docker build * -o*"
+      - "!docker build * -[!-]*o*"
+      # rebase options that run commands (`--exec`, `-x`), open the todo list
+      # (`--interactive`, `-i`, `--edit-todo`), resume a todo list that may hold `exec`
+      # lines (`--continue`, `--skip`) or run a `git-merge-<name>` program (`--strategy`,
+      # `-s`); git takes an unambiguous prefix of a long option, so `--ex*` is `--exec`
+      - "!git rebase * --ex*"
+      - "!git rebase * --in*"
+      - "!git rebase * --ed*"
+      - "!git rebase * --con*"
+      - "!git rebase * --sk*"
+      - "!git rebase * --str*"
+      - "!git rebase * -[ixs]*"
+      - "!git rebase * -[!-]*[ixs]*"
+      # a merge strategy other than the built-in ones runs a `git-merge-<name>` program
+      - "!git merge * --str*"
+      - "!git merge * -s*"
+      - "!git merge * -[!-]*s*"
+      # deleting a branch by force drops commits only the reflog keeps: `destructive-recoverable` needs review
+      - "!git branch -D *"
+      - "!git branch --delete --force *"
+      - "!git branch --force --delete *"
+      - "!git branch -d -f *"
+      - "!git branch -f -d *"
+      - "!git branch -df *"
+      - "!git branch -fd *"
+      # options that run a program: a pager to open matches in (`-O`), and the textconv
+      # or filter drivers that `--textconv` and `--filters` turn on; any prefix git
+      # accepts (`--op*`, `--te*`/`--t*`, `--fi*`)
+      - "!git grep * -O*"
+      - "!git grep * -[!-]*O*"
+      - "!git grep * --op*"
+      - "!git grep * --te*"
+      - "!git cat-file * --t*"
+      - "!git cat-file * --fi*"
+      - "!git blame * --t*"
+      # venv `--clear` empties an existing directory, `--upgrade-deps` downloads
+      # packages; argparse also takes a prefix of a long option
+      - "!python* -m venv * --cl*"
+      - "!python* -m venv * --u*"
+  - id: dev-readonly
+    reason: read-only inspection tools and non-secret variables
+    shell:
+      - "wc *"
+      - "diff *"
+      - "tree*"
+      # their operands are fs.read atoms, so outside the project these need review
+      - "file *"
+      - "stat *"
+      - "du *"
+      - "fd *"
+      - "uname"
+      # printing the date; setting the clock (`date -s`, `date MMDDhhmm`) needs review
+      - "date $"
+      - "date +* $"
+      - "date {-u,--utc} $"
+      - "date {-u,--utc} +* $"
+      - "brew {list,ls,info,search,config,--version}"
+      - "java {-version,--version} $"
+      # a toolchain's version, the first thing an agent checks; only these names, so a
+      # program the agent wrote (`./tool --version`) still needs review
+      - "{git,node,npm,pnpm,yarn,deno,bun,python,python3,pip,pip3,uv,ruby,gem,bundle,cargo,rustc,rustup,go,gcc,g++,clang,cmake,make,docker,kubectl,terraform,dotnet,mvn,gradle,swift,php,composer,perl} {--version,-V} $"
+      - "{node,npm,pnpm,yarn,deno,bun} -v $"
+      - "{git,go,docker,dotnet} version $"
+      # git's own options are parsed away (`git --version` is also seen as `git`); a bare
+      # `git` prints its usage, and an option that changes what git runs keeps the
+      # command as written, which must match on its own (shell/git.rs)
+      - "git $"
+      - "docker ps*"
+      - "docker images*"
+      - "docker logs *"
+      - "docker version*"
+      - "gh pr view*"
+      - "gh pr list*"
+      - "gh pr diff*"
+      - "gh pr checks*"
+      - "gh issue view*"
+      - "gh issue list*"
+      - "gh run list*"
+      - "gh run view*"
+      - "gh repo view*"
+      - "!* --output*"
+      - "!* -o *"
+      # `fd -x/-X/--exec*` run a program per match; `file -C` writes a compiled
+      # magic file and `file -f` reads the names to check from a file
+      - "!fd * -[xX]*"
+      - "!fd * -[!-]*[xX]*"
+      - "!fd * --exec*"
+      - "!file * -[Cf]*"
+      - "!file * -[!-]*[Cf]*"
+      - "!file * --{c,f}*"
+    env.read: ["PATH", "HOME", "USER", "SHELL", "PWD", "LANG", "TERM", "TMPDIR", "EDITOR"]
+  # a lowercase shell variable (`for f in`, `n=3`): environment variables, secrets
+  # among them, are uppercase by convention; the lowercase ones programs do read,
+  # the proxy variables of curl and git and npm's `npm_config_*`, stay out
+  - id: shell-locals
+    env.set: ["[a-z_]*", "![a-z_]*[!a-z0-9_]*", "!*_proxy", "!no_proxy", "!npm_config_*"]
+  - id: dev-tools
+    shell:
+      - "tsc*"
+      - "eslint *"
+      - "prettier *"
+      - "biome *"
+      - "vitest*"
+      - "jest*"
+      - "mocha*"
+      - "ruff *"
+      - "black *"
+      - "mypy *"
+      - "golangci-lint*"
+      # `gofmt -w` rewrites its operands and `-cpuprofile` writes a file: fs.write atoms
+      - "gofmt *"
+  - id: text-tools
+    reason: read-only text tools; the classifier reads their options and scripts (shell/text.rs)
+    shell:
+      - "sed *"
+      - "awk *"
+      - "sort *"
+      - "uniq *"
+      - "cut *"
+      # reads only stdin and writes only stdout; its operands are character sets
+      - "tr *"
+      # `perl -pi -e 's/a/b/' FILE…` whose program is only substitutions without the
+      # `e` flag (shell/in_place.rs): the files are fs.write atoms, as for `sed -i`
+      - "perl @substitute *"
+      # what the classifier cannot prove read-only is reported as `<program> @<argument>`
+      - "!{sed,awk,sort,uniq,cut} @*"
+  # OpenMoat's own commands that read no state and change nothing: the usage and the
+  # version, `policy lint FILE` (the file is an `fs.read`, decided by the path rules),
+  # `policy check` of a command, and the `demo` table; by either name and by path (a
+  # build in `target/debug/`). Every other command of the binary stays as it is:
+  # the person-only ones denied (`kernel-self`), the rest to the catch-all
+  - id: openmoat-readonly
+    reason: OpenMoat's usage, version, policy lint and check, and demo read no state and change nothing
+    shell:
+      - "{moat,openmoat,*/moat,*/openmoat} {--help,-h,help}"
+      - "{moat,openmoat,*/moat,*/openmoat} {--version,-V}"
+      # `[!-]*` is one word (a subcommand); `*` would be any number of words
+      - "{moat,openmoat,*/moat,*/openmoat} [!-]* {--help,-h}"
+      - "{moat,openmoat,*/moat,*/openmoat} {policy,mcp,proxy,sandbox,audit} [!-]* {--help,-h}"
+      - "{moat,openmoat,*/moat,*/openmoat} policy {lint,check}"
+      - "{moat,openmoat,*/moat,*/openmoat} demo"
+  - id: registries
+    net:
+      - "api.github.com"
+      - "github.com"
+      - "registry.npmjs.org"
+      - "crates.io"
+      - "static.crates.io"
+      - "index.crates.io"
+      - "proxy.golang.org"
+      - "pypi.org"
+      - "files.pythonhosted.org"
+  - id: safe-mcp
+    mcp: ["mcp__github__search_*", "mcp__github__get_*", "mcp__filesystem__read_*", "mcp__filesystem__list_*"]
+
+# OpenMoat holds calls for review itself only where the effect outlives the sandbox or the session:
+# what git, the login session or a build runs later, outside any sandbox, and reads
+# that sweep up secrets. Normal work never meets these (ADR-025).
+review:
+  - id: git-internals
+    reason: git runs what its config, hooks and refs name, later and outside any sandbox
+    title: changing git's config, hooks or refs
+    why: git runs what they name later, outside any sandbox
+    # a `.git` at any depth is a repository git follows (a `gitdir:` file, a planted directory)
+    fs.write: ["${project}/.git", "${project}/.git/**", "${project}/**/.git", "${project}/**/.git/**"]
+    # `dev-shell` allows the forms that only read; the rest of these change what git runs.
+    # A `-c` key that never names a program is dropped from the atom (shell/git.rs), so
+    # `git -c user.name=x commit` matches `git commit`. `git init --template=DIR` copies
+    # DIR's hooks into the new repository; an empty `--template=` copies none
+    shell: ["git config *", "git remote *", "git -c *", "git --config-env*", "git --git-dir*", "git --work-tree*", "git --exec-path*",
+      "git init --template=?*", "git init --template ?*", "git init * --template=?*", "git init * --template ?*"]
+  # provenance notes (ADR-056) are a person's record of what agents wrote; an agent that
+  # wrote, moved or removed them could hide its own work from a review. Only the notes
+  # ref OpenMoat uses: other notes and all of history stay as they are. `GIT_NOTES_REF`
+  # is denied (`env-poison`), `git config core.notesRef` and files under `.git` need review
+  # (`git-internals`); `update-ref --stdin` reads which refs it moves from its input
+  - id: provenance-notes
+    reason: OpenMoat's provenance notes record what agents wrote; a person writes them with `openmoat provenance --write-notes`
+    title: rewriting OpenMoat's record of what agents wrote
+    why: the notes are your record of which changes an agent made; an agent that edits them can hide its own work
+    shell: ["git notes * *openmoat*", "git update-ref * *notes/openmoat*", "git update-ref * --stdin*"]
+  # deleting a local branch loses nothing the reflog does not keep for weeks, so it
+  # needs review where a force push or `reset --hard` is denied
+  - id: destructive-recoverable
+    reason: deletes local work that the reflog still holds for a while
+    title: deleting local work
+    why: git keeps it for a while only, in the reflog
+    shell: ["git branch -D *", "git branch --delete --force *", "git branch --force --delete *",
+      "git branch -d -f *", "git branch -f -d *", "git branch -df *", "git branch -fd *"]
+  # CI configuration runs with the repository's secrets once a branch is pushed, and
+  # commit-hook managers and editor tasks run on this machine outside any sandbox;
+  # so do the agent hosts' hooks, MCP server lists, plugins and commands, in the next
+  # session. `project-fs` leaves them out, so a write needs review wherever it is.
+  # The OS sandboxes leave CI, commit-hook, editor and build files writable (an install
+  # writes them); `openmoat run` denies commands writing an agent's configuration in the
+  # project (ADR-091). The home files are the hosts' own state, which `moat run --write`
+  # may grant
+  - id: runs-later
+    reason: CI, commit hooks, the editor or the agent host run this later, outside any sandbox
+    title: changing something that runs later, outside any sandbox
+    why: CI, commit hooks, your editor or the agent run it later with your permissions
+    fs.write: ["**/.github/workflows/**", "**/.gitlab-ci.yml", "**/.circleci/**", "**/azure-pipelines.yml", "**/Jenkinsfile", "**/.buildkite/**", "**/.husky/**", "**/.pre-commit-config.yaml", "**/lefthook.yml", "**/.lefthook.yml",
+      # the editors' project configuration and the folders that hold it: VS Code's (and
+      # its forks') `.vscode/` and `.code-workspace` files, whose tasks, launch
+      # configurations, MCP servers and settings that name a program (a terminal
+      # profile, an interpreter, a formatter's path) the editor runs; JetBrains' `.idea/`
+      # and shared `*.run.xml` run configurations, which it runs, and which an agent's
+      # accepted edit could otherwise turn into a command no prompt asked about
+      # (code.claude.com/docs/en/jetbrains, "Security considerations")
+      "**/.vscode/**", "**/.vscode", "**/*.code-workspace", "**/.idea/**", "**/.idea", "**/*.run.xml",
+      # package-manager and build configuration that runs code on the next install,
+      # script or build (`.npmrc` `node-options`/`script-shell`, `.yarnrc.yml`
+      # `yarnPath`, `.cargo/config.toml` `rustc-wrapper`/`runner`, `bunfig.toml`
+      # `preload`), in the project or the home
+      "**/.npmrc", "**/.yarnrc", "**/.yarnrc.yml", "**/.cargo/config.toml", "**/.cargo/config", "**/bunfig.toml",
+      # git hooks outside `.git`: the folders a repository's `core.hooksPath` usually
+      # names (`.githooks` and `githooks`, `.git-hooks` and `scripts/git-hooks`), which
+      # git runs on the next commit or push once the setting points there. Not every
+      # folder named `hooks`: React hooks and docs live in those
+      "**/.githooks/**", "**/.git-hooks/**", "**/githooks/**", "**/git-hooks/**",
+      "**/.githooks", "**/.git-hooks", "**/githooks", "**/git-hooks",
+      # what every Python start runs, the allowed `pytest` included: a `.pth`
+      # file in a site directory (a line starting `import` is executed) and
+      # `sitecustomize`/`usercustomize`, imported from any folder on `sys.path`
+      "**/site-packages/*.pth", "**/dist-packages/*.pth", "**/sitecustomize.py", "**/usercustomize.py",
+      # each agent's files that run later, generated from its spec
+      # Claude Code: a project's hook scripts and MCP servers, and its subagents,
+      # skills and slash commands, which carry their own hooks, allowed tools and shell
+      "**/.claude/hooks/**", "**/.mcp.json", "**/.claude/agents/**", "**/.claude/skills/**",
+      "**/.claude/commands/**",
+      # Claude Code: the person's MCP servers and plugins
+      "~/.claude.json", "~/.claude/plugins/**",
+      # Codex: a project's configuration, which can add MCP servers; a write whose
+      # content turns its hook off (`[features] hooks = false`) is denied before the
+      # file changes (`project-settings`)
+      "**/.codex/config.toml",
+      # Cursor: a project's MCP servers
+      "**/.cursor/mcp.json",
+      # Cursor: the person's MCP servers and the CLI's configuration
+      "~/.cursor/mcp.json", "~/.cursor/cli-config.json",
+      # Continue CLI: its configuration, whose `mcpServers` it starts
+      "~/.continue/config.yaml",
+      # OpenClaw: the person's plugins, which its Gateway loads and runs with the
+      # agent's rights
+      "~/.openclaw/extensions/**",
+      # OpenClaw: a project's plugins
+      "**/.openclaw/extensions/**",
+      # GitHub Copilot CLI: a repository's hook files, MCP servers and custom agents
+      # (whose frontmatter may carry hooks)
+      "**/.github/hooks/**", "**/.github/mcp.json", "**/.github/agents/**",
+      # GitHub Copilot CLI: the person's MCP servers, plugins and custom agents, and
+      # the folder above a repository's hooks (a rename away and back edits them)
+      "~/.copilot/mcp-config.json", "~/.copilot/installed-plugins/**", "~/.copilot/agents/**",
+      "**/.github/hooks",
+      # pi: a project's extensions, which pi loads and runs with the agent's rights,
+      # its MCP servers, and its settings, which can add packages and turn extensions
+      # off (a write that removes OpenMoat's extension is denied, `project-settings`)
+      "**/.pi/extensions/**", "**/.pi/mcp.json", "**/.pi/settings.json",
+      # pi: the person's extensions and MCP servers, and the folders above a
+      # project's (a rename away and back edits them)
+      "~/.pi/agent/extensions/**", "~/.pi/agent/mcp.json", "**/.pi", "**/.pi/extensions",
+      # Gemini CLI: a project's policy files, which can allow what OpenMoat leaves to
+      # it (accepted without a question in a non-interactive run); its custom
+      # commands, whose shell runs when the person types the command, outside any
+      # tool hook; and its subagents
+      "**/.gemini/policies/**", "**/.gemini/commands/**", "**/.gemini/agents/**",
+      # Gemini CLI: the person's extensions, whose hooks and MCP servers it starts,
+      # and policy files
+      "~/.gemini/extensions/**", "~/.gemini/policies/**",
+      # OpenCode: the person's plugins and custom tools, which it loads into its own
+      # process with the agent's rights; commands, whose `` !`…` `` shell runs when
+      # the person types the command; and the package files and caches it loads
+      # plugin code from
+      "~/.config/opencode/plugins/**", "~/.config/opencode/plugin/**",
+      "~/.config/opencode/tools/**", "~/.config/opencode/tool/**", "~/.config/opencode/commands/**",
+      "~/.config/opencode/command/**", "~/.config/opencode/package.json",
+      "~/.config/opencode/node_modules/**", "~/.cache/opencode/node_modules/**",
+      # OpenCode: the person's agents and modes, which set their own prompt, model
+      # and permissions, and skills, loaded into every later session with no
+      # prompt; and the folders that hold them and the commands and tools (a
+      # rename away and back edits them)
+      "~/.config/opencode/agents/**", "~/.config/opencode/agent/**", "~/.config/opencode/modes/**",
+      "~/.config/opencode/mode/**", "~/.config/opencode/skills/**", "~/.config/opencode/skill/**",
+      "~/.config/opencode/agents", "~/.config/opencode/agent", "~/.config/opencode/modes",
+      "~/.config/opencode/mode", "~/.config/opencode/skills", "~/.config/opencode/skill",
+      "~/.config/opencode/commands", "~/.config/opencode/command", "~/.config/opencode/tools",
+      "~/.config/opencode/tool",
+      # OpenCode: a project's plugins, tools, commands, agents, modes and skills
+      # (loaded at start, with no prompt), and its configuration, which adds plugins, MCP
+      # servers and permission rules (a write that removes OpenMoat's plugin is
+      # denied, `project-settings`)
+      "**/.opencode/plugins/**", "**/.opencode/plugin/**", "**/.opencode/tools/**",
+      "**/.opencode/tool/**", "**/.opencode/commands/**", "**/.opencode/command/**",
+      "**/.opencode/agents/**", "**/.opencode/agent/**", "**/.opencode/modes/**",
+      "**/.opencode/mode/**", "**/.opencode/skills/**", "**/.opencode/skill/**",
+      "**/.opencode/opencode.json", "**/.opencode/opencode.jsonc", "**/opencode.json",
+      "**/opencode.jsonc",
+      # OpenCode: a project's package file, which OpenCode writes itself when it
+      # installs plugin dependencies at start, and the folders above a project's
+      # plugins (a rename away and back edits them)
+      "**/.opencode/package.json", "**/.opencode", "**/.opencode/plugins", "**/.opencode/plugin",
+      # Hermes Agent: the cron jobs it runs later unattended and the skills it loads
+      # into later sessions; another profile's configuration, hook allowlist, `.env`,
+      # plugins, hooks, skills and cron jobs, which run when that profile is used
+      "~/.hermes/cron/**", "~/.hermes/skills/**", "~/.hermes/profiles/*/config.yaml",
+      "~/.hermes/profiles/*/shell-hooks-allowlist.json", "~/.hermes/profiles/*/.env",
+      "~/.hermes/profiles/*/plugins/**", "~/.hermes/profiles/*/hooks/**",
+      "~/.hermes/profiles/*/agent-hooks/**", "~/.hermes/profiles/*/skills/**",
+      "~/.hermes/profiles/*/cron/**",
+      # Hermes Agent: a project's plugins (loaded with `HERMES_ENABLE_PROJECT_PLUGINS`)
+      "**/.hermes/plugins/**",
+      # Hermes Agent: the folders above a project's plugins
+      "**/.hermes", "**/.hermes/plugins",
+      # Cline: a workspace's hooks, every file of which it runs on each tool call
+      "**/.clinerules/hooks/**", "**/.cline/hooks/**",
+      # Cline: the folders above them (a rename away and back edits them); its rules
+      # files in `.clinerules/` stay ordinary project writes
+      "**/.clinerules", "**/.clinerules/hooks", "**/.cline", "**/.cline/hooks",
+      # Qwen Code: a project's settings, whose hooks and MCP servers it runs once
+      # approved, and its other configuration (commands, agents, skills)
+      "**/.qwen/**",
+      # Qwen Code: the person's extensions, whose hooks and MCP servers it starts
+      "~/.qwen/extensions/**",
+      # Crush: a project's configuration, whose hooks and MCP servers it runs when it
+      # starts, and its `crushrc` scripts, which it runs as Bash with no prompt
+      "**/crush.json", "**/.crush.json", "**/crushrc", "**/.crushrc", "**/.crush/**",
+      # Agent Skills, loaded by Codex, Cursor, GitHub Copilot CLI, pi, Gemini CLI,
+      # OpenCode, goose, Antigravity CLI, Crush:
+      # the shared `.agents/skills` folder, whose skills these hosts load into their
+      # later sessions (in the home too: `**/` matches it there)
+      "**/.agents/skills/**",
+      # the folders above it (a rename away and back edits them)
+      "**/.agents", "**/.agents/skills",
+      # a virtual environment's interpreter and scripts, which the editor's
+      # Python extension and the test runners start outside any sandbox; with
+      # the folder itself, a rename away and back edits it
+      "**/.venv/bin/**", "**/venv/bin/**", "**/.venv/bin", "**/venv/bin",
+      # a dev container's `initializeCommand`, which the editor runs on this
+      # machine, not in the container, when the folder is opened
+      "**/.devcontainer/**", "**/.devcontainer", "**/.devcontainer.json"]
+    shell:
+      # `opencode plugin` adds a plugin to the project's configuration (with
+      # `--global`, which `kernel-self` denies, to the person's)
+      - "{opencode,*/opencode} {plugin,plug}*"
+      # the agents' own commands that save an MCP server, which the agent starts
+      # in every later session, turn a defined one on, or start a server's OAuth
+      # sign-in, which opens the address the server names (Codex's `mcp add
+      # --url` and OpenCode's `mcp debug` start one too); listing and showing
+      # servers stays as it was
+      - "{claude,*/claude} mcp {add*,login*}"
+      - "{claude,*/claude} plugin install*"
+      - "{codex,*/codex} mcp {add*,login*}"
+      - "{agent,*/agent,cursor-agent,*/cursor-agent} mcp {enable*,login*}"
+      - "{openclaw,*/openclaw} mcp {add*,set*,configure*,login*}"
+      - "{copilot,*/copilot} mcp {add*,enable*}"
+      - "{pi,*/pi} mcp {add*,login*}"
+      - "{gemini,*/gemini} mcp {add*,enable*}"
+      - "{gemini,*/gemini} extensions {install*,link*}"
+      - "{opencode,*/opencode,opencode2,*/opencode2} mcp {add*,auth*,debug*}"
+      - "{hermes,*/hermes} mcp $"
+      - "{hermes,*/hermes} mcp {add*,install*,picker*,configure*,login*,reauth*}"
+      - "{hermes,*/hermes} * mcp {add*,install*,picker*,configure*,login*,reauth*}"
+  - id: persistence
+    reason: runs again later, outside this session
+    title: setting up something that runs again later
+    why: a scheduled job or service keeps running after this session ends
+    fs.write: ["~/Library/LaunchAgents/**", "~/.gitconfig", "~/.config/git/**", "~/.config/autostart/**", "~/.config/systemd/user/**",
+      # folders on `PATH`: a file named after `git`, `ls` or `node` there runs in
+      # its place later, with the person's rights. Installers (`pipx`, `cargo
+      # install`, `brew`) are commands, not writes, and keep their verdict;
+      # `kernel-self` denies OpenMoat's own binary names in any `bin`
+      "~/.local/bin/**", "~/bin/**", "~/.cargo/bin/**", "/usr/local/bin/**", "/opt/homebrew/bin/**",
+      # where every later install fetches packages from, and what every Bun start
+      # preloads: pip's and uv's user configuration, Bun's global configuration
+      "~/.config/pip/pip.conf", "~/.pip/pip.conf", "~/Library/Application Support/pip/pip.conf",
+      "~/.config/uv/uv.toml", "~/.bunfig.toml",
+      # the system's schedulers and service managers: crontabs (Linux spool, macOS
+      # tabs), cron's and anacron's tables and folders, macOS `periodic`, systemd
+      # units for the system and every user, SysV init scripts, and launchd's
+      # daemons and agents for every user
+      "/var/spool/cron", "/var/spool/cron/**", "/private/var/at/tabs/**", "/usr/lib/cron/tabs/**",
+      "/etc/crontab", "/private/etc/crontab", "/etc/anacrontab", "/etc/cron.*", "/etc/cron.*/**",
+      "/etc/periodic/**", "/private/etc/periodic/**",
+      "/etc/systemd/system", "/etc/systemd/system/**", "/etc/systemd/user", "/etc/systemd/user/**",
+      "/lib/systemd/system/**", "/usr/lib/systemd/system/**", "/usr/lib/systemd/user/**",
+      "/etc/init.d/**", "/etc/rc.local",
+      "/Library/LaunchDaemons", "/Library/LaunchDaemons/**", "/Library/LaunchAgents",
+      "/Library/LaunchAgents/**"]
+    # `at` and `batch` run the job on their stdin or in `-f FILE` later; the job's
+    # commands are classified too, so a denied one stays denied. `systemctl` and
+    # `launchctl` forms that start a unit or job at every boot or login, and a
+    # `systemd-run` timer; stopping, starting or listing them stays as it was
+    shell: ["crontab *", "at *", "batch *",
+      "{systemctl,*/systemctl} * {enable,reenable,link,preset,preset-all,add-wants,add-requires,set-default,edit}",
+      "{systemd-run,*/systemd-run} * --on-*",
+      "{launchctl,*/launchctl} {load,bootstrap,enable,submit}"]
+  # the operating system's own folders. No build, test or install an agent runs
+  # writes there (package managers write `/usr/local`, `/opt/homebrew` and the
+  # home), and what changes there outlives the session and every sandbox. Reads
+  # stay as they are; a write the sandboxes refuse anyway (macOS's sealed system
+  # volume) is still held, since the hook may be the only check
+  - id: system-files
+    reason: changes the operating system's own files, which outlive this session
+    title: changing the operating system's files
+    why: every program and user on this machine runs with them, after this session too
+    fs.write: ["/etc", "/etc/**", "/private/etc", "/private/etc/**",
+      "/usr", "/usr/**", "!/usr/local", "!/usr/local/**",
+      "/bin", "/bin/**", "/sbin", "/sbin/**", "/lib", "/lib/**", "/lib32", "/lib32/**",
+      "/lib64", "/lib64/**", "/libx32", "/libx32/**", "/boot", "/boot/**",
+      "/System", "/System/**",
+      "/Library/{Extensions,SystemExtensions,StartupItems,PrivilegedHelperTools,Security,Keychains,Filesystems}",
+      "/Library/{Extensions,SystemExtensions,StartupItems,PrivilegedHelperTools,Security,Keychains,Filesystems}/**"]
+  - id: stops-openmoat
+    reason: stops a running OpenMoat process, such as the egress proxy service
+    title: stopping a running OpenMoat process
+    why: its protection, such as the egress proxy, stops with it
+    # `@kills <name>` atoms: a `pkill` or `killall` pattern that could match the
+    # process name `openmoat` or `moat`, read as the regular expression it is
+    # (`pkill -f 'open.*'`, `killall moat`; not `pkill -f my-server.js`, shell/kills.rs);
+    # and `kill` of the pids a substitution names (`kill $(pgrep openmoat)`): its
+    # atom carries the substitution's text in place of `$(…)`
+    shell:
+      - "@kills *moat*"
+      - "{kill,*/kill} * *moat*"
+  - id: stops-system
+    reason: stops a process the operating system or the login session needs
+    title: stopping a system process
+    why: this machine, its remote login or your session may stop working
+    # `@kills-system <what>` atoms (shell/kills.rs): a `pkill` or `killall` pattern
+    # that could stop `init`, `launchd`, `systemd`, `sshd`, the login window or
+    # another system process, every process of `root`, `kill 1`, `kill -9 -1`
+    # (every process the user may signal), and `kill` of the pids `pgrep` or
+    # `pidof` looks up for one of them. `kill <pid>`, `pkill -f "node server"` and
+    # `killall node` stay as they were
+    shell: ["@kills-system *"]
+  - id: home-sweep
+    reason: reads the whole home folder, secrets included
+    title: reading your whole home folder
+    why: your secrets are in it too
+    # the folder itself: a recursive read of an ancestor of the guarded paths (POLICY.md §3)
+    fs.read: ["~", "~/.config"]
+  - id: other-home
+    reason: names another user's home, which OpenMoat cannot place
+    title: touching another user's home folder
+    why: OpenMoat cannot tell what is in it
+    # `@other-home <word>` atoms: `~alice/.ssh/id_rsa` may hold that user's secrets
+    shell: ["@other-home *"]
+  - id: secret-names
+    reason: names a secret's file in a directory OpenMoat cannot see
+    title: naming a secret's file in a folder OpenMoat cannot see
+    why: the file there may be a secret your policy denies
+    # `@unknown-path <word>` atoms: a path through a variable whose value is not known
+    # (`cat $X/id_rsa`); its file name is that of a key, a token or a `.env`
+    shell:
+      - "@unknown-path *{id_rsa,id_dsa,id_ecdsa,id_ed25519}"
+      - "@unknown-path *{id_rsa,id_dsa,id_ecdsa,id_ed25519}.pub"
+      - "@unknown-path *{.env,.envrc,.netrc,.npmrc,.pypirc,.git-credentials,credentials}"
+      - "@unknown-path *.env.*"
+      - "@unknown-path *.{pem,key,p12,pfx}"
+  - id: opaque-code
+    reason: a program OpenMoat cannot read may open any file or variable
+    title: running a program OpenMoat cannot read
+    why: it may open any file or variable
+    # `<program> @<text>` atoms: an awk or sed program, or a text-tool option, not understood
+    # and `<shell> @stdin`: text piped into a shell that the command line does not show;
+    # `@opaque-code <interpreter>`: inline code (`python3 -c`, `node -e`, a here-document)
+    # that opens files, connects, reads the environment or runs programs with text it
+    # builds at run time, so the scan cannot see what it opens
+    # or a `cmd`, PowerShell or `wt` line built at run time (`^`, `%x%`, `!x!`, joined
+    # strings, `iex`, `-EncodedCommand`), so what it runs cannot be read (ADR-083)
+    shell: ["awk @*", "gawk @*", "mawk @*", "nawk @*", "sed @*", "gsed @*", "sort @*", "uniq @*", "cut @*", "printf -v *", "{sh,bash,zsh,dash,ksh,fish} @stdin", "@opaque-code *"]
+    env.set: ["CDPATH"]
+  # `@package-near-miss <ecosystem> <name> <popular>` atoms (ADR-030): an install of a
+  # name that is not on the bundled list of popular packages but is one typo or a
+  # common trick away from one on it. Other installs defer, unknown names included
+  - id: package-near-miss
+    reason: looks like a typo of a popular package's name, as typo-squats and made-up names do; check which one you meant
+    title: installing a package whose name looks like a typo
+    why: typo-squats and made-up names are how malicious packages get installed
+    shell: ["@package-near-miss *"]
+  # `@package-run-unknown <ecosystem> <name>` atoms (ADR-102): `npx`, `bunx`, `npm exec`,
+  # `pnpm dlx`, `yarn dlx`, `bun x`, `uvx`, `uv tool run` or `pipx run` of a package that
+  # is not on the bundled list of popular packages: it is fetched and its code runs at
+  # once. A popular name defers, as an install does; `npx --no-install` fetches nothing
+  - id: package-run-unknown
+    reason: fetches a package that is not on the list of popular ones and runs its code at once; check that it is the one you meant
+    title: running a package that is not a well-known one
+    why: a made-up or squatted name runs whatever its author put in it, with your permissions
+    shell: ["@package-run-unknown *"]
+  - id: docker-secrets
+    reason: hands secrets, the SSH agent or the host to a build
+    title: handing secrets or this machine to a container build
+    why: the build can read and keep what it is given
+    # `dev-shell` allows `docker build` without these options
+    shell: ["docker build *"]
+  # a container handed the host: privileged mode, the host's process, network or
+  # user namespaces, added capabilities, devices, a weaker security profile, the
+  # host's root or the Docker socket mounted in. Code in it can change this machine
+  # outside any sandbox, as root where the daemon runs as root. Other runs defer,
+  # as before; a key folder mounted in is decided by its path (`secrets-paths`)
+  - id: container-host
+    reason: gives a container the host's root, devices, namespaces or Docker socket, so it can change this machine outside any sandbox
+    title: giving a container the host's root, devices or Docker socket
+    why: code in that container can change this machine outside any sandbox, as root where the daemon runs as root
+    shell:
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --privileged*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --{pid,ipc,uts,userns,cgroupns,net,network}=host*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --{pid,ipc,uts,userns,cgroupns,net,network} host*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --cap-add*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --device*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --security-opt*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v,--volume} /"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v,--volume} /:*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v,--volume} *docker.sock*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v/:*,-v=/:*,--volume=/:*,-v/,-v=/,--volume=/}"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v*docker.sock*,--volume=*docker.sock*}"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount *docker.sock*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount=*docker.sock*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount *{source,src}=/,*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount *{source,src}=/"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount=*{source,src}=/,*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount=*{source,src}=/"
+  # `claude setup-token` signs in and prints a new long-lived login token
+  # without saving it; the person may mean to (a CI secret), the agent should
+  # not do it unasked. Commands that print a stored token are denied
+  # (`agent-credentials`)
+  - id: agent-token
+    reason: makes a new login token for an AI agent and prints it
+    title: making a new login token for an AI agent
+    why: the command prints a long-lived token into the agent's context
+    shell: ["{claude,*/claude} setup-token*"]
+  # `@credential-egress <kind> <host>` atoms, in the places `token-egress` reads: a
+  # JSON web token (three base64url parts, the first two `eyJ`), or a database URL
+  # with a password (`postgres://user:pass@db/…`, MySQL, MongoDB, Redis, AMQP, SQL
+  # Server) sent to a host other than its own. Both are often sent to the service
+  # they belong to, which a JWT's shape does not name, so they need review rather
+  # than a deny; loopback hosts are left out (POLICY.md §3)
+  - id: credential-egress
+    reason: sends a login token or a database password off this machine
+    title: sending a login token or a database password off this machine
+    why: whoever receives it can sign in as you, or into that database
+    shell: ["@credential-egress *"]
+  # Staging (ADR-061, accepted by ADR-113). `@staging-egress <host> <trigger>`
+  # atoms on a send of a session that collected data: `staged`, the send names a
+  # file the session packed or encoded from files outside the project (`tar czf
+  # /tmp/a.tgz ~/Documents`, then `curl -F f=@/tmp/a.tgz …`); `private`, the
+  # session wrote private data into a file (`cp ~/.aws/credentials notes/`, `tar
+  # czf k.tgz ~/.ssh`) and this call can send data anywhere. `collected` (many
+  # outside reads, then a send with a body) stays recorded only: its thresholds
+  # are not yet measured (POLICY.md §4.5)
+  - id: staging-egress
+    reason: sends data after this session packed files from outside the project or wrote private data into a file
+    title: sending data the session packed or copied out of private files
+    why: collect, pack and send is how data leaves in steps that each look ordinary
+    shell: ["@staging-egress * staged $", "@staging-egress * private $"]
+
+# Installs, publishing and pushes are not listed: they match no rule, so the agent's
+# own prompt decides them like any other unlisted call (ADR-025).
+defer:
+  # without this group the `net` default would deny local services
+  - id: local-net
+    reason: local service; may expose a control API (Docker, databases, cloud agents)
+    net: ["localhost", "127.0.0.1", "::1"]
+
+executables: {}
+
+# Method and path rules for hosts the rules above allow (ADR-062). `registries` opens
+# api.github.com to git, gh and the agents' GitHub tools, and so to its endpoints that
+# publish what they are sent: a new gist is public to anyone with its link. The hook
+# reads the method and URL a command or fetch tool sends (`curl -X POST …`, `gh api`,
+# `gh gist create`): a request a deny rule names is denied, one it cannot read in full
+# where a rule could refuse it needs review. `hook_only: true` keeps them out of the
+# proxy, which would need a certificate authority to read requests inside HTTPS.
+#
+# With a proxy CA (`openmoat proxy ca init`), an entry without `hook_only` is also held
+# by the proxy, inside the tunnels it terminates, and may list `allow` rules:
+#   - id: github-api
+#     host: api.github.com
+#     allow: ["GET /**", "HEAD /**", "POST /repos/*/*/issues", "POST /repos/*/*/pulls"]
+#     deny: ["POST /gists", "PATCH /gists/**", "POST /gists/*/comments"]
+# `requests_untrusted: refuse` (the default) refuses a connection `openmoat proxy`
+# cannot terminate for such an entry; `relay` passes it unread.
+requests:
+  # GitHub REST API, "Gists": create a gist, update one (and its comments), comment on one
+  - id: exfil-gists
+    host: api.github.com
+    hook_only: true
+    deny: ["POST /gists", "PATCH /gists/**", "POST /gists/*/comments"]
+
+# What the host sandboxes OpenMoat configures (ADR-018) may read beyond the project:
+# system and toolchain locations every build reads. Only OS layers use this list;
+# the hook still applies the rules above to these reads (defer), and secrets-paths
+# still wins inside them. Writes stay project-only. Missing paths are harmless.
+sandbox:
+  # `moat run` tells npm and uv to install no version published in the last 7 days
+  # (ADR-030); 0 turns it off
+  package_min_release_age_days: 7
+  read_roots:
+    - /usr
+    - /bin
+    - /sbin
+    - /lib
+    - /lib64
+    - /etc
+    - /opt
+    - /nix
+    - /snap
+    - /System
+    - /Library
+    - /Applications/Xcode.app
+    - /private/etc
+    - /tmp
+    - /private/tmp
+    - /var/folders
+    - /private/var/folders
+    - ~/.gitconfig
+    - ~/.cargo
+    - ~/.rustup
+    - ~/.npm
+    - ~/.nvm
+    - ~/.pyenv
+    - ~/.local/bin
+    - ~/go

@@ -29,7 +29,8 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
     let home = Home::locate()?;
     if !home.policy_path().is_file() {
         bail!(
-            "no policy at {}; run `openmoat init`",
+            "no policy at {}; run `openmoat init`, then `openmoat policy upgrade --dry-run` \
+             (docs/USAGE.md#after-upgrading-openmoat)",
             home.policy_path().display()
         );
     }
@@ -109,6 +110,11 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
         trust_steps(&home, &binary, &mut out)?;
     }
     sync(&home, &mut out)?;
+    writeln!(
+        out,
+        "Next: `openmoat status` shows the protection in place; \
+         `openmoat policy upgrade --undo` puts the previous policy back"
+    )?;
     out.finish()?;
     Ok(Code::Ok)
 }

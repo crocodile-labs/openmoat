@@ -1082,9 +1082,31 @@ OpenMoat 0.15.0 has new default rules for your policy
 Apply these changes? [y/N/d]   (d = show the full diff)
 ```
 
-A change it cannot name is counted as `Other changes: N (d to see)`. After a yes it writes
+A change it cannot name is counted as `Other changes: N (d to see)`. A pattern replaced by
+the same pattern with a longer `{…}` list matches everything it did and more, so the two
+are shown once, as one broadening, never as a pattern no longer denied: 0.27.0 added
+`team` to the commands fifteen `kernel-self` lines deny, shown as
+`` `kernel-self`: 15 patterns now also cover `team` `` under "New protections". A pattern
+taken out with nothing as broad left stays a removal. After a yes it writes
 the agents' sandbox settings from the upgraded policy, as `openmoat sandbox sync` does and
 after the same checks; when they cannot be written it says to run `openmoat sandbox sync`.
+Then it names what to run next: `openmoat status` to see the protection in place, and
+`openmoat policy upgrade --undo` to put the previous policy back.
+
+#### Try it
+
+In a throwaway state directory, with the 0.26.0 default as the policy (needs `curl`;
+your own `~/.moat` and agents are not touched, and `--dry-run` writes nothing):
+
+```bash
+export MOAT_HOME="$(mktemp -d)"
+curl -fsSL -o "$MOAT_HOME/policy.yaml" \
+  https://raw.githubusercontent.com/crocodile-labs/openmoat/v0.26.0/crates/openmoat-core/policies/default-v1.yaml
+cp "$MOAT_HOME/policy.yaml" "$MOAT_HOME/policy.base.yaml"   # the default it was made from
+openmoat policy upgrade --dry-run    # grouped: New protections, Fewer interruptions, …
+openmoat policy upgrade --dry-run --diff   # the same, then the full diff
+rm -rf "$MOAT_HOME"; unset MOAT_HOME     # undo: remove the throwaway directory
+```
 
 Lines you changed are never touched; a change that would overlap them is listed for you to
 make with `openmoat edit` if you want it. From 0.12.0 the default policy adds the deny

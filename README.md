@@ -194,7 +194,10 @@ call's arguments, such as an MCP mail tool's recipients
 applies (`openmoat policy upgrade`, `openmoat trust`, `openmoat policy install`), OpenMoat
 lists the calls it finds the change would decide less strictly, and an upgrade that has any
 needs `--accept-widening`; `openmoat policy diff OLD NEW --widen` checks any two policies
-([docs/POLICY.md §8.3](docs/POLICY.md#83-does-a-change-widen-openmoat-policy-diff---widen-adr-111)). No AI model decides,
+([docs/POLICY.md §8.3](docs/POLICY.md#83-does-a-change-widen-openmoat-policy-diff---widen-adr-111)).
+After you update OpenMoat, `openmoat policy upgrade --dry-run` shows what the new default
+adds to your policy, grouped as new protections and fewer interruptions, keeping your own
+edits ([docs/USAGE.md](docs/USAGE.md#after-upgrading-openmoat)). No AI model decides,
 and OpenMoat sends nothing off your machine unless you set up
 [remote approvals](docs/APPROVALS.md) or [live audit delivery](docs/DELIVERY.md).
 

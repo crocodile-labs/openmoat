@@ -14,6 +14,8 @@ use serde_json::Value;
 
 use crate::upgrade::Change;
 
+mod superset;
+
 /// At most this many patterns are named in a line; more are counted.
 const NAMED_PATTERNS: usize = 3;
 /// A pattern longer than this is counted, not named.
@@ -220,7 +222,9 @@ fn added_group(list: List, group: &RuleGroup, summary: &mut Summary) {
 /// The patterns `group` gained and lost, one line per direction; whether
 /// there were any. A pattern starting with `!` is an exception to the group,
 /// so adding one does the opposite of adding a plain pattern. A pattern lost
-/// that one the group keeps or gains still matches as a whole is counted in
+/// for one the group gains that is the same but for longer `{…}` lists was
+/// broadened: the two are shown once, as that, never as a removal. One lost
+/// that a pattern the group keeps still matches is counted in
 /// [`Summary::folded`], not named: the group decides it as before.
 fn pattern_changes(
     list: List,
@@ -231,25 +235,44 @@ fn pattern_changes(
 ) -> bool {
     let folded_before = summary.folded;
     let (mut tighter, mut wider) = (Vec::new(), Vec::new());
+    let mut broadened = Vec::new();
     for kind in Kind::ALL {
         let (old, new) = (was.patterns(kind), now.patterns(kind));
-        let added = new.iter().filter(|p| !old.contains(p)).map(|p| (p, true));
+        let added: Vec<&String> = new.iter().filter(|p| !old.contains(p)).collect();
         let removed = old.iter().filter(|p| !new.contains(p));
-        let (folded, removed): (Vec<&String>, Vec<&String>) =
-            removed.partition(|p| still_covered(kind, p, new));
-        summary.folded += folded.len();
-        for (pattern, added) in added.chain(removed.into_iter().map(|p| (p, false))) {
+        let mut pairs: Vec<Broadened> = Vec::new();
+        let mut taken_out = Vec::new();
+        for pattern in removed {
+            let pair = added
+                .iter()
+                .filter(|by| !pairs.iter().any(|pair| pair.new == by.as_str()))
+                .find_map(|by| Broadened::of(kind, pattern, by));
+            if let Some(pair) = pair {
+                pairs.push(pair);
+            } else if still_covered(kind, pattern, new) {
+                summary.folded += 1;
+            } else {
+                taken_out.push(pattern);
+            }
+        }
+        let put_in = added
+            .into_iter()
+            .filter(|p| !pairs.iter().any(|pair| pair.new == p.as_str()));
+        for (pattern, added) in put_in
+            .map(|p| (p, true))
+            .chain(taken_out.into_iter().map(|p| (p, false)))
+        {
             let shown = pattern.strip_prefix('!');
-            // A plain pattern added to a deny or review group protects more;
-            // an exception, a removal or an allow group each turn that round.
-            let side = if added ^ shown.is_some() ^ list.lets_through() {
+            let side = if tightens(added, shown.is_some(), list) {
                 &mut tighter
             } else {
                 &mut wider
             };
             side.push(shown.unwrap_or(pattern.as_str()));
         }
+        broadened.extend(pairs);
     }
+    broadened_lines(list, id, &broadened, summary);
     let (now_covers, no_longer) = match list {
         List::Deny => ("now also denies", "no longer denies"),
         List::Review => ("now also holds for review", "no longer holds for review"),
@@ -267,7 +290,64 @@ fn pattern_changes(
         let line = format!("`{id}` {no_longer} {}", patterns_phrase(&wider));
         summary.fewer.push(line);
     }
-    !(tighter.is_empty() && wider.is_empty()) || summary.folded > folded_before
+    !(tighter.is_empty() && wider.is_empty() && broadened.is_empty())
+        || summary.folded > folded_before
+}
+
+/// Whether a pattern taken in (`added`) or out of a group of `list` makes it
+/// decide more calls the strict way. A plain pattern added to a deny or review
+/// group protects more; an exception, a removal or an allow group each turn
+/// that round.
+fn tightens(added: bool, exception: bool, list: List) -> bool {
+    added ^ exception ^ list.lets_through()
+}
+
+/// A pattern replaced by the same pattern with longer `{…}` lists: everything
+/// the old matched, the new still matches, and more.
+struct Broadened<'a> {
+    new: &'a str,
+    /// The alternatives the new pattern's lists gained: `team`.
+    gained: Vec<String>,
+}
+
+impl<'a> Broadened<'a> {
+    /// `removed` replaced by `by`, when `by` is `removed` with longer lists
+    /// and matches everything it did: a plain pattern by a plain one, an
+    /// exception by an exception.
+    fn of(kind: Kind, removed: &str, by: &'a str) -> Option<Self> {
+        let ((by_negated, body_by), (negated, body)) =
+            (split_exclusion(by), split_exclusion(removed));
+        let broader = by_negated == negated && superset::covers(kind, body_by, body);
+        broader
+            .then(|| superset::gained(body, body_by))
+            .flatten()
+            .map(|gained| Self { new: by, gained })
+    }
+}
+
+/// One line per set of alternatives gained, on the side it moves the group
+/// to: a pattern of a deny group that now matches more protects more.
+/// `kernel-self`: 15 patterns now also cover `team`.
+fn broadened_lines(list: List, id: &str, broadened: &[Broadened], summary: &mut Summary) {
+    let mut by_gain: BTreeMap<(bool, &[String]), usize> = BTreeMap::new();
+    for pair in broadened {
+        let exception = pair.new.starts_with('!');
+        *by_gain
+            .entry((exception, pair.gained.as_slice()))
+            .or_default() += 1;
+    }
+    for ((exception, gained), n) in by_gain {
+        let noun = if exception { "exception" } else { "pattern" };
+        let what = crate::report::count(n, noun);
+        let verb = if n == 1 { "covers" } else { "cover" };
+        let names: Vec<String> = gained.iter().map(|g| format!("`{g}`")).collect();
+        let line = format!("`{id}`: {what} now also {verb} {}", names.join(", "));
+        if tightens(true, exception, list) {
+            summary.protections.push(line);
+        } else {
+            summary.fewer.push(line);
+        }
+    }
 }
 
 /// Whether `removed`, a pattern a group of `kind` no longer lists, is still
@@ -280,7 +360,7 @@ fn still_covered(kind: Kind, removed: &str, patterns: &[String]) -> bool {
     let (negated, body) = split_exclusion(removed);
     patterns.iter().any(|p| {
         let (by_negated, by) = split_exclusion(p);
-        by_negated == negated && openmoat_core::lint::covers(kind, by, body)
+        by_negated == negated && superset::covers(kind, by, body)
     })
 }
 
