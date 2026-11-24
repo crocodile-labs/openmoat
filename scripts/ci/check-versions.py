@@ -10,6 +10,8 @@ changes every place below at once:
 - Cargo.lock and fuzz/Cargo.lock record it for every `openmoat*` package;
 - sdk/js/package.json, the JavaScript SDK, has it as its `version` (ADR-046);
 - README.md and docs/ROADMAP.md say "The latest release is `<version>`";
+- the sample output and the "what <version> changes" links show it, and those
+  links and docs/INSTALL.md's newest upgrade note name it (`check_current`);
 - CHANGELOG.md starts with `## [Unreleased]`, then `## [<version>] - YYYY-MM-DD`,
   names each release once and repeats no `###` heading inside one section.
 
@@ -71,6 +73,37 @@ def check_docs(version, problems):
                 problems.append(f"{doc}: says the latest release is {stated}, workspace is {version}")
 
 
+# Places that show the running release: sample output (`openmoat init`'s
+# first line, its `--format json`), the link to "what this release changes"
+# and that link's upgrade note. A release PR that misses one leaves the docs
+# naming an older release as the current one.
+CURRENT = [
+    ("README.md", re.compile(r"OpenMoat (\d+\.\d+\.\d+) · ")),
+    ("docs/USAGE.md", re.compile(r'"version": "(\d+\.\d+\.\d+)", "dry_run"')),
+    ("README.md", re.compile(r"what (\d+\.\d+\.\d+) changes")),
+    ("docs/README.md", re.compile(r"what (\d+\.\d+\.\d+) changes")),
+    ("docs/USAGE.md", re.compile(r"\n(\d+\.\d+\.\d+) changes for you")),
+]
+UPGRADE_NOTE = re.compile(r"INSTALL\.md#from-\d+-to-(\d+)\)")
+
+
+def check_current(version, problems):
+    for doc, pattern in CURRENT:
+        for stated in pattern.findall((ROOT / doc).read_text(encoding="utf-8")):
+            if stated != version:
+                problems.append(f"{doc}: shows {stated} as the current release, workspace is {version}")
+    digits = version.replace(".", "")
+    for doc in ("README.md", "docs/README.md", "docs/USAGE.md"):
+        for to in UPGRADE_NOTE.findall((ROOT / doc).read_text(encoding="utf-8")):
+            if to != digits:
+                problems.append(
+                    f"{doc}: links the upgrade note to {to}, workspace is {version} ({digits})"
+                )
+    install = (ROOT / "docs/INSTALL.md").read_text(encoding="utf-8")
+    if not re.search(rf"^### From \d+\.\d+\.\d+ to {re.escape(version)}$", install, re.M):
+        problems.append(f"docs/INSTALL.md: no '### From … to {version}' upgrade note")
+
+
 def check_changelog(version, problems):
     releases, subsections, current = [], set(), None
     for number, line in enumerate((ROOT / "CHANGELOG.md").read_text(encoding="utf-8").splitlines(), 1):
@@ -101,6 +134,7 @@ def main():
     check_lockfiles(version, problems)
     check_packages(version, problems)
     check_docs(version, problems)
+    check_current(version, problems)
     check_changelog(version, problems)
     for problem in problems:
         print(problem)

@@ -227,20 +227,28 @@ pub fn verify(home: &Home, signers: &Path, dir: &Path) -> Result<Bundle> {
     let manifest_bytes = read_inside(&dir, MANIFEST)?;
     let signature = read_inside(&dir, SIGNATURE)?;
     // The bytes that verify are the bytes installed: `ssh-keygen` reads the
-    // signature from a file, so it gets a private copy of these bytes.
-    create_private_dir(&home.team_dir())?;
-    let staged = home
-        .team_dir()
-        .join(format!(".staged.{}.sig", std::process::id()));
-    write_private(&staged, &signature)?;
-    let signer = signing::verify(
-        &program,
-        signers,
-        &manifest_bytes,
-        &staged,
-        Signed::TeamBundle,
-    );
-    let _ = fs::remove_file(&staged);
+    // signature from a file, so it gets a private copy of these bytes. The
+    // copy goes in a private folder of this process's own in the temp
+    // directory, not in `~/.moat/team/`: `inventory --check` reads a bundle
+    // under an agent's sandbox too, where `~/.moat` is not writable.
+    let staging = std::env::temp_dir().join(format!(
+        "openmoat-team-{}-{}",
+        std::process::id(),
+        crate::time::now_ms()
+    ));
+    create_private_dir(&staging)?;
+    let staged = staging.join("bundle.sig");
+    let written = write_private(&staged, &signature);
+    let signer = written.and_then(|()| {
+        signing::verify(
+            &program,
+            signers,
+            &manifest_bytes,
+            &staged,
+            Signed::TeamBundle,
+        )
+    });
+    let _ = fs::remove_dir_all(&staging);
     let Some(signer) = signer? else {
         bail!(
             "refusing the bundle in {}: {SIGNATURE} does not verify against the team's key \

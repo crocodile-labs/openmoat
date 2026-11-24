@@ -428,6 +428,17 @@ pub fn record_current(
     })
 }
 
+/// What `init`, `status` and `doctor` say the ledger holds: the hook
+/// commands, plugin hooks and git programs the set-up agents load besides
+/// OpenMoat's own hook. "0 recorded" read as if recording had failed, so none
+/// is said as none.
+pub fn recorded(count: usize) -> String {
+    match count {
+        0 => "none besides OpenMoat's own hook".to_owned(),
+        n => format!("{n} besides OpenMoat's own hook, recorded"),
+    }
+}
+
 /// The lines `status`, `doctor` and `hooks list` print for `review`.
 pub fn lines(review: &Review) -> Vec<String> {
     if !review.recorded {

@@ -38,8 +38,8 @@ pub(super) fn line(shown: &mut Shown, home: &Home, binary: &Path) -> bool {
         }
         Ok(found) if found.changes.is_empty() => {
             let text = format!(
-                "{} recorded; nothing waits for `openmoat hooks accept`",
-                found.pin_count
+                "{}; nothing waits for `openmoat hooks accept`",
+                hook_ledger::recorded(found.pin_count)
             );
             shown.state(Mark::Ok, "Other hooks", text);
             true

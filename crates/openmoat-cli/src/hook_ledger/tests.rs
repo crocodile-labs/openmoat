@@ -183,3 +183,14 @@ fn a_token_in_a_command_is_not_kept_in_clear() {
     let one = found("a", "d1", &[&format!("curl -H 'Authorization: {token}' x")]);
     assert!(!HookPin::of(&one).shown.contains(&token));
 }
+
+/// No other hook is said as none, never as "0 recorded", which read as if
+/// recording had failed.
+#[test]
+fn the_count_says_none_besides_openmoats_own() {
+    assert_eq!(super::recorded(0), "none besides OpenMoat's own hook");
+    assert_eq!(
+        super::recorded(3),
+        "3 besides OpenMoat's own hook, recorded"
+    );
+}

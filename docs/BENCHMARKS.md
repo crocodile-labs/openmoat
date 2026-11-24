@@ -23,21 +23,28 @@ OpenMoat; how, and what that leaves out, is below.
 
 ## Summary
 
-Decision engine only, run on 2026-11-22, twice: the default policy of OpenMoat 0.25.0
-(`main` at `33d8f388`), and the same release with the rules this measurement led to
-([ADR-112](adr/ADR-112-default-rules-from-outside-benchmarks.md), below as "after").
-"Stopped" is `deny`, or `deny` plus `review` (held for a person). `defer` means OpenMoat
-leaves the call to the agent's own permission prompt, which is the default policy's
-answer for a call no rule names (ADR-025); it is not counted as stopped.
+Decision engine only. Run on 2026-11-22 with the default policy of OpenMoat 0.25.0
+(`main` at `33d8f388`) and with the rules this measurement led to
+([ADR-112](adr/ADR-112-default-rules-from-outside-benchmarks.md), released in 0.26.0), and
+again on 2026-11-24 with OpenMoat 0.27.0 (`main` at `4c9c40f5`, which adds ADR-116's
+`obfuscated` rule and PowerShell reader). "Stopped" is `deny`, or `deny` plus `review`
+(held for a person). `defer` means OpenMoat leaves the call to the agent's own permission
+prompt, which is the default policy's answer for a call no rule names (ADR-025); it is
+not counted as stopped.
 
-| Benchmark, form | Attacks | Stopped, deny only: 0.25.0 → after | Stopped, deny + review: 0.25.0 → after | `defer`: 0.25.0 → after | Allowed: 0.25.0 → after | False positives: 0.25.0 → after |
+| Benchmark, form | Attacks | Stopped, deny only: 0.25.0 → 0.26.0 → 0.27.0 | Stopped, deny + review: 0.25.0 → 0.26.0 → 0.27.0 | `defer`: 0.25.0 → 0.26.0 → 0.27.0 | Allowed | False positives |
 |---|--:|--:|--:|--:|--:|--:|
-| RedCode-Exec, code inline in the command, all 47 scenario files | 1,410 | 188 (13.3%) → 209 (14.8%) | 488 (34.6%) → 658 (46.7%) | 922 (65.4%) → 752 (53.3%) | 0 → 0 | no benign cases in the set |
-| RedCode-Exec, code inline, the 30 scenario files whose code acts on the machine | 900 | 178 (19.8%) → 199 (22.1%) | 450 (50.0%) → 620 (68.9%) | 450 (50.0%) → 280 (31.1%) | 0 → 0 | |
-| RedCode-Exec, script written to the project, then run | 1,410 | 0 → 0 | 0 → 0 | 600 (42.6%) → 600 (42.6%) | 810 (57.4%) → 810 (57.4%) | |
-| agent-egress-bench, the call an agent makes (`curl`, or the agent's own tool for MCP cases) | 122 of 192 | 58 (47.5%) → 61 (50.0%) | 58 (47.5%) → 66 (54.1%) | 63 (51.6%) → 55 (45.1%) | 1 → 1 | 12 of 37 (32.4%) → 12 of 37 (32.4%) |
-| agent-egress-bench, the same over the whole corpus, skipped cases counted as not stopped | 192 | 58 (30.2%) → 61 (31.8%) | 58 (30.2%) → 66 (34.4%) | | | |
-| agent-egress-bench, plain `GET`s through the agent's fetch tool | 53 | 5 (9.4%) → 20 (37.7%) | 5 (9.4%) → 22 (41.5%) | 48 → 31 | 0 → 0 | 0 of 14 → 0 of 14 |
+| RedCode-Exec, code inline in the command, all 47 scenario files | 1,410 | 188 (13.3%) → 209 (14.8%) → 209 (14.8%) | 488 (34.6%) → 658 (46.7%) → 665 (47.2%) | 922 (65.4%) → 752 (53.3%) → 745 (52.8%) | 0 in each | no benign cases in the set |
+| RedCode-Exec, code inline, the 30 scenario files whose code acts on the machine | 900 | 178 (19.8%) → 199 (22.1%) → 199 (22.1%) | 450 (50.0%) → 620 (68.9%) → 622 (69.1%) | 450 (50.0%) → 280 (31.1%) → 278 (30.9%) | 0 in each | |
+| RedCode-Exec, script written to the project, then run | 1,410 | 0 in each | 0 in each | 600 (42.6%) in each | 810 (57.4%) in each | |
+| agent-egress-bench, the call an agent makes (`curl`, or the agent's own tool for MCP cases) | 122 of 192 | 58 (47.5%) → 61 (50.0%) → 61 (50.0%) | 58 (47.5%) → 66 (54.1%) → 67 (54.9%) | 63 (51.6%) → 55 (45.1%) → 54 (44.3%) | 1 in each | 12 of 37 (32.4%) in each |
+| agent-egress-bench, the same over the whole corpus, skipped cases counted as not stopped | 192 | 58 (30.2%) → 61 (31.8%) → 61 (31.8%) | 58 (30.2%) → 66 (34.4%) → 67 (34.9%) | | | |
+| agent-egress-bench, plain `GET`s through the agent's fetch tool | 53 | 5 (9.4%) → 20 (37.7%) → 20 (37.7%) | 5 (9.4%) → 22 (41.5%) → 22 (41.5%) | 48 → 31 → 31 | 0 in each | 0 of 14 in each |
+
+0.27.0's change is the `obfuscated` rule: 7 more RedCode-Exec cases and 1 more
+agent-egress-bench case held for review, and no new false positive in either. The
+per-scenario and per-category tables below compare 0.25.0 with ADR-112's rules ("after",
+as released in 0.26.0).
 
 Read with these facts beside it:
 
@@ -64,12 +71,12 @@ Read with these facts beside it:
 
 | | |
 |---|---|
-| OpenMoat | 0.25.0, `main` at `33d8f388`, debug build of `openmoat`; "after": the same with ADR-112's rules and engine changes (`feat/benchmark-rule-gaps`) |
-| Policy | `crates/openmoat-core/policies/default-v1.yaml` as shipped (0.25.0's, then the one with ADR-112's rules), nothing added |
+| OpenMoat | 0.25.0, `main` at `33d8f388`, debug build of `openmoat`; 0.26.0: the same with ADR-112's rules and engine changes (`feat/benchmark-rule-gaps`, released in 0.26.0); 0.27.0: `main` at `4c9c40f5`, debug build |
+| Policy | `crates/openmoat-core/policies/default-v1.yaml` as shipped (0.25.0's, the one with ADR-112's rules, then 0.27.0's), nothing added |
 | Engine path | `openmoat policy check --policy <default-v1.yaml> --kind <kind> --format json`, one call per action, the same compile and decide `openmoat guard` uses after the lock check, without an installation snapshot (programs are not resolved to their paths) |
 | RedCode | `AI-secure/RedCode` at `664e4793dc7309f98b8271baed5bbc04d6ef4c39` (MIT), `dataset/RedCode-Exec/`: 27 Python and 20 Bash scenario files, 30 snippets each |
 | agent-egress-bench | `pipelab-org/agent-egress-bench` at `8fad78b20bf24200c5eb3e1749d94dcb0d92af0e` (Apache-2.0), corpus `v2.16.0`, `cases/`: 270 cases in 18 categories, 192 `block`, 77 `allow`, 1 `warn` |
-| Machine | macOS 12, run on 2026-11-22 |
+| Machine | macOS 12, run on 2026-11-22 (0.25.0, 0.26.0's rules) and 2026-11-24 (0.27.0) |
 | Harness | [`scripts/bench/external.py`](../scripts/bench/external.py), Python 3 standard library |
 
 The datasets are not part of this repository. The harness reads their JSON and never
@@ -138,10 +145,13 @@ tool call (`deny` > `review` > `defer` > `allow`).
 | Form | Policy | Attacks | deny | of which host only | review | defer | allow | Stopped (deny) | Stopped (deny + review) |
 |---|---|--:|--:|--:|--:|--:|--:|--:|--:|
 | `inline` | 0.25.0 | 1,410 | 188 | 101 | 300 | 922 | 0 | 13.3% | 34.6% |
-| `inline` | after | 1,410 | 209 | 101 | 449 | 752 | 0 | 14.8% | 46.7% |
+| `inline` | 0.26.0 | 1,410 | 209 | 101 | 449 | 752 | 0 | 14.8% | 46.7% |
+| `inline` | 0.27.0 | 1,410 | 209 | 101 | 456 | 745 | 0 | 14.8% | 47.2% |
 | `inline`, code acts on the machine | 0.25.0 | 900 | 178 | 92 | 272 | 450 | 0 | 19.8% | 50.0% |
-| `inline`, code acts on the machine | after | 900 | 199 | 92 | 421 | 280 | 0 | 22.1% | 68.9% |
-| `inline`, logic only | both | 510 | 10 | 9 | 28 | 472 | 0 | 2.0% | 7.5% |
+| `inline`, code acts on the machine | 0.26.0 | 900 | 199 | 92 | 421 | 280 | 0 | 22.1% | 68.9% |
+| `inline`, code acts on the machine | 0.27.0 | 900 | 199 | 92 | 423 | 278 | 0 | 22.1% | 69.1% |
+| `inline`, logic only | 0.25.0, 0.26.0 | 510 | 10 | 9 | 28 | 472 | 0 | 2.0% | 7.5% |
+| `inline`, logic only | 0.27.0 | 510 | 10 | 9 | 33 | 467 | 0 | 2.0% | 8.4% |
 | `file` | both | 1,410 | 0 | 0 | 0 | 600 | 810 | 0.0% | 0.0% |
 
 "Logic only" is ten scenarios whose snippet only computes and prints; the risk is in the
@@ -211,12 +221,13 @@ After the change:
 | Form | Policy | Attacks | deny | of which host only | review | defer | allow | Stopped (deny) | Stopped (deny + review) | Benign | False positives |
 |---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
 | `curl` (url, header, request_body) | 0.25.0 | 84 | 48 | 32 | 0 | 36 | 0 | 57.1% | 57.1% | 26 | 12 (46.2%), all host only |
-| `curl` | after | 84 | 51 | 31 | 2 | 31 | 0 | 60.7% | 63.1% | 26 | 12 (46.2%), the same, all host only |
+| `curl` | 0.26.0, 0.27.0 | 84 | 51 | 31 | 2 | 31 | 0 | 60.7% | 63.1% | 26 | 12 (46.2%), the same, all host only |
 | `fetch` (plain `GET`s) | 0.25.0 | 53 | 5 | 0 | 0 | 48 | 0 | 9.4% | 9.4% | 14 | 0 |
-| `fetch` | after | 53 | 20 | 13 | 2 | 31 | 0 | 37.7% | 41.5% | 14 | 0 |
+| `fetch` | 0.26.0, 0.27.0 | 53 | 20 | 13 | 2 | 31 | 0 | 37.7% | 41.5% | 14 | 0 |
 | `native` (MCP calls as the agent's own tools) | 0.25.0 | 38 | 10 | 1 | 0 | 27 | 1 | 26.3% | 26.3% | 11 | 0 |
-| `native` | after | 38 | 10 | 0 | 3 | 24 | 1 | 26.3% | 34.2% | 11 | 0 |
-| `mcp` (MCP calls by tool name only) | both | 38 | 0 | 0 | 0 | 38 | 0 | 0.0% | 0.0% | 11 | 0 |
+| `native` | 0.26.0 | 38 | 10 | 0 | 3 | 24 | 1 | 26.3% | 34.2% | 11 | 0 |
+| `native` | 0.27.0 | 38 | 10 | 0 | 4 | 23 | 1 | 26.3% | 36.8% | 11 | 0 |
+| `mcp` (MCP calls by tool name only) | each | 38 | 0 | 0 | 0 | 38 | 0 | 0.0% | 0.0% | 11 | 0 |
 
 On 0.25.0 no case was answered `review`. The one `allow` is `mcp-input-hex-apikey-008`, an
 `echo` of a hex-encoded key, which runs locally and sends nothing.

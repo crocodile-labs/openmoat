@@ -37,9 +37,8 @@ pub(super) fn record(
     };
     writeln!(
         files.detail,
-        "✔ other hooks      {} hook commands and git programs recorded; a new or changed one \
-         waits for `openmoat hooks accept`",
-        recorded.count
+        "✔ other hooks      {}; a new or changed one waits for `openmoat hooks accept`",
+        crate::hook_ledger::recorded(recorded.count)
     )?;
     for change in &recorded.accepted {
         writeln!(

@@ -33,8 +33,8 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
             Area::Hooks,
             true,
             format!(
-                "other hooks      {} hook commands and git programs recorded, unchanged",
-                found.pin_count
+                "other hooks      {}, unchanged",
+                hook_ledger::recorded(found.pin_count)
             ),
         );
         return;

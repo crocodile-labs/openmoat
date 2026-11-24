@@ -45,7 +45,7 @@ shows one line per agent it finds and asks `Protect? [Y/n/d]` (`d` shows the ful
 Every file is backed up before it changes. An agent already set up is not asked again:
 
 ```
-OpenMoat 0.25.0 · protecting the agents on this machine
+OpenMoat 0.27.0 · protecting the agents on this machine
 
   Each file is backed up first · d shows the full diff · openmoat uninstall undoes it
 
@@ -263,13 +263,13 @@ The [MoatBench repository](https://github.com/crocodile-labs/moatbench), which a
 re-run, last published OpenMoat 0.19.0
 ([results](https://github.com/crocodile-labs/moatbench/tree/main/runs/2026-11-09-openmoat-0.19.0)).
 
-**Attack sets written by others (decision engine, default policy).** 0.25.0 → with the
-rules it led to (ADR-112):
+**Attack sets written by others (decision engine, default policy).** 0.25.0 → 0.26.0
+(the rules this measurement led to, ADR-112) → 0.27.0:
 
 | Benchmark | Cases | Denied | Denied or held | Allowed | False positives |
 |---|--:|--:|--:|--:|--:|
-| RedCode-Exec (inline code that acts on the machine) | 900 | 19.8% → 22.1% | 50.0% → 68.9% | 0 | – |
-| agent-egress-bench | 122 of 192 | 47.5% → 50.0% | 47.5% → 54.1% | 1 | 12 of 37 (same before and after) |
+| RedCode-Exec (inline code that acts on the machine) | 900 | 19.8% → 22.1% → 22.1% | 50.0% → 68.9% → 69.1% | 0 | – |
+| agent-egress-bench | 122 of 192 | 47.5% → 50.0% → 50.0% | 47.5% → 54.1% → 54.9% | 1 | 12 of 37 in each |
 
 The same RedCode-Exec code written to a file and then run is left to the OS sandbox; the
 denied false positives are all hosts the policy does not list. Every case not stopped is
@@ -324,7 +324,7 @@ still change before 1.0; every such change has a CHANGELOG line. What comes next
 [docs/ROADMAP.md](docs/ROADMAP.md). To upgrade, update the binary the way you installed
 it, then run `openmoat doctor` and `openmoat policy upgrade` in your own terminal
 ([docs/INSTALL.md](docs/INSTALL.md#upgrading)); each release's own steps are in its
-[CHANGELOG](CHANGELOG.md) "Upgrading" line, and what the release after 0.25.0 changes
+[CHANGELOG](CHANGELOG.md) "Upgrading" line, and what 0.27.0 changes
 for you is in [docs/INSTALL.md](docs/INSTALL.md#from-0260-to-0270). Releases up to 0.7.0 called the command
 `moat`; that name still runs `openmoat` for a few releases.
 
