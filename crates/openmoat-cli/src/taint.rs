@@ -84,6 +84,15 @@ pub fn is_dir(path: &str) -> bool {
 /// fold of part of the session is never an answer, since it may lack the
 /// event that tainted it, but the next call reads on from where this one got.
 ///
+/// An upgrade or a policy change gives every session a new digest, with no
+/// row of its own yet; folding a long session from its first event again then
+/// outlasts the guard's budget on every call (ADR-121). So a call reads on
+/// from the session's furthest fold under any earlier digest instead, carried
+/// forward ([`Kind::Carried`]): what an earlier policy found the session
+/// exposed to stays, and the calls since are classified under this one. The
+/// fold under this digest from the first event goes on after each call
+/// ([`catch_up`]) and is read once it reaches the carried row.
+///
 /// Files the session read that a tainted session wrote ([`provenance`]) taint
 /// it too. They are looked up each call, not cached: the cache holds only what
 /// the events fold to.
@@ -95,8 +104,39 @@ pub fn of_session(
     cwd: &str,
     progress: &mut Progress<'_>,
 ) -> Result<(SessionTaint, Option<CacheWrite>)> {
+    fold_session(store, host, session, policy, cwd, progress, Mode::Decide)
+}
+
+/// Which rows [`fold_session`] may read on from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    /// The guard's: the furthest of this digest's fold and a carried one.
+    Decide,
+    /// [`catch_up`]'s: this digest's own fold only, so that it reaches the
+    /// carried row and takes over from it.
+    Exact,
+}
+
+/// Which row a fold was read from and is written back to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    /// Every call of the session classified under this digest.
+    Exact,
+    /// An earlier digest's fold, read on under this one (ADR-121).
+    Carried,
+}
+
+fn fold_session(
+    store: &Store,
+    host: Host,
+    session: &str,
+    policy: &CompiledPolicy<'_>,
+    cwd: &str,
+    progress: &mut Progress<'_>,
+    mode: Mode,
+) -> Result<(SessionTaint, Option<CacheWrite>)> {
     let rows = Rows::of(host, policy, cwd)?;
-    let (mut out, start) = rows.read(store, session, host);
+    let (mut out, start, kind) = rows.read(store, session, host, mode);
     let mut upto = start;
     let mut pass = Pass {
         deadline: Some(progress.deadline),
@@ -108,10 +148,11 @@ pub fn of_session(
             session: session.to_owned(),
             host,
             cached: Cached {
-                digest: rows.of_fold(out).to_owned(),
+                digest: rows.of_fold(out, kind).to_owned(),
                 upto,
                 state: serde_json::to_string(out)?,
             },
+            wait: false,
         })
     };
     loop {
@@ -125,7 +166,12 @@ pub fn of_session(
         }
         if folded < events.len() {
             if upto != start {
-                (progress.save)(&write(&out, upto)?);
+                // This call is denied anyway; the save is what lets the next
+                // one read on, so it waits for the lock instead of being
+                // skipped while other guards record (ADR-121).
+                let mut reached = write(&out, upto)?;
+                reached.wait = true;
+                (progress.save)(&reached);
             }
             bail!("{}", behind(pass.folded));
         }
@@ -170,9 +216,10 @@ pub fn behind(folded: usize) -> String {
 /// `PostToolUse`), until `deadline`, keeping what was read in the cache, so
 /// the next call's fold starts close to its own event and does not run out
 /// of time where the cache is far behind (after an upgrade or a policy
-/// change). Best effort: no
-/// decision rests on it, and a fold it leaves unfinished is read on by the
-/// next call as before.
+/// change). It reads on this digest's own fold, never a carried one, so after
+/// a policy change that fold reaches the session's latest call and takes over
+/// from the carried row (ADR-121). Best effort: no decision rests on it, and a
+/// fold it leaves unfinished is read on by the next call as before.
 pub fn catch_up(
     store: &Store,
     host: Host,
@@ -188,7 +235,15 @@ pub fn catch_up(
         every: CHECKPOINT_EVERY,
         folded: 0,
     };
-    if let Ok((_, Some(write))) = of_session(store, host, session, policy, cwd, &mut progress) {
+    if let Ok((_, Some(write))) = fold_session(
+        store,
+        host,
+        session,
+        policy,
+        cwd,
+        &mut progress,
+        Mode::Exact,
+    ) {
         write.write(store);
     }
 }
@@ -240,14 +295,25 @@ pub struct CacheWrite {
     session: String,
     host: Host,
     cached: Cached,
+    /// Whether the write waits for the database's write lock: only for the
+    /// fold of a call that ran out of time, which is denied anyway and whose
+    /// save is all the next call has to read on from.
+    wait: bool,
 }
 
 impl CacheWrite {
-    /// Best effort and without waiting: without the cache the next call folds
-    /// more, nothing else. `store` must not mask secrets: the row is keyed by
-    /// the session id as [`of_session`] reads it, on a handle that masks none.
+    /// Best effort, and without waiting unless `wait`: without the cache the
+    /// next call folds more, nothing else. `store` must not mask secrets: the
+    /// row is keyed by the session id as [`of_session`] reads it, on a handle
+    /// that masks none.
     pub fn write(&self, store: &Store) {
-        let _ = store.try_set_session_cache(&self.session, self.host.id(), &self.cached);
+        let _ = if self.wait {
+            store.set_session_cache(&self.session, self.host.id(), &self.cached)
+        } else {
+            store
+                .try_set_session_cache(&self.session, self.host.id(), &self.cached)
+                .map(drop)
+        };
     }
 
     /// [`CacheWrite::write`] on a writable handle to the audit log of `home`,
@@ -276,52 +342,113 @@ impl CacheWrite {
 /// under [`Rows::here`], and only this directory reads it. A directory change
 /// then reads on from the shared row instead of folding the session from its
 /// first event again.
+///
+/// Each has a carried twin ([`Kind::Carried`], ADR-121), kept apart so that
+/// the fold under this digest from the first event ([`catch_up`]) and the
+/// carried one never overwrite each other.
 struct Rows {
     shared: String,
     here: String,
+    carried_shared: String,
+    carried_here: String,
 }
+
+/// A fold read from the cache and the event it reached.
+type Row = (SessionTaint, EventId);
 
 impl Rows {
     fn of(host: Host, policy: &CompiledPolicy<'_>, cwd: &str) -> Result<Self> {
         let shared = digest(host, policy)?;
         let here = sha256_hex(&parts(&[&shared, cwd]));
-        Ok(Self { shared, here })
+        let carried_shared = sha256_hex(&parts(&[CARRIED, &shared]));
+        let carried_here = sha256_hex(&parts(&[CARRIED, &here]));
+        Ok(Self {
+            shared,
+            here,
+            carried_shared,
+            carried_here,
+        })
     }
 
-    /// The fold to read on from: the further on of the shared row (when it
-    /// holds no call without a directory, as it never does when this build
-    /// wrote it) and this directory's row; an empty fold from the session's
-    /// first event without either.
-    fn read(&self, store: &Store, session: &str, host: Host) -> (SessionTaint, EventId) {
-        let row = |digest: &str| {
+    /// The fold to read on from, and which row it is. Under [`Mode::Exact`]
+    /// this digest's own fold ([`Rows::best`]); under [`Mode::Decide`] the
+    /// carried fold instead when it is further on: this digest's carried row,
+    /// or, when there is none yet, the furthest fold under another digest
+    /// ([`Rows::seed`]). An empty fold from the session's first event without
+    /// any.
+    fn read(
+        &self,
+        store: &Store,
+        session: &str,
+        host: Host,
+        mode: Mode,
+    ) -> (SessionTaint, EventId, Kind) {
+        let row = |digest: &str| -> Option<Row> {
             let cached = store.session_cache(session, host.id(), digest).ok()??;
             let state: SessionTaint = serde_json::from_str(&cached.state).ok()?;
             Some((state, cached.upto))
         };
-        let shared = row(&self.shared).filter(|(state, _)| !state.cwdless);
-        let here = row(&self.here);
-        match (shared, here) {
-            (Some(shared), Some(here)) => {
-                if here.1.0 >= shared.1.0 {
-                    here
-                } else {
-                    shared
-                }
+        let exact = Self::best(row(&self.shared), row(&self.here));
+        let reached = exact.as_ref().map_or(0, |(_, upto)| upto.0);
+        if mode == Mode::Decide {
+            let carried = Self::best(row(&self.carried_shared), row(&self.carried_here))
+                .or_else(|| self.seed(store, session, host));
+            if let Some((state, upto)) = carried
+                && upto.0 > reached
+            {
+                return (state, upto, Kind::Carried);
             }
-            (Some(row), None) | (None, Some(row)) => row,
-            (None, None) => (SessionTaint::default(), EventId(0)),
+        }
+        let (state, upto) = exact.unwrap_or_else(|| (SessionTaint::default(), EventId(0)));
+        (state, upto, Kind::Exact)
+    }
+
+    /// The further on of a shared row (when it holds no call without a
+    /// directory, as it never does when this build wrote it) and a
+    /// directory's row; this directory's on a tie.
+    fn best(shared: Option<Row>, here: Option<Row>) -> Option<Row> {
+        let shared = shared.filter(|(state, _)| !state.cwdless);
+        match (shared, here) {
+            (Some(shared), Some(here)) => Some(if here.1.0 >= shared.1.0 { here } else { shared }),
+            (row @ Some(_), None) | (None, row) => row,
         }
     }
 
-    /// The row `fold` belongs in.
-    fn of_fold(&self, fold: &SessionTaint) -> &str {
-        if fold.cwdless {
-            &self.here
-        } else {
-            &self.shared
+    /// The session's furthest fold under a digest other than this call's: an
+    /// earlier policy or build. Only one that holds no call recorded without
+    /// a directory, since such a fold took that call to have run in another
+    /// directory ([`Rows`]); and only one this build can read.
+    fn seed(&self, store: &Store, session: &str, host: Host) -> Option<Row> {
+        let ours = [
+            &self.shared,
+            &self.here,
+            &self.carried_shared,
+            &self.carried_here,
+        ];
+        store
+            .session_caches(session, host.id())
+            .ok()?
+            .into_iter()
+            .filter(|cached| !ours.contains(&&cached.digest))
+            .find_map(|cached| {
+                let state: SessionTaint = serde_json::from_str(&cached.state).ok()?;
+                (!state.cwdless).then_some((state, cached.upto))
+            })
+    }
+
+    /// The row `fold`, read from a row of `kind`, belongs in.
+    fn of_fold(&self, fold: &SessionTaint, kind: Kind) -> &str {
+        match (kind, fold.cwdless) {
+            (Kind::Exact, false) => &self.shared,
+            (Kind::Exact, true) => &self.here,
+            (Kind::Carried, false) => &self.carried_shared,
+            (Kind::Carried, true) => &self.carried_here,
         }
     }
 }
+
+/// Part of a carried row's digest, so it is never taken for this digest's own.
+const CARRIED: &str = "carried";
 
 /// What the fold of a session depends on besides its events and, for the
 /// calls recorded without a working directory, the directory of the call

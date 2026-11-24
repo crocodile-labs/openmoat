@@ -1045,7 +1045,15 @@ was folded), Claude Code's `PostToolUse`
 hook catches it up after the call ran (`taint::catch_up`, with the same budget, for
 the row of that call's directory), so the next `PreToolUse` folds only the events
 since and is decided within its own budget; hosts without that hook catch up over
-calls as before. The
+calls as before. An upgrade or a policy change gives the session no row under the
+new digest, so the guard carries the session's furthest earlier fold forward
+instead (ADR-121): it reads on from that row under the new policy, in a carried row
+of its own (the digest with `carried` added), and decides with it, never looser
+than what the earlier policy found. `catch_up` folds the new digest's own row from
+the first event meanwhile; once that row reaches the carried one, calls read it. A
+fold holding a call without a directory is never carried. The save of a fold that
+ran out of time waits for the lock (that call is denied anyway), so concurrent
+guards cannot keep skipping the one write the next call needs. The
 cache is outside the hash chain and never a source of truth: it can only hold what
 the events folded to. The table is created on first use, without changing the schema
 version, so older builds still open the database (they keep using the one-row

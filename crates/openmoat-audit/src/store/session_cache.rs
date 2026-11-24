@@ -134,6 +134,37 @@ impl Store {
             .optional()?)
     }
 
+    /// Every cached state of `session_id` on `host`, whatever its digest,
+    /// furthest on first: what a caller whose own digest has no row yet (after
+    /// an upgrade or a policy change) may carry forward instead of folding the
+    /// session from its first event.
+    pub fn session_caches(&self, session_id: &str, host: &str) -> Result<Vec<Cached>, StoreError> {
+        let exists: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_folds'",
+                [],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if exists.is_none() {
+            return Ok(Vec::new());
+        }
+        let session_id = self.secrets.redact(session_id);
+        let mut stmt = self.conn.prepare(
+            "SELECT digest, upto, state FROM session_folds
+             WHERE session_id = ?1 AND host = ?2 ORDER BY upto DESC, touched DESC",
+        )?;
+        let rows = stmt.query_map(params![session_id, host], |r| {
+            Ok(Cached {
+                digest: r.get(0)?,
+                upto: EventId(r.get(1)?),
+                state: r.get(2)?,
+            })
+        })?;
+        rows.collect::<Result<_, _>>().map_err(Into::into)
+    }
+
     /// Store `cached` for `session_id` on `host` under its digest. Only a
     /// later `upto` replaces a row, so a slower concurrent guard cannot move
     /// it back. The session keeps its 16 most recently written rows on `host`.

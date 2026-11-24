@@ -133,7 +133,9 @@ records the rule it follows now.
 - **Unchanged.** A fold that runs out of time still saves what it reached and denies the
   call: part of a session is never an answer. An upgrade, a policy edit or a move to
   another project still changes the digest, and the session is folded again from its
-  first call; that is what the classifier of the new build or policy would answer. Each
+  first call; that is what the classifier of the new build or policy would answer
+  (superseded for upgrades and policy edits by ADR-121: the earlier fold is carried
+  forward while the new one catches up). Each
   fold now classifies a call once for its taint and its collection (ADR-061) instead of
   twice, and `openmoat doctor` lists the calls the guard could not decide in the last day,
   so a guard that denies every call is never shown as all good.

@@ -357,6 +357,7 @@ fn an_interrupted_fold_never_answers_cleaner() {
             upto: head[4].id,
             state: serde_json::to_string(&partial).unwrap(),
         },
+        wait: false,
     }
     .write(&store);
     let (resumed, folded) = call(&store, CWDS[1], far()).unwrap();
@@ -565,3 +566,4 @@ fn the_behind_message_says_the_call_was_not_judged_and_to_run_it_again() {
 
 mod approved_writes;
 mod long_session;
+mod policy_change;

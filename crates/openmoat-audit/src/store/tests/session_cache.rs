@@ -112,6 +112,33 @@ fn the_cache_is_absent_until_written_and_never_moves_back() {
     );
 }
 
+/// Every row of one session on one host, whatever its digest, furthest on
+/// first; none before the table exists.
+#[test]
+fn session_caches_lists_a_sessions_rows_furthest_on_first() {
+    let store = Store::open_in_memory().unwrap();
+    assert_eq!(store.session_caches("s1", "claude-code").unwrap(), []);
+    for (digest, upto) in [("old", 7), ("older", 3), ("newest", 9)] {
+        store
+            .set_session_cache("s1", "claude-code", &cached(digest, upto, digest))
+            .unwrap();
+    }
+    store
+        .set_session_cache("s2", "claude-code", &cached("x", 99, "x"))
+        .unwrap();
+    store
+        .set_session_cache("s1", "codex", &cached("y", 99, "y"))
+        .unwrap();
+    assert_eq!(
+        store.session_caches("s1", "claude-code").unwrap(),
+        [
+            cached("newest", 9, "newest"),
+            cached("old", 7, "old"),
+            cached("older", 3, "older"),
+        ]
+    );
+}
+
 /// A session keeps its most recently written rows; the oldest digest goes,
 /// and other sessions keep theirs.
 #[test]
