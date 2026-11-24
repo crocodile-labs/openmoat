@@ -180,6 +180,11 @@ pub fn run_port_only_network() -> Option<String> {
     run::port_only_network()
 }
 
+/// Why `moat run --listen PORT` is refused on this system, if it is.
+pub fn run_listen_refused_here(port: u16) -> Option<String> {
+    run::listen_refused_here(port)
+}
+
 /// Whether this process runs under a restricted token, as the Windows tier
 /// of `openmoat run` starts the agent and its hooks (ADR-115).
 #[cfg(windows)]

@@ -98,6 +98,23 @@ pub fn unavailable() -> Option<String> {
 /// How macOS holds the network: the profile allows the proxy's address alone.
 pub const NETWORK: NetworkMode = NetworkMode::Profile;
 
+/// Why `openmoat run --listen` is refused on macOS (ADR-108 §7): Seatbelt's
+/// `local ip "localhost:PORT"` filter lets a bind to every address (`0.0.0.0`)
+/// on the port through too, as the end-to-end test found on macOS 15, so the
+/// port could be reachable from the network, not only from this machine.
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "one signature on every platform: Linux's lets `--listen` through"
+)]
+pub fn listen_refused_here(port: u16) -> Option<String> {
+    Some(format!(
+        "`openmoat run --listen {port}` is refused on macOS: its sandbox cannot keep a \
+         listening port to this machine (a bind to every address on port {port} would go \
+         through too), so the port could be reachable from the network; start the agent \
+         without `openmoat run`, under its hook"
+    ))
+}
+
 /// None: the tool-shell wrapper (ADR-075) works here.
 pub const TOOL_SHELL_GAP: Option<&str> = None;
 

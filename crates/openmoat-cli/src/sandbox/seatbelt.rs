@@ -396,11 +396,11 @@ fn network(p: &mut Generated, net: &Access, port: Option<u16>) {
     p.report.proxy_only(net);
 }
 
-/// `openmoat run --listen`: bind and accept on the one port, on loopback
-/// alone (ADR-108 §7). `localhost` is the only address Seatbelt's `local ip`
-/// filter names besides `*`, and it matches the loopback addresses only, so a
-/// bind to every address (`0.0.0.0`, `::`) or to another port stays denied.
-/// Connecting to the port is not allowed: only the proxy is reachable.
+/// `openmoat run --listen`: bind and accept on the one port (ADR-108 §7).
+/// Not reached today: `openmoat run` refuses `--listen` on macOS, because a
+/// bind to every address (`0.0.0.0`) on the port goes through this filter too
+/// (the end-to-end test on macOS 15). Connecting to the port is not allowed:
+/// only the proxy is reachable.
 fn listen(p: &mut Generated, port: Option<u16>) {
     let Some(port) = port else {
         return;

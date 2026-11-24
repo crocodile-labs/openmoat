@@ -181,10 +181,12 @@ default bind mode `loopback`; `openclaw gateway` runs it in the foreground.
 - **The capability.** `openmoat run --listen PORT` lets the confined processes bind and
   accept on that one port, on loopback only. They may still connect only to the proxy:
   not to the listened port, so a command cannot drive the Gateway through it.
-  - macOS: the Seatbelt profile adds `(allow network-bind (local ip "localhost:PORT"))`
-    and `(allow network-inbound (local ip "localhost:PORT"))`. `localhost` matches the
-    loopback addresses alone, so a bind to `0.0.0.0`, `::`, another address or another
-    port stays denied.
+  - macOS: refused. The Seatbelt rules `(allow network-bind (local ip "localhost:PORT"))`
+    and `(allow network-inbound (local ip "localhost:PORT"))` were meant to keep the port
+    to loopback, but the end-to-end test on macOS 15 showed a bind to `0.0.0.0` on the
+    port going through too, so the port could be reachable from the network, as with
+    Landlock alone below. `openmoat run --listen` refuses on macOS, and `status` offers
+    no command for OpenClaw there, until a profile can hold the port to loopback.
   - Linux, with a network namespace (the Isolated tier, and the Lightweight tier where
     bubblewrap works): Landlock ABI 4 grants `BindTcp` on that port alone. The
     namespace's only interface is its loopback, so whatever address the Gateway binds
@@ -209,9 +211,9 @@ default bind mode `loopback`; `openclaw gateway` runs it in the foreground.
 - **Attack tests.** Unit: the profile has one bind and one inbound rule, for
   `localhost:PORT`, and still one outbound rule, for the proxy; Landlock's rules carry the
   bind port alone; the forward relays both ways and refuses a port in use. End to end
-  (macOS and Linux CI): inside `openmoat run --listen`, a bind to the port on
-  `127.0.0.1` works, and a bind to another port, to `0.0.0.0` on the port and a
-  connection to the port are refused.
+  (Linux CI): inside `openmoat run --listen`, a bind to the port on `127.0.0.1` works,
+  and a bind to another port and a connection to the port are refused; on macOS
+  `--listen` itself is refused.
 
 ### 8. Confining by default is asked, per agent
 

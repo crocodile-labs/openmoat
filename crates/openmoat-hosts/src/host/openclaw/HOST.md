@@ -142,7 +142,8 @@ port on loopback alone; the port is found as OpenClaw finds it (`OPENCLAW_GATEWA
 then `gateway.port` in `openclaw.json`, then 18789, <https://docs.openclaw.ai/gateway>),
 and with `OPENCLAW_PROFILE` set and no port named no command is offered. On Linux the
 port is forwarded from this machine's loopback into the sandbox's network namespace;
-without a namespace, and on Windows, the run is refused. A sandboxed-start shim
+without a namespace, on macOS (whose sandbox would let a bind to every address on the
+port through) and on Windows, the run is refused and no command is offered. A sandboxed-start shim
 (`openmoat init`, `openmoat confine openclaw`) confines `openclaw gateway` alone: the
 other commands are the Gateway's clients, which a sandbox reaching only the proxy would
 cut off from it. The browser tool's control service, on a port of its own, is not

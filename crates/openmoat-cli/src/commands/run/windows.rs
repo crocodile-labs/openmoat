@@ -203,6 +203,20 @@ pub fn unavailable() -> Option<String> {
 /// Nothing in the operating system holds the network here.
 pub const NETWORK: NetworkMode = NetworkMode::ProxyVariables;
 
+/// Why `openmoat run --listen` is refused on Windows (ADR-108 §7, ADR-115):
+/// nothing in the tier holds the network.
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "one signature on every platform: Linux's lets `--listen` through"
+)]
+pub fn listen_refused_here(port: u16) -> Option<String> {
+    Some(format!(
+        "`openmoat run --listen {port}` is refused here: nothing in this system's tier holds \
+         the network, so nothing could keep the port to this machine; start the agent \
+         without `openmoat run`, under its hook"
+    ))
+}
+
 /// No tool-shell wrapper on Windows (ADR-075 links `bash` and `zsh`): tool
 /// commands keep the relay token, and the record says why.
 pub const TOOL_SHELL_GAP: Option<&str> =

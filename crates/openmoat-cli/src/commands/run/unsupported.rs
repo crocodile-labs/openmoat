@@ -53,6 +53,11 @@ pub fn unavailable() -> Option<String> {
 /// `moat run` refuses here; a record needs a value.
 pub const NETWORK: NetworkMode = NetworkMode::PortOnly;
 
+/// `moat run` refuses here before `--listen` matters.
+pub fn listen_refused_here(_port: u16) -> Option<String> {
+    None
+}
+
 /// `moat run` refuses here, so there is no wrapper.
 pub const TOOL_SHELL_GAP: Option<&str> = Some("`openmoat run` has no sandbox on this system");
 

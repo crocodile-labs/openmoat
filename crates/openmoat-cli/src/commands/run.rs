@@ -492,6 +492,12 @@ pub fn port_only_network() -> Option<String> {
     platform::port_only_network()
 }
 
+/// Why `moat run --listen PORT` is refused on this system whatever the tier,
+/// if it is (macOS, Windows; ADR-108 §7), for `status`'s run command.
+pub fn listen_refused_here(port: u16) -> Option<String> {
+    platform::listen_refused_here(port)
+}
+
 /// The kernel's Landlock ABI on Linux, for `doctor` and `sandbox show`
 /// (ADR-082); `None` elsewhere.
 pub fn landlock() -> Option<Kernel> {

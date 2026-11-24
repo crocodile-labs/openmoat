@@ -116,6 +116,18 @@ impl Store {
         rows.collect::<Result<_, _>>().map_err(Into::into)
     }
 
+    /// The `limit` most recent agents' events, newest first; without the
+    /// policy-change ledger's rows ([`is_ledger`]), which `session` still lists.
+    pub fn recent(&self, limit: usize) -> Result<Vec<Event>, StoreError> {
+        let mut stmt = self.conn.prepare(&format!(
+            "{} WHERE {NOT_LEDGER} ORDER BY id DESC LIMIT ?1",
+            self.select()
+        ))?;
+        let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+        let rows = stmt.query_map(params![limit], row_to_event)?;
+        rows.collect::<Result<_, _>>().map_err(Into::into)
+    }
+
     /// Up to `limit` events recorded after the event `after` (all events when
     /// `None`), oldest first: what `openmoat watch` reads on each look. One
     /// short read by row id, which never waits on a writer in WAL mode.

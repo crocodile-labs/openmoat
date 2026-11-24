@@ -563,24 +563,6 @@ impl Store {
             .map_err(Into::into)
     }
 
-    /// Most recent agents' events, newest first; without the policy-change
-    /// ledger's rows (`query::is_ledger`), which `session` still lists.
-    pub fn recent(&self, limit: usize) -> Result<Vec<Event>, StoreError> {
-        let mut stmt = self.conn.prepare(&format!(
-            "{} WHERE NOT (host = ?2 AND session_id = ?3) ORDER BY id DESC LIMIT ?1",
-            self.select()
-        ))?;
-        let rows = stmt.query_map(
-            params![
-                i64::try_from(limit).unwrap_or(i64::MAX),
-                crate::query::LEDGER_HOST,
-                crate::query::LEDGER_SESSION
-            ],
-            row_to_event,
-        )?;
-        rows.collect::<Result<_, _>>().map_err(Into::into)
-    }
-
     /// All events of one session, oldest first. `session_id` is matched as
     /// [`Store::record`] stored it, redacted.
     pub fn session(&self, session_id: &str) -> Result<Vec<Event>, StoreError> {

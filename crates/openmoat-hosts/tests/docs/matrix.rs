@@ -162,9 +162,15 @@ pub fn sandbox(host: Host, os: Os, ev: &Evidence<'_>) -> Cell {
 pub fn runs(spec: &HostSpec, os: Os) -> Result<(), String> {
     match spec.run {
         RunFacts::Unknown { why } if spec.sandbox.is_none() => Err(why.to_owned()),
-        // The Windows tier cannot let one loopback port listen alone (ADR-108 §7).
+        // The Windows tier cannot let one loopback port listen alone, and
+        // macOS's Seatbelt lets a bind to every address on the port through
+        // (ADR-108 §7).
         _ if spec.run_listen.is_some() && os == Os::Windows => Err(format!(
             "{} serves a local port, which the Windows tier of `openmoat run` does not allow",
+            spec.run_listen.map_or("it", |l| l.what)
+        )),
+        _ if spec.run_listen.is_some() && os == Os::Mac => Err(format!(
+            "{} serves a local port, which `openmoat run` on macOS cannot keep to this machine",
             spec.run_listen.map_or("it", |l| l.what)
         )),
         _ => Ok(()),

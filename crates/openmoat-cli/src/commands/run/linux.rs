@@ -340,6 +340,13 @@ pub fn project_open(policy: &Policy, ctx: &EvalContext) -> Option<String> {
 pub use isolate::{inside, isolate};
 pub use launch::{NETWORK, restrictions};
 
+/// None: with a network namespace the port is reachable from this machine
+/// alone; without one, the run refuses `--listen` once it knows the tier
+/// ([`listen_refusal`]).
+pub fn listen_refused_here(_port: u16) -> Option<String> {
+    None
+}
+
 /// None: the tool-shell wrapper (ADR-075) works here.
 pub const TOOL_SHELL_GAP: Option<&str> = None;
 

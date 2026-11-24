@@ -1028,7 +1028,7 @@ processes bind and accept on that one port, on loopback only (ADR-108 §7):
 
 | Where | How the port is held |
 |---|---|
-| macOS 13 or later | the Seatbelt profile allows `network-bind` and `network-inbound` on `localhost:PORT` alone; a bind to `0.0.0.0`, `::` or another port is denied |
+| macOS | refused: Seatbelt's `localhost:PORT` filter lets a bind to every address (`0.0.0.0`) on the port through too, so the port could be reachable from the network |
 | Linux, Isolated tier or Lightweight with bubblewrap | Landlock grants a bind to that port alone, inside the agent's own network namespace whose only interface is loopback; `openmoat run` listens on this machine's `127.0.0.1:PORT` and forwards each connection in through a Unix socket only `moat isolated` can use |
 | Linux without a network namespace | refused: Landlock restricts a bind by port only, on every address, so the port would be open to the network |
 | Windows | refused: the tier holds the network by the proxy variables alone |

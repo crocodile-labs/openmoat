@@ -138,7 +138,10 @@ pub(crate) fn command(
         Some(serves) => {
             let settings = HostConfig::for_host(home, host)?.settings_path;
             match listen::port(&serves, &settings, |name| std::env::var(name).ok()) {
-                Ok(port) => Some(port),
+                Ok(port) => match crate::commands::run_listen_refused_here(port) {
+                    Some(why) => return Ok(Err(OsSandbox::Unavailable { why })),
+                    None => Some(port),
+                },
                 Err(why) => return Ok(Err(OsSandbox::Unavailable { why })),
             }
         }

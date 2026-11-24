@@ -1,10 +1,10 @@
 //! `openmoat run --listen PORT` (ADR-108 §7): inside, a bind to that one port
 //! on loopback works; a bind to another port, and a connection to the port
-//! (only the proxy is reachable), are refused. On macOS a bind to every
-//! address on the port is refused too; on Linux the agent's network namespace
+//! (only the proxy is reachable), are refused. The agent's network namespace
 //! has loopback alone, so there it may bind any address, reachable from
-//! nowhere else. Linux without a namespace refuses `--listen` before anything
-//! starts.
+//! nowhere else. Linux without a namespace, and macOS (whose Seatbelt filter
+//! lets a bind to every address on the port through), refuse `--listen`
+//! before anything starts.
 
 use std::net::{Ipv4Addr, TcpListener};
 
@@ -69,10 +69,18 @@ fn listen_allows_one_loopback_port_and_no_other_bind() {
         &script,
         &[],
     );
+    let shown = text(&out);
+    if cfg!(target_os = "macos") {
+        // Seatbelt lets a bind to every address on the port through too, so
+        // the port could be reachable from the network: refused.
+        assert_eq!(out.status.code(), Some(USAGE), "{shown}");
+        assert!(stderr(&out).contains("refused on macOS"), "{shown}");
+        assert!(!stdout(&out).contains("loopback="), "{shown}");
+        return;
+    }
     if !ran(&out) {
         return;
     }
-    let shown = text(&out);
     if cfg!(target_os = "linux") {
         let port_only = stderr(&out).contains("needs a network of the agent's own");
         check_netns(port_only, &shown);
@@ -93,12 +101,6 @@ fn listen_allows_one_loopback_port_and_no_other_bind() {
         said.contains("connect=") && !said.contains("connect=0\n"),
         "{shown}"
     );
-    if cfg!(target_os = "macos") {
-        assert!(
-            said.contains("every=") && !said.contains("every=0\n"),
-            "{shown}"
-        );
-    }
 }
 
 /// Without `--listen`, no bind at all.
