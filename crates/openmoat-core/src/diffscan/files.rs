@@ -33,6 +33,8 @@ pub(super) enum Lock {
     Cargo,
     /// `poetry.lock`, `uv.lock`.
     Python,
+    /// `go.sum`.
+    Go,
 }
 
 impl Lock {
@@ -41,6 +43,7 @@ impl Lock {
             Self::Npm | Self::Pnpm | Self::Yarn => Ecosystem::Npm,
             Self::Cargo => Ecosystem::Crates,
             Self::Python => Ecosystem::Pypi,
+            Self::Go => Ecosystem::Go,
         }
     }
 }
@@ -140,6 +143,7 @@ pub(super) fn classify(path: &str) -> File {
         "yarn.lock" => Some(Lock::Yarn),
         "cargo.lock" => Some(Lock::Cargo),
         "poetry.lock" | "uv.lock" => Some(Lock::Python),
+        "go.sum" => Some(Lock::Go),
         _ => None,
     };
     let yaml = extension.is_some_and(|e| matches!(e, "yml" | "yaml"));

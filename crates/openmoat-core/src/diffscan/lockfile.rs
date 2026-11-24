@@ -1,5 +1,7 @@
-//! Lockfiles: where each locked package is fetched from, and whether its
-//! hash changes while its version stays.
+//! Lockfiles: where each locked package is fetched from, whether its hash
+//! changes while its version stays, and what it resolves (`resolved.rs`:
+//! look-alike names and install scripts, transitive packages included,
+//! ADR-125; `go.rs`: `go.sum`).
 //!
 //! A package manager installs what the lockfile names and checks it against
 //! the hash there. A lockfile edit that points a package at another host, or
@@ -11,6 +13,9 @@ use std::collections::BTreeSet;
 use super::files::Lock;
 use super::{Block, Change, Hit, LOCK_INTEGRITY, Level, PACKAGE_SOURCE, shown};
 use crate::packages::Ecosystem;
+
+mod go;
+mod resolved;
 
 /// The hosts each registry serves its packages from: a source there is the registry's.
 fn registry_hosts(ecosystem: Ecosystem) -> &'static [&'static str] {
@@ -33,6 +38,11 @@ const CRATES_IO_INDEX: &str = "registry+https://github.com/rust-lang/crates.io-i
 const SAME_ENTRY_LINES: usize = 3;
 
 pub(super) fn scan(lock: Lock, change: &Change<'_>, hits: &mut Vec<Hit>) {
+    resolved::scan(lock, change, hits);
+    if lock == Lock::Go {
+        go::scan(change, hits);
+        return;
+    }
     sources(lock, change, hits);
     let moved: Vec<usize> = change
         .blocks
@@ -60,6 +70,8 @@ fn urls(lock: Lock, text: &str) -> Vec<String> {
         Lock::Pnpm => &["tarball:", "repo:"],
         Lock::Cargo => &["source ="],
         Lock::Python => &["url =", "git =", "registry ="],
+        // `go.sum` names modules, not where they come from
+        Lock::Go => &[],
     };
     keys.iter()
         .filter_map(|key| {

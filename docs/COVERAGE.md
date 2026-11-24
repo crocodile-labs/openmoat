@@ -42,7 +42,7 @@ T13 to T15 have no fixture tagged with them: a fixture is one tool call, and the
 ### T14: A backdoor in a pull request
 
 - Tagged fixtures: none; `openmoat policy check-diff` reads a diff, not a tool call.
-- Tests (33): `crates/openmoat-cli/tests/e2e/check_diff.rs`, `crates/openmoat-core/src/diffscan/tests.rs`, `crates/openmoat-core/src/diffscan/tests`
+- Tests (38): `crates/openmoat-cli/tests/e2e/check_diff.rs`, `crates/openmoat-core/src/diffscan/tests.rs`, `crates/openmoat-core/src/diffscan/tests`
 
 ### T15: Acting on injected input
 

@@ -174,14 +174,36 @@ value is never printed.
 Package manifests (`package.json`, `requirements*.txt`, `constraints*.txt`,
 `pyproject.toml`, `Cargo.toml`, `go.mod`, `Gemfile`, `*.gemspec`) and lockfiles
 (`package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `yarn.lock`,
-`Cargo.lock`, `poetry.lock`, `uv.lock`).
+`Cargo.lock`, `poetry.lock`, `uv.lock`, `go.sum`). A lockfile lists every package the
+install fetches, those a dependency pulls in included, so its entries get the same
+checks as a direct dependency (ADR-125), from the lockfile's text alone.
 
 | Rule id | Level | When |
 |---|---|---|
-| `diff-package-near-miss` | review | an added dependency is not on the bundled list of popular names but is one typo or trick away from one (`lodahs`, `reqeusts`, `python-dateutils`); the same lists and test as the hook's `package-near-miss` |
-| `diff-install-script` | review | `package.json` sets `preinstall`, `install`, `postinstall` or `prepare`, which npm runs on install; the reason shows the command |
+| `diff-package-near-miss` | review | an added dependency is not on the bundled list of popular names but is one typo or trick away from one (`lodahs`, `reqeusts`, `python-dateutils`); the same lists and test as the hook's `package-near-miss`. Also a new or changed lockfile entry with such a name: `"node_modules/…/lodahs"`, a pnpm or yarn key (`expresss@4.19.2:`), `name = "serde_jsno"` in `Cargo.lock`, `poetry.lock` or `uv.lock`, a `go.sum` module; once per name per lockfile |
+| `diff-install-script` | review | `package.json` sets `preinstall`, `install`, `postinstall` or `prepare`, which npm runs on install; the reason shows the command. Also a lockfile that records an install script for an entry, transitive ones included: `"hasInstallScript": true` (`package-lock.json`), `requiresBuild: true` (`pnpm-lock.yaml`); the reason names the package when its entry is part of the same added lines |
 | `diff-package-source` | review | a dependency from git, a URL or `owner/repo` instead of its registry (`"x": "git+https://…"`, `x @ https://…`, `{ git = "…" }`, `gem "x", git:`, a `replace` in `go.mod`, a Gemfile `source` other than rubygems.org), or a lockfile entry resolved from git, plain http or a host that is not the registry; once per place per lockfile |
-| `diff-lock-integrity` | deny | a lockfile's `integrity`, `checksum` or `hash` changes or is removed in a block where the package's version does not change (for `poetry.lock` and `uv.lock`: the same file name with another hash) |
+| `diff-lock-integrity` | deny | a lockfile's `integrity`, `checksum` or `hash` changes or is removed in a block where the package's version does not change (for `poetry.lock` and `uv.lock`: the same file name with another hash; for `go.sum`: the same module and version with another `h1:` hash) |
+
+What a lockfile does not record is not checked: yarn and `Cargo.lock` keep no install
+script flag, and pnpm 9 dropped `requiresBuild`; a look-alike that is the popular name
+itself in another registry, or one far from every popular name, is not a near miss.
+
+#### Try it
+
+Without `--base`, `check-diff` reads a unified diff on stdin, so no repository is needed
+and no file is written (nothing to undo):
+
+```bash
+printf '%s\n' '--- a/package-lock.json' '+++ b/package-lock.json' '@@ -0,0 +1,4 @@' \
+  '+    "node_modules/some-lib/node_modules/lodahs": {' \
+  '+      "version": "4.17.21",' \
+  '+      "hasInstallScript": true' \
+  '+    },' | openmoat policy check-diff
+# review  package-lock.json:1 [diff-package-near-miss]  locks the npm package `lodahs`, … `lodash` …
+# review  package-lock.json:3 [diff-install-script]     records an install script for `lodahs` …
+# exit 3
+```
 
 ```
 review  web/package.json:14 [diff-package-near-miss]

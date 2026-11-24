@@ -7,6 +7,7 @@ use crate::Policy;
 mod ci;
 mod code;
 mod hosts;
+mod lockfiles;
 mod supply;
 
 /// One file of a change, owned, for building a [`Change`].
