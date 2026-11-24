@@ -111,7 +111,7 @@ pub fn connect_retrying<S>(
 
 /// Write `request` on `stream` and read the reply before `deadline`. Each
 /// read and write waits at most until then; the guard's own time limit
-/// (`deny_when_over_budget`) ends a reply that trickles in past it.
+/// (its deadline's deny, ADR-120) ends a reply that trickles in past it.
 pub fn exchange(mut stream: impl Stream, request: &Request, deadline: Instant) -> Result<Reply> {
     let left = || {
         deadline

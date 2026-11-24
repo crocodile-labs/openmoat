@@ -16,6 +16,12 @@ use crate::integrity::Kept;
 
 pub use pinned::{arg_form, pin};
 
+/// Whether the hook command's `--home` was pinned already ([`pin`]): until it
+/// is, [`Home::locate`] would follow the environment the host gave the hook.
+pub fn is_pinned() -> bool {
+    pinned::pinned().is_some()
+}
+
 /// The state directory's name under the home directory, and under a project
 /// for its repository policy (`repo.rs`).
 pub const DIR_NAME: &str = ".moat";

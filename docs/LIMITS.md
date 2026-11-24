@@ -324,10 +324,19 @@ Each agent's gaps and the reasons are in
 - **Some agents run a call when the hook fails.** Claude Code before 2.1.295 runs a
   call unchecked if `openmoat` is missing. Codex, Gemini CLI, Qwen Code and Crush block
   it then, because OpenMoat's hook command exits 2 itself when the guard could not run
-  or was killed (ADR-109), and run it only when the hook times out. Codex also skips untrusted
+  or was killed (ADR-109). Codex also skips untrusted
   hooks: after `openmoat init`, open Codex, run `/hooks` and trust both OpenMoat hooks;
-  `status` and `doctor` report missing trust and broken legacy entries. GitHub Copilot
-  CLI and Gemini CLI run a call whose hook times out. OpenClaw, pi and OpenCode run calls
+  `status` and `doctor` report missing trust and broken legacy entries. Codex, GitHub
+  Copilot CLI, Gemini CLI, Qwen Code, Crush, the Cline CLI and (not documented) the
+  Antigravity CLI run a call whose hook outlives its time limit. A slow guard never gets
+  there: it answers deny on its own at its deadline, 30 s (25 s for Hermes Agent, whose
+  plugin limit is 30 s), below every limit the agent was given (ADR-120), whatever the
+  decision is stuck on, and records `hook-deadline`. What still runs such a call is a
+  guard that cannot answer at all before the limit: its process stopped (a debugger,
+  `kill -STOP`, a machine starved for minutes), or killed together with the hook command
+  so no tail or plugin reports it. A guard the operating system kills alone (out of
+  memory, `SIGKILL`) is a hook that crashed: the first column of the table below says
+  what each agent does then. OpenClaw, pi and OpenCode run calls
   unchecked when they do not load OpenMoat's plugin or extension (OpenCode 1 with
   `--pure` or `OPENCODE_PURE`, OpenCode 2 with `-openmoat` in a project's `plugins`, or
   when the plugin fails to load, which each of them logs and goes on; `openmoat status`
@@ -338,15 +347,17 @@ Each agent's gaps and the reasons are in
   `HERMES_SAFE_MODE=1` or in a profile OpenMoat did not set up, and Hermes runs a call
   unchecked when its own hook dispatcher fails (a Hermes bug, not a failing hook). The
   Cline CLI runs a call when OpenMoat's hook script cannot start (native Windows), prints
-  something that is not JSON or is killed after 120 s, and under `--yolo`, which runs no
+  something that is not JSON or is killed after 120 s because the guard could not answer
+  at all (a slow guard denies after 30 s), and under `--yolo`, which runs no
   hooks. goose runs calls unchecked when it does not load OpenMoat's plugin
   (`disabledPlugins`, `enabled: false` under `plugins` in `config.yaml`, or a project
   plugin named `openmoat`); `openmoat status` and `doctor` report both, for the directory
   they run in. The Antigravity CLI does not document what happens when a hook fails and
   has no documented setting that blocks then; the weekly real-agent check of 2026-11-12
   saw it block the call when OpenMoat's hook was missing or exited 1 without output, on
-  Linux and macOS, but what it does when the hook times out or prints bad JSON is not
-  known, so OpenMoat assumes the call runs then; `--dangerously-skip-permissions`
+  Linux and macOS, but what it does when the hook cannot answer before its time limit or
+  prints bad JSON is not known, so OpenMoat assumes the call runs then (a slow guard
+  denies after 30 s, before the 600 s limit `openmoat init` writes); `--dangerously-skip-permissions`
   approves its requests unseen, which OpenMoat cannot see, and a `review` under a saved
   `toolPermission: always-proceed` is a deny.
 
@@ -355,7 +366,10 @@ Each agent's gaps and the reasons are in
 What each agent does with a tool call when OpenMoat's hook fails in a way the hook
 cannot catch itself (its binary is gone, it is killed, the host's time limit runs out),
 or is turned off. The time limit is the one `openmoat init` installs, or OpenMoat's
-plugin's own. "Fails open" means the call runs unchecked in that case; `openmoat doctor`
+plugin's own. The guard answers deny on its own at its deadline, below that limit
+(ADR-120), so "times out" in the table is a guard that could not answer at all: a slow
+one is denied. A guard the operating system kills (out of memory, `SIGKILL`) counts as
+one that crashed. "Fails open" means the call runs unchecked in that case; `openmoat doctor`
 names such an agent under its row with what to do: start it with `openmoat run`, whose OS
 sandbox holds the boundary when the hook does not (`docs/SANDBOX.md`), and add
 `require.run: full-boundary` to the policy so `openmoat run` refuses to start without it.
@@ -382,22 +396,22 @@ log's on this machine, so a restored or wrongly dated file can raise it until th
 call.
 
 <!-- generated:hosts-hook-failure -->
-| Agent | Hook cannot start, crashes or exits non-zero | Hook times out | Time limit | Turned off (every call runs unchecked) | Fails open | Source |
+| Agent | Hook cannot start, crashes, is killed or exits non-zero | Hook times out | Time limit | Turned off (every call runs unchecked) | Fails open | Source |
 |---|---|---|---|---|---|---|
 | Claude Code | blocks the call from 2.1.295 (`openmoat init` asks for it); runs it before | blocks the call from 2.1.295 (`openmoat init` asks for it); runs it before | 600 s | `disableAllHooks: true` in a settings file (a project's included), `--settings '{"disableAllHooks": true}'`, or deleting the entry | before that version: cannot start, crashes or exits non-zero; times out | [1](https://code.claude.com/docs/en/hooks) |
-| Codex | blocks the call | runs the call | 600 s | `[features] hooks = false` in `config.toml` (or `requirements.toml`), turning the hook off in `/hooks`, or a hook Codex has not been told to trust | yes: times out | [1](https://learn.chatgpt.com/docs/hooks) [2](https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/hooks/src/engine/command_runner.rs#L417) |
+| Codex | blocks the call | blocks the call: OpenMoat's guard answers deny at 30 s, before the agent's limit; runs it only when the guard cannot answer at all (stopped, or killed with the hook command) | 600 s | `[features] hooks = false` in `config.toml` (or `requirements.toml`), turning the hook off in `/hooks`, or a hook Codex has not been told to trust | no | [1](https://learn.chatgpt.com/docs/hooks) [2](https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/hooks/src/engine/command_runner.rs#L417) |
 | Cursor | blocks the call | blocks the call | 600 s | deleting the entry from `hooks.json`, or an entry without `failClosed: true` (`openmoat status` calls that not protected) | no | [1](https://cursor.com/docs/agent/hooks) |
 | OpenClaw | blocks the call | blocks the call | 45 s | a Gateway that does not load the plugin (disabled in `openclaw.json`, or a load error, which leaves the Gateway running) | no | [1](https://docs.openclaw.ai/plugins/hooks/reference) |
-| GitHub Copilot CLI | blocks the call | runs the call | 600 s | `disableAllHooks: true` in a hook file or in a repository's `settings.json`, or deleting the hook file | yes: times out | [1](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference) |
+| GitHub Copilot CLI | blocks the call | blocks the call: OpenMoat's guard answers deny at 30 s, before the agent's limit; runs it only when the guard cannot answer at all (stopped, or killed with the hook command) | 600 s | `disableAllHooks: true` in a hook file or in a repository's `settings.json`, or deleting the hook file | no | [1](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference) |
 | pi | blocks the call | blocks the call | 45 s | `pi --no-extensions`, or an `extensions` entry in pi's or a trusted project's settings that turns the extension off | no | [1](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md) |
-| Gemini CLI | blocks the call | runs the call | 600 s | `hooks` turned off in the user's or a project's `settings.json`, or a folder Gemini CLI does not trust (which runs no settings hooks) | yes: times out | [1](https://geminicli.com/docs/hooks/reference/) [2](https://github.com/google-gemini/gemini-cli/blob/v0.65.0/packages/core/src/hooks/hookRunner.ts) |
+| Gemini CLI | blocks the call | blocks the call: OpenMoat's guard answers deny at 30 s, before the agent's limit; runs it only when the guard cannot answer at all (stopped, or killed with the hook command) | 600 s | `hooks` turned off in the user's or a project's `settings.json`, or a folder Gemini CLI does not trust (which runs no settings hooks) | no | [1](https://geminicli.com/docs/hooks/reference/) [2](https://github.com/google-gemini/gemini-cli/blob/v0.65.0/packages/core/src/hooks/hookRunner.ts) |
 | OpenCode | blocks the call | blocks the call | 45 s | OpenCode 1's `--pure` or `OPENCODE_PURE`, OpenCode 2's `-openmoat` in `plugins` (a project's included), or an error loading the plugin | no | [1](https://opencode.ai/docs/build/plugins/server) |
 | Hermes Agent | blocks the call | blocks the call | 30 s | the hook missing from `config.yaml` or from `shell-hooks-allowlist.json` (gateway, cron and ACP sessions), another profile, or `HERMES_SAFE_MODE=1` | no | [1](https://github.com/NousResearch/hermes-agent/blob/v0.22.5/agent/shell_hooks.py) |
-| Cline CLI | runs the call | runs the call | 120 s | `--yolo`, or `--config`, `--hooks-dir` or a moved `CLINE_DIR` OpenMoat did not install into | yes: cannot start, crashes or exits non-zero; times out | [1](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/hook-file-hooks.ts) [2](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/subprocess-runner.ts) |
+| Cline CLI | runs the call | blocks the call: OpenMoat's guard answers deny at 30 s, before the agent's limit; runs it only when the guard cannot answer at all (stopped, or killed with the hook command) | 120 s | `--yolo`, or `--config`, `--hooks-dir` or a moved `CLINE_DIR` OpenMoat did not install into | yes: cannot start, crashes or exits non-zero | [1](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/hook-file-hooks.ts) [2](https://github.com/cline/cline/blob/cli-v3.0.74/sdk/packages/core/src/hooks/subprocess-runner.ts) |
 | goose | blocks the call | blocks the call | 60 s | `disabledPlugins` in a `settings.json`, `enabled: false` under `plugins` in `config.yaml`, a project plugin named `openmoat`, or a `hooks.json` goose cannot read | no | [1](https://github.com/aaif-goose/goose/blob/v1.57.0/crates/goose/src/hooks/mod.rs) |
-| Antigravity CLI | blocks the call | not documented; assumed to run the call | 600 s | `enabled: false` on the entry (a project's `.agents/hooks.json` included), or deleting it | yes: times out | [1](https://antigravity.google/docs/hooks?tab=cli) [2](https://github.com/crocodile-labs/openmoat/actions/runs/43254846914) |
-| Qwen Code | blocks the call | runs the call | 600 s | `disableAllHooks: true` in a settings file (whether a project's turns the person's hooks off was not verified, so OpenMoat assumes it does), `--safe-mode`, `--bare`, or deleting the entry | yes: times out | [1](https://qwenlm.github.io/qwen-code-docs/en/users/features/hooks/) [2](https://github.com/QwenLM/qwen-code/blob/main/packages/core/src/hooks/hookRunner.ts) [3](https://github.com/QwenLM/qwen-code/blob/main/packages/core/src/core/toolHookTriggers.ts) |
-| Crush | blocks the call | runs the call | 600 s | deleting the entry: no setting turns hooks off, and the hooks of every configuration file are appended to one another | yes: times out | [1](https://github.com/charmbracelet/crush/blob/main/docs/hooks/README.md) [2](https://github.com/charmbracelet/crush/blob/main/internal/hooks/runner.go) |
+| Antigravity CLI | blocks the call | blocks the call: OpenMoat's guard answers deny at 30 s, before the agent's limit; not documented, assumed to run it only when the guard cannot answer at all (stopped, or killed with the hook command) | 600 s | `enabled: false` on the entry (a project's `.agents/hooks.json` included), or deleting it | no | [1](https://antigravity.google/docs/hooks?tab=cli) [2](https://github.com/crocodile-labs/openmoat/actions/runs/43254846914) |
+| Qwen Code | blocks the call | blocks the call: OpenMoat's guard answers deny at 30 s, before the agent's limit; runs it only when the guard cannot answer at all (stopped, or killed with the hook command) | 600 s | `disableAllHooks: true` in a settings file (whether a project's turns the person's hooks off was not verified, so OpenMoat assumes it does), `--safe-mode`, `--bare`, or deleting the entry | no | [1](https://qwenlm.github.io/qwen-code-docs/en/users/features/hooks/) [2](https://github.com/QwenLM/qwen-code/blob/main/packages/core/src/hooks/hookRunner.ts) [3](https://github.com/QwenLM/qwen-code/blob/main/packages/core/src/core/toolHookTriggers.ts) |
+| Crush | blocks the call | blocks the call: OpenMoat's guard answers deny at 30 s, before the agent's limit; runs it only when the guard cannot answer at all (stopped, or killed with the hook command) | 600 s | deleting the entry: no setting turns hooks off, and the hooks of every configuration file are appended to one another | no | [1](https://github.com/charmbracelet/crush/blob/main/docs/hooks/README.md) [2](https://github.com/charmbracelet/crush/blob/main/internal/hooks/runner.go) |
 | Continue CLI | runs the call | runs the call | 600 s | always: the released Continue CLI fires no hook | yes: cannot start, crashes or exits non-zero; times out | [1](https://github.com/continuedev/continue/blob/main/extensions/cli/src/hooks/hookRunner.ts) |
 <!-- /generated -->
 - **Agent settings can turn hooks off.** Codex runs a new or changed hook only once you

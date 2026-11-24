@@ -161,8 +161,9 @@ The time limit that ends first is 30 s, not the entry's 60 s: Hermes registers a
 hook as a plugin callback and runs every `pre_tool_call` callback under
 `plugins.hook_callback_timeout` (30 s by default, at most 600, `0` for none), then blocks
 the call ("`pre_tool_call` plugin callback timed out", `_run_hook_callbacks` in
-`hermes_cli/plugins_dispatch.py`). That is the guard's own budget, after which it denies
-by itself, so either way a slow call is blocked. `openmoat init` leaves the setting
+`hermes_cli/plugins_dispatch.py`). The guard's own deadline for Hermes is 25 s, that
+limit less its 5 s margin (ADR-120), after which it denies by itself, so a slow call gets
+the guard's deny, and Hermes blocks it if even that cannot come. `openmoat init` leaves the setting
 alone: it bounds every Python plugin's callbacks, and a larger one would only let a stuck
 plugin hold the agent longer. A smaller one blocks calls sooner; `0` leaves the entry's
 60 s, after the guard's own 30 s deny.

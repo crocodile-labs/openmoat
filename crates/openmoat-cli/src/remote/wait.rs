@@ -5,8 +5,9 @@
 //! time leaves the `review` exactly as without the wait.
 //!
 //! How long is the least of three limits: the person's own setting
-//! ([`super::Settings::wait`], [`DEFAULT_WAIT_S`]); the guard's budget
-//! ([`GUARD_BUDGET_S`], after which it denies on its own) less the time it
+//! ([`super::Settings::wait`], [`DEFAULT_WAIT_S`]); the guard's deadline for
+//! the host (at most [`GUARD_BUDGET_S`], after which it denies on its own,
+//! ADR-120) less the time it
 //! keeps to record and answer ([`ANSWER_MARGIN`]) and, under `openmoat run`,
 //! the relay's own share ([`RELAY_MARGIN`]); and the host's hook timeout from
 //! its spec ([`host_limit`]), of which a host that runs a call whose hook
@@ -59,19 +60,24 @@ pub fn host_limit(failure: &HookFailure) -> Duration {
     let timeout = Duration::from_secs(u64::from(timeout));
     match failure.times_out {
         FailureOutcome::Blocks => timeout,
+        // The guard's deny comes before such a host's limit, but one that
+        // cannot answer at all leaves the call to the host: wait as little.
         FailureOutcome::BlocksFrom(_)
         | FailureOutcome::BlocksWhenMissing
         | FailureOutcome::Runs
-        | FailureOutcome::NotDocumented => timeout / FAIL_OPEN_SHARE,
+        | FailureOutcome::NotDocumented
+        | FailureOutcome::GuardDenies(_) => timeout / FAIL_OPEN_SHARE,
     }
 }
 
 /// How much longer a guard that has run `elapsed` may wait for an answer on
-/// a host with `failure`'s facts; `relayed`: `openmoat run` started it. The
-/// guard's whole run then ends [`ANSWER_MARGIN`] (and [`RELAY_MARGIN`])
-/// before the smaller of its budget and [`host_limit`].
-pub fn room(failure: &HookFailure, elapsed: Duration, relayed: bool) -> Duration {
-    let end = host_limit(failure).min(Duration::from_secs(GUARD_BUDGET_S));
+/// a host with `failure`'s facts, whose guard denies on its own after
+/// `deadline_s` ([`openmoat_hosts::HostSpec::guard_deadline_s`]); `relayed`:
+/// `openmoat run` started it. The guard's whole run then ends
+/// [`ANSWER_MARGIN`] (and [`RELAY_MARGIN`]) before the smaller of that
+/// deadline and [`host_limit`].
+pub fn room(failure: &HookFailure, deadline_s: u64, elapsed: Duration, relayed: bool) -> Duration {
+    let end = host_limit(failure).min(Duration::from_secs(deadline_s));
     let margin = if relayed {
         ANSWER_MARGIN + RELAY_MARGIN
     } else {

@@ -82,17 +82,22 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     on_hook_failure: "blocks the call when the hook cannot start or exits non-zero without \
          output, as \
          the weekly real-agent run of 2026-11-12 observed on Linux and macOS (the \
-         documentation does not say); what a timed-out hook or output that is not its JSON \
-         does is not documented, so OpenMoat assumes the call runs then (the guard itself \
-         answers a deny on stdout, with exit 0, on every error it can catch)",
-    // The hooks page states a 30 s default timeout and `enabled: false`, and
-    // says nothing of what a failed or timed-out hook does to the call. The
-    // weekly `latest agents` run 43254846914 (2026-11-12) made the hook binary
-    // missing and made it exit 1 with no output under a real `agy` on Linux
-    // and macOS: both times the call was blocked. A timeout is not tried there.
+         documentation does not say); a slow hook is denied by the guard itself after 30 s, \
+         before the 600 s `timeout` `openmoat init` writes (ADR-120); what a hook that cannot \
+         answer at all before that limit (stopped, or killed with the hook command) or \
+         output that is not its JSON does is not documented, so OpenMoat assumes the call \
+         runs then (the guard itself answers a deny on stdout, with exit 0, on every error \
+         it can catch)",
+    // The hooks page states a 30 s default timeout, the entry's `timeout` in
+    // seconds and `enabled: false`, and says nothing of what a failed or
+    // timed-out hook does to the call. The weekly `latest agents` run
+    // 43254846914 (2026-11-12) made the hook binary missing and made it exit
+    // 1 with no output under a real `agy` on Linux and macOS: both times the
+    // call was blocked. A timeout is not tried there; the guard's own deny at
+    // its deadline comes before the 600 s the entry sets (ADR-120).
     hook_failure: crate::HookFailure {
         fails: crate::FailureOutcome::Blocks,
-        times_out: crate::FailureOutcome::NotDocumented,
+        times_out: crate::FailureOutcome::GuardDenies(crate::Unanswered::NotDocumented),
         timeout_s: Some(600),
         turned_off_by: "`enabled: false` on the entry (a project's `.agents/hooks.json` \
                         included), or deleting it",
@@ -121,7 +126,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     // The weekly check has shown the hook deciding a real agy's call
     // (`HOST.md`, "Real runs"); what is left is what the documentation leaves.
     limit: Some(
-        "Antigravity CLI does not document what happens when the hook times out, and \
+        "Antigravity CLI does not document what happens when the hook cannot answer before \
+         its time limit (a slow guard denies after 30 s), and \
          `--dangerously-skip-permissions` approves requests unseen",
     ),
     install: Some(InstallSpec {

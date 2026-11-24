@@ -3,7 +3,7 @@
 //! per agent, and `moat status` and `moat doctor` name an agent that runs the
 //! call then ("fails open") under its row, with what to do about it.
 
-use openmoat_hosts::{FailureOutcome, HookFailure, Host};
+use openmoat_hosts::{FailureOutcome, HookFailure, Host, Unanswered};
 use serde::Serialize;
 
 /// What to do about an agent that fails open: the OS sandbox of `openmoat
@@ -22,10 +22,18 @@ pub struct Failure {
     /// The hook cannot start (its binary is gone): the same words; differs
     /// from [`Self::fails`] where the host blocks only that case.
     pub cannot_start: &'static str,
-    /// The hook does not answer within [`Self::timeout_s`].
+    /// The hook does not answer within [`Self::timeout_s`]: `blocks` too where
+    /// the guard's own deny comes first ([`Self::deadline_s`], ADR-120).
     pub times_out: &'static str,
     /// The time limit as `openmoat init` installs it, in seconds.
     pub timeout_s: Option<u32>,
+    /// Seconds after which the guard answers deny on its own (ADR-120).
+    pub deadline_s: u64,
+    /// Where [`Self::times_out`] is `blocks` because the guard's deny comes
+    /// first: what the agent does when the guard cannot answer at all before
+    /// the limit (stopped, or killed with the hook command), `runs` or
+    /// `not-documented`; `None` where the agent blocks a timed-out hook itself.
+    pub unanswered: Option<&'static str>,
     /// How the hook is turned off, when every call runs unchecked.
     pub turned_off_by: &'static str,
     /// The cases in which the call runs unchecked; empty when it never does.
@@ -53,7 +61,7 @@ impl Failure {
 pub fn of(host: Host, blocks_from: bool) -> Failure {
     let facts: &HookFailure = &host.spec().hook_failure;
     let word = |outcome: FailureOutcome| match outcome {
-        FailureOutcome::Blocks => "blocks",
+        FailureOutcome::Blocks | FailureOutcome::GuardDenies(_) => "blocks",
         FailureOutcome::BlocksFrom(_) if blocks_from => "blocks",
         FailureOutcome::BlocksFrom(_)
         | FailureOutcome::BlocksWhenMissing
@@ -68,6 +76,12 @@ pub fn of(host: Host, blocks_from: bool) -> Failure {
         },
         times_out: word(facts.times_out),
         timeout_s: facts.timeout_s,
+        deadline_s: host.spec().guard_deadline_s(),
+        unanswered: match facts.times_out {
+            FailureOutcome::GuardDenies(Unanswered::Runs) => Some("runs"),
+            FailureOutcome::GuardDenies(Unanswered::NotDocumented) => Some("not-documented"),
+            _ => None,
+        },
         turned_off_by: facts.turned_off_by,
         fails_open: facts.open_cases(blocks_from),
         sources: facts.sources,
@@ -126,6 +140,26 @@ mod tests {
             } else {
                 assert_eq!(failure.cannot_start, failure.fails, "{host:?}");
             }
+        }
+    }
+
+    /// A timeout the guard's deny answers first reads `blocks`, with what the
+    /// agent does when the guard cannot answer at all beside it.
+    #[test]
+    fn a_timeout_the_guard_answers_first_blocks_and_names_what_remains() {
+        for host in Host::EVERY {
+            let failure = of(host, true);
+            if let FailureOutcome::GuardDenies(_) = host.spec().hook_failure.times_out {
+                assert_eq!(failure.times_out, "blocks", "{host:?}");
+                assert!(failure.unanswered.is_some(), "{host:?}");
+                assert!(!failure.fails_open.contains(&"times out"), "{host:?}");
+            } else {
+                assert_eq!(failure.unanswered, None, "{host:?}");
+            }
+            assert!(
+                failure.deadline_s <= openmoat_hosts::GUARD_BUDGET_S,
+                "{host:?}"
+            );
         }
     }
 

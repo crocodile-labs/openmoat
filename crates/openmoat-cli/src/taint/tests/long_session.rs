@@ -138,7 +138,7 @@ fn a_directory_change_late_in_a_long_session_is_decided_within_the_budget() {
     let sub = format!("{here}/sub");
     session.record(&sub, &nth(7, &sub));
     let started = Instant::now();
-    let budget = crate::commands::guard::TAINT_BUDGET;
+    let budget = crate::commands::guard::taint_budget(Host::ClaudeCode);
     let (taint, folded) = session.call(&sub, started + budget).unwrap();
     let first = started.elapsed();
     eprintln!("the first call in {sub}: {first:?}, {folded} call(s) folded");

@@ -110,8 +110,10 @@ published advisory (`advisories.rs`).
 Codex runs the call when the hook is missing, cannot start, exits non-zero other than 2
 (or 2 with nothing on stderr), or times out (default 600 s). OpenMoat's hook command ends in a tail that turns any exit but the guard's own 0 or 2 (a
 missing `openmoat` exits 127, a killed one 128 and the signal) into exit 2 with a reason
-on stderr (ADR-109), so those block the call; a timeout still runs it, and the guard
-denies on its own after 30 s. On Windows the
+on stderr (ADR-109), so those block the call. A slow hook never reaches the timeout: the
+guard answers deny on its own at its 30 s deadline, whatever the decision is stuck on
+(ADR-120). A timeout still runs the call when the guard cannot answer at all before it
+(stopped, or killed together with the hook command). On Windows the
 PowerShell command does the same.
 
 ## Known gaps
@@ -128,7 +130,8 @@ hooked; what `write_stdin` types into a running command is not hooked, so a comm
 starts a shell, REPL, editor or login without its own commands needs review; reviews
 become denies; Codex skips a new or changed hook until the person trusts it in `/hooks`,
 and `[features] hooks = false` turns hooks off (`openmoat status` and `doctor` report
-that); a call runs unchecked if the hook times out.
+that); a call runs unchecked if the guard cannot answer at all before the hook's time
+limit (stopped, or killed with the hook command).
 
 ## Sandbox
 

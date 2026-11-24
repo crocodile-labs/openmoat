@@ -79,14 +79,17 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         ..Reviews::BASE
     },
     on_hook_failure: "blocks the call when `openmoat` is missing, cannot start or is killed \
-         (the hook command exits 2 itself then, ADR-109); runs it when the hook times out \
-         (600 s as `openmoat init` writes it; the guard denies on its own after 30 s); Qwen \
-         Code has no setting that blocks a failed hook",
+         (the hook command exits 2 itself then, ADR-109); a slow hook is denied by the guard \
+         itself after 30 s, before the 600 s limit `openmoat init` writes (ADR-120); runs the \
+         call only when the guard cannot answer at all before that limit (stopped, or killed \
+         with the hook command): Qwen Code has no setting that blocks a failed hook",
     // Exit 2 blocks (the hooks page, `hookRunner.ts`); the entry's command
-    // turns any status but the guard's 0 or 2 into it (`hook_file.rs`).
+    // turns any status but the guard's 0 or 2 into it (`hook_file.rs`). A
+    // timeout runs the call; the guard's own deny at its deadline comes
+    // first (ADR-120).
     hook_failure: crate::HookFailure {
         fails: crate::FailureOutcome::Blocks,
-        times_out: crate::FailureOutcome::Runs,
+        times_out: crate::FailureOutcome::GuardDenies(crate::Unanswered::Runs),
         timeout_s: Some(600),
         turned_off_by: "`disableAllHooks: true` in a settings file (whether a project's turns \
                         the person's hooks off was not verified, so OpenMoat assumes it does), \
@@ -99,7 +102,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     gaps: "preview: built from Qwen Code's documentation and source, not yet run against a \
          real `qwen`; no OS sandbox from OpenMoat (Qwen Code's own `--sandbox` is the \
-         person's to turn on); a hook that times out lets the call run; a \
+         person's to turn on); a hook that cannot answer at all before its time limit (its \
+         process stopped) lets the call run; a \
          project's `.qwen/settings.json` may turn hooks off (`disableAllHooks`) or add a \
          hook that rewrites a call's arguments (`updatedInput`), once the person approves \
          it or trusts the folder (`openmoat status` and `doctor` warn about one); \

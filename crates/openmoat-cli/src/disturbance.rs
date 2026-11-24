@@ -55,15 +55,21 @@ pub struct HookFailureFacts {
     pub times_out: String,
     /// The hook's time limit as `openmoat init` installs it, in seconds.
     pub timeout_s: Option<u32>,
+    /// Seconds after which the guard answers deny on its own for this agent
+    /// (ADR-120).
+    pub deadline_s: u64,
 }
 
 impl HookFailureFacts {
     fn of(host: Host) -> Self {
-        let facts = host.spec().hook_failure;
+        let spec = host.spec();
+        let facts = spec.hook_failure;
+        let deadline_s = spec.guard_deadline_s();
         Self {
             fails: FailureOutcome::words(facts.fails),
-            times_out: FailureOutcome::words(facts.times_out),
+            times_out: facts.times_out.words_at(Some(deadline_s)),
             timeout_s: facts.timeout_s,
+            deadline_s,
         }
     }
 }

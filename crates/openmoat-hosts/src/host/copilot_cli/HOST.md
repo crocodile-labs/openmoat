@@ -78,7 +78,9 @@ published advisory (`advisories.rs`).
 
 Copilot blocks the call when the hook cannot start, crashes or exits non-zero; it runs it
 when the hook times out (`timeoutSec`, 600 s as `openmoat init` writes it) or its file is
-gone.
+gone. A slow hook never reaches that timeout: the guard answers deny on its own at its
+30 s deadline (ADR-120), so a timeout runs the call only when the guard cannot answer at
+all before it (stopped, or killed with the hook command).
 
 ## Known gaps
 
@@ -88,7 +90,8 @@ it need review (`injected-input`). The output of a call that failed (`postToolUs
 is not read, and an install from before the entry links nothing until `openmoat init`
 runs once; only session taint applies there.
 
-A hook that times out lets the call run; `disableAllHooks` in Copilot's user or a
+A hook that cannot answer at all before its time limit (its process stopped) lets the call
+run; `disableAllHooks` in Copilot's user or a
 repository's `settings.json` turns the hook off (`openmoat status` and `doctor` report it);
 MCP tools are told apart from built-in ones only by name, so a changed server is traced by
 its `<server>-` prefix; reviews become denies in autopilot; no OS sandbox is configured.

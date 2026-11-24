@@ -2,17 +2,15 @@
 //! its answer printed as it came.
 
 use std::io::{self, Write as _};
-use std::sync::PoisonError;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::Result;
 use openmoat_hosts::{HookEvent, Host};
 
-use super::{RESPONDED, entry, kernel_error, read_stdin, respond};
+use super::{GATE, deadline, entry, kernel_error, read_stdin, respond};
 use crate::exit::Code;
 use crate::guard_relay;
 use crate::hangs::{self, Phase};
-use crate::install::GUARD_BUDGET_S;
 
 /// Under `moat run`: the call goes to the run's process outside the sandbox,
 /// and its answer is printed as it came. Whatever fails denies here, in the
@@ -32,7 +30,8 @@ pub(super) fn relayed(
     let caller_set = entry::caller_set();
     let host = installed_for.sender(&payload, caller_set);
     let event = host.event_of_as(&payload, entry::event());
-    let budget = Duration::from_secs(GUARD_BUDGET_S).saturating_sub(started.elapsed());
+    deadline::saw(host, &event);
+    let budget = deadline::of(installed_for).saturating_sub(started.elapsed());
     hangs::enter(Phase::Relay);
     let sent = (caller_set, entry::event());
     match endpoint.and_then(|e| e.decide(installed_for, &payload, sent, budget)) {
@@ -48,13 +47,12 @@ pub(super) fn relayed(
 }
 
 /// Print `reply` as the guard outside the sandbox wrote it, unless the
-/// budget's deny came first.
+/// deadline's deny came first.
 fn relay_once(reply: &guard_relay::Reply) -> Code {
-    let mut responded = RESPONDED.lock().unwrap_or_else(PoisonError::into_inner);
-    if *responded {
-        return Code::Deny;
-    }
-    *responded = true;
+    GATE.once(|| write_reply(reply)).unwrap_or(Code::Deny)
+}
+
+fn write_reply(reply: &guard_relay::Reply) -> Code {
     let mut stdout = io::stdout().lock();
     let written = stdout
         .write_all(&reply.stdout)

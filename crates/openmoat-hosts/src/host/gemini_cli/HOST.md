@@ -96,8 +96,10 @@ Gemini CLI has no fail-closed setting. It runs the call when the hook times out,
 by a signal or exits 1; it blocks it when the hook exits 2, or exits with any other code
 and prints something, as a missing `openmoat` does. OpenMoat's hook command ends in a tail that turns any exit but the guard's own 0 or 2 (a
 missing `openmoat` exits 127, a killed one 128 and the signal) into exit 2 with a reason
-on stderr (ADR-109), so those block the call; a timeout still runs it, and the guard
-denies on its own after 30 s.
+on stderr (ADR-109), so those block the call. A slow hook never reaches the timeout: the
+guard answers deny on its own at its 30 s deadline, before the 600 s `openmoat init`
+writes (ADR-120). A timeout still runs the call when the guard cannot answer at all before
+it (stopped, or killed together with the hook command).
 
 ## Known gaps
 
@@ -118,7 +120,8 @@ hooks at all and asks the person before every tool instead; a project's
 (`openmoat status` and `doctor` warn about one); extension hooks run beside OpenMoat's; a
 search without a `dir_path` is checked over the working directory and the
 `context.includeDirectories` of the user and project settings, not over directories added
-with `--include-directories` or `/directory add`; a hook that times out lets the call run.
+with `--include-directories` or `/directory add`; a hook that cannot answer at all before
+its time limit (its process stopped) lets the call run.
 
 ## Sandbox
 

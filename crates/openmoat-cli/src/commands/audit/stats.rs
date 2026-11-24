@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use std::io::{self, Write as _};
 
 use anyhow::{Result, bail};
-use openmoat_hosts::{GUARD_BUDGET_S, Host};
+use openmoat_hosts::Host;
 use serde::Serialize;
 
 use crate::cli::{Format, StatsArgs};
@@ -138,7 +138,7 @@ fn text(stats: &Stats) -> String {
         let _ = writeln!(
             out,
             "{}: {} approved by you; later allowed in the same session: {} denies, {} reviews; \
-             guard failures: {} kernel-error, {} with no decision within {GUARD_BUDGET_S} s\n  \
+             guard failures: {} kernel-error, {} with no decision within {} s\n  \
              if the hook fails, the agent {}; if it times out{limit}, it {} (from its spec, \
              not measured)",
             agent.name,
@@ -147,6 +147,7 @@ fn text(stats: &Stats) -> String {
             f.reviews_later_allowed,
             f.kernel_errors,
             f.guard_timeouts,
+            h.deadline_s,
             h.fails,
             h.times_out,
         );

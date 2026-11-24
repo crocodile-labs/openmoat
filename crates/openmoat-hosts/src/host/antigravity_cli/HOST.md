@@ -124,7 +124,10 @@ runs the call. A hook that times out is not tried there (waiting out the limit w
 outlast the job), and output that is not its JSON is not tried either: OpenMoat assumes
 the call runs in both cases, and `openmoat doctor` names the timeout. Every error `openmoat guard`
 can catch answers a `deny` on stdout first, with exit 0 (see "Answers"). The timeout is written at 600 s so the
-guard's own 30 s budget always answers before the host's documented 30 s default would.
+guard's own 30 s deadline always answers before the host's documented 30 s default would:
+a slow hook is denied by the guard itself, whatever the decision is stuck on (ADR-120),
+and only a guard that cannot answer at all before the limit (stopped, or killed with the
+hook command) leaves the call to `agy`.
 
 ## Real runs
 

@@ -11,7 +11,6 @@
 //! denies and names `openmoat init`.
 
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::{HookEvent, Host, StandAside};
@@ -21,8 +20,8 @@ use crate::exit::Code;
 use crate::home::Home;
 use crate::install::{HookState, HostConfig};
 
-/// What `--plugin` does before the call is decided: start the budget's deny
-/// (for a call), refuse a state directory the agent's environment moved,
+/// What `--plugin` does before the call is decided (`run` has started the
+/// deadline's deny for a call already): refuse a state directory the agent's environment moved,
 /// record that the package ran, and answer for it when it stands aside or
 /// only reports loading (`--heartbeat`, which never stands for `init`'s
 /// plugin having loaded). `None`: decide the call as `init`'s hook would, or,
@@ -35,7 +34,6 @@ pub(super) fn answer(args: &GuardArgs) -> Option<Code> {
     let payload = if heartbeat {
         None
     } else {
-        super::deny_when_over_budget(host, Instant::now());
         match super::read_stdin(host) {
             Ok(payload) => Some(payload),
             Err(error) => {
@@ -50,6 +48,9 @@ pub(super) fn answer(args: &GuardArgs) -> Option<Code> {
     let event = payload.as_deref().map_or_else(HookEvent::default, |p| {
         host.event_of_as(p, super::entry::event())
     });
+    if payload.is_some() {
+        super::deadline::saw(host, &event);
+    }
     if let Some(why) = moved_state_dir() {
         if heartbeat {
             eprintln!("moat: {why}");

@@ -63,9 +63,9 @@ pub(crate) const EVENT: &str = "pre_tool_call";
 /// plugin callback, and runs every `pre_tool_call` callback under
 /// `plugins.hook_callback_timeout` (30 s by default, at most 600, `0` for
 /// none), after which it blocks the call (`_run_hook_callbacks` in
-/// `hermes_cli/plugins_dispatch.py`: "`pre_tool_call` plugin callback timed out"). 30 s is
-/// [`crate::GUARD_BUDGET_S`]; the guard denies on its own at that point too, so
-/// whichever comes first, the call is blocked. `openmoat init` leaves that
+/// `hermes_cli/plugins_dispatch.py`: "`pre_tool_call` plugin callback timed out"). The
+/// guard's own deadline comes before it ([`HostSpec::guard_deadline_s`]: 25 s, ADR-120),
+/// so a slow guard's deny is what Hermes reads; either way the call is blocked. `openmoat init` leaves that
 /// setting alone: it bounds every Python plugin's callbacks, not only
 /// OpenMoat's, and a larger one only lets a stuck plugin hold the agent longer.
 const HOOK_TIMEOUT_S: u64 = 60;

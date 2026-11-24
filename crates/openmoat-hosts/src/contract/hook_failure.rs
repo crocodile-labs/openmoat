@@ -28,13 +28,51 @@ pub enum FailureOutcome {
     Runs,
     /// The host's documentation does not say; OpenMoat assumes the call runs.
     NotDocumented,
+    /// Only [`HookFailure::times_out`] takes it: the host would let a call
+    /// whose hook outlived its limit go ahead (what it does is the
+    /// [`Unanswered`]), but `openmoat guard` answers deny on its own at its
+    /// deadline ([`HostSpec::guard_deadline_s`](crate::HostSpec), ADR-120),
+    /// which is below every limit `openmoat init` gives the host. A slow
+    /// decision is blocked; the call goes ahead only when the guard cannot
+    /// answer at all before the limit (its process stopped, or killed with
+    /// the command the host started, so no tail or plugin reports it).
+    GuardDenies(Unanswered),
+}
+
+/// What a host does with a call whose hook gave no answer before its limit,
+/// where that is not a block ([`FailureOutcome::GuardDenies`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unanswered {
+    /// The host runs the call, as its documentation or source says.
+    Runs,
+    /// The host's documentation does not say; OpenMoat assumes the call runs.
+    NotDocumented,
 }
 
 impl FailureOutcome {
     /// The outcome in a few words, as the generated table and `doctor` say it.
     #[must_use]
     pub fn words(self) -> String {
+        self.words_at(None)
+    }
+
+    /// [`Self::words`], naming the guard's deadline in seconds where it is
+    /// known ([`HostSpec::guard_deadline_s`](crate::HostSpec)).
+    #[must_use]
+    pub fn words_at(self, deadline_s: Option<u64>) -> String {
         match self {
+            Self::GuardDenies(unanswered) => {
+                let at = deadline_s.map_or_else(String::new, |s| format!(" at {s} s"));
+                let then = match unanswered {
+                    Unanswered::Runs => "runs it",
+                    Unanswered::NotDocumented => "not documented, assumed to run it",
+                };
+                format!(
+                    "blocks the call: OpenMoat's guard answers deny{at}, before the agent's \
+                     limit; {then} only when the guard cannot answer at all (stopped, or killed \
+                     with the hook command)"
+                )
+            }
             Self::Blocks => "blocks the call".to_owned(),
             Self::BlocksFrom((major, minor, patch)) => format!(
                 "blocks the call from {major}.{minor}.{patch} (`openmoat init` asks for it); \
@@ -52,6 +90,9 @@ impl FailureOutcome {
     /// Whether the call may run with no decision: [`Self::Runs`],
     /// [`Self::NotDocumented`], and [`Self::BlocksWhenMissing`] for a crash. [`Self::BlocksFrom`] depends on the version
     /// found, which only the CLI can ask, so it is not counted here.
+    /// [`Self::GuardDenies`] is not counted either: a slow guard's deny comes
+    /// first, and only a guard that cannot run at all leaves the call to the
+    /// host, as a guard that cannot run anywhere does.
     #[must_use]
     pub fn runs(self) -> bool {
         matches!(
@@ -70,7 +111,8 @@ pub struct HookFailure {
     /// non-zero without a decision the host reads.
     pub fails: FailureOutcome,
     /// The hook does not answer before the host's (or OpenMoat's plugin's)
-    /// time limit.
+    /// time limit: [`FailureOutcome::GuardDenies`] where the host would run
+    /// the call but the guard's own deny comes first (ADR-120).
     pub times_out: FailureOutcome,
     /// That time limit as `openmoat init` installs it, in seconds; `None` when
     /// the host documents none.
@@ -133,7 +175,7 @@ impl HookFailure {
 
 #[cfg(test)]
 mod tests {
-    use super::{FailureOutcome, HookFailure};
+    use super::{FailureOutcome, HookFailure, Unanswered};
 
     #[test]
     fn a_host_that_blocks_both_cases_has_no_open_case() {
@@ -173,6 +215,37 @@ mod tests {
             FailureOutcome::BlocksWhenMissing
                 .words()
                 .starts_with("blocks the call when the hook cannot start")
+        );
+    }
+
+    /// A host whose timer would run the call, where the guard's own deny comes
+    /// first: not open, and its words name the deadline and what remains.
+    #[test]
+    fn a_guard_that_denies_first_closes_the_timeout() {
+        let codex_like = HookFailure {
+            fails: FailureOutcome::Blocks,
+            times_out: FailureOutcome::GuardDenies(Unanswered::Runs),
+            ..HookFailure::BASE
+        };
+        assert_eq!(codex_like.open_cases(false), Vec::<&str>::new());
+        assert!(!codex_like.times_out.runs());
+        let words = codex_like.times_out.words_at(Some(30));
+        assert!(
+            words.starts_with("blocks the call: OpenMoat's guard answers deny at 30 s"),
+            "{words}"
+        );
+        assert!(
+            words.contains("; runs it only when the guard cannot answer at all"),
+            "{words}"
+        );
+        let undocumented = FailureOutcome::GuardDenies(Unanswered::NotDocumented).words();
+        assert!(
+            undocumented.contains("answers deny, before"),
+            "{undocumented}"
+        );
+        assert!(
+            undocumented.contains("assumed to run it only when"),
+            "{undocumented}"
         );
     }
 

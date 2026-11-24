@@ -86,9 +86,11 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         defer_is_review_on_no_prompt: false,
         ..Reviews::BASE
     },
-    on_hook_failure: "runs the call when the hook times out (Gemini CLI has no fail-closed \
-         setting; the guard denies on its own after 30 s); blocks it when `openmoat` is \
-         missing or killed, which the hook command turns into exit 2 with a reason (ADR-109)",
+    on_hook_failure: "blocks the call when `openmoat` is missing or killed, which the hook \
+         command turns into exit 2 with a reason (ADR-109); a slow hook is denied by the \
+         guard itself after 30 s, before the 600 s limit `openmoat init` writes (ADR-120); \
+         runs the call only when the guard cannot answer at all before that limit (stopped, \
+         or killed with the hook command): Gemini CLI has no fail-closed setting",
     // Exit 1, a signal or a timeout is a warning and the call runs; another
     // non-zero exit with output blocks (`convertPlainTextToHookOutput` in
     // `hookRunner.ts`, 0.65.0; the reference page calls every other code a
@@ -96,10 +98,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     // exits 127 with its message, and on Windows the entry exits 2 itself
     // (`hook_file.rs`). A silent crash blocks nothing. Gemini CLI has no
     // fail-closed setting. So the entry's command turns any status but the
-    // guard's 0 or 2, a signal included, into exit 2 (`hook_file.rs`).
+    // guard's 0 or 2, a signal included, into exit 2 (`hook_file.rs`). A
+    // timeout runs the call; the guard's own deny at its deadline comes
+    // first (ADR-120).
     hook_failure: crate::HookFailure {
         fails: crate::FailureOutcome::Blocks,
-        times_out: crate::FailureOutcome::Runs,
+        times_out: crate::FailureOutcome::GuardDenies(crate::Unanswered::Runs),
         timeout_s: Some(600),
         turned_off_by: "`hooks` turned off in the user's or a project's `settings.json`, or a \
                         folder Gemini CLI does not trust (which runs no settings hooks)",
@@ -115,7 +119,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          OpenMoat's; a search without a `dir_path` is checked over the working directory and \
          the `context.includeDirectories` of the user and project settings, not over \
          directories added with `--include-directories` or `/directory add`; a hook that \
-         times out lets the call run",
+         cannot answer at all before its time limit (its process stopped) lets the call run",
     // `GEMINI_CLI_HOME` replaces the home directory `.gemini` is looked up in
     // (`homedir()` in `packages/core/src/utils/paths.ts`).
     install: Some(InstallSpec {

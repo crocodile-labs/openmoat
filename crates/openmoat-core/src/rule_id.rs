@@ -58,6 +58,11 @@ pub const LETHAL_TRIFECTA: &str = "lethal-trifecta";
 pub const KERNEL_INTEGRITY: &str = "kernel-integrity";
 /// A call `openmoat guard` could not check or record: a deny (invariant 4).
 pub const KERNEL_ERROR: &str = "kernel-error";
+/// A call `openmoat guard` denied on its own because no decision came before
+/// its deadline for the host, which lies below the agent's hook time limit
+/// (ADR-120): beside `kernel-error` in the answer, alone in the audit row the
+/// guard leaves when the log can still be written.
+pub const HOOK_DEADLINE: &str = "hook-deadline";
 /// A tool OpenMoat does not check.
 pub const UNGOVERNED: &str = "ungoverned";
 /// A call a person approved for the session with `openmoat allow`.
@@ -307,6 +312,7 @@ pub const BUILTIN_RULES: &[BuiltinRule] = &[
     worded(LETHAL_TRIFECTA, &words::LETHAL_TRIFECTA),
     worded(KERNEL_INTEGRITY, &words::KERNEL_INTEGRITY),
     worded(KERNEL_ERROR, &words::KERNEL_ERROR),
+    quiet(HOOK_DEADLINE),
     worded(UNGOVERNED, &words::UNGOVERNED),
     quiet(APPROVED_SESSION),
     worded(PROTECTION_REQUIRED, &words::PROTECTION_REQUIRED),

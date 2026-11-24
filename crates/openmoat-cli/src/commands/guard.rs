@@ -5,12 +5,11 @@
 //! that cannot evaluate must not let the action through.
 
 use std::io::{self, Read as _, Write as _};
-use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_audit::KnownSecrets;
-use openmoat_core::rule_id::{APPROVED_SESSION, KERNEL_ERROR, UNGOVERNED};
+use openmoat_core::rule_id::{APPROVED_SESSION, HOOK_DEADLINE, KERNEL_ERROR, UNGOVERNED};
 use openmoat_core::{CompiledPolicy, Decision, Verdict};
 use openmoat_hosts::{HookEvent, HookRequest, Host};
 use record::Recorded;
@@ -24,13 +23,13 @@ use crate::exit::Code;
 use crate::guard_relay::{self, MAX_PAYLOAD_BYTES};
 use crate::hangs::{self, Phase};
 use crate::home::Home;
-use crate::install::GUARD_BUDGET_S;
 use crate::integrity::{self, Drift};
 use crate::realpath::FsPathResolver;
 use crate::{notice, push, render, secrets, session_code, taint, time};
 
 mod capture;
 mod config_change;
+mod deadline;
 mod drift;
 mod entry;
 mod loaded;
@@ -45,10 +44,13 @@ mod shown;
 mod unattended;
 mod unseen;
 
-/// How far into [`GUARD_BUDGET_S`] the session's taint may be folded, leaving
-/// time to record: a session too long to fold in time is denied with a
-/// recorded reason, its progress kept, rather than by the budget's deny.
-pub(crate) const TAINT_BUDGET: Duration = Duration::from_secs(GUARD_BUDGET_S * 2 / 3);
+/// How far into its host's deadline ([`deadline::of`]) the session's taint
+/// may be folded, leaving time to record: a session too long to fold in time
+/// is denied with a recorded reason, its progress kept, rather than by the
+/// deadline's deny.
+pub(crate) fn taint_budget(host: Host) -> Duration {
+    deadline::of(host) * 2 / 3
+}
 
 /// The least time a call that got here late on a loaded machine still gets to
 /// read on a few events from its session's cache row.
@@ -58,6 +60,15 @@ pub fn run(args: &GuardArgs) -> Code {
     let host = args.host;
     entry::set(args.event.clone());
     entry::set_package(args.plugin);
+    // First, before anything that touches a file: whatever blocks below, the
+    // host gets a deny before its own time limit (ADR-120). A heartbeat
+    // decides no call.
+    if !args.heartbeat
+        && let Err(error) = deny_at_deadline(host, Instant::now(), args.home.is_some())
+    {
+        let error = anyhow::Error::new(error).context("starting the guard's deadline");
+        return respond(host, &HookEvent::default(), &kernel_error(&error));
+    }
     // The hook's command line names the state directory; the environment the
     // host gave the hook does not get to (ADR-071).
     if let Some(word) = &args.home
@@ -77,9 +88,6 @@ pub fn run(args: &GuardArgs) -> Code {
     }
     if args.heartbeat {
         return loaded::report(host);
-    }
-    if !args.plugin {
-        deny_when_over_budget(host, Instant::now());
     }
     // A panic would exit 101, which Claude Code treats as a non-blocking hook
     // failure, i.e. the call would proceed. Turn it into an explicit deny.
@@ -116,33 +124,57 @@ fn fault_point(point: &str) {
 fn fault_point(_: &str) {}
 
 /// A hook the host times out counts as failed, and most hosts then run the
-/// call, so after [`GUARD_BUDGET_S`] the guard denies on its own, in the
-/// default event's format; exit 2 denies whatever the event. The deny goes to
-/// the side file of [`hangs`], not the audit log: what is stuck may be the log.
-/// The line names the phase the guard was in and how long it had run, so a
-/// slow machine can be told from a stuck step. Exiting while the main thread is
+/// call, so at its host's deadline ([`deadline::of`], below every time limit
+/// the host was given) the guard denies on its own (ADR-120): in the form of
+/// the payload's event once it was read ([`deadline::saw`]), else the default
+/// event's; exit 2 denies whatever the event. The deny is recorded first in
+/// the side file of [`hangs`], which names the phase the guard was in and how
+/// long it had run, so a slow machine can be told from a stuck step; then,
+/// where the audit log can still be written, as a row with rule
+/// `hook-deadline`. Both are waited for a bounded time only: what is stuck may
+/// be the log. `pin_named`: the hook command names a state directory, which
+/// nothing is written to before it is pinned. Exiting while the main thread is
 /// inside the audit store's `BEGIN IMMEDIATE` is deliberate (fail closed): the
 /// OS drops the write lock, and the next open of the log drops the unfinished row.
-fn deny_when_over_budget(host: Host, started: Instant) {
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_secs(GUARD_BUDGET_S));
+fn deny_at_deadline(installed_for: Host, started: Instant, pin_named: bool) -> io::Result<()> {
+    let after = deadline::of(installed_for);
+    deadline::arm(after, move || {
         let phase = hangs::current();
-        let decision = kernel_error(&anyhow::Error::msg(format!(
-            "no decision within {GUARD_BUDGET_S} s"
-        )));
-        if let Some(code) = answer_once(host, &Answer::To(&HookEvent::default()), &decision) {
-            if let Ok(home) = Home::locate() {
+        let (host, event) = deadline::seen(installed_for);
+        let decision = deadline_deny(after, phase);
+        if let Some(code) = answer_once(host, &Answer::To(&event), &decision) {
+            if (!pin_named || crate::home::is_pinned())
+                && let Ok(home) = Home::locate()
+            {
                 let elapsed_ms = started.elapsed().as_millis();
-                hangs::record(&home, host, time::now_ms(), phase, elapsed_ms);
+                let row = record::deadline_row(home.clone(), host, &decision);
+                hangs::record(&home, host, (time::now_ms(), phase, elapsed_ms), row);
             }
             std::process::exit(code as i32);
         }
-    });
+    })
 }
 
-/// Whether a response was written: the decision's or the budget's deny,
-/// whichever comes first. The guard answers once.
-static RESPONDED: Mutex<bool> = Mutex::new(false);
+/// The deny the deadline answers with: `kernel-error`, whose words and page
+/// the block message uses, and `hook-deadline`, which says why.
+fn deadline_deny(after: Duration, phase: Phase) -> Decision {
+    let waited = if after.subsec_millis() == 0 {
+        format!("{} s", after.as_secs())
+    } else {
+        format!("{} ms", after.as_millis())
+    };
+    let mut decision = kernel_error(&anyhow::Error::msg(format!(
+        "no decision within {waited} (while {}), so it is denied before the agent's own time \
+         limit could run it",
+        phase.doing()
+    )));
+    decision.rules.push(HOOK_DEADLINE.to_owned());
+    decision
+}
+
+/// The one answer the guard writes: the decision's or the deadline's deny,
+/// whichever comes first.
+static GATE: deadline::Gate = deadline::Gate::new();
 
 /// [`answer_once`]; when the budget's deny came first, its exit code.
 fn respond(host: Host, event: &HookEvent, decision: &Decision) -> Code {
@@ -159,11 +191,11 @@ enum Answer<'a> {
 /// Write `decision` for `answer` and return the exit code that goes with it, or
 /// `None` when a response was already written.
 fn answer_once(host: Host, answer: &Answer<'_>, decision: &Decision) -> Option<Code> {
-    let mut responded = RESPONDED.lock().unwrap_or_else(PoisonError::into_inner);
-    if *responded {
-        return None;
-    }
-    *responded = true;
+    GATE.once(|| write_answer(host, answer, decision))
+}
+
+/// Write `decision` for `answer`, holding [`GATE`]; the exit code that goes with it.
+fn write_answer(host: Host, answer: &Answer<'_>, decision: &Decision) -> Code {
     let response = match answer {
         Answer::For(request) => host.render_response_for(request, decision),
         Answer::To(event) => host.render_response(event, decision),
@@ -179,9 +211,9 @@ fn answer_once(host: Host, answer: &Answer<'_>, decision: &Decision) -> Option<C
         // Without a response the host falls back to its own default, which
         // may be to proceed; exit 2 is the one signal every host honours.
         eprintln!("moat: could not write the hook response: {error}");
-        return Some(Code::Deny);
+        return Code::Deny;
     }
-    Some(match decision.verdict {
+    match decision.verdict {
         Verdict::Allow | Verdict::Defer | Verdict::Review => Code::Ok,
         // `Deny`, and any verdict added to the core later, blocks the call.
         _ => {
@@ -192,7 +224,7 @@ fn answer_once(host: Host, answer: &Answer<'_>, decision: &Decision) -> Option<C
             );
             deny_code(host)
         }
-    })
+    }
 }
 
 /// The exit code of a deny whose response was written: 2, or 0 for a host
@@ -231,6 +263,7 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
             // The Continue CLI runs the Claude Code hook but cannot prompt.
             host = installed_for.sender(&payload, entry::caller_set());
             *event = host.event_of_as(&payload, entry::event());
+            deadline::saw(host, event);
             // What a call returned: nothing to decide or record (ADR-057).
             if matches!(event, HookEvent::PostToolUse { .. }) {
                 return post_tool_use::answer(host, &payload, event);
@@ -471,7 +504,7 @@ fn evaluate(
     // (`CacheWrite::save_in` says why that handle comes from the key's module).
     let mut save = |write: &taint::CacheWrite| write.save_in(&home);
     let mut progress = taint::Progress {
-        deadline: (started + TAINT_BUDGET).max(Instant::now() + MIN_TAINT_TIME),
+        deadline: (started + taint_budget(host)).max(Instant::now() + MIN_TAINT_TIME),
         save: &mut save,
         every: taint::checkpoint_every(),
         folded: 0,

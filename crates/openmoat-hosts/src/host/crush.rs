@@ -78,14 +78,17 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         ..Reviews::BASE
     },
     on_hook_failure: "blocks the call when `openmoat` is missing, cannot start or is killed \
-         (the hook command exits 2 itself then, ADR-109); runs it when the hook times out \
-         (600 s as `openmoat init` writes it; the guard denies on its own after 30 s); Crush \
-         has no setting that blocks a failed hook",
+         (the hook command exits 2 itself then, ADR-109); a slow hook is denied by the guard \
+         itself after 30 s, before the 600 s limit `openmoat init` writes (ADR-120); runs the \
+         call only when the guard cannot answer at all before that limit (stopped, or killed \
+         with the hook command): Crush has no setting that blocks a failed hook",
     // Exit 2 blocks (hooks README, `runner.go`); the entry's command turns
-    // any status but the guard's 0 or 2 into it (`hook_file.rs`).
+    // any status but the guard's 0 or 2 into it (`hook_file.rs`). A timeout
+    // runs the call; the guard's own deny at its deadline comes first
+    // (ADR-120).
     hook_failure: crate::HookFailure {
         fails: crate::FailureOutcome::Blocks,
-        times_out: crate::FailureOutcome::Runs,
+        times_out: crate::FailureOutcome::GuardDenies(crate::Unanswered::Runs),
         timeout_s: Some(600),
         turned_off_by: "deleting the entry: no setting turns hooks off, and the hooks of every \
                         configuration file are appended to one another",
@@ -95,7 +98,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         ],
     },
     gaps: "preview: built from Crush's documentation and source, not yet run against a real \
-         `crush`; no OS sandbox from OpenMoat; a hook that times out lets the call run; \
+         `crush`; no OS sandbox from OpenMoat; a hook that cannot answer at all before its \
+         time limit (its process stopped) lets the call run; \
          reviews become denies; a call OpenMoat defers runs unasked under `--yolo`; the \
          tool calls of a subagent (`agent`, `agentic_fetch`) fire no hook, so starting one \
          needs review; a project's `crush.json`, `.crush.json` or `.crushrc` can add a hook \

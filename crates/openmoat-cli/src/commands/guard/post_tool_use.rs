@@ -89,7 +89,7 @@ fn kept(host: Host, request: HookRequest, output: &str) -> Result<Decision> {
     // The call ran: read on through the session's history now, so the next
     // call's own fold is short (the cache row is keyed like that call's).
     hangs::enter(Phase::Taint);
-    let deadline = started + super::TAINT_BUDGET;
+    let deadline = started + super::taint_budget(host);
     taint::catch_up(
         &store,
         host,

@@ -54,19 +54,19 @@ has each agent's case). What happens when the hook fails, case by case and with 
 | Agent | Protection | Own OS sandbox (`openmoat init`) | `openmoat run` | A `review` becomes | MCP servers | Hook a project cannot turn off | Plugin package (preview) | When the hook fails, the agent |
 |---|---|---|---|---|---|---|---|---|
 | Claude Code | hook + OS sandbox (macOS, Linux, WSL2); hook only on native Windows | `settings.json`, not on native Windows | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | `openmoat init --managed` | Claude Code plugin marketplace | blocks it from 2.1.295; earlier versions run it |
-| Codex | hook + OS sandbox | `config.toml` | macOS 13+, Linux, Windows (writes only, preview) | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | an administrator writes it | — | runs it when the hook times out |
+| Codex | hook + OS sandbox | `config.toml` | macOS 13+, Linux, Windows (writes only, preview) | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | an administrator writes it | — | blocks it |
 | Cursor | hook + OS sandbox (macOS, Linux); hook only on Windows | `sandbox.json`, not on native Windows | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | `openmoat init --managed` | Cursor Marketplace | blocks it |
 | OpenClaw | hook only | — | — | the agent's own prompt | pinned; stdio servers can be wrapped | — | ClawHub | blocks it |
-| GitHub Copilot CLI | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | `openmoat init --managed` prints the root command | GitHub Copilot CLI plugins | runs it when the hook times out |
+| GitHub Copilot CLI | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | `openmoat init --managed` prints the root command | GitHub Copilot CLI plugins | blocks it |
 | pi | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | — | pi packages (npm, pi.dev gallery) | blocks it |
-| Gemini CLI | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | an administrator writes it | Gemini CLI extensions gallery | runs it when the hook times out |
+| Gemini CLI | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | an administrator writes it | Gemini CLI extensions gallery | blocks it |
 | OpenCode | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | an administrator writes it | OpenCode plugins (npm) | blocks it |
 | Hermes Agent | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned | — | Hermes Agent Plugin Catalog | blocks it |
-| Cline CLI | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | — | — | runs it when the hook cannot start, crashes or exits non-zero; or times out |
+| Cline CLI | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | — | — | runs it when the hook cannot start, crashes or exits non-zero |
 | goose | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | a deny you approve with `openmoat allow --last` | pinned | — | — | blocks it |
-| Antigravity CLI | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | — | Antigravity CLI plugins | runs it when the hook times out |
-| Qwen Code | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | an administrator writes it | — | runs it when the hook times out |
-| Crush | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | an administrator writes it | — | runs it when the hook times out |
+| Antigravity CLI | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | — | Antigravity CLI plugins | blocks it |
+| Qwen Code | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | an administrator writes it | — | blocks it |
+| Crush | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | an administrator writes it | — | blocks it |
 | Continue CLI | not checked yet; use `openmoat run` | — | — | — | — | — | — | — |
 <!-- /generated -->
 

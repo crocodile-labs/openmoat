@@ -174,17 +174,21 @@ the session of the hook decision that call matched, for every agent
 (`commands/mcp/gate.rs`; ADR-063, proposed).
 
 A panic inside steps 1–11 is caught and answered with a deny and exit 2, because
-Claude Code treats exit 101 as a non-blocking error. A `guard` with no answer after
-30 s (`GUARD_BUDGET_S`, below every hook timeout `openmoat init` sets) writes a deny,
-unrecorded, and exits 2, since a host that times the hook out runs the call
-(THREAT_MODEL §5, "When the hook fails"). Only one response is ever written. The
+Claude Code treats exit 101 as a non-blocking error. A `guard` with no answer at its
+host's deadline (`HostSpec::guard_deadline_s`: 30 s, `GUARD_BUDGET_S`, or the host's
+shortest hook time limit less 5 s where that is earlier, ADR-120) writes a deny and
+exits 2, since a host that times the hook out runs the call (THREAT_MODEL §5, "When the
+hook fails"). The watchdog thread (`commands/guard/deadline.rs`) starts before the guard
+reads a file, and its deny is in the form of the payload's event once it was read. Only
+one response is ever written: every answer goes through one gate. The
 limit is wall-clock time, which includes waiting for a CPU and for the audit
 database's lock, so it is set well above the 10–40 ms a call takes: on a machine
 loaded by parallel builds a call can take seconds without being stuck. The deny
 appends `<ms> <host> <phase> <elapsed ms>` to `~/.moat/guard-hangs.log`, the
 phase being the step the guard was in (`stdin`, `relay` for a hook inside `openmoat run`
 waiting for the run to decide, `lock`, `context`, `compile`, `taint`, `cache`,
-`record`, `answer`); `openmoat doctor` reports the hangs of the last
+`record`, `answer`), then, where the audit log can still be written within the same
+2 s, a row with rule `hook-deadline` (tool `guard`); `openmoat doctor` reports the hangs of the last
 week and the phase most of them were in. A call the guard denied because it could
 not decide it in time or at all (`kernel-error`, recorded in the audit log, such as a
 session whose earlier calls could not be read before the taint deadline) is a doctor
@@ -1029,8 +1033,8 @@ skipped and the older row stays, so the next call folds a few more events. A row
 is replaced only by one further on, so a skipped or late write never moves it back.
 Without a row for the digest, or when it cannot be read, the session is folded from
 its first event. A fold reads the events 512 at a time; one that runs long saves
-what it has reached every 2 s, on a writable handle of its own, and at 20 s into
-the guard's 30 s budget it stops, saves, and the call is denied (`kernel-error`,
+what it has reached every 2 s, on a writable handle of its own, and two thirds into
+the guard's deadline for the host (20 s of 30 s, ADR-120) it stops, saves, and the call is denied (`kernel-error`,
 recorded) rather than answered from part of the session, which may lack the event
 that tainted it. Its message says the call was stopped, not judged, and that running
 it again reads on. The next call reads on from the saved row, so a session too long to

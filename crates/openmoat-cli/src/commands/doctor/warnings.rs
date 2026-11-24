@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use openmoat_core::Policy;
-use openmoat_core::rule_id::KERNEL_ERROR;
+use openmoat_core::rule_id::{HOOK_DEADLINE, KERNEL_ERROR};
 use openmoat_hosts::Host;
 
 use crate::hangs;
@@ -169,8 +169,9 @@ pub(super) fn hangs(home: &Home, now_ms: i64) -> Option<String> {
         format!(", most while {} (phase {})", p.doing(), p.name())
     });
     Some(format!(
-        "guard            {} call(s) denied with no decision within {GUARD_BUDGET_S} s \
-         in the last 7 days, the latest at {}{phase}; not in the audit log, listed in {}",
+        "guard            {} call(s) denied with no decision before the guard's deadline (at \
+         most {GUARD_BUDGET_S} s) in the last 7 days, the latest at {}{phase}; listed in {}, \
+         and in the audit log as {HOOK_DEADLINE} where it could still be written",
         found.count,
         time::timestamp(found.newest_ms),
         path.display()

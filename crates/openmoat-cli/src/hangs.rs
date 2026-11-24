@@ -117,7 +117,27 @@ static CURRENT: AtomicU8 = AtomicU8::new(0);
 pub fn enter(phase: Phase) {
     let index = PHASES.iter().position(|p| *p == phase).unwrap_or(0);
     CURRENT.store(u8::try_from(index).unwrap_or(0), Ordering::Relaxed);
+    stall_at(phase);
 }
+
+/// Debug builds stop for good on entering the phase this variable names
+/// (`lock`, `record`, …), so the end-to-end tests can show the deadline's deny
+/// arrives whatever step is stuck (ADR-120). Release builds do not read it.
+#[cfg(debug_assertions)]
+const STALL_ENV: &str = "MOAT_TEST_STALL_AT";
+
+#[cfg(debug_assertions)]
+fn stall_at(phase: Phase) {
+    if std::env::var(STALL_ENV).is_ok_and(|v| v == phase.name()) {
+        // Only the deadline's exit ends the process now.
+        loop {
+            thread::sleep(Duration::from_secs(1));
+        }
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn stall_at(_: Phase) {}
 
 /// The phase the guard is in now.
 pub fn current() -> Phase {
@@ -128,13 +148,21 @@ pub fn current() -> Phase {
 }
 
 /// Record that `host`'s call was denied at `now_ms` with no decision, while in
-/// `phase` after `elapsed_ms`, waiting at most [`WRITE_WAIT`] for the line.
-pub fn record(home: &Home, host: Host, now_ms: i64, phase: Phase, elapsed_ms: u128) {
+/// `phase` after `elapsed_ms`, then run `then` (the audit row, ADR-120) on the
+/// same thread, waiting at most [`WRITE_WAIT`] for both: the line comes first,
+/// so a stuck audit log cannot keep it from being written.
+pub fn record(
+    home: &Home,
+    host: Host,
+    (now_ms, phase, elapsed_ms): (i64, Phase, u128),
+    then: impl FnOnce() + Send + 'static,
+) {
     let (done, written) = mpsc::channel();
     let path = home.hangs_path();
     let line = line(now_ms, host, phase, elapsed_ms);
     let writer = thread::Builder::new().spawn(move || {
         let _ = append(&path, &line);
+        then();
         let _ = done.send(());
     });
     if writer.is_ok() {
@@ -249,18 +277,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_budget_and_the_write_wait_end_before_any_host_times_out() {
-        let deadline = Duration::from_secs(openmoat_hosts::GUARD_BUDGET_S) + WRITE_WAIT;
-        for host in Host::ALL {
-            let Some(install) = host.spec().install.as_ref() else {
-                continue;
-            };
-            for hook in install.hooks {
+    fn the_deadline_and_the_write_wait_end_before_any_host_times_out() {
+        // The margin the deadline keeps covers this wait, with room to spare.
+        assert!(WRITE_WAIT < Duration::from_secs(openmoat_hosts::DEADLINE_MARGIN_S));
+        for host in Host::EVERY {
+            let spec = host.spec();
+            let gone = Duration::from_secs(spec.guard_deadline_s()) + WRITE_WAIT;
+            let limits = spec
+                .hook_failure
+                .timeout_s
+                .map(u64::from)
+                .into_iter()
+                .chain(
+                    spec.install
+                        .iter()
+                        .flat_map(|i| i.hooks.iter().map(|h| h.timeout)),
+                );
+            for limit in limits {
                 assert!(
-                    Duration::from_secs(hook.timeout) > deadline + Duration::from_secs(5),
-                    "{host:?} {}: {} s leaves no margin after {deadline:?}",
-                    hook.event,
-                    hook.timeout
+                    Duration::from_secs(limit) > gone,
+                    "{host:?}: {limit} s leaves no margin after {gone:?}"
                 );
             }
         }

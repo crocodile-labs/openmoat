@@ -134,7 +134,10 @@ pub fn hook_failure(host: Host, os: Os, ev: &Evidence<'_>) -> Cell {
         other => format!("cannot start, crashes or exits non-zero: {}", other.words()),
     };
     claimed(
-        format!("{fails}; times out{limit}: {}", facts.times_out.words()),
+        format!(
+            "{fails}; times out{limit}: {}",
+            facts.times_out.words_at(Some(spec.guard_deadline_s()))
+        ),
         ev.has(Claim::HookFailure, host, os),
     )
 }

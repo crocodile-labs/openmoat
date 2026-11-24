@@ -164,6 +164,41 @@ pub(super) fn relay_outside(host: Host, request: Option<&HookRequest>) {
     let _ = Home::locate().and_then(note);
 }
 
+/// The audit row of a call the guard denied at its deadline (ADR-120), to
+/// write on [`hangs::record`]'s thread: rule `hook-deadline` alone, so it is
+/// counted once, with the guard timeouts the side file counts, and not again
+/// as a `kernel-error`. Best effort: the log may be what is stuck, and the
+/// process exits within the side file's wait whether or not it is written.
+pub(super) fn deadline_row(
+    home: Home,
+    host: Host,
+    answered: &Decision,
+) -> impl FnOnce() + Send + 'static {
+    let mut decision = Decision::new(Verdict::Deny);
+    decision
+        .rules
+        .push(openmoat_core::rule_id::HOOK_DEADLINE.to_owned());
+    decision.reasons.clone_from(&answered.reasons);
+    let package = super::entry::from_package();
+    move || {
+        let note = || -> Result<()> {
+            let store = crate::audit_key::open_existing(&home)?.from_package(package);
+            store.record(&NewEvent {
+                host: host.id(),
+                session_id: "unknown",
+                call_id: None,
+                cwd: None,
+                tool: "guard",
+                action: None,
+                decision: &decision,
+                latency_us: 0,
+            })?;
+            Ok(())
+        };
+        let _ = note();
+    }
+}
+
 /// Record `event`, then what goes with its row (`with_row`: provenance, the
 /// MCP ticket, the `openmoat run` link). When that fails the host is answered
 /// with a deny (`decide_and_respond`), while the committed row says what was

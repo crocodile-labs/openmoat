@@ -107,8 +107,8 @@ fn gaps_list() -> Vec<String> {
 /// turned off, from its [`HostSpec::hook_failure`] (ADR-079), with the sources.
 fn hook_failure_table() -> Vec<String> {
     let mut lines = vec![
-        "| Agent | Hook cannot start, crashes or exits non-zero | Hook times out | Time limit | \
-         Turned off (every call runs unchecked) | Fails open | Source |"
+        "| Agent | Hook cannot start, crashes, is killed or exits non-zero | Hook times out | \
+         Time limit | Turned off (every call runs unchecked) | Fails open | Source |"
             .to_owned(),
         "|---|---|---|---|---|---|---|".to_owned(),
     ];
@@ -137,7 +137,7 @@ fn hook_failure_table() -> Vec<String> {
             "| {} | {} | {} | {limit} | {} | {open} | {sources} |",
             spec.display_name,
             facts.fails.words(),
-            facts.times_out.words(),
+            facts.times_out.words_at(Some(spec.guard_deadline_s())),
             facts.turned_off_by
         ));
     }

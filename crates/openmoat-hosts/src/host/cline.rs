@@ -85,19 +85,23 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         ..Reviews::BASE
     },
     on_hook_failure: "blocks the call when `openmoat` is missing, crashes or answers nothing \
-         (OpenMoat's hook script prints Cline's `cancel` itself); runs the call when the \
-         script cannot start (no `sh`, as on native Windows), when Cline kills it after \
-         120 s, and when Cline runs no hooks (`--yolo`); Cline has no setting that blocks a \
-         failed hook",
+         (OpenMoat's hook script prints Cline's `cancel` itself); a slow hook is denied by \
+         the guard itself after 30 s, before Cline's fixed 120 s limit (ADR-120); runs the \
+         call when the script cannot start (no `sh`, as on native Windows), when the guard \
+         cannot answer at all before Cline kills the script after 120 s (stopped, or killed \
+         with the script), and when Cline runs no hooks (`--yolo`); Cline has no setting \
+         that blocks a failed hook",
     // Cline reads only a `cancel` on stdout, which OpenMoat's script prints
-    // whenever `guard` fails; it kills a hook after 120 s and runs the call.
+    // whenever `guard` fails; it kills a hook after 120 s and runs the call,
+    // after the guard's own deny at its deadline (ADR-120). Nothing sets
+    // that limit, so `openmoat init` writes none.
     // It also runs the call when the script itself cannot start (no `sh`,
     // native Windows), and the facts have no platform-dependent outcome, so
     // a failing hook counts as running the call: `doctor` must not promise a
     // block that Windows does not give.
     hook_failure: crate::HookFailure {
         fails: crate::FailureOutcome::Runs,
-        times_out: crate::FailureOutcome::Runs,
+        times_out: crate::FailureOutcome::GuardDenies(crate::Unanswered::Runs),
         timeout_s: Some(120),
         turned_off_by: "`--yolo`, or `--config`, `--hooks-dir` or a moved `CLINE_DIR` OpenMoat \
                         did not install into",
@@ -167,8 +171,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     payload_copies: 2,
     limit: Some(
         "`cline --yolo` runs no hooks; another hook or plugin can rewrite a call after \
-         OpenMoat checked it; Cline runs the call if OpenMoat's script cannot start or is \
-         killed after 120 s",
+         OpenMoat checked it; Cline runs the call if OpenMoat's script cannot start, or is \
+         killed after 120 s because the guard could not answer at all (a slow guard denies \
+         after 30 s)",
     ),
     // Every `PreToolUse` file of Cline's hook directories runs, OpenMoat's
     // among them (`resolveHooksConfigSearchPaths`), and so do the plugins in

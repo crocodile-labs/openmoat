@@ -95,14 +95,17 @@ exits with a code other than 0, 2 and 49 without a decision on stdout, is a logg
 non-blocking error; output it cannot parse is no decision. Crush has no fail-closed
 setting. Every error `openmoat guard` can catch itself is a deny with exit 2. OpenMoat's hook command ends in a tail that turns any exit but the guard's own 0 or 2 (a
 missing `openmoat` exits 127, a killed one 128 and the signal) into exit 2 with a reason
-on stderr (ADR-109), so those block the call; a timeout still runs it, and the guard
-denies on its own after 30 s.
+on stderr (ADR-109), so those block the call. A slow hook never reaches the timeout: the
+guard answers deny on its own at its 30 s deadline, before the 600 s `openmoat init`
+writes (ADR-120). A timeout still runs the call when the guard cannot answer at all before
+it (stopped, or killed together with the hook command).
 
 ## Known gaps
 
 - Preview: no real `crush` has run the hook; the fixtures are built from the source; the
   weekly job does not install Crush yet.
-- A timed-out hook lets the call run.
+- A hook that cannot answer at all before its time limit (its process stopped) lets the
+  call run.
 - Subagents' tool calls fire no hook.
 - A project's `.crushrc` (or `crushrc`) is a Bash script Crush runs when it starts, from
   the repository, with no trust prompt. OpenMoat cannot read what it does; writing one

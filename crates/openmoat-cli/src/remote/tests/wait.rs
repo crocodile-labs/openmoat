@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use openmoat_audit::KnownSecrets;
 use openmoat_core::{Decision, Verdict};
-use openmoat_hosts::{FailureOutcome, GUARD_BUDGET_S, HookFailure, HookRequest, Host};
+use openmoat_hosts::{FailureOutcome, GUARD_BUDGET_S, HookFailure, HookRequest, Host, Unanswered};
 
 use super::super::answer::{self, Answer};
 use super::super::gate::gate_used;
@@ -71,10 +71,11 @@ fn answer_when_sent(s: &Setup, verdict: answer::Verdict, after: Duration) {
 fn every_host_s_wait_ends_safely_before_its_hook_times_out() {
     for host in Host::ALL {
         let facts = &host.spec().hook_failure;
-        let limit = room(facts, Duration::ZERO, false);
+        let deadline = host.spec().guard_deadline_s();
+        let limit = room(facts, deadline, Duration::ZERO, false);
         let whole = limit + ANSWER_MARGIN;
         assert!(
-            whole <= Duration::from_secs(GUARD_BUDGET_S),
+            whole <= Duration::from_secs(deadline),
             "{host:?}: {whole:?}"
         );
         let Some(timeout) = facts.timeout_s else {
@@ -93,7 +94,7 @@ fn every_host_s_wait_ends_safely_before_its_hook_times_out() {
         }
         // Under `openmoat run` the relay's share comes off too.
         assert_eq!(
-            room(facts, Duration::ZERO, true),
+            room(facts, deadline, Duration::ZERO, true),
             limit.saturating_sub(RELAY_MARGIN),
             "{host:?}"
         );
@@ -105,34 +106,58 @@ fn the_wait_is_capped_by_the_host_the_budget_and_the_time_already_spent() {
     let blocks = failure(FailureOutcome::Blocks, Some(30));
     assert_eq!(host_limit(&blocks), Duration::from_secs(30));
     assert_eq!(
-        room(&blocks, Duration::ZERO, false),
+        room(&blocks, GUARD_BUDGET_S, Duration::ZERO, false),
         Duration::from_secs(25)
     );
     assert_eq!(
-        room(&blocks, Duration::from_secs(24), false),
+        room(&blocks, GUARD_BUDGET_S, Duration::from_secs(24), false),
         Duration::from_secs(1)
     );
     assert_eq!(
-        room(&blocks, Duration::from_secs(30), false),
+        room(&blocks, GUARD_BUDGET_S, Duration::from_secs(30), false),
         Duration::ZERO
     );
-    assert_eq!(room(&blocks, Duration::ZERO, true), Duration::from_secs(20));
+    assert_eq!(
+        room(&blocks, GUARD_BUDGET_S, Duration::ZERO, true),
+        Duration::from_secs(20)
+    );
+    // A host whose guard denies earlier (ADR-120) waits less by as much.
+    assert_eq!(
+        room(&blocks, 25, Duration::ZERO, false),
+        Duration::from_secs(20)
+    );
     // A host that runs a timed-out call: a quarter of its timeout at most.
     for open in [
         FailureOutcome::Runs,
         FailureOutcome::NotDocumented,
         FailureOutcome::BlocksFrom((1, 0, 0)),
+        FailureOutcome::GuardDenies(Unanswered::Runs),
     ] {
         assert_eq!(
-            room(&failure(open, Some(600)), Duration::ZERO, false),
+            room(
+                &failure(open, Some(600)),
+                GUARD_BUDGET_S,
+                Duration::ZERO,
+                false
+            ),
             Duration::from_secs(25)
         );
         assert_eq!(
-            room(&failure(open, Some(60)), Duration::ZERO, false),
+            room(
+                &failure(open, Some(60)),
+                GUARD_BUDGET_S,
+                Duration::ZERO,
+                false
+            ),
             Duration::from_secs(10)
         );
         assert_eq!(
-            room(&failure(open, Some(20)), Duration::ZERO, false),
+            room(
+                &failure(open, Some(20)),
+                GUARD_BUDGET_S,
+                Duration::ZERO,
+                false
+            ),
             Duration::ZERO
         );
     }
@@ -140,6 +165,7 @@ fn the_wait_is_capped_by_the_host_the_budget_and_the_time_already_spent() {
     assert_eq!(
         room(
             &failure(FailureOutcome::Blocks, None),
+            GUARD_BUDGET_S,
             Duration::ZERO,
             false
         ),

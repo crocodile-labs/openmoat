@@ -75,6 +75,7 @@ pub fn gated(
         until: std::time::Instant::now()
             + wait::room(
                 &request.host.spec().hook_failure,
+                request.host.spec().guard_deadline_s(),
                 started.elapsed(),
                 relayed,
             ),

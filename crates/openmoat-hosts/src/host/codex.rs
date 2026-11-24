@@ -67,15 +67,19 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         ..Reviews::BASE
     },
     on_hook_failure: "blocks the call when `openmoat` is missing, cannot start or is killed \
-         (the hook command exits 2 with a reason itself then); runs it when the hook times out \
-         (600 s as `openmoat init` writes it; the guard denies on its own after 30 s)",
+         (the hook command exits 2 with a reason itself then); a slow hook is denied by the \
+         guard itself after 30 s, before the 600 s limit `openmoat init` writes (ADR-120); \
+         runs the call only when the guard cannot answer at all before that limit (stopped, \
+         or killed with the hook command)",
     // The hooks page does not say what a failed local hook does; the hook
     // runner's source does: only exit 2 with stderr, or a decision, blocks.
     // So the entry's command turns any status but the guard's 0 or 2 into
-    // exit 2 with a reason (`hook_file.rs`, ADR-109).
+    // exit 2 with a reason (`hook_file.rs`, ADR-109). A hook past its
+    // `timeout` (seconds, the hooks page) fails and the call runs; the guard
+    // answers deny at its deadline first (ADR-120).
     hook_failure: crate::HookFailure {
         fails: crate::FailureOutcome::Blocks,
-        times_out: crate::FailureOutcome::Runs,
+        times_out: crate::FailureOutcome::GuardDenies(crate::Unanswered::Runs),
         timeout_s: Some(600),
         turned_off_by: "`[features] hooks = false` in `config.toml` (or `requirements.toml`), \
                         turning the hook off in `/hooks`, or a hook Codex has not been told to \
@@ -91,7 +95,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          review; reviews become denies; Codex skips a \
          new or changed hook until the person trusts it in `/hooks`, and `[features] hooks = \
          false` turns hooks off (`openmoat status` and `doctor` report that); a call runs \
-         unchecked if the hook times out",
+         unchecked if the guard cannot answer at all before the hook's time limit (stopped, or \
+         killed with the hook command)",
     install: Some(InstallSpec {
         dir_variable: "CODEX_HOME",
         dir_name: ".codex",

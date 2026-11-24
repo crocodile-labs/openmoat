@@ -203,8 +203,11 @@ the binary back:
 | `missing` | none: the hook names a file that is gone | `hook_failure.cannot_start` |
 
 A hook that hangs is not tried: waiting out each agent's time limit (30 s to 600 s) would
-make the job outlast its own time limit, so `hook_failure.times_out` rests on the vendors'
-documentation and source alone.
+make the job outlast its own time limit, so what an agent does when its limit runs out
+(`hook_failure.unanswered`) rests on the vendors' documentation and source alone. A slow
+guard never gets there: it denies on its own at its deadline (`hook_failure.deadline_s`,
+ADR-120), below every limit `openmoat init` writes, which `hook_failure.times_out` reads as
+`blocks` and the end-to-end tests (`host_failures.rs`) check with the real binary.
 
 The call ran when the probe file's marker is in what the agent printed, in the fake API's
 log, or in the copy in the project. It was blocked when the marker is nowhere and the

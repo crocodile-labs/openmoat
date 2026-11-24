@@ -116,8 +116,15 @@ fn an_unknown_tool_naming_a_secret_is_denied_where_openmoat_sees_it() {
     );
 }
 
+/// The guard's deadline for `row`'s hook, from its host's spec (ADR-120).
+fn deadline_of(row: &Row) -> Duration {
+    let host: Host = row.hook.parse().unwrap();
+    Duration::from_secs(host.spec().guard_deadline_s())
+}
+
 /// A host that times the hook out runs the call (most do), so `guard` denies on
-/// its own first: here its payload never ends, and it answers within its budget.
+/// its own first: here its payload never ends, and it answers at its host's
+/// deadline (ADR-120), the real one, which no variable shortens here.
 #[test]
 fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
     let sb = Sandbox::installed(&[
@@ -125,7 +132,6 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
         &dir_of(Host::Codex),
         &dir_of(Host::Cursor),
     ]);
-    let budget = Duration::from_secs(30);
     let started = Instant::now();
     let running: Vec<_> = rows()
         .into_iter()
@@ -144,18 +150,20 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
         let out = child.wait_with_output().unwrap();
         drop(open_stdin);
         let elapsed = started.elapsed();
-        assert!(elapsed >= budget, "{}: answered after {elapsed:?}", row.id);
+        let deadline = deadline_of(&row);
         assert!(
-            elapsed < budget * 3,
+            elapsed >= deadline,
+            "{}: answered after {elapsed:?}",
+            row.id
+        );
+        assert!(
+            elapsed < deadline * 3,
             "{}: answered after {elapsed:?}",
             row.id
         );
         assert_denied(&row, &out, "stuck");
-        assert!(
-            stderr(&out).contains("no decision within 30 s"),
-            "{}",
-            text(&out)
-        );
+        let said = format!("no decision within {} s", deadline.as_secs());
+        assert!(stderr(&out).contains(&said), "{}", text(&out));
     }
     // Not in the audit log, which may be what hangs: one line each in a side
     // file, owner-only, which `moat doctor` reports without failing.
@@ -167,7 +175,11 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
         let fields: Vec<&str> = line.split(' ').collect();
         assert_eq!(fields.len(), 4, "{line}");
         assert_eq!(fields[2], "stdin", "{line}");
-        assert!(fields[3].parse::<u128>().unwrap() >= 30_000, "{line}");
+        let shortest = rows().iter().map(deadline_of).min().unwrap();
+        assert!(
+            fields[3].parse::<u128>().unwrap() >= shortest.as_millis(),
+            "{line}"
+        );
     }
     #[cfg(unix)]
     {
@@ -177,7 +189,7 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
     }
     let doctor = sb.moat(&["doctor"]);
     let denied = format!(
-        "! Guard {} call(s) denied with no decision within 30 s",
+        "! Guard {} call(s) denied with no decision before the guard's deadline (at most 30 s)",
         rows().len()
     );
     let shown = crate::common::squash(&text(&doctor));
@@ -188,6 +200,72 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
         text(&doctor)
     );
     assert_eq!(doctor.status.code(), Some(0), "{}", text(&doctor));
+}
+
+/// A decision stuck in a step that is not the payload (here the lock check,
+/// standing for a held audit database lock or a slow file system): the guard
+/// still answers deny at its deadline, once, whole and in the host's own
+/// format for the payload's event, and the audit log records `hook-deadline`.
+/// Debug builds only: the deadline is shortened and the step stuck through
+/// variables release builds do not read.
+#[test]
+fn a_stuck_decision_is_denied_at_the_deadline_in_the_hosts_format() {
+    let sb = Sandbox::installed(&[
+        &dir_of(Host::ClaudeCode),
+        &dir_of(Host::Codex),
+        &dir_of(Host::Cursor),
+    ]);
+    let deadline = Duration::from_millis(1500);
+    for row in rows() {
+        let started = Instant::now();
+        let mut child = command(&row, &sb)
+            .env(
+                "MOAT_TEST_GUARD_DEADLINE_MS",
+                deadline.as_millis().to_string(),
+            )
+            .env("MOAT_TEST_STALL_AT", "lock")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut stdin = child.stdin.take().unwrap();
+        std::io::Write::write_all(&mut stdin, fixture(row.governed).as_bytes()).unwrap();
+        drop(stdin);
+        let out = child.wait_with_output().unwrap();
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed >= deadline,
+            "{}: answered after {elapsed:?}",
+            row.id
+        );
+        // The deadline, the side file's bounded wait and a loaded runner.
+        assert!(
+            elapsed < deadline + Duration::from_secs(10),
+            "{}: {elapsed:?}",
+            row.id
+        );
+        assert_denied(&row, &out, "stuck at the lock");
+        assert!(
+            stderr(&out).contains("while checking the policy lock"),
+            "{}",
+            text(&out)
+        );
+    }
+    let log = sb.home.join(".moat/guard-hangs.log");
+    let lines = fs::read_to_string(&log).unwrap();
+    assert_eq!(lines.lines().count(), rows().len(), "{lines}");
+    assert!(
+        lines.lines().all(|l| l.split(' ').nth(2) == Some("lock")),
+        "{lines}"
+    );
+    let recent = (rows().len() * 2).to_string();
+    let shown = text(&sb.moat(&["show", "--recent", &recent]));
+    assert_eq!(
+        shown.matches("hook-deadline").count(),
+        rows().len(),
+        "{shown}"
+    );
 }
 
 /// The hook command names a binary that no longer exists (an upgrade removed

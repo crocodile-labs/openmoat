@@ -104,7 +104,8 @@ malformed (a deny). The full table is in
 | `openmoat` missing, crashing, or exiting without a reply | blocked by OpenMoat's script |
 | the script cannot start (no `sh`, as on native Windows) | runs the call |
 | the script prints something that is not JSON | runs the call |
-| the script is killed after 120 s | runs the call |
+| `openmoat` slow to decide | blocked: the guard answers deny on its own at its 30 s deadline (ADR-120) |
+| the script is killed after 120 s (the guard could not answer at all: stopped, or killed with the script) | runs the call |
 | `--yolo` | runs no hooks at all |
 
 ## Known gaps
