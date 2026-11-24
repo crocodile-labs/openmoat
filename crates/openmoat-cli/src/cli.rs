@@ -71,6 +71,14 @@ pub enum Command {
     /// Make typing a hook-only agent's name start it in `openmoat run`'s sandbox, or
     /// with `--off` start it as before (ADR-108). Refused unless run by a person at a
     /// terminal.
+    #[command(after_help = "\
+Examples:
+  openmoat confine <agent-id>          typing the agent's name now starts it under `openmoat run`
+  openmoat confine --all               every hook-only agent `openmoat run` can start here
+  openmoat confine --off <agent-id>    start it as before again
+Agent ids are the ones `openmoat init --hosts` takes; `openmoat status` lists them.
+`openmoat status` shows each agent's protection score. An agent `openmoat run` cannot
+start on this machine is named with why. Guide: docs/USAGE.md, \"How each agent is protected\".")]
     Confine(ConfineArgs),
     /// Decide one hook request from stdin (invoked by host hooks, not by people).
     Guard(GuardArgs),
@@ -197,10 +205,24 @@ pub enum Command {
     /// This machine's state for a team: agents and versions, hooks and whether they
     /// run, protection levels, MCP servers and their pins, policy and lock, latest
     /// checkpoint. Redacted; reads files only, sends nothing unless `--deliver`.
+    #[command(after_help = "\
+Examples:
+  openmoat inventory                          JSON (openmoat-inventory-v1)
+  openmoat inventory --format ocsf            OCSF 1.3.0 events, for a SIEM
+  openmoat inventory --check ~/src/acme-openmoat; echo $?
+                                              0: this machine has what the team's bundle requires; 1: it differs
+Guide: docs/TEAM.md")]
     Inventory(InventoryArgs),
     /// A second factor on every command that loosens the protection (ADR-117): once
     /// set up, `allow`, `trust`, `edit`, `doctor --accept` and the other commands that
     /// widen or re-pin ask for a code from your authenticator app as well.
+    #[command(after_help = "\
+Try it, with any authenticator app on your phone:
+  openmoat gate setup                       scan the link or type the key, then type the app's code
+  openmoat allow --site example.com         now asks for a code first
+  openmoat show --session policy-changes    every change, with whether a code was given
+  openmoat gate remove                      asks for a code, then turns it off
+Guide: docs/USAGE.md, \"Ask for a code before anything is loosened\".")]
     Gate {
         #[command(subcommand)]
         command: GateCommand,

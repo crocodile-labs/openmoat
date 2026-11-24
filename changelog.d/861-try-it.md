@@ -1,0 +1,2 @@
+### Changed
+- How to use each 0.27.0 feature: `openmoat team join` without its arguments shows a real example, and `openmoat team`, `openmoat inventory`, `openmoat gate` and `openmoat confine` end their `--help` with commands to try and the guide; docs/TEAM.md has a two-minute walkthrough with a throwaway key, USAGE.md a try-it for the gate and why the confine question may not appear, POLICY.md step-by-step minted git credentials, and the README a "New in 0.27.0" list with each feature's first command ([#861](https://github.com/crocodile-labs/openmoat/pull/861)).

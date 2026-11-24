@@ -224,6 +224,11 @@ with the score it has and would have here; the answer is no unless you type `y`:
   Gemini CLI       hook only 0/100 → openmoat run 100/100: typing `gemini` starts it confined?  [y/N/d]
 ```
 
+No question appears when `openmoat run` cannot start the agent on this machine: macOS
+before 13 (`openmoat status` says so in one line), or an agent that serves a port where
+`--listen` is refused (OpenClaw on macOS and Windows). The agent
+stays hook-only there, with `protection 0/100` in `status`.
+
 To turn it on later, or off, without `init`:
 
 ```bash
@@ -1137,6 +1142,17 @@ case it moves toward allow), the account and whether a code was given; refusals 
 
 ```bash
 openmoat show --session policy-changes
+```
+
+Try it, in your own terminal (agents are denied these commands), with any authenticator
+app on your phone:
+
+```bash
+openmoat gate setup                         # scan the link or type the key into the app, then type its code
+openmoat allow --site example.com           # now asks for a code first
+openmoat show --session policy-changes      # the change, with "authenticator code"
+openmoat allow --remove approved-1          # the undo line `allow` printed; tightening asks nothing
+openmoat gate remove                        # asks for a code once more; the gate is off
 ```
 
 The secret is kept in `~/.moat/audit.key.gate`, owner-only and denied to agents like the

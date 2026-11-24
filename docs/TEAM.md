@@ -14,6 +14,46 @@ machine has, without a server of any kind. Three pieces do it, all local:
 Nothing leaves the machine unless you configure a sink for it. The design is
 [ADR-119](adr/ADR-119-team-mode-without-a-service.md).
 
+## Try it in two minutes
+
+Play both roles on one machine, with a throwaway key and folder. Run it in your own
+terminal: agents are denied `openmoat team`. The last step removes everything.
+
+```bash
+# The team: a key, a bundle with one rule, its manifest, its signature
+ssh-keygen -t ed25519 -N "" -f ~/demo-team-key -C demo@team
+mkdir -p ~/demo-bundle && cd ~/demo-bundle
+cat > policy.yaml <<'EOF'
+version: 1
+deny:
+  - id: no-publish
+    title: publishing a package
+    shell: ["npm publish", "cargo publish"]
+EOF
+sum=$(shasum -a 256 policy.yaml 2>/dev/null || sha256sum policy.yaml)
+cat > openmoat-team.yaml <<EOF
+format: openmoat-team-bundle-v1
+name: demo
+serial: 1
+policy:
+  path: policy.yaml
+  sha256: ${sum%% *}
+EOF
+ssh-keygen -Y sign -f ~/demo-team-key -n openmoat-team-bundle openmoat-team.yaml
+
+# A person joins it, with the team's public key as one allowed-signers line
+openmoat team join ~/demo-bundle --signer "demo@team $(cut -d' ' -f1,2 ~/demo-team-key.pub)"
+openmoat policy check "npm publish"         # deny [team:demo:policy:no-publish]
+openmoat inventory --check ~/demo-bundle; echo "exit $?"   # 0: this machine has what the bundle requires
+
+# Undo
+openmoat team leave
+rm -rf ~/demo-bundle ~/demo-team-key ~/demo-team-key.pub
+```
+
+For a real team, the bundle lives in a repository the team owns, and everyone joins it
+with the key line the team publishes ([Join, update, leave](#join-update-leave)).
+
 ## The layer only narrows
 
 The bundle's rules can deny and hold for review; they cannot allow. Your own policy can

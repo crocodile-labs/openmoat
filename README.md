@@ -168,6 +168,17 @@ Which agents and operating systems each feature works with: [docs/FEATURES.md](d
 | **Merge check** | Flags what a pull request's changes do: CI and hook edits, agent settings, look-alike packages, new hosts, a policy change that lets more through. | `openmoat policy check-diff` |
 | **Policy lock** | Pins the policy and hook files: an agent's call that changes the rules, approves its own block or switches OpenMoat off is denied. It also records the other hooks, plugin hooks and git programs the agents run, and names a new or changed one until you accept it ([docs/USAGE.md](docs/USAGE.md#other-hooks-the-agents-run)). With `openmoat gate setup`, every command that loosens the protection also asks for a code from your authenticator app, and every policy change is recorded in the audit log. | `openmoat doctor` · `openmoat gate setup` |
 
+**New in 0.27.0, and how to start each:**
+
+| Feature | First command | How to use it |
+|---|---|---|
+| Team rules from a signed bundle that only narrows, and an inventory of each machine | `openmoat team join <folder> --signer "<key line>"` | [Try it in two minutes](docs/TEAM.md#try-it-in-two-minutes) |
+| A code from your authenticator app before anything is loosened | `openmoat gate setup` | [Try it](docs/USAGE.md#ask-for-a-code-before-anything-is-loosened) |
+| Short-lived git and AWS credentials for an agent (preview) | add a `mint:` secret, then `openmoat run -- <agent>` | [Step by step](docs/POLICY.md#221-minted-narrowed-credentials-source-mint-helper-preview) |
+| Typing an agent's name starts it confined | `openmoat confine <agent>` | [How each agent is protected](docs/USAGE.md#how-each-agent-is-protected) |
+| Hidden or obfuscated commands, and PowerShell, are read | nothing to run: on by default after `openmoat policy upgrade` | [See it decide](#see-it-decide) |
+| A slow check is denied, never run unchecked | nothing to run: on by default | [docs/LIMITS.md](docs/LIMITS.md) |
+
 By risk: secrets read or sent, data sent to unlisted hosts, instructions planted in what
 the agent reads, a send after the same session read both private data and content someone
 else wrote (`lethal-trifecta`, held for review even to an allowed host), data packed or

@@ -540,6 +540,25 @@ result like any other value, renewed before it ends
 ([ADR-118](adr/ADR-118-minted-audience-bound-credentials.md)). Your own credential is read
 by the proxy only, each time it mints, and sent only to the provider's own endpoint.
 
+**How to use it: git for an agent, as a GitHub App, one repository.**
+
+1. On GitHub, create a GitHub App (Settings → Developer settings → GitHub Apps → New):
+   no webhook, repository permission **Contents: Read and write**. Note its **Client ID**.
+2. On the App's page, **Install App** on your account, choosing **Only select
+   repositories** and the one repository. The installation's page URL ends in its
+   **installation ID**.
+3. On the App's page, **Generate a private key**, and move the downloaded `.pem` to
+   `~/.config/moat/app.pem`.
+4. In your own terminal, `openmoat edit`, and add the `gh-git` entry below (your Client
+   ID, installation ID and repository name) and the `mint-credentials` deny rule.
+5. Start the agent under OpenMoat's sandbox: `openmoat run -- claude` (or any agent).
+   Inside it, `git push` and `git pull` to that repository work with a token that lasts
+   an hour and reaches that repository alone; the agent never sees the key.
+6. To stop: remove the entry with `openmoat edit`, and uninstall the App on GitHub.
+
+Only `openmoat run` sets up the git and AWS credential helpers that hand minted values
+to those tools; an agent started without it does not get them through git or `aws`.
+
 ```yaml
 secrets:
   # git push and pull to two repositories, as a GitHub App, for an hour at a time.
