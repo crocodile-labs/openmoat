@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Read this when** you want to run the attack and everyday scenarios per agent, read the scorecard, or score another hook.
 
-**On this page:** [Reproduce it: openmoat bench](#reproduce-it-openmoat-bench) · [Proof report: openmoat bench --report](#proof-report-openmoat-bench---report) · [Scenario format](#scenario-format) · [Known gaps](#known-gaps) · [Developer workflows](#developer-workflows) · [Adding a scenario](#adding-a-scenario) · [Scorecard: OpenMoat 0.25.0, fourteen agents](#scorecard-openmoat-0250-fourteen-agents)
+**On this page:** [Reproduce it: openmoat bench](#reproduce-it-openmoat-bench) · [Proof report: openmoat bench --report](#proof-report-openmoat-bench---report) · [Scenario format](#scenario-format) · [Known gaps](#known-gaps) · [Developer workflows](#developer-workflows) · [Adding a scenario](#adding-a-scenario) · [Scorecard: OpenMoat 0.25.0, fourteen agents](#scorecard-openmoat-0270-fourteen-agents)
 
 End-to-end scenarios of what a steered agent tries, run through the real `openmoat`
 binary with each host's own payload shape. The conformance suite
@@ -311,10 +311,10 @@ fixture in `tests/conformance/benign.yaml` or `review.yaml`.
    it with a conformance fixture, or open an issue and mark the gap. Never change the
    default policy just to make a scenario pass.
 
-## Scorecard: OpenMoat 0.25.0, fourteen agents
+## Scorecard: OpenMoat 0.27.0, fourteen agents
 
-Measured on OpenMoat 0.25.0 (2026-11-22, `openmoat bench`, a debug build on macOS 12.7.6,
-x86_64), every scenario run as the hook payloads of each of the fourteen agents: Claude
+Measured on OpenMoat 0.27.0 (2026-11-24, `openmoat bench`, the released build on macOS
+12.7.6, x86_64; 0.25.0 and 0.26.0 gave the same totals), every scenario run as the hook payloads of each of the fourteen agents: Claude
 Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes
 Agent, the Cline CLI, goose, the Antigravity CLI, Qwen Code and Crush. A later change to
 the scenarios or the policy gives other totals; run `openmoat bench` for today's. What
@@ -335,7 +335,7 @@ above).
 | workflows | 100 | 0 | 26 | 12 | 0 | 62 |
 | **total** | **970** | **538** | **181** | **120** | **9** | **122** |
 
-On 0.25.0: 0 false positives, 0 known gaps, 0 mismatches with the expected answers. The eight
+On 0.27.0: 0 false positives, 0 known gaps, 0 mismatches with the expected answers. The eight
 developer workflows (git feature branch, Node app, Python package, Rust crate, Go
 module, Docker image, make targets, editing project files) ran 844 steps with 26 reviews,
 all of them expected (12 in `docker-image`, 14 in `edit-project-files`). "OS sandbox"
@@ -344,10 +344,10 @@ sandbox holds it; `openmoat bench --report` runs those. "Left to the agent"
 (`passthrough`) means OpenMoat returned no decision and the agent's own checks decide: a
 deferred call, or an allow on the agents that read it that way.
 
-The scorecard also prints decision times for the ordinary work (1,088 calls). The run
-above was a debug build on a heavily loaded machine, so its times are not a performance
-figure and are not quoted here. Its review and deny rates are: 2.39 reviews and 0 denies
-per 100 ordinary calls.
+The scorecard also prints decision times for the ordinary work (1,088 calls). On the run
+above, the released build on one loaded laptop, they were p50 113 ms, p95 208 ms and p99
+258 ms per call; they depend on the machine and are not a performance figure. The review
+and deny rates are 2.39 reviews and 0 denies per 100 ordinary calls.
 
 The proof report of the same release on the same machine (`openmoat bench --report`, all
 14 hosts' models): 12 rows pass, 0 fail, 5 not tested here.

@@ -247,7 +247,7 @@ and [docs/SANDBOX.md](docs/SANDBOX.md).
 
 ## Proof
 
-**Our own scenarios (MoatBench, OpenMoat 0.25.0, macOS 12).** `openmoat bench` sends each
+**Our own scenarios (MoatBench, OpenMoat 0.27.0, macOS 12).** `openmoat bench` sends each
 scenario as each of the 14 agents' hook payloads:
 
 | | Runs | Denied | Held for review | Left to OS sandbox | Left to agent's prompt | Allowed |

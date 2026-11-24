@@ -460,8 +460,8 @@ future work.
 [MoatBench](MOATBENCH.md) drives `openmoat guard` with each agent's hook payloads, a
 session and an audit log, which the outside benchmarks above do not. Its scenarios were
 written by OpenMoat's authors, so it shows that the policy and its own expectations
-agree. OpenMoat 0.25.0 (`main` at `33d8f388`), run by the maintainer on 2026-11-22 on
-macOS 12.7.6 (x86_64), a debug build, all 14 agents' payloads (Claude Code, Codex, Cursor,
+agree. OpenMoat 0.27.0, the released build, run by the maintainer on 2026-11-24 on macOS
+12.7.6 (x86_64), all 14 agents' payloads (Claude Code, Codex, Cursor,
 OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI,
 goose, the Antigravity CLI, Qwen Code, Crush):
 
@@ -482,17 +482,17 @@ goose, the Antigravity CLI, Qwen Code, Crush):
 eight developer workflows ran 844 steps with 26 reviews, all expected. "OS sandbox" is a
 step the hook allows where the scenario declares that OpenMoat's OS sandbox holds it;
 "left to the agent" is a call OpenMoat defers, or an allow on the agents that read it that
-way. The scorecard also prints decision times; they come from a debug build on a heavily
-loaded machine and are not a performance figure.
+way. 0.25.0 (2026-11-22, a debug build) and 0.26.0 gave the same totals. The scorecard also
+prints decision times; they depend on the machine and are not a performance figure.
 
 The proof report of the same build on the same machine (`openmoat bench --report`, the 14
 hosts' models, no host program run): 12 checks pass, 0 fail, 5 not tested here. The 4 OS
 sandbox rows (reading `~/.ssh/id_rsa`, a build script reading an agent's login, turning
 OpenMoat off, a tool reading the relay token) need `openmoat run`, which needs macOS 13 or
 later; the fifth is the real host's behaviour when its hook fails, which the report never
-runs. The table per promise is in [MOATBENCH.md](MOATBENCH.md#scorecard-openmoat-0250-fourteen-agents).
+runs. The table per promise is in [MOATBENCH.md](MOATBENCH.md#scorecard-openmoat-0270-fourteen-agents).
 
-This run is of 0.25.0, before ADR-112. The `moatbench` end-to-end test runs `openmoat
+The `moatbench` end-to-end test runs `openmoat
 bench` in CI's `test` job on every change and fails on any mismatch or false positive, so
 a change to the default policy that breaks one of its expectations fails CI. To run it
 yourself:
