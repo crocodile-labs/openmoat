@@ -3,7 +3,7 @@
 //! feature works with which agent cannot claim more than the specs do. The
 //! evidence behind each claim, OS by OS, is `docs/PROTECTION.md`'s.
 
-use openmoat_hosts::{Host, HostSpec, Managed, McpSyntax, Plugin};
+use openmoat_hosts::{FailureOutcome, Host, HostSpec, Managed, McpSyntax, Plugin};
 
 use crate::cfg::Os;
 use crate::matrix::{anchor, runs};
@@ -137,6 +137,11 @@ fn hook_failure(spec: &HostSpec) -> String {
     let open = facts.open_cases(true);
     if !open.is_empty() {
         return format!("runs it when the hook {}", open.join("; or "));
+    }
+    // The guard's own deny comes before the agent's timeout (ADR-120); a
+    // guard that cannot answer at all still leaves the call to the agent.
+    if let FailureOutcome::GuardDenies(_) = facts.times_out {
+        return "blocks a slow check; runs it if the guard is stopped or killed".to_owned();
     }
     match facts.flag_since() {
         Some((major, minor, patch)) => {
