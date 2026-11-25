@@ -222,7 +222,9 @@ pub fn run(host: Host, os: Os, ev: &Evidence<'_>) -> Cell {
         Os::Mac => "Lightweight (macOS 13 or later)",
         Os::Windows => {
             "Write-restricted (ADR-115): writes held to the project and `--write` paths; reads \
-             and the network not held by the OS"
+             and the network not held by the OS. After `openmoat agent-account setup` (ADR-129, \
+             preview) the agent runs as its own account and the reads the policy denies are \
+             refused too; the network still not"
         }
     };
     let text = match command(spec, os) {
@@ -275,7 +277,9 @@ pub fn credentials(host: Host, os: Os, ev: &Evidence<'_>) -> Cell {
     if os == Os::Windows {
         return claimed(
             "everything you can read: the Windows tier does not restrict reads, so other agents' \
-             logins and every variable but a brokered secret are the hook's to hold"
+             logins and every variable but a brokered secret are the hook's to hold; as the agent \
+             account (`openmoat agent-account setup`, ADR-129, preview) other agents' logins and \
+             the policy's other literal read denies in your profile are refused by Windows"
                 .to_owned(),
             ev.has(Claim::Credentials, host, os),
         );

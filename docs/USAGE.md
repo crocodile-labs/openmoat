@@ -258,6 +258,39 @@ and `sandbox.strict: true` in your own policy makes `openmoat run` start only wi
 whole score ([SANDBOX.md](SANDBOX.md#the-protection-score-and-strict-mode),
 [POLICY.md §9.7](POLICY.md#97-strict-mode-sandboxstrict)).
 
+### Run the agent as its own Windows account
+
+On Windows `openmoat run` holds writes only: the agent runs as you, so Windows lets it
+read everything you can. `openmoat agent-account setup` makes a local account for agents
+once; from then on `openmoat run` starts the agent as that account, and Windows itself
+refuses its reads of `~/.ssh`, other agents' logins and the other places your policy
+denies, as well as its writes outside the project (ADR-129, a preview). The network is
+still held by the proxy variables only; the network filters are the next step.
+
+#### Try it
+
+From an administrator terminal (Terminal or PowerShell, "Run as administrator"), once:
+
+```powershell
+openmoat agent-account setup       # creates openmoat-<you>; granting it read on your profile takes a while
+```
+
+Then from any terminal, as before:
+
+```powershell
+openmoat run --print-boundary -- claude   # restrictions: agent_account, job_object, wfp_network, windows_read_deny; 70/100
+openmoat run -- claude                    # "Windows preview tier, as the agent account (ADR-129)"
+openmoat run -- cmd /c type $HOME\.ssh\id_ed25519   # refused by Windows: Access is denied
+openmoat agent-account status             # ✔ matches its record; exit 1 when the system differs
+```
+
+Undo, from an administrator terminal: `openmoat agent-account remove` takes out every
+access-list entry it and the runs added, the account and its profile. Without an
+administrator terminal setup refuses and says to use one; on macOS and Linux it exits 64,
+since `openmoat run` there needs no account. What the account may and may not do, and
+what stays the hook's, is in
+[SANDBOX.md](SANDBOX.md#as-the-agent-account-reads-held-too-preview-adr-129).
+
 ### Can the agent's own sandbox start commands here? (Linux)
 
 `openmoat init` turns on the agents' own sandboxes (Claude Code, Codex, Cursor). On Linux
@@ -1662,6 +1695,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat hooks list` | list the hook commands, plugin hooks, program-running settings and git programs the agents load besides OpenMoat's hook, and what waits for `openmoat hooks accept`; exits 64 while something waits |
 | `openmoat hooks accept` | review each new or changed one, with the shell classifier's verdict, and record it; until then `openmoat status` names it, and the calls of the agent that loads it are denied when that verdict is deny (held for review for any, with `hooks.foreign: hold`) ([ADR-109](adr/ADR-109-foreign-hook-ledger-and-fail-safe-hooks.md)) |
 | `openmoat gate setup` · `openmoat gate status` · `openmoat gate remove` | turn on, check or turn off the code from your authenticator app that every command loosening the policy then asks for ([above](#ask-for-a-code-before-anything-is-loosened), [ADR-117](adr/ADR-117-loosening-possession-gate.md)) |
+| `openmoat agent-account setup` · `openmoat agent-account status` · `openmoat agent-account remove` | Windows: make, check (exit 1 on drift) or remove the local account `openmoat run` starts agents as, so Windows refuses their reads of what the policy denies too; setup and remove need an administrator terminal and a person, and ask for the gate's code when it is set up ([above](#run-the-agent-as-its-own-windows-account), [ADR-129](adr/ADR-129-windows-agent-account.md)). Elsewhere each exits 64 |
 | `openmoat mcp accept [<server>]` | review a changed or new MCP server definition, or tools `openmoat mcp proxy` holds, and accept them; until then that server's tool calls are refused |
 | `openmoat mcp wrap [<server>…] [--sandbox \| --no-sandbox] [--dry-run]` · `openmoat mcp unwrap [<server>…]` | run stdio MCP servers through `openmoat mcp proxy`, which starts one only from a definition a person accepted, in `openmoat run`'s sandbox by default where it can sandbox, not on Windows, whose preview tier needs `--sandbox` (`--no-sandbox` opts out; a rewrap keeps the choice unless a flag is given), pins each tool's title, description, input and output schemas and annotations and hides one that changed or that nobody accepted yet, every tool of a server it has not seen included · point them back; `openmoat init --mcp-proxy` wraps every one, `openmoat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md), [ADR-032](adr/ADR-032-mcp-proxy-holds-first-sight.md)) |
 | `openmoat mcp proxy --server <name> [--host <agent>] [--sandbox] [--write PATH]… -- <command>` | the wrapper `openmoat mcp wrap` writes into the agent's configuration; the agent starts it, you do not. `--host` names the agent whose file starts it: only that agent's hook decisions let its calls through (a server wrapped before this option existed gets it the next time you run `openmoat mcp wrap`). It starts the server only when this command line is the one an accepted definition gives; otherwise it answers every request with an error naming `openmoat mcp accept <name>` and exits 1 ([ADR-049](adr/ADR-049-mcp-startup-gate.md)) |

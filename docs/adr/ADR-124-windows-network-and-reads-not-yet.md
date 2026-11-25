@@ -1,7 +1,9 @@
 # ADR-124: Windows `openmoat run`: why the network and reads stay the hook's for now
 
 Status: accepted · Date: 2026-11-24 · Builds on ADR-115 (the write-restricted Windows
-tier, its §4, §5 and §7), ADR-108 (protection score), ADR-018 (OS enforcement)
+tier, its §4, §5 and §7), ADR-108 (protection score), ADR-018 (OS enforcement) · Its
+Decision 2 and 3 are carried out by [ADR-129](ADR-129-windows-agent-account.md) (the agent
+account; reads in its first step, the network in its second)
 
 ## Context
 

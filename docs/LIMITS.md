@@ -97,6 +97,17 @@ Each agent's gaps and the reasons are in
   `require.run: full-boundary` and `sandbox.strict: true` refuse there. No real agent has
   been run under it yet: the tests start `cmd.exe`
   ([SANDBOX.md](SANDBOX.md#openmoat-run-on-windows-preview-writes-only)).
+- **The Windows agent account holds reads in your profile only (preview, ADR-129).** After
+  `openmoat agent-account setup` the agent runs as an account of its own: Windows refuses
+  its reads of the literal places the policy denies in your profile and the write roots
+  that exist when the run starts. Not covered: globs, places made later, places outside
+  your profile (readable to any account through the system's own lists), the network
+  (still the proxy variables only, until the Windows Filtering Platform filters of the
+  next step), and secrets in Windows Credential Manager, which are not the account's (an
+  agent that keeps its login there signs in again). A command line longer than 1024
+  characters is refused. Setup changes the machine (an account, two HKLM values, an
+  inherited read entry on your profile); `openmoat agent-account remove` undoes it. Such a
+  run scores at most 70/100.
 - **`require.run: full-boundary` is about `openmoat run`.** It refuses a run without an OS
   sandbox or, on Linux, without the Isolated tier (ADR-080). An agent started without
   `openmoat run` is not refused

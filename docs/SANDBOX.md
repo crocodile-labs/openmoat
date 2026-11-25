@@ -373,7 +373,8 @@ leaves `sandbox.json` alone and `openmoat status` reports Cursor as `hook only`.
 On Linux `openmoat run` starts the Isolated tier (below) by default where bubblewrap
 works, and the Lightweight tier otherwise (ADR-080). macOS has the Lightweight tier only.
 Windows has a preview tier that holds writes and the process tree only
-([below](#openmoat-run-on-windows-preview-writes-only), ADR-115).
+([below](#openmoat-run-on-windows-preview-writes-only), ADR-115), and reads too once
+`openmoat agent-account setup` made the agent an account of its own (ADR-129).
 
 | Linux, `openmoat run` … | bubblewrap works | bubblewrap missing or blocked |
 |---|---|---|
@@ -462,9 +463,11 @@ start, only when the launch confirmed it.
 
 On macOS the Seatbelt profile is the whole 100: it holds files, the network (the
 proxy's address alone) and Mach services in one. On Windows (ADR-115) the weights are
-`restricted_token` 45, `job_object` 10, `wfp_network` 30 and `windows_read_deny` 15; the
-last two are not part of OpenMoat's Windows tier yet, so a Windows run scores at most 55
-and `sandbox.strict: true` refuses every Windows run. A score compares runs on one system,
+`restricted_token` 45, `job_object` 10, `wfp_network` 30 and `windows_read_deny` 15. A run
+under the token scores at most 55. A run as the agent account (ADR-129) counts
+`agent_account` in the token's place and `windows_read_deny` once its launch check
+confirmed the account, so it scores at most 70; `wfp_network` is not built yet, so
+`sandbox.strict: true` still refuses every Windows run. A score compares runs on one system,
 not systems. The hook alone scores 0: an allowed call runs with your permissions. The
 microVM tier (design, ADR-128) has a table of its own: `vm_hypervisor` 35,
 `vm_proxy_network` 25, `vm_project_only` 20, `vm_guard_relay` 10 and `vm_image_pinned`
@@ -952,13 +955,43 @@ setting cannot make a token restricted.
 `openmoat mcp wrap` does not put MCP servers under this tier by default (most start
 through `npx`, a batch file); `openmoat mcp wrap --sandbox` asks for it.
 
-**Why the network and reads are not held yet** ([ADR-124](adr/ADR-124-windows-network-and-reads-not-yet.md)).
+**Why the token holds no network and no reads** ([ADR-124](adr/ADR-124-windows-network-and-reads-not-yet.md)).
 Adding a Windows Filtering Platform filter needs administrator rights, which `openmoat
 run` does not have, and no documented filter condition picks out one run's processes
 under a write-restricted token. That token is checked on writes only, so it cannot deny
-a read without denying the person too. Both wait for an opt-in setup, done once by an
-administrator, that starts the agent as a dedicated local account. Until then the score
-stays at most 55, and `sandbox.strict: true` refuses a Windows run.
+a read without denying the person too. Both need the agent to run as an account that is
+not the person's: the agent account below.
+
+### As the agent account: reads held too (preview, ADR-129)
+
+`openmoat agent-account setup`, run once from an administrator terminal, makes a local
+account `openmoat-<you>` for agents. After that every `openmoat run` starts the agent as
+that account instead of under the token, as long as `openmoat agent-account status` finds
+the system as setup left it (otherwise the run warns and uses the token).
+
+```powershell
+openmoat agent-account setup                      # administrator terminal, once
+openmoat run -- claude                            # any terminal: the agent runs as openmoat-<you>
+openmoat run --print-boundary -- claude           # agent_account and windows_read_deny in force: 70/100
+openmoat agent-account status                     # exit 1 when the system differs from the record
+openmoat agent-account remove                     # administrator terminal: undoes all of it
+```
+
+| What | As the agent account |
+|---|---|
+| The account | a standard user taken out of every local group, so it holds only what `Authenticated Users`, `Everyone` and entries naming it grant; interactive logon only (network, remote desktop, service and batch logon denied); hidden from the sign-in screen; its random password is shown to no one and kept encrypted for you with DPAPI in `~/.moat/agent-account/` |
+| Your profile | one inherited entry lets the account read and run in it; Windows hands it to every file below once, which takes a while in a large profile. `~/.moat` keeps its own list of you and `SYSTEM` (ADR-083), so the account cannot read it |
+| Writes | the account gets one inherited write entry on the project, the run's temp directory and `--write` paths, and deny entries on the places the token holds (`.git`, `.moat`, …); everything else in your profile is read-only to it. Outside the profile the system's own lists apply, as for any standard user |
+| Reads | each read deny of the policy that names one place in your profile or a write root that exists when the run starts (`~/.ssh`, `~/.aws`, other agents' logins) gets a deny entry for the account, so Windows refuses the read. The running agent's own login is left out. Globs, places made later and places outside your profile stay the hook's; the run's report names them. Each run takes out the denies the last one set that it does not need |
+| Network | as under the token: the proxy variables only (`proxy_variables`). The Windows Filtering Platform filters for the account are the next step of ADR-129 |
+| Git | the project's files are yours, so the run adds `safe.directory` for the project through `GIT_CONFIG_*` |
+| Hooks | a hook the agent starts runs as the account and cannot open the lock for writing; the guard relays its call to the run when its token's user is a SID setup registered under `HKLM\SOFTWARE\OpenMoat`, where only an administrator can write |
+| Start | `CreateProcessWithLogonW` (the Secondary Logon service) starts the agent suspended with the account's profile; it is put in the run's job, and its token's user and its job are read back before it runs. The command line may be at most 1024 characters |
+
+Files the agent creates are owned by the account; you keep full access through the
+project's own entries. `openmoat agent-account remove` takes out every entry the record
+names, the sign-in and relay values, the logon rights, the account's profile and the
+account. It is a preview: no real agent has run under it yet.
 
 ## `openmoat run --isolate` (Isolated tier, Linux)
 

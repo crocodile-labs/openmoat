@@ -341,6 +341,20 @@ something OpenMoat claims to stop.
   account and `SYSTEM` only, so the token cannot write it, and the run refuses a write
   root there. The boundary record and the score (at most 55/100) say all of this on every
   run.
+- **`openmoat run` as the Windows agent account (ADR-129, preview).** After an
+  administrator ran `openmoat agent-account setup`, the agent runs as a local account in
+  no group, so it reads only what `Authenticated Users`, `Everyone` and entries naming it
+  grant: your profile (read and run), and not the literal places the policy's read denies
+  name there (deny entries the run sets and reconciles), nor OpenMoat's state, whose list
+  names you and `SYSTEM` only. Its password is encrypted for you with DPAPI, so another
+  account cannot start a process as it. Its hooks relay to the run because their token's
+  user is a SID registered under HKLM, which only an administrator can write. It does not
+  hold the network (the proxy variables only, until the filters of ADR-129's second
+  step), globs and places made during the run, or places outside the profile that the
+  system's lists open to every account; an administrator, or a process with your full
+  access outside the run, can change the account's entries, which `openmoat agent-account
+  status` then reports; the next run then warns and uses the token instead. Such a run
+  scores at most 70/100.
 - **What the Standard tier does not cover.** It is as strong as each host's sandbox
   and OpenMoat's translation, and every host version bump must keep the generated keys
   working (`openmoat doctor` names a weakened setting; the differential suite executes
