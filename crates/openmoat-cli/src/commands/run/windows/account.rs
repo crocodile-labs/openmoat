@@ -16,7 +16,6 @@ mod registry;
 mod system;
 
 use std::path::Path;
-use std::sync::OnceLock;
 
 use anyhow::{Context as _, Result, bail};
 use zeroize::Zeroizing;
@@ -24,7 +23,6 @@ use zeroize::Zeroizing;
 use super::acl;
 use super::win32::Job;
 use crate::agent_account::{self, AclEntry, Observed, Record};
-use crate::home::Home;
 use crate::sandbox::write_token::account::AccountPlan;
 use crate::sandbox::write_token::{self, Entry};
 
@@ -55,41 +53,36 @@ pub struct Active {
     state: std::path::PathBuf,
 }
 
-/// The agent account, once per process: `None` without a record, and, with a
-/// warning, when the system no longer matches it (`openmoat agent-account
-/// status` names what differs); the run is then ADR-115's.
-pub fn active() -> Option<&'static Active> {
-    static ACTIVE: OnceLock<Option<Active>> = OnceLock::new();
-    ACTIVE
-        .get_or_init(|| {
-            let home = Home::locate().ok()?;
-            let record = match Record::load(home.root()) {
-                Ok(record) => record?,
-                Err(error) => {
-                    eprintln!(
-                        "moat run: the agent account's record cannot be read, so this run uses \
-                         the write-restricted token: {error:#}"
-                    );
-                    return None;
-                }
-            };
-            let drift = agent_account::drift(&record, &observe(home.root(), &record));
-            if !drift.is_empty() {
-                eprintln!(
-                    "moat run: the agent account {} no longer matches its record ({}), so this \
-                     run uses the write-restricted token; `openmoat agent-account status` shows \
-                     it",
-                    record.account,
-                    drift.join("; ")
-                );
-                return None;
-            }
-            Some(Active {
-                record,
-                state: home.root().to_path_buf(),
-            })
-        })
-        .as_ref()
+/// The agent account of the state directory `state`: `None` without a
+/// record, and, with a warning, when the system no longer matches it
+/// (`openmoat agent-account status` names what differs); the run is then
+/// ADR-115's. The caller passes the state directory it already holds, so
+/// nothing here finds a home of its own.
+pub fn active(state: &Path) -> Option<Active> {
+    let record = match Record::load(state) {
+        Ok(record) => record?,
+        Err(error) => {
+            eprintln!(
+                "moat run: the agent account's record cannot be read, so this run uses the \
+                 write-restricted token: {error:#}"
+            );
+            return None;
+        }
+    };
+    let drift = agent_account::drift(&record, &observe(state, &record));
+    if !drift.is_empty() {
+        eprintln!(
+            "moat run: the agent account {} no longer matches its record ({}), so this run uses \
+             the write-restricted token; `openmoat agent-account status` shows it",
+            record.account,
+            drift.join("; ")
+        );
+        return None;
+    }
+    Some(Active {
+        record,
+        state: state.to_path_buf(),
+    })
 }
 
 /// What the system holds now of `record`'s account. The groups and logon

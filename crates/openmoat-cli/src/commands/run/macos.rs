@@ -133,8 +133,14 @@ pub fn restrictions(
     _isolated: bool,
     _port_only: bool,
     _kernel: Option<&crate::sandbox::landlock::abi::Kernel>,
+    _agent_account: bool,
 ) -> Vec<Restriction> {
     vec![Restriction::planned(Mechanism::Seatbelt, true, true)]
+}
+
+/// False: the agent account is Windows' (ADR-129).
+pub fn agent_account(_state: &Path) -> bool {
+    false
 }
 
 /// None: Landlock is Linux's (ADR-082).
@@ -252,6 +258,15 @@ impl Confined {
         reason = "the method every platform's `Confined` has; Linux's reads itself"
     )]
     pub fn project_top_open(&self) -> bool {
+        false
+    }
+
+    /// False: the agent account is Windows' (ADR-129).
+    #[expect(
+        clippy::unused_self,
+        reason = "the method every platform's `Confined` has; Windows' reads itself"
+    )]
+    pub fn agent_account(&self) -> bool {
         false
     }
 

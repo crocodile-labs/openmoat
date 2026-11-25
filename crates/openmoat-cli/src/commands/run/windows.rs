@@ -73,7 +73,7 @@ enum Mode {
     /// Under the write-restricted token whose SIDs `Plan` grants (ADR-115).
     Token(Plan),
     /// As the agent account (ADR-129).
-    Account(&'static account::Active),
+    Account(Box<account::Active>),
 }
 
 /// The agent, ready to start under its token or as the agent account.
@@ -97,13 +97,14 @@ pub fn confine(
     }
     let tmpdir = grants.tmpdir.clone();
     let exists = |path: &str| Path::new(path).exists();
+    let active = account::active(state);
     let state = path_string(state);
-    let (report, mode) = if let Some(active) = account::active() {
+    let (report, mode) = if let Some(active) = active {
         let plan =
             crate::sandbox::account_plan(policy, ctx, grants, &exists, &active.record.profile)?;
         refuse_state(plan.roots.iter(), &state)?;
         active.apply(&plan)?;
-        (plan.report, Mode::Account(active))
+        (plan.report, Mode::Account(Box::new(active)))
     } else {
         let generated = crate::sandbox::write_token_plan(policy, ctx, grants, &exists)?;
         refuse_state(generated.plan.roots.iter().map(|(root, _)| root), &state)?;
@@ -275,8 +276,8 @@ pub fn restrictions(
     _isolated: bool,
     _port_only: bool,
     _kernel: Option<&crate::sandbox::landlock::abi::Kernel>,
+    as_account: bool,
 ) -> Vec<Restriction> {
-    let as_account = account::active().is_some();
     let writes = if as_account {
         Mechanism::AgentAccount
     } else {
@@ -288,6 +289,12 @@ pub fn restrictions(
         Restriction::planned(Mechanism::WfpNetwork, false, false),
         Restriction::planned(Mechanism::WindowsReadDeny, as_account, as_account),
     ]
+}
+
+/// Whether a run with the state directory `state` starts the agent as the
+/// agent account (ADR-129), for `--print-boundary`, which confines nothing.
+pub fn agent_account(state: &Path) -> bool {
+    account::active(state).is_some()
 }
 
 /// None: Landlock is Linux's (ADR-082).
@@ -401,6 +408,11 @@ impl Confined {
     )]
     pub fn project_top_open(&self) -> bool {
         false
+    }
+
+    /// Whether the agent starts as the agent account (ADR-129).
+    pub fn agent_account(&self) -> bool {
+        matches!(self.mode, Mode::Account(_))
     }
 
     /// Start the agent suspended under the token (or as the agent account)

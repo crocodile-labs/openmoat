@@ -31,7 +31,12 @@ pub const NETWORK: NetworkMode = NetworkMode::Namespace;
 
 /// The restrictions a Linux run plans: Landlock's steps, the seccomp filters,
 /// `no_new_privs`, and bubblewrap's network namespace and view.
-pub fn restrictions(isolated: bool, port_only: bool, kernel: Option<&Kernel>) -> Vec<Restriction> {
+pub fn restrictions(
+    isolated: bool,
+    port_only: bool,
+    kernel: Option<&Kernel>,
+    _agent_account: bool,
+) -> Vec<Restriction> {
     use Mechanism as M;
     let abi = match kernel {
         Some(Kernel::Abi(abi)) => *abi,

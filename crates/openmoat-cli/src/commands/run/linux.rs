@@ -274,6 +274,11 @@ pub fn unavailable() -> Option<String> {
     None
 }
 
+/// False: the agent account is Windows' (ADR-129).
+pub fn agent_account(_state: &Path) -> bool {
+    false
+}
+
 /// The kernel's Landlock ABI, for the ladder (ADR-082).
 #[expect(
     clippy::unnecessary_wraps,
@@ -630,6 +635,15 @@ impl Confined {
 
     pub fn project_top_open(&self) -> bool {
         self.top_open
+    }
+
+    /// False: the agent account is Windows' (ADR-129).
+    #[expect(
+        clippy::unused_self,
+        reason = "the method every platform's `Confined` has; Windows' reads itself"
+    )]
+    pub fn agent_account(&self) -> bool {
+        false
     }
 
     /// Start the agent, give the check of its start to `on_launch` (ADR-089)

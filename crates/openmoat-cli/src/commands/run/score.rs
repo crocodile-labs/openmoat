@@ -69,6 +69,8 @@ pub fn tiers() -> Vec<TierScore> {
                 token: ToolToken::UnknownAgent,
                 port: None,
                 project_top_open: false,
+                // What any run here gets: the account is a person's own setup.
+                agent_account: false,
             })
             .score
         };

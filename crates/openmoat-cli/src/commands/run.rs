@@ -15,13 +15,13 @@
 // a grant would show the state directory `state`, whose `command()` takes
 // the agent's arguments and environment, `report()` lists the losses and
 // allowances, `warning()` says where the network is restricted by port only,
-// and `status()` runs the agent in its sandbox; `isolation()` is whether the
+// `agent_account()` whether it starts as the Windows agent account (ADR-129),
+// and `status()` runs it, first marking the descriptors this process inherited
+// close-on-exec (`inherited.rs`, ADR-088); `isolation()` is whether the
 // Isolated tier can start here (`isolation::Offered`); `inside(args)` is what
 // bubblewrap starts in its sandbox; `port_only_network()` is `moat doctor`'s
 // warning for the same; `terminals()` lists the terminal devices this
 // process's standard streams are on, the only ones the sandbox opens.
-// Each `status()` first marks the descriptors this process inherited
-// close-on-exec (`inherited.rs`, ADR-088).
 mod boundary;
 /// The command line and environment block the Windows tier starts the agent with.
 #[cfg(any(windows, test))]
@@ -242,13 +242,12 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let mut record = boundary::plan(boundary::Plan {
         asked: Asked::of(args),
         tier: &tier,
-        port_only: agent
-            .warning()
-            .map(|warning| platform::no_network_namespace().unwrap_or_else(|| warning.to_owned())),
+        port_only: boundary::port_only(agent.warning()),
         kernel: landlock.as_ref(),
         token: tool_shell::token(agent_host, tool_shell.is_some()),
         port: Some(port),
         project_top_open: agent.project_top_open(),
+        agent_account: agent.agent_account(),
     });
     boundary::refuse_incomplete(strict_score, &record)?;
     let cwd = ctx.cwd.clone();

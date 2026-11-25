@@ -43,6 +43,15 @@ pub struct Plan<'a> {
     /// The person's policy opened the project's top in this run
     /// (`sandbox.project_top: writable` without a namespace, ADR-090).
     pub project_top_open: bool,
+    /// The agent starts as the agent account (Windows, ADR-129): its caller
+    /// knows, from the state directory it holds.
+    pub agent_account: bool,
+}
+
+/// Why the network is restricted by port only, from the tier's `warning`:
+/// what this system lacks, where it says, or the warning itself.
+pub fn port_only(warning: Option<&str>) -> Option<String> {
+    warning.map(|warning| platform::no_network_namespace().unwrap_or_else(|| warning.to_owned()))
 }
 
 /// The record for `plan`, nothing applied or tested yet.
@@ -124,6 +133,7 @@ pub fn plan(plan: Plan<'_>) -> EffectiveBoundary {
             plan.tier.isolated(),
             plan.port_only.is_some(),
             plan.kernel,
+            plan.agent_account,
         ),
         launch: None,
         environment: None,
@@ -179,6 +189,7 @@ pub fn print_plan(
         port: None,
         // Only the Lightweight tier without a namespace reads the setting.
         project_top_open: port_only.is_some() && policy.project_top() == ProjectTop::Writable,
+        agent_account: platform::agent_account(home.root()),
     });
     record.environment = Some(super::planned_environment(
         &policy,

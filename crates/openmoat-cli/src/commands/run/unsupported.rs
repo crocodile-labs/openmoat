@@ -69,8 +69,14 @@ pub fn restrictions(
     _: bool,
     _: bool,
     _: Option<&crate::sandbox::landlock::abi::Kernel>,
+    _: bool,
 ) -> Vec<Restriction> {
     Vec::new()
+}
+
+/// False: the agent account is Windows' (ADR-129).
+pub fn agent_account(_state: &Path) -> bool {
+    false
 }
 
 /// None: Landlock is Linux's (ADR-082).
@@ -154,6 +160,10 @@ impl Confined {
     }
 
     pub fn project_top_open(&self) -> bool {
+        match *self {}
+    }
+
+    pub fn agent_account(&self) -> bool {
         match *self {}
     }
 

@@ -14,6 +14,7 @@ fn planned(asked: Asked, tier: &Tier, port_only: Option<&str>) -> EffectiveBound
         token: ToolToken::Withheld,
         port: Some(41_000),
         project_top_open: false,
+        agent_account: false,
     })
 }
 
@@ -77,6 +78,7 @@ fn an_open_project_top_is_a_chosen_downgrade() {
         token: ToolToken::Withheld,
         port: None,
         project_top_open: true,
+        agent_account: false,
     });
     assert_eq!(record.downgrades.len(), 3, "{:?}", record.downgrades);
     let top = &record.downgrades[2];

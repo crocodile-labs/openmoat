@@ -14,6 +14,7 @@
 //! <https://learn.microsoft.com/windows/win32/api/securitybaseapi/nf-securitybaseapi-getace>,
 //! <https://learn.microsoft.com/windows/win32/api/winnt/ns-winnt-access_allowed_ace>.
 
+use std::mem::MaybeUninit;
 use std::ptr;
 
 use anyhow::{Result, bail};
@@ -64,7 +65,8 @@ fn names(ace: *const core::ffi::c_void, sid: windows_sys::Win32::Security::PSID)
 #[expect(unsafe_code, reason = "access list calls are foreign code")]
 pub fn remove(path: &[u16], sid: &str, matches: &dyn Fn(bool, u32) -> bool) -> Result<usize> {
     let sid = sid_from(sid)?;
-    let mut dacl: *mut ACL = ptr::null_mut();
+    // Written by the call before it is read: never a null this code made.
+    let mut dacl = MaybeUninit::<*mut ACL>::uninit();
     let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
     // SAFETY: `path` is NUL-terminated; `dacl` points into the LocalAlloc'd
     // descriptor, which `_descriptor` frees after the last use of `dacl`.
@@ -75,7 +77,7 @@ pub fn remove(path: &[u16], sid: &str, matches: &dyn Fn(bool, u32) -> bool) -> R
             DACL_SECURITY_INFORMATION,
             ptr::null_mut(),
             ptr::null_mut(),
-            &raw mut dacl,
+            dacl.as_mut_ptr(),
             ptr::null_mut(),
             &raw mut descriptor,
         )
@@ -87,6 +89,8 @@ pub fn remove(path: &[u16], sid: &str, matches: &dyn Fn(bool, u32) -> bool) -> R
         bail!("reading the access list: Windows error {status}");
     }
     let _descriptor = Local(descriptor);
+    // SAFETY: the call succeeded, so it wrote the list's address (or null).
+    let dacl = unsafe { dacl.assume_init() };
     if dacl.is_null() {
         return Ok(0);
     }
@@ -112,11 +116,13 @@ pub fn remove(path: &[u16], sid: &str, matches: &dyn Fn(bool, u32) -> bool) -> R
     }
     let mut taken = 0;
     for index in 0..u32::from(count) {
-        let mut ace: *mut core::ffi::c_void = ptr::null_mut();
+        let mut ace = MaybeUninit::<*mut core::ffi::c_void>::uninit();
         // SAFETY: `index` is below the list's count.
-        if unsafe { GetAce(dacl, index, &raw mut ace) } == 0 {
+        if unsafe { GetAce(dacl, index, ace.as_mut_ptr()) } == 0 {
             bail!("reading an access list entry: {}", last_error());
         }
+        // SAFETY: the call succeeded, so it wrote the entry's address.
+        let ace = unsafe { ace.assume_init() };
         // SAFETY: every entry starts with an ACE_HEADER.
         let header = unsafe { &*ace.cast::<ACE_HEADER>() };
         let explicit =
@@ -178,7 +184,8 @@ pub fn add_entry(
     (allows, mask, inherit): (bool, u32, bool),
 ) -> Result<()> {
     let sid = sid_from(sid)?;
-    let mut dacl: *mut ACL = ptr::null_mut();
+    // Written by the call before it is read: never a null this code made.
+    let mut dacl = MaybeUninit::<*mut ACL>::uninit();
     let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
     // SAFETY: `path` is NUL-terminated; `dacl` points into the LocalAlloc'd
     // descriptor, which `_descriptor` frees after the last use of `dacl`.
@@ -189,7 +196,7 @@ pub fn add_entry(
             DACL_SECURITY_INFORMATION,
             ptr::null_mut(),
             ptr::null_mut(),
-            &raw mut dacl,
+            dacl.as_mut_ptr(),
             ptr::null_mut(),
             &raw mut descriptor,
         )
@@ -198,6 +205,8 @@ pub fn add_entry(
         bail!("reading the access list: Windows error {status}");
     }
     let _descriptor = Local(descriptor);
+    // SAFETY: the call succeeded, so it wrote the list's address (or null).
+    let dacl = unsafe { dacl.assume_init() };
     let mut control: u16 = 0;
     let mut revision: u32 = 0;
     // SAFETY: `descriptor` is the valid descriptor returned above.
