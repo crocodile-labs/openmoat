@@ -624,9 +624,15 @@ fn default_verdict() -> Defaults {
 impl Policy {
     /// Parse and lint a policy document. Pure: takes the YAML text.
     pub fn parse(yaml: &str) -> Result<Self, PolicyError> {
-        schema::check(yaml)?;
+        // One deserialize, then the errors in the order they always came:
+        // the schema version first, then the old names, then the parse error.
+        let parsed: Result<Self, _> = crate::yaml::from_str(yaml);
+        match &parsed {
+            Ok(policy) => schema::check_parsed(policy.version)?,
+            Err(_) => schema::check(yaml)?,
+        }
         let old_names = old_names::find(yaml)?;
-        let mut policy: Self = crate::yaml::from_str(yaml).map_err(PolicyError::Parse)?;
+        let mut policy = parsed.map_err(PolicyError::Parse)?;
         policy.old_names = old_names;
         policy.lint()?;
         Ok(policy)

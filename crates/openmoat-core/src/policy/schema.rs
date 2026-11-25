@@ -43,12 +43,23 @@ pub(crate) fn check(yaml: &str) -> Result<(), PolicyError> {
         Declared::Missing => Err(PolicyError::MissingVersion {
             supported: SUPPORTED_VERSION,
         }),
-        Declared::Version(found) if found != SUPPORTED_VERSION => Err(PolicyError::Version {
-            found,
-            supported: SUPPORTED_VERSION,
-        }),
-        Declared::Version(_) | Declared::Unreadable => Ok(()),
+        Declared::Version(found) => check_parsed(found),
+        Declared::Unreadable => Ok(()),
     }
+}
+
+/// [`check`] for a document that deserialized in full as a policy, whose
+/// `version:` is `found`: the policy's `version` is a required number, so the
+/// probe would have read the same `Declared::Version(found)` from it, and no
+/// second deserialize is needed to read it.
+pub(crate) fn check_parsed(found: u32) -> Result<(), PolicyError> {
+    if found == SUPPORTED_VERSION {
+        return Ok(());
+    }
+    Err(PolicyError::Version {
+        found,
+        supported: SUPPORTED_VERSION,
+    })
 }
 
 /// What [`PolicyError::Version`] says: a newer schema needs a newer OpenMoat;
@@ -103,6 +114,46 @@ mod tests {
             matches!(repo, PolicyError::MissingVersion { supported: 1 }),
             "{repo}"
         );
+    }
+
+    /// `Policy::parse` reads `version:` from its one deserialize when the
+    /// document parses, and probes for it only when it does not: either way a
+    /// wrong or missing version gives the error the probe alone gave.
+    #[test]
+    fn a_wrong_or_missing_version_gives_the_same_error_with_one_deserialize() {
+        for yaml in [
+            // Parses in full: the version comes from the parsed policy.
+            "version: 0\n",
+            "version: 2\n",
+            "version: 7\ndefaults: deny\n",
+            // Does not parse in full: the probe reads it.
+            "defaults: deny\n",
+            "version: 2\nnew_key: true\n",
+            "version: 0\ndenny: []\n",
+            "version: ~\n",
+        ] {
+            let probed = check(yaml).unwrap_err().to_string();
+            let parsed = crate::Policy::parse(yaml).unwrap_err().to_string();
+            assert_eq!(parsed, probed, "{yaml}");
+        }
+        assert!(matches!(
+            crate::Policy::parse("version: 3\n"),
+            Err(PolicyError::Version {
+                found: 3,
+                supported: SUPPORTED_VERSION
+            })
+        ));
+        assert!(matches!(
+            crate::Policy::parse("defaults: deny\n"),
+            Err(PolicyError::MissingVersion {
+                supported: SUPPORTED_VERSION
+            })
+        ));
+        // A readable version 1 with a bad key is the parse's own error.
+        assert!(matches!(
+            crate::Policy::parse("version: 1\ndenny: []\n"),
+            Err(PolicyError::Parse(_))
+        ));
     }
 
     #[test]
