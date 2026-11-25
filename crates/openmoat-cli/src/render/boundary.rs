@@ -19,6 +19,7 @@ pub fn lines(record: &EffectiveBoundary) -> Vec<String> {
             Weaker::Tier => "tier",
             Weaker::Network => "network",
             Weaker::ProjectTop => "project top",
+            Weaker::Dns => "dns",
         };
         let how = if downgrade.chosen { "chosen" } else { "forced" };
         lines.push(format!("  downgrade ({what}, {how}): {}", downgrade.why));
@@ -30,6 +31,10 @@ pub fn lines(record: &EffectiveBoundary) -> Vec<String> {
         NetworkMode::ProxyVariables => {
             "the proxy variables only: nothing in the OS holds the network, so a program that \
              ignores HTTP_PROXY connects directly"
+        }
+        NetworkMode::WfpAccount => {
+            "the agent account's Windows Filtering Platform filters: only the proxy's ports on \
+             loopback, no listen"
         }
     };
     lines.push(format!("  network: {network}"));

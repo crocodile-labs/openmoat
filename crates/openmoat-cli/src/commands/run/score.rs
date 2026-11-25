@@ -70,7 +70,7 @@ pub fn tiers() -> Vec<TierScore> {
                 port: None,
                 project_top_open: false,
                 // What any run here gets: the account is a person's own setup.
-                agent_account: false,
+                agent_account: crate::agent_account::RunAs::Person,
             })
             .score
         };

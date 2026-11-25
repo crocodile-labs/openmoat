@@ -228,7 +228,8 @@ pub fn run_bubblewrap_userns() -> Option<std::result::Result<(), String>> {
 }
 
 /// What `openmoat run` lacks here for its full boundary (ADR-077); `None` when
-/// it has all of it.
-pub fn run_full_boundary_gap() -> Option<String> {
-    run::full_boundary_gap()
+/// it has all of it; `state` is the state directory, whose record names the
+/// Windows agent account (ADR-129).
+pub fn run_full_boundary_gap(state: &std::path::Path) -> Option<String> {
+    run::full_boundary_gap(state)
 }

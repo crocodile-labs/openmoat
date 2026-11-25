@@ -14,6 +14,7 @@ use openmoat_core::{EvalContext, ProjectTop, Verdict};
 
 use super::isolation::{Asked, Lightweight, Tier, write_row};
 use super::{platform, tool_shell};
+use crate::agent_account::RunAs;
 use crate::cli::{Format, RunArgs};
 use crate::exit::Code;
 use crate::home::Home;
@@ -43,10 +44,17 @@ pub struct Plan<'a> {
     /// The person's policy opened the project's top in this run
     /// (`sandbox.project_top: writable` without a namespace, ADR-090).
     pub project_top_open: bool,
-    /// The agent starts as the agent account (Windows, ADR-129): its caller
-    /// knows, from the state directory it holds.
-    pub agent_account: bool,
+    /// Whom the agent starts as (the Windows agent account, ADR-129, with
+    /// its network filters or without): its caller knows, from the state
+    /// directory it holds.
+    pub agent_account: RunAs,
 }
+
+/// Why a run as the agent account with its network filters is weaker than
+/// the full boundary (ADR-129 §2, "What it does not hold").
+const DNS_WHY: &str = "name lookups go through Windows' DNS Client service, which resolves under \
+     its own account, so a lookup the agent asks for leaves the machine (as `mDNSResponder` \
+     does for the macOS profile)";
 
 /// Why the network is restricted by port only, from the tier's `warning`:
 /// what this system lacks, where it says, or the warning itself.
@@ -95,6 +103,16 @@ pub fn plan(plan: Plan<'_>) -> EffectiveBoundary {
             } else {
                 NetworkMode::PortOnly
             }
+        }
+        // The account's filters hold the network (Windows, ADR-129); its
+        // name lookups do not go through them.
+        None if plan.agent_account == RunAs::Filtered => {
+            downgrades.push(Downgrade {
+                what: Weaker::Dns,
+                chosen: false,
+                why: DNS_WHY.to_owned(),
+            });
+            NetworkMode::WfpAccount
         }
         None => platform::NETWORK,
     };
@@ -165,7 +183,9 @@ pub fn print_plan(
     if let Some(kernel) = landlock.as_ref().filter(|k| !k.meets_floor()) {
         bail!("{}", abi::summary(kernel));
     }
-    let port_only = (!tier.isolated())
+    let agent_account = platform::agent_account(home.root());
+    // As the agent account with its filters the network is the system's to hold.
+    let port_only = (!tier.isolated() && agent_account != RunAs::Filtered)
         .then(platform::no_network_namespace)
         .flatten();
     super::refuse_port_only(args.netns, strict, port_only.as_deref())?;
@@ -189,7 +209,7 @@ pub fn print_plan(
         port: None,
         // Only the Lightweight tier without a namespace reads the setting.
         project_top_open: port_only.is_some() && policy.project_top() == ProjectTop::Writable,
-        agent_account: platform::agent_account(home.root()),
+        agent_account,
     });
     record.environment = Some(super::planned_environment(
         &policy,

@@ -4,19 +4,23 @@
 //!
 //! Setup, in order: the account (out of `Users`), its logon rights, its
 //! place off the sign-in screen, its SID in the relay's list, the password
-//! encrypted for the person, the read entry on the profile, the record. A
-//! step that fails undoes the ones before it, so a failed setup leaves no
-//! half-made account. Remove takes out what the record names, each step
-//! idempotent, and keeps the record while any step fails, so running it
-//! again finishes the job.
+//! encrypted for the person, the read entry on the profile, the network
+//! filters (`filters.rs`) on a range of proxy ports it chooses, the record.
+//! A step that fails undoes the ones before it, so a failed setup leaves no
+//! half-made account. Over a record of ADR-129's first step (`"wfp": null`)
+//! setup adds the network filters alone. Remove takes out what the record
+//! names, each step idempotent, and keeps the record while any step fails,
+//! so running it again finishes the job.
 
 use std::io::Write as _;
+use std::net::{Ipv4Addr, TcpListener};
 use std::path::Path;
 use std::time::Instant;
 
 use anyhow::{Context as _, Result, bail};
 
-use super::{USERS, logon, registry, set, system, unset};
+use super::{USERS, filters, logon, registry, set, system, unset};
+use crate::agent_account::wfp::{self, Wfp};
 use crate::agent_account::{
     self, AclEntry, DENIED_RIGHTS, ELEVATE, INTERACTIVE_RIGHT, PROFILE_MASK, Record,
 };
@@ -96,7 +100,10 @@ fn require_state_protected(state: &Path) -> Result<()> {
 
 pub fn setup(home: &Home) -> Result<Vec<String>> {
     let state = home.root();
-    if Record::load(state)?.is_some() {
+    if let Some(record) = Record::load(state)? {
+        if record.wfp.is_none() {
+            return add_filters(state, record);
+        }
         bail!(
             "the agent account is set up already: `openmoat agent-account status` checks it; to \
              make it again, run `openmoat agent-account remove` first"
@@ -139,16 +146,113 @@ pub fn setup(home: &Home) -> Result<Vec<String>> {
     writeln!(
         out,
         "✔ agent account {} ({}): in no group, interactive logon only, hidden from the sign-in \
-         screen, read on {}; `openmoat run` now starts agents as it.\n  The network is still \
-         held by the proxy variables only: the network filters are the next step (ADR-129).\n  \
-         Check it: openmoat agent-account status",
-        record.account, record.sid, record.profile
+         screen, read on {}; `openmoat run` now starts agents as it.\n  {}\n  Check it: \
+         openmoat agent-account status",
+        record.account,
+        record.sid,
+        record.profile,
+        filters_line(record.wfp.as_ref())
     )?;
     out.finish()?;
     Ok(vec![
         format!("account {} ({})", record.account, record.sid),
         format!("read and run granted on {}", record.profile),
-        "network filters: not set up (ADR-129, next step)".to_owned(),
+        filters_detail(record.wfp.as_ref()),
+    ])
+}
+
+/// What setup and status say of the network filters.
+fn filters_line(wfp: Option<&Wfp>) -> String {
+    match wfp {
+        Some(wfp) => format!(
+            "Network: {} Windows Filtering Platform filters refuse every connection and listen \
+             of the account but one to its proxy on loopback, ports {}-{}; name lookups still \
+             leave through Windows' DNS Client service (the run's `dns` downgrade)",
+            wfp.filters.len(),
+            wfp.ports[0],
+            wfp.ports[1]
+        ),
+        None => "Network: no filters yet (a setup of ADR-129's first step), so it is held by \
+                 the proxy variables only; run `openmoat agent-account setup` again, from an \
+                 administrator terminal, to add them"
+            .to_owned(),
+    }
+}
+
+/// The ledger's line for the network filters.
+fn filters_detail(wfp: Option<&Wfp>) -> String {
+    wfp.map_or_else(
+        || "network filters: not set up".to_owned(),
+        |w| {
+            format!(
+                "network filters: provider {}, {} filters, proxy ports {}-{}",
+                w.provider,
+                w.filters.len(),
+                w.ports[0],
+                w.ports[1]
+            )
+        },
+    )
+}
+
+/// Install the account `sid`'s network filters on the first range of proxy
+/// ports free now, with fresh keys.
+fn install_filters(sid: &str, out: &mut Deferred) -> Result<Wfp> {
+    let ports = wfp::choose_range(|port| TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_ok())
+        .context("no range of eight free loopback ports was found for the agent account's proxy")?;
+    let keys = (0..2 + wfp::plan().len())
+        .map(|_| wfp::random_key(&crate::guard_relay::random_hex(16)?))
+        .collect::<Result<Vec<u128>>>()?;
+    writeln!(
+        out,
+        "Installing the network filters (Windows Filtering Platform): the agent account may \
+         reach 127.0.0.1 and ::1 on ports {}-{} alone…",
+        ports[0], ports[1]
+    )?;
+    out.flush()?;
+    filters::install(sid, &keys, ports)
+}
+
+/// Write `record` with `wfp` installed; when the write fails, the filters
+/// are deleted again, so nothing is left that no record names.
+fn keep(state: &Path, mut record: Record, wfp: &Wfp) -> Result<Record> {
+    record.wfp = Some(wfp.clone());
+    let written = record.to_json().and_then(|json| {
+        crate::home::write_private(&state.join(agent_account::RECORD_FILE), json.as_bytes())
+    });
+    if let Err(error) = written {
+        let _ = filters::remove(wfp);
+        return Err(error);
+    }
+    Ok(record)
+}
+
+/// Over a record of ADR-129's first step: add the network filters alone,
+/// once the account matches its record.
+fn add_filters(state: &Path, record: Record) -> Result<Vec<String>> {
+    let drift = agent_account::drift(&record, &super::observe(state, &record));
+    if !drift.is_empty() {
+        bail!(
+            "the agent account {} differs from its record ({}), so no network filters are \
+             added: `openmoat agent-account remove`, then `setup`, makes it again",
+            record.account,
+            drift.join("; ")
+        );
+    }
+    let mut out = Deferred::default();
+    let wfp = install_filters(&record.sid, &mut out)?;
+    let record = keep(state, record, &wfp)?;
+    writeln!(
+        out,
+        "✔ agent account {}: network filters added.\n  {}\n  Check it: openmoat \
+         agent-account status",
+        record.account,
+        filters_line(record.wfp.as_ref())
+    )?;
+    out.finish()?;
+    Ok(vec![
+        format!("account {} ({})", record.account, record.sid),
+        filters_detail(record.wfp.as_ref()),
     ])
 }
 
@@ -192,6 +296,7 @@ fn make(
     let started = Instant::now();
     set(&entry, &sid)?;
     writeln!(out, "  done in {} s", started.elapsed().as_secs())?;
+    let wfp = install_filters(&sid, out)?;
     let record = Record {
         version: agent_account::VERSION,
         account: account.to_owned(),
@@ -207,11 +312,7 @@ fn make(
         write_entries: Vec::new(),
         read_entries: Vec::new(),
     };
-    crate::home::write_private(
-        &state.join(agent_account::RECORD_FILE),
-        record.to_json()?.as_bytes(),
-    )?;
-    Ok(record)
+    keep(state, record, &wfp)
 }
 
 pub fn status(home: &Home) -> Result<Code> {
@@ -246,12 +347,12 @@ pub fn status(home: &Home) -> Result<Code> {
         writeln!(
             out,
             "✔ agent account {} ({}): matches its record; `openmoat run` starts agents as it\n  \
-             {} write entries and {} read denies from runs; network filters: not set up (the \
-             next step of ADR-129)",
+             {} write entries and {} read denies from runs\n  {}",
             record.account,
             record.sid,
             record.write_entries.len(),
-            record.read_entries.len()
+            record.read_entries.len(),
+            filters_line(record.wfp.as_ref())
         )?;
         let unread = agent_account::unread(&seen);
         if !unread.is_empty() {
@@ -297,6 +398,9 @@ pub fn remove(home: &Home) -> Result<Option<Vec<String>>> {
             failed.push(format!("{what}: {error:#}"));
         }
     };
+    if let Some(wfp) = &record.wfp {
+        step("the network filters", filters::remove(wfp));
+    }
     for entry in record.entries() {
         step(&format!("the entry on {}", entry.path), unset(entry, sid));
     }
@@ -325,8 +429,8 @@ pub fn remove(home: &Home) -> Result<Option<Vec<String>>> {
         .context("removing the agent account's record")?;
     writeln!(
         out,
-        "✔ agent account {} removed with its profile and the {} entries it had; `openmoat run` \
-         uses the write-restricted token again",
+        "✔ agent account {} removed with its profile, its network filters and the {} entries \
+         it had; `openmoat run` uses the write-restricted token again",
         record.account,
         record.entries().count()
     )?;
@@ -334,5 +438,9 @@ pub fn remove(home: &Home) -> Result<Option<Vec<String>>> {
     Ok(Some(vec![
         format!("account {} ({}) deleted", record.account, record.sid),
         format!("{} access-list entries taken out", record.entries().count()),
+        format!(
+            "network filters deleted: {}",
+            record.wfp.as_ref().map_or(0, |w| w.filters.len())
+        ),
     ]))
 }

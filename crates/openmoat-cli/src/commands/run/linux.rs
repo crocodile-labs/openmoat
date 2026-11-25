@@ -274,9 +274,15 @@ pub fn unavailable() -> Option<String> {
     None
 }
 
-/// False: the agent account is Windows' (ADR-129).
-pub fn agent_account(_state: &Path) -> bool {
-    false
+/// The person's own user: the agent account is Windows' (ADR-129).
+pub fn agent_account(_state: &Path) -> crate::agent_account::RunAs {
+    crate::agent_account::RunAs::Person
+}
+
+/// None: the proxy takes any free loopback port; only the Windows agent
+/// account's network filters fix a range (ADR-129).
+pub fn proxy_ports(_state: &Path) -> Option<[u16; 2]> {
+    None
 }
 
 /// The kernel's Landlock ABI, for the ladder (ADR-082).
@@ -637,13 +643,13 @@ impl Confined {
         self.top_open
     }
 
-    /// False: the agent account is Windows' (ADR-129).
+    /// The person's own user: the agent account is Windows' (ADR-129).
     #[expect(
         clippy::unused_self,
         reason = "the method every platform's `Confined` has; Windows' reads itself"
     )]
-    pub fn agent_account(&self) -> bool {
-        false
+    pub fn agent_account(&self) -> crate::agent_account::RunAs {
+        crate::agent_account::RunAs::Person
     }
 
     /// Start the agent, give the check of its start to `on_launch` (ADR-089)

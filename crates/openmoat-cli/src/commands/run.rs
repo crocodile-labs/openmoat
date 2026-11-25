@@ -38,6 +38,8 @@ mod linux;
 mod listen;
 #[cfg(target_os = "macos")]
 mod macos;
+mod notice;
+mod proxy_port;
 mod release_age;
 mod required;
 pub mod score;
@@ -61,8 +63,6 @@ use unsupported as platform;
 use windows as platform;
 
 use std::ffi::{OsStr, OsString};
-use std::io::Write as _;
-use std::net::{Ipv4Addr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -82,15 +82,14 @@ use crate::guard_relay::{self, Service, random_hex};
 use crate::home::Home;
 use crate::proxy_ca::Trust;
 use crate::sandbox::Grants;
-use crate::sandbox::Report;
 use crate::sandbox::git_env;
 use crate::sandbox::kerberos;
-use crate::sandbox::landlock::abi::{self, Kernel};
+use crate::sandbox::landlock::abi::Kernel;
 use crate::sandbox::own_login::{self, Owner};
 use crate::sandbox::shared_temp;
 use crate::snapshot::RunSnapshots;
 use crate::taint::run::RUN_SESSION_ENV;
-use isolation::{Asked, Offered, Tier};
+use isolation::{Asked, Offered};
 use temp::RunTemp;
 
 /// What a proxy-aware program reads to find its proxy.
@@ -128,9 +127,8 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     }
     // A bare repository a command plants (no `.git` name) is used only when named.
     let git = git_env::add(&|var| std::env::var(var).ok())?;
-    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
-        .context("listening on a loopback port for the proxy")?;
-    let port = listener.local_addr()?.port();
+    // As the Windows agent account, a port of its filters' range (ADR-129).
+    let (listener, port) = proxy_port::listen(platform::proxy_ports(home.root()))?;
     let mut policy = home.load_policy()?;
     let agent_host = match owner {
         Owner::Agent(host) => Some(host),
@@ -260,7 +258,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let exit = Exit::open(&home, policy, ctx, Some(credential), &write_roots)?
         .with_guard(guard)
         .with_tls(terminating.map(|t| t.tls));
-    notice(
+    notice::notice(
         &program,
         port,
         exit.session(),
@@ -554,14 +552,16 @@ pub fn withheld_line(names: &[OsString], policy: &Policy, strict: Option<&str>) 
 
 /// What this system lacks for the run's full boundary (ADR-077): no sandbox at
 /// all, or on Linux the Isolated tier (ADR-080) or a network of the agent's
-/// own; `None` when it has all of it.
-pub fn full_boundary_gap() -> Option<String> {
+/// own, which on Windows the agent account's network filters of the state
+/// directory `state` hold (ADR-129); `None` when it has all of it.
+pub fn full_boundary_gap(state: &Path) -> Option<String> {
+    let filtered = platform::agent_account(state) == crate::agent_account::RunAs::Filtered;
     platform::unavailable()
         .or_else(|| match platform::isolation() {
             Offered::Unavailable(why) => Some(format!("the Isolated tier cannot start: {why}")),
             Offered::Not | Offered::Available => None,
         })
-        .or_else(platform::no_network_namespace)
+        .or_else(|| (!filtered).then(platform::no_network_namespace).flatten())
 }
 
 /// `openmoat doctor`'s row for the tier a plain `openmoat run` starts here,
@@ -588,75 +588,6 @@ fn refuse_port_only(netns: Netns, strict: Option<&str>, port_only: Option<&str>)
         ),
         _ => Ok(()),
     }
-}
-
-/// What the user must know before the agent starts, on standard error.
-fn notice(
-    program: &Path,
-    port: u16,
-    session: &str,
-    agent: &platform::Confined,
-    (tier, landlock, verbose): (&Tier, Option<&Kernel>, bool),
-) -> Result<()> {
-    let report: &Report = agent.report();
-    let mut err = std::io::stderr().lock();
-    let sees = if tier.isolated() {
-        "; it sees only the project, the read roots and --write paths"
-    } else {
-        ""
-    };
-    // The tests find the port after "proxy on 127.0.0.1:" in either line.
-    let network = if platform::NETWORK == openmoat_core::boundary::NetworkMode::ProxyVariables {
-        "network through OpenMoat's proxy for programs that honour HTTP_PROXY (not held by the \
-         OS)"
-        .to_owned()
-    } else if agent.warning().is_some() {
-        format!("network only to port {port} on any host, OpenMoat's proxy")
-    } else {
-        "network only through OpenMoat's proxy".to_owned()
-    };
-    writeln!(
-        err,
-        "moat run: {} in a sandbox made from the policy{sees}, {network} on 127.0.0.1:{port} \
-         (audit session {session})",
-        program.display()
-    )?;
-    if let Some(warning) = agent.warning() {
-        writeln!(err, "{warning}")?;
-    }
-    if let Some(fallback) = isolation::notice(tier) {
-        writeln!(err, "{fallback}")?;
-    }
-    if let Some(open) = agent.project_notice() {
-        writeln!(err, "{open}")?;
-    }
-    let off = crate::sandbox::install::own_sandbox_off();
-    if verbose {
-        writeln!(
-            err,
-            "  proxy: 127.0.0.1:{port}\n  \
-             turn the agent's own sandbox off{off}: sandboxes \
-             do not nest, so the agent's cannot start in here. This one holds the agent and \
-             every command it starts together, so it is less precise per command than the \
-             agent's own sandbox."
-        )?;
-        write_report(&mut err, report)?;
-        if let Some(kernel) = landlock {
-            writeln!(err, "  {}", abi::summary(kernel))?;
-            for line in abi::lines(kernel) {
-                writeln!(err, "    {line}")?;
-            }
-        }
-    } else {
-        writeln!(
-            err,
-            "moat run: turn the agent's own sandbox off{off}; \
-             sandbox ready ({} stricter, {} wider; --verbose for details)",
-            report.losses.len(),
-            report.allowances.len()
-        )?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]

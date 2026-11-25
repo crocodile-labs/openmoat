@@ -69,14 +69,20 @@ pub fn restrictions(
     _: bool,
     _: bool,
     _: Option<&crate::sandbox::landlock::abi::Kernel>,
-    _: bool,
+    _: crate::agent_account::RunAs,
 ) -> Vec<Restriction> {
     Vec::new()
 }
 
-/// False: the agent account is Windows' (ADR-129).
-pub fn agent_account(_state: &Path) -> bool {
-    false
+/// The person's own user: the agent account is Windows' (ADR-129).
+pub fn agent_account(_state: &Path) -> crate::agent_account::RunAs {
+    crate::agent_account::RunAs::Person
+}
+
+/// None: the proxy takes any free loopback port; only the Windows agent
+/// account's network filters fix a range (ADR-129).
+pub fn proxy_ports(_state: &Path) -> Option<[u16; 2]> {
+    None
 }
 
 /// None: Landlock is Linux's (ADR-082).
@@ -163,7 +169,7 @@ impl Confined {
         match *self {}
     }
 
-    pub fn agent_account(&self) -> bool {
+    pub fn agent_account(&self) -> crate::agent_account::RunAs {
         match *self {}
     }
 

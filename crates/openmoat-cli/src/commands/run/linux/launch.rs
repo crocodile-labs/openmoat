@@ -35,7 +35,7 @@ pub fn restrictions(
     isolated: bool,
     port_only: bool,
     kernel: Option<&Kernel>,
-    _agent_account: bool,
+    _agent_account: crate::agent_account::RunAs,
 ) -> Vec<Restriction> {
     use Mechanism as M;
     let abi = match kernel {

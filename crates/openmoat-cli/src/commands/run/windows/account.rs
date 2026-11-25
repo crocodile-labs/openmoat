@@ -7,9 +7,11 @@
 //! What decides is pure (`crate::agent_account`, `sandbox/write_token/account.rs`);
 //! the Win32 calls are in this folder: `system.rs` (the account, its groups
 //! and logon rights), `registry.rs` (the sign-in screen and the relay's
-//! list), `logon.rs` (DPAPI, elevation, `CreateProcessWithLogonW`) and
+//! list), `logon.rs` (DPAPI, elevation, `CreateProcessWithLogonW`),
+//! `filters.rs` (the network filters in the Windows Filtering Platform) and
 //! `../acl.rs` (setting and taking out entries, shared with ADR-115's tier).
 
+mod filters;
 mod logon;
 mod manage;
 mod registry;
@@ -51,6 +53,16 @@ const USERS: &str = "S-1-5-32-545";
 pub struct Active {
     pub record: Record,
     state: std::path::PathBuf,
+    /// The record's network filters were read back as recorded.
+    pub filters: bool,
+}
+
+/// The ports the record's network filters let the account reach, where the
+/// run's proxy must listen; `None` without a record or filters. Read from
+/// the record alone, before [`active`] checks the system: a proxy in the
+/// range is the only one the agent could reach should the filters hold.
+pub fn proxy_ports(state: &Path) -> Option<[u16; 2]> {
+    Record::load(state).ok().flatten()?.wfp.map(|w| w.ports)
 }
 
 /// The agent account of the state directory `state`: `None` without a
@@ -69,7 +81,8 @@ pub fn active(state: &Path) -> Option<Active> {
             return None;
         }
     };
-    let drift = agent_account::drift(&record, &observe(state, &record));
+    let seen = observe(state, &record);
+    let drift = agent_account::drift(&record, &seen);
     if !drift.is_empty() {
         eprintln!(
             "moat run: the agent account {} no longer matches its record ({}), so this run uses \
@@ -79,7 +92,15 @@ pub fn active(state: &Path) -> Option<Active> {
         );
         return None;
     }
+    if seen.wfp == agent_account::wfp::Read::Unread {
+        eprintln!(
+            "moat run: the agent account's network filters cannot be read back from this \
+             terminal, so this run does not count them (`wfp_network`); they still refuse \
+             what they name"
+        );
+    }
     Some(Active {
+        filters: matches!(seen.wfp, agent_account::wfp::Read::Seen(_)),
         record,
         state: state.to_path_buf(),
     })
@@ -90,6 +111,12 @@ pub fn active(state: &Path) -> Option<Active> {
 /// `status` as unread; everything else that cannot be read counts as
 /// missing.
 fn observe(state: &Path, record: &Record) -> Observed {
+    use agent_account::wfp::Read;
+    let wfp = match record.wfp.as_ref().map(filters::observe) {
+        None => Read::NotAsked,
+        Some(Ok(seen)) => Read::Seen(seen),
+        Some(Err(_)) => Read::Unread,
+    };
     Observed {
         sid: system::sid_of(&record.account).ok().flatten(),
         groups: system::local_groups(&record.account).ok(),
@@ -101,6 +128,7 @@ fn observe(state: &Path, record: &Record) -> Observed {
             .join(agent_account::DIR)
             .join(agent_account::PASSWORD_FILE)
             .is_file(),
+        wfp,
     }
 }
 

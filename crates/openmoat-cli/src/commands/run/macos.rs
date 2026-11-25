@@ -133,14 +133,20 @@ pub fn restrictions(
     _isolated: bool,
     _port_only: bool,
     _kernel: Option<&crate::sandbox::landlock::abi::Kernel>,
-    _agent_account: bool,
+    _agent_account: crate::agent_account::RunAs,
 ) -> Vec<Restriction> {
     vec![Restriction::planned(Mechanism::Seatbelt, true, true)]
 }
 
-/// False: the agent account is Windows' (ADR-129).
-pub fn agent_account(_state: &Path) -> bool {
-    false
+/// The person's own user: the agent account is Windows' (ADR-129).
+pub fn agent_account(_state: &Path) -> crate::agent_account::RunAs {
+    crate::agent_account::RunAs::Person
+}
+
+/// None: the proxy takes any free loopback port; only the Windows agent
+/// account's network filters fix a range (ADR-129).
+pub fn proxy_ports(_state: &Path) -> Option<[u16; 2]> {
+    None
 }
 
 /// None: Landlock is Linux's (ADR-082).
@@ -261,13 +267,13 @@ impl Confined {
         false
     }
 
-    /// False: the agent account is Windows' (ADR-129).
+    /// The person's own user: the agent account is Windows' (ADR-129).
     #[expect(
         clippy::unused_self,
         reason = "the method every platform's `Confined` has; Windows' reads itself"
     )]
-    pub fn agent_account(&self) -> bool {
-        false
+    pub fn agent_account(&self) -> crate::agent_account::RunAs {
+        crate::agent_account::RunAs::Person
     }
 
     /// Start the agent under `sandbox-exec`, tell `on_launch` it started

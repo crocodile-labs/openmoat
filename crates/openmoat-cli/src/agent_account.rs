@@ -106,16 +106,29 @@ impl AclEntry {
     }
 }
 
-/// The network filters of ADR-129's second step. Not set up by this version:
-/// the record says `"wfp": null`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Wfp {
-    /// The provider's key.
-    pub provider: String,
-    /// The filters' keys.
-    pub filters: Vec<String>,
-    /// The first and last port of the range the runs' proxies listen on.
-    pub ports: [u16; 2],
+pub mod wfp;
+
+pub use wfp::Wfp;
+
+/// Whom a run starts the agent as, as far as the agent account goes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RunAs {
+    /// The person's own user: every run off Windows, and ADR-115's
+    /// write-restricted token on Windows.
+    #[default]
+    Person,
+    /// The agent account, without network filters confirmed: a setup of
+    /// ADR-129's first step, or filters this terminal cannot read back.
+    Account,
+    /// The agent account with its network filters read back as recorded.
+    Filtered,
+}
+
+impl RunAs {
+    /// Whether the agent starts as the agent account.
+    pub fn account(self) -> bool {
+        self != Self::Person
+    }
 }
 
 /// `agent-account.json`.
@@ -140,7 +153,8 @@ pub struct Record {
     pub relay_registered: bool,
     /// The read entry on the profile.
     pub profile_entry: AclEntry,
-    /// The network filters; `None` until ADR-129's second step.
+    /// The network filters; `None` in a record of ADR-129's first step,
+    /// which running setup again completes.
     pub wfp: Option<Wfp>,
     /// The write entries runs set (kept between runs, like ADR-115's).
     #[serde(default)]
@@ -173,6 +187,10 @@ impl Record {
                 "the agent account's record names the SID {}, not a local account's",
                 record.sid
             );
+        }
+        if let Some(wfp) = &record.wfp {
+            wfp.check()
+                .context("in the agent account's record of its network filters")?;
         }
         Ok(record)
     }
@@ -285,11 +303,15 @@ pub struct Observed {
     pub profile_entry: bool,
     /// The encrypted password's file is there.
     pub password: bool,
+    /// What the Windows Filtering Platform holds of the record's network
+    /// filters.
+    pub wfp: wfp::Read,
 }
 
 /// What `seen` could not read, for `status` to name: an unelevated process
-/// may not read the account's groups or rights, which only an administrator
-/// can change; [`drift`] judges the rest.
+/// may not read the account's groups, rights or network filters, which only
+/// an administrator can change; [`drift`] judges the rest. A run does not
+/// hold them against the account, but counts no filter it could not read.
 pub fn unread(seen: &Observed) -> Vec<&'static str> {
     let mut out = Vec::new();
     if seen.groups.is_none() {
@@ -297,6 +319,9 @@ pub fn unread(seen: &Observed) -> Vec<&'static str> {
     }
     if seen.rights.is_none() {
         out.push("its logon rights");
+    }
+    if seen.wfp == wfp::Read::Unread {
+        out.push("its network filters");
     }
     out
 }
@@ -345,6 +370,13 @@ pub fn drift(record: &Record, seen: &Observed) -> Vec<String> {
     }
     if !seen.password {
         out.push("the account's encrypted password is gone".to_owned());
+    }
+    match (&record.wfp, &seen.wfp) {
+        (Some(recorded), wfp::Read::Seen(filters)) => out.extend(wfp::drift(recorded, filters)),
+        (Some(_), wfp::Read::NotAsked) => {
+            out.push("the network filters were not read back".to_owned());
+        }
+        _ => {}
     }
     out
 }

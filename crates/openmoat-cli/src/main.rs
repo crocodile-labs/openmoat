@@ -5,13 +5,13 @@
 //! see [`exit::Code`].
 
 /// The agent account of `openmoat run` on Windows (ADR-129); its pure parts
-/// are tested on every system.
-#[cfg(any(windows, test))]
+/// are tested on every system, and every system's run names whom it starts
+/// the agent as ([`agent_account::RunAs`]) and picks the proxy's port.
 #[cfg_attr(
     not(windows),
     expect(
         dead_code,
-        reason = "the Windows tier uses all of it; tests elsewhere only its pure parts"
+        reason = "the Windows tier uses all of it; elsewhere only its pure parts"
     )
 )]
 mod agent_account;

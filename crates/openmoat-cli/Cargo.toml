@@ -71,16 +71,20 @@ libc.workspace = true
 # (`commands/run/windows/account/`): the account and its groups
 # (NetManagement), its logon rights (the LSA, Authentication_Identity), its
 # password encrypted with DPAPI (Cryptography), its place off the sign-in
-# screen (Registry) and its profile's removal (`DeleteProfileW`, UI_Shell).
+# screen (Registry), its profile's removal (`DeleteProfileW`, UI_Shell) and
+# its network filters (WindowsFilteringPlatform; `FwpmEngineOpen0` takes
+# the RPC authentication service, Rpc).
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_NetworkManagement_NetManagement",
+    "Win32_NetworkManagement_WindowsFilteringPlatform",
     "Win32_Security",
     "Win32_Security_Authentication_Identity",
     "Win32_Security_Authorization",
     "Win32_Security_Cryptography",
     "Win32_System_JobObjects",
     "Win32_System_Registry",
+    "Win32_System_Rpc",
     "Win32_System_Threading",
     "Win32_UI_Shell",
 ] }
