@@ -214,13 +214,21 @@ jobs:
               echo "closed #$number: $agent passes"
             done
           fi
+          # Not checked: npm's attestations service failed twice, so the agent was not run
+          # (scripts/ci/latest-agents/README.md, "When it fails"). Named, never an issue.
+          not_checked=$(jq -s -r '[.[] | select(.outcome == "not-checked") | "\(.agent) (\(.os))"] | unique | join(", ")' "${results[@]}" /dev/null)
+          [ -z "$not_checked" ] || echo "::warning::not checked, npm's attestations service failed: $not_checked"
           failed=$(jq -s -r '[.[] | select(.outcome == "failed") | .agent] | unique | .[]' "${results[@]}" /dev/null)
           if [ -z "$failed" ]; then
             if [ "$AGENT_RESULT" != success ]; then
               echo "::error::an agent job ended $AGENT_RESULT without writing its result; read the run"
               exit 1
             fi
-            echo "every agent passed"
+            if [ -n "$not_checked" ]; then
+              echo "no agent failed; not checked: $not_checked"
+            else
+              echo "every agent passed"
+            fi
             exit 0
           fi
           if [ "$ON_MAIN" != true ]; then

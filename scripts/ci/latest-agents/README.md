@@ -231,7 +231,19 @@ outcome is read and compared; only a run of this job shows what an agent does.
 
 The `report` job opens or updates one issue per agent, `latest <agent> <version> breaks
 OpenMoat`, with the failed step; the `latest-agent-<agent>-<OS>` artefact holds every
-log. Re-run one agent from Actions → latest agents → Run workflow. When an adapter is
+log. On main, it closes such an issue, with a link to the run, once every runner planned
+for that agent passed; a runner GitHub cancelled wrote no result, so it proves nothing
+and the issue stays open.
+
+A run can also end **not checked**: npm's attestations service, which `npm audit
+signatures` asks for each package's provenance, has answered `OK` instead of JSON for some
+packages. The script asks once more; if npm fails the same way again, the agent is not
+run, since its packages could not be verified, and the run records `not-checked` with
+the package, warns, and opens no issue. Only that exact npm error counts: a signature
+that is missing or does not verify still fails the run (`check.py
+npm-attestations-fault`, tested by `test_check.py`).
+
+Re-run one agent from Actions → latest agents → Run workflow. When an adapter is
 then checked against the new release, change the version in the file its record names
 and in the host's `weekly.rs` in the same pull request, and regenerate `agents.json`
 (`python3 -I scripts/ci/latest-agents/check.py records` fails otherwise).

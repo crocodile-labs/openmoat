@@ -93,6 +93,9 @@ relation=""
 checked=$(check get "$agent" checked.version || echo none)
 fake_pid=""
 fake_log=""
+# Set, with why, when the agent could not be checked for a reason of the
+# registry's, never of OpenMoat's: the run then exits 0 as `not-checked`.
+not_checked=""
 finish() {
     local rc=$?
     [ -z "$fake_pid" ] || kill "$fake_pid" 2>/dev/null || true
@@ -105,6 +108,7 @@ finish() {
         python3 -I "$lib/after_call.py" report "$agent" "$after_call_dir" "${fake_log:--}" "$step" || true
     local outcome=passed
     [ "$rc" -eq 0 ] || outcome=failed
+    [ "$rc" -ne 0 ] || [ -z "$not_checked" ] || outcome=not-checked
     printf '{"agent":"%s","host":"%s","name":"%s","os":"%s","version":"%s","checked":"%s","relation":"%s","outcome":"%s","step":"%s"}\n' \
         "$agent" "$host" "$name" "${RUNNER_OS:-$(uname -s)}" "$version" "$checked" "$relation" \
         "$outcome" "$step" >"$out/result.json"
@@ -118,6 +122,9 @@ finish() {
             if [ "$rc" -ne 0 ]; then
                 echo
                 echo "Failed in step \`$step\`; the logs are in the \`latest-agent-$agent-*\` artefact."
+            elif [ -n "$not_checked" ]; then
+                echo
+                echo "Not checked, in step \`$step\`: $not_checked."
             fi
             if [ -f "$out/background-mcp.txt" ]; then
                 echo
@@ -125,7 +132,10 @@ finish() {
             fi
         } >>"$GITHUB_STEP_SUMMARY"
     fi
-    if [ "$rc" -eq 0 ]; then
+    if [ "$rc" -eq 0 ] && [ -n "$not_checked" ]; then
+        echo "::warning title=$agent: not checked::$not_checked"
+        echo "NOT CHECKED  $name ($agent): $not_checked"
+    elif [ "$rc" -eq 0 ]; then
         echo "PASS  $name ($agent) $version"
     else
         echo "FAIL  $name ($agent) in step $step"
@@ -257,7 +267,25 @@ install_npm() {
         return 1
     }
     # Every package's registry signature and, where it has one, its provenance.
-    npm audit signatures --prefix "$agent_dir" | tee "$out/npm-signatures.log"
+    # npm's attestations service has answered `OK` instead of JSON for some
+    # packages: a fault of npm's, not of a signature, the agent or OpenMoat. It is
+    # asked once more; if it fails so again, nothing is run unverified and the
+    # agent is recorded as not checked, not failed (`not_checked`, below).
+    local tries fault
+    for tries in 1 2; do
+        if npm audit signatures --prefix "$agent_dir" >"$out/npm-signatures.log" 2>&1; then
+            cat "$out/npm-signatures.log"
+            break
+        fi
+        cat "$out/npm-signatures.log"
+        fault=$(check npm-attestations-fault "$out/npm-signatures.log") || return 1
+        if [ "$tries" -eq 2 ]; then
+            not_checked="npm's attestations service answered something other than JSON for $fault twice, so the registry signatures could not be verified and the agent was not run"
+            exit 0
+        fi
+        echo "npm's attestations service failed for $fault; asking once more"
+        sleep 20
+    done
     platform=$(node -p 'process.platform + "-" + process.arch')
     binary=$(check get "$agent" binary)
     bin="$agent_dir/${binary//\{platform\}/$platform}"

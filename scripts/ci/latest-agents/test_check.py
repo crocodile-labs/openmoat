@@ -439,6 +439,50 @@ class SessionFiles(unittest.TestCase):
             self.assertEqual(check.sessions_problems(rec), [], agent)
 
 
+class NpmAttestationsFault(unittest.TestCase):
+    """`npm-attestations-fault`: npm's attestations service failing is told apart
+    from a signature that does not verify, which must still fail the job."""
+
+    # What `npm audit signatures` printed on the macos-15 runner on 2026-11-25.
+    FAULT = ("npm error code FETCH_ERROR\n"
+             "npm error errno FETCH_ERROR\n"
+             "npm error invalid json response body at https://registry.npmjs.org/-/npm/v1/"
+             "attestations/@example-agent%2fproc-safe-darwin-arm64@0.4.2 reason: Unexpected token "
+             "'O', \"OK\" is not valid JSON\n"
+             "npm error A complete log of this run can be found in: /tmp/x/_logs/debug-0.log\n")
+
+    def fault(self, log):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "npm-signatures.log"
+            path.write_text(log, encoding="utf-8")
+            return run_quietly(check.cmd_npm_attestations_fault, str(path))
+
+    def test_the_service_answering_not_json_names_the_package(self):
+        self.assertEqual(self.fault(self.FAULT), (0, "@example-agent/proc-safe-darwin-arm64@0.4.2\n"))
+        unscoped = self.FAULT.replace("@example-agent%2fproc-safe-darwin-arm64@0.4.2", "ai@7.0.180")
+        self.assertEqual(self.fault(unscoped), (0, "ai@7.0.180\n"))
+
+    def test_a_signature_that_does_not_verify_is_never_the_fault(self):
+        invalid = ("audited 412 packages in 2s\n\n"
+                   "1 package has an invalid registry signature:\n\n"
+                   "evil-pkg@1.0.0 (https://registry.npmjs.org/)\n\n"
+                   "Someone might have tampered with this package since it was published\n")
+        self.assertEqual(self.fault(invalid), (1, ""))
+        missing = "1 package has a missing registry signature but the registry is providing keys\n"
+        self.assertEqual(self.fault(missing), (1, ""))
+
+    def test_another_fetch_error_or_host_is_not_the_fault(self):
+        other_host = self.FAULT.replace("https://registry.npmjs.org/-/npm/v1/attestations/",
+                                        "https://evil.example/-/npm/v1/attestations/")
+        self.assertEqual(self.fault(other_host), (1, ""))
+        keys = self.FAULT.replace("/-/npm/v1/attestations/", "/-/npm/v1/keys/")
+        self.assertEqual(self.fault(keys), (1, ""))
+        timeout = "npm error code ETIMEDOUT\nnpm error network request to https://registry.npmjs.org failed\n"
+        self.assertEqual(self.fault(timeout), (1, ""))
+        no_code = self.FAULT.replace("npm error code FETCH_ERROR\n", "")
+        self.assertEqual(self.fault(no_code), (1, ""))
+
+
 if __name__ == "__main__":
     result = unittest.main(exit=False, verbosity=1).result
     sys.exit(0 if result.wasSuccessful() else 1)

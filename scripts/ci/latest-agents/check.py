@@ -62,6 +62,10 @@ read JSON, and the agent records they come from (agents.json beside this file).
                                              `sessions` (the host spec, ADR-104) says; a miss
                                              warns and never fails
 
+    check.py npm-attestations-fault <log>    exit 0 and print the package when `npm audit
+                                             signatures`'s log shows npm's attestations
+                                             service failed (not a signature); exit 1 otherwise
+
 Every failure prints why and exits 1; usage errors exit 64.
 """
 
@@ -625,6 +629,38 @@ def cmd_tool_failures(captured, host, expected):
     return 0
 
 
+# npm's own message when its attestations service answers something that is not
+# JSON for one package (`OK`, seen on 2026-11-23 and 2026-11-25 for platform
+# packages of three agents): a fault of npm's registry, not of a signature, the
+# agent or OpenMoat.
+NPM_ATTESTATIONS_FAULT = re.compile(
+    r"^npm error invalid json response body at "
+    r"https://registry\.npmjs\.org/-/npm/v1/attestations/(\S+@[0-9][^\s]*) reason:",
+    re.M)
+
+
+def npm_attestations_fault(log):
+    """The `<package>@<version>` whose attestations npm's service failed to give
+    in `npm audit signatures` output `log`, or None. Only npm's FETCH_ERROR for
+    that one service counts: a missing or invalid signature is never this."""
+    if "npm error code FETCH_ERROR" not in log:
+        return None
+    match = NPM_ATTESTATIONS_FAULT.search(log)
+    return match.group(1).replace("%2f", "/").replace("%2F", "/") if match else None
+
+
+def cmd_npm_attestations_fault(log_file):
+    """Exit 0 and print the package when `npm audit signatures`'s log shows that
+    npm's attestations service failed; exit 1, silent, otherwise. The script then
+    asks once more, and if that fails the same way records the agent as not
+    checked instead of failed: nothing is run unverified."""
+    package = npm_attestations_fault(Path(log_file).read_text(encoding="utf-8", errors="replace"))
+    if package:
+        print(package)
+        return 0
+    return 1
+
+
 def cmd_env_limited(captured, host):
     """Exit 0 and print the limit when any captured PostToolUseFailure of `host`
     (the expected one included) shows a limit of the runner; exit 1, silent,
@@ -944,7 +980,7 @@ COMMANDS = {
     "scrub": (cmd_scrub, 7), "resumed": (cmd_resumed, 1),
     "background-mcp": (cmd_background_mcp, 5), "capture-event": (cmd_capture_event, 2),
     "event-captured": (cmd_event_captured, 3), "tool-failures": (cmd_tool_failures, 3),
-    "env-limited": (cmd_env_limited, 2),
+    "env-limited": (cmd_env_limited, 2), "npm-attestations-fault": (cmd_npm_attestations_fault, 1),
 }
 
 
