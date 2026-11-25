@@ -348,13 +348,20 @@ something OpenMoat claims to stop.
   name there (deny entries the run sets and reconciles), nor OpenMoat's state, whose list
   names you and `SYSTEM` only. Its password is encrypted for you with DPAPI, so another
   account cannot start a process as it. Its hooks relay to the run because their token's
-  user is a SID registered under HKLM, which only an administrator can write. It does not
-  hold the network (the proxy variables only, until the filters of ADR-129's second
-  step), globs and places made during the run, or places outside the profile that the
-  system's lists open to every account; an administrator, or a process with your full
-  access outside the run, can change the account's entries, which `openmoat agent-account
-  status` then reports; the next run then warns and uses the token instead. Such a run
-  scores at most 70/100.
+  user is a SID registered under HKLM, which only an administrator can write. Its network
+  is held by Windows Filtering Platform filters whose user condition names the account: a
+  hard block at the connect, listen and receive-accept layers, and one permit to
+  `127.0.0.1` and `::1` on the eight ports where runs place their proxy, so a program
+  that ignores `HTTP_PROXY` is refused by Windows (T1, T12). It does not hold name lookups
+  (the DNS Client service resolves under its own account, so a lookup can carry data out:
+  the record's `dns` downgrade), programs of another local user listening on the
+  permitted ports, globs and places made during the run, or places outside the profile
+  that the system's lists open to every account. An administrator, or a process with your
+  full access outside the run, can change the account's entries; only an administrator
+  can change its filters (a filter of higher weight in another sublayer cannot override
+  their hard blocks, but an administrator can delete them). `openmoat agent-account
+  status` then reports the drift, and the next run warns and uses the token instead. Such
+  a run scores 100/100 with the `dns` downgrade named, 70/100 without the filters.
 - **What the Standard tier does not cover.** It is as strong as each host's sandbox
   and OpenMoat's translation, and every host version bump must keep the generated keys
   working (`openmoat doctor` names a weakened setting; the differential suite executes

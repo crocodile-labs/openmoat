@@ -57,16 +57,26 @@ and says that `openmoat run` there needs no account. It:
    `ALE_AUTH_RECV_ACCEPT_V4`/`_V6`, block filters whose `FWPM_CONDITION_ALE_USER_ID` names
    the account, with one permit: a connection to `127.0.0.1` or `::1` on a port of a fixed
    range of eight that setup chooses and records, where runs place their proxy. Raw sockets
-   already need administrator rights.
+   already need administrator rights. All of it is added in one WFP transaction, so a
+   failure keeps none of it. The blocks are hard (`FWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT`), so
+   a permit in a sublayer of lower weight cannot override them, and the sublayer has the
+   highest weight; inside it the permit outweighs the block. Setup takes the first range of
+   eight whose every port is free on loopback, from 47320 up in steps of eight and below
+   Windows' dynamic range (49152). Over a record of step 1 (`"wfp": null`), setup adds
+   the filters alone, once `status` finds no drift.
 5. Writes `agent-account.json` in the state directory: the account's name and SID, the
    person's SID, its rights, the profile entry, and the entries runs add (write entries,
-   kept; read denies, reconciled), so `remove` undoes exactly them; the network filters'
-   part (`wfp`: provider, filters, port range) is `null` until step 2.
+   kept; read denies, reconciled), so `remove` undoes exactly them; and the network
+   filters' part (`wfp`: the provider's and the sublayer's keys, each filter's key, layer
+   and action, the port range), which is `null` in a record of step 1.
 
 `openmoat agent-account status` reads the record back against the system (the account and
 its SID, no group membership, exactly the recorded rights, the sign-in and relay values,
-the profile entry, the password file; the filters from step 2) and exits 1 on drift; with
-no record it exits 1 only when an account of the name setup would use exists. The groups
+the profile entry, the password file; the provider, the sublayer, and each filter by its
+key with its layer, action, sublayer, provider and number of conditions) and exits 1 on
+drift; with no record it exits 1 only when an account of the name setup would use exists.
+A record of step 1 is no drift: `status` says it has no filters and that `setup` again,
+from an administrator terminal, adds them, and its runs keep step 1's network and score. The groups
 and rights are judged where this process may read them (the local security policy may
 refuse a standard user); otherwise `status` names them as unread, and a run does not hold
 them against the account, since only an administrator can change either.
@@ -116,7 +126,11 @@ what differs and is ADR-115's.
 - **Network.** The proxy listens on the first free port of the recorded range and checks it
   bound that port itself; the proxy variables point at it. Every other connection the
   account's processes make, and every listen, is refused by the filters, whether or not a
-  program honours the variables. The record's network mode is `wfp_account`.
+  program honours the variables. The record's network mode is `wfp_account`. The port is
+  taken from the record before the system is checked, so even a run that then falls back
+  to the token listens where the filters would let the agent reach. Filters the run cannot
+  read back (the filtering engine may refuse a standard user) are not counted: the run is
+  the account's, with step 1's network mode and score, and says so.
 - **What it does not hold, stated.** Name lookups go through the system's DNS Client service,
   which resolves under its own account, so a lookup an agent asks for leaves the machine
   (the same gap the macOS profile has through `mDNSResponder`); the record names it as a
@@ -133,29 +147,43 @@ what differs and is ADR-115's.
 A run as the account records the restriction `agent_account` where ADR-115's records
 `restricted_token`, and the score weighs it in the token's place (45). `windows_read_deny`
 counts only after the launch check confirms the account; `wfp_network` only once `status`
-confirms the filters (step 2). After step 1 such a run scores at most 70; after step 2 a
-Windows run scores 100 less its named downgrades (`dns`), and `sandbox.strict: true` and
-`require.run: full-boundary` accept it.
+confirms the filters (step 2): read back as recorded before the start, with the proxy on
+their range, and the agent's token the account's. After step 1 such a run scores at most
+70; after step 2 a Windows run scores 100, and its named downgrade (`dns`) is in the
+record beside the score: the score weighs kernel features (ADR-108), and a downgrade is
+named, not subtracted. `sandbox.strict: true` and `require.run: full-boundary` accept it.
 `docs/PROTECTION.md`'s Windows rows stay *preview* until a test runs a real agent under the
 account.
 
 ### 4. Tests
 
-CI's `windows-latest` runner is elevated, so its end-to-end tests run `setup`, then a run
-whose program tries a connection to an outside address (refused), a fetch through the proxy
-(allowed), a listen (refused), a read of a denied file in the profile (refused), a read of
-an allowed one (works), a write outside the roots (refused), and `remove`, after which
-`status` finds nothing; the network cases come with step 2. The unelevated refusal is
-tested with a switch only debug builds read, which can only make setup refuse: the
+CI's `windows-latest` runner is elevated, so its end-to-end tests run `setup` (the
+filters are then in `netsh wfp show filters` and `status` is clean), then a run whose
+program tries a direct connection to an address of the machine that is not loopback
+(refused, and nothing reaches the test's listener there, which the test's own connection
+does reach), a request through the proxy (answered by the proxy), a listen (refused), a
+read of a denied file in the profile (refused), a read of an allowed one (works), a write
+outside the roots (refused), and `remove`, after which no filter key is in `netsh wfp
+show filters` and `status` finds nothing. No case sends a packet off the machine: the
+proxied request names loopback, which the proxy refuses itself. The unelevated refusal
+is tested with a switch only debug builds read, which can only make setup refuse: the
 runner's own processes are all elevated, so no unelevated token of the same user is at
-hand. The record, the drift check, the read-deny plan and its reconciliation, the
-account's name and the command line's limit are unit tests that run on every system.
+hand. The record and its `wfp` part, the drift check of the account and of the filters,
+the filter plan, the port range and the proxy's port, the read-deny plan and its
+reconciliation, the account's name, the command line's limit and the scores (70 without
+the filters, 100 with them and the `dns` downgrade) are unit tests that run on every
+system.
 
-### 5. Built in this change (step 1)
+### 5. Built in
 
-Setup, status, remove and runs as the account (writes and reads); the record's `wfp` is
-`null`, the network mode stays `proxy_variables` with its downgrade, and `wfp_network` is
-named as not built.
+- **Step 1** (#864): setup, status, remove and runs as the account (writes and reads); the
+  record's `wfp` is `null`, the network mode stays `proxy_variables` with its downgrade.
+- **Step 2** (#865): the provider, the sublayer and the eight filters, installed by setup
+  (or added by it over a record of step 1), read back by `status` and every run, deleted
+  by `remove`; the proxy on the recorded range; the network mode `wfp_account` with its
+  `dns` downgrade; `wfp_network` in the score once confirmed. The Win32 calls are in
+  `commands/run/windows/account/filters.rs`, what they install and compare in the pure
+  `agent_account/wfp.rs`.
 
 ## Consequences
 

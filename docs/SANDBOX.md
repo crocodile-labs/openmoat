@@ -373,8 +373,9 @@ leaves `sandbox.json` alone and `openmoat status` reports Cursor as `hook only`.
 On Linux `openmoat run` starts the Isolated tier (below) by default where bubblewrap
 works, and the Lightweight tier otherwise (ADR-080). macOS has the Lightweight tier only.
 Windows has a preview tier that holds writes and the process tree only
-([below](#openmoat-run-on-windows-preview-writes-only), ADR-115), and reads too once
-`openmoat agent-account setup` made the agent an account of its own (ADR-129).
+([below](#openmoat-run-on-windows-preview-writes-only), ADR-115), and reads and the
+network too once `openmoat agent-account setup` made the agent an account of its own
+(ADR-129).
 
 | Linux, `openmoat run` … | bubblewrap works | bubblewrap missing or blocked |
 |---|---|---|
@@ -466,8 +467,11 @@ proxy's address alone) and Mach services in one. On Windows (ADR-115) the weight
 `restricted_token` 45, `job_object` 10, `wfp_network` 30 and `windows_read_deny` 15. A run
 under the token scores at most 55. A run as the agent account (ADR-129) counts
 `agent_account` in the token's place and `windows_read_deny` once its launch check
-confirmed the account, so it scores at most 70; `wfp_network` is not built yet, so
-`sandbox.strict: true` still refuses every Windows run. A score compares runs on one system,
+confirmed the account, and `wfp_network` once its network filters were read back as
+setup recorded them: 100, with the name lookups that leave through Windows' resolver
+named as a `dns` downgrade beside the number (downgrades are named, not subtracted), so
+`sandbox.strict: true` and `require.run: full-boundary` accept it. Without the filters
+(an earlier setup, or a terminal that cannot read them back) it scores 70. A score compares runs on one system,
 not systems. The hook alone scores 0: an allowed call runs with your permissions. The
 microVM tier (design, ADR-128) has a table of its own: `vm_hypervisor` 35,
 `vm_proxy_network` 25, `vm_project_only` 20, `vm_guard_relay` 10 and `vm_image_pinned`
@@ -962,7 +966,7 @@ under a write-restricted token. That token is checked on writes only, so it cann
 a read without denying the person too. Both need the agent to run as an account that is
 not the person's: the agent account below.
 
-### As the agent account: reads held too (preview, ADR-129)
+### As the agent account: reads and the network held too (preview, ADR-129)
 
 `openmoat agent-account setup`, run once from an administrator terminal, makes a local
 account `openmoat-<you>` for agents. After that every `openmoat run` starts the agent as
@@ -972,7 +976,7 @@ the system as setup left it (otherwise the run warns and uses the token).
 ```powershell
 openmoat agent-account setup                      # administrator terminal, once
 openmoat run -- claude                            # any terminal: the agent runs as openmoat-<you>
-openmoat run --print-boundary -- claude           # agent_account and windows_read_deny in force: 70/100
+openmoat run --print-boundary -- claude           # agent_account, wfp_network, windows_read_deny: 100/100, network wfp_account
 openmoat agent-account status                     # exit 1 when the system differs from the record
 openmoat agent-account remove                     # administrator terminal: undoes all of it
 ```
@@ -983,15 +987,20 @@ openmoat agent-account remove                     # administrator terminal: undo
 | Your profile | one inherited entry lets the account read and run in it; Windows hands it to every file below once, which takes a while in a large profile. `~/.moat` keeps its own list of you and `SYSTEM` (ADR-083), so the account cannot read it |
 | Writes | the account gets one inherited write entry on the project, the run's temp directory and `--write` paths, and deny entries on the places the token holds (`.git`, `.moat`, …); everything else in your profile is read-only to it. Outside the profile the system's own lists apply, as for any standard user |
 | Reads | each read deny of the policy that names one place in your profile or a write root that exists when the run starts (`~/.ssh`, `~/.aws`, other agents' logins) gets a deny entry for the account, so Windows refuses the read. The running agent's own login is left out. Globs, places made later and places outside your profile stay the hook's; the run's report names them. Each run takes out the denies the last one set that it does not need |
-| Network | as under the token: the proxy variables only (`proxy_variables`). The Windows Filtering Platform filters for the account are the next step of ADR-129 |
+| Network | **held by Windows Filtering Platform filters** that setup installs for the account: a persistent OpenMoat provider and sublayer, and at the connect, listen and receive-accept layers (IPv4 and IPv6) a block whose user condition names the account, so every connection and listen of its processes is refused, whether or not a program honours `HTTP_PROXY`. A permit of higher weight lets it reach `127.0.0.1` and `::1` on a range of eight ports setup chooses and records; the run's proxy listens on the first free one and checks it holds that port itself. The record says `wfp_account`. `openmoat run --listen` stays refused |
+| Name lookups | **not held**: they go through Windows' DNS Client service, which resolves under its own account, so a lookup the agent asks for leaves the machine (as `mDNSResponder` does for the macOS profile). The record names it as a `dns` downgrade |
+| An earlier setup without filters | `openmoat agent-account status` says so; `openmoat agent-account setup` again, from an administrator terminal, adds them. Until then the network is held as under the token (`proxy_variables`) and the run scores 70 |
 | Git | the project's files are yours, so the run adds `safe.directory` for the project through `GIT_CONFIG_*` |
 | Hooks | a hook the agent starts runs as the account and cannot open the lock for writing; the guard relays its call to the run when its token's user is a SID setup registered under `HKLM\SOFTWARE\OpenMoat`, where only an administrator can write |
 | Start | `CreateProcessWithLogonW` (the Secondary Logon service) starts the agent suspended with the account's profile; it is put in the run's job, and its token's user and its job are read back before it runs. The command line may be at most 1024 characters |
 
 Files the agent creates are owned by the account; you keep full access through the
-project's own entries. `openmoat agent-account remove` takes out every entry the record
-names, the sign-in and relay values, the logon rights, the account's profile and the
-account. It is a preview: no real agent has run under it yet.
+project's own entries. Another local user's programs listening on the permitted ports
+are reachable to the account; the range is outside the ports common servers use.
+`openmoat agent-account remove` deletes the filters, the sublayer and the provider, every
+entry the record names, the sign-in and relay values, the logon rights, the account's
+profile and the account; `netsh wfp show filters` lists the filters while they are there.
+It is a preview: no real agent has run under it yet.
 
 ## `openmoat run --isolate` (Isolated tier, Linux)
 
@@ -1121,7 +1130,7 @@ processes bind and accept on that one port, on loopback only (ADR-108 §7):
 | macOS | refused: Seatbelt's `localhost:PORT` filter lets a bind to every address (`0.0.0.0`) on the port through too, so the port could be reachable from the network; no other filter form excludes that address, and sockets `openmoat run` could hold on it would end with the run while a process the agent left behind keeps its sandbox ([ADR-122](adr/ADR-122-macos-listen-stays-refused.md)); the way forward is the macOS Isolated tier (ADR-023) |
 | Linux, Isolated tier or Lightweight with bubblewrap | Landlock grants a bind to that port alone, inside the agent's own network namespace whose only interface is loopback; `openmoat run` listens on this machine's `127.0.0.1:PORT` and forwards each connection in through a Unix socket only `moat isolated` can use |
 | Linux without a network namespace | refused: Landlock restricts a bind by port only, on every address, so the port would be open to the network |
-| Windows | refused: the tier holds the network by the proxy variables alone |
+| Windows | refused: under the token the tier holds the network by the proxy variables alone, and the agent account's filters refuse every listen |
 
 `openmoat status` finds the port as OpenClaw does and prints the command; with
 `OPENCLAW_PROFILE` set and no port named, it offers none and says why. Started with no
