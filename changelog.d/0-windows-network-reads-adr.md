@@ -1,2 +1,0 @@
-### Changed
-- docs/SANDBOX.md and ADR-124 say why Windows `openmoat run` holds neither the network nor reads yet: adding a Windows Filtering Platform filter needs administrator rights, no documented filter condition picks out one run's processes, and the write-restricted token is checked on writes only. The protection score stays at most 55 on Windows; the next step is an opt-in setup, done once by an administrator, that starts the agent as a dedicated local account ([#0](https://github.com/crocodile-labs/openmoat/pull/0)).

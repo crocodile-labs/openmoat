@@ -347,11 +347,12 @@ fn a_list_that_gained_an_entry_is_one_broadening_not_a_removal() {
             .contains(&"`kernel-self`: 15 patterns now also cover `team`".to_owned()),
         "{shown}"
     );
-    // The two `team join|update|leave` lines are new, not broadenings.
+    // The two `team join|update|leave` lines and the two for remote MCP
+    // tokens (`~/.moat/mcp-remote/`) are new, not broadenings.
     assert!(
         summary
             .protections
-            .contains(&"`kernel-self` now also denies 2 patterns".to_owned()),
+            .contains(&"`kernel-self` now also denies 4 patterns".to_owned()),
         "{shown}"
     );
 }
