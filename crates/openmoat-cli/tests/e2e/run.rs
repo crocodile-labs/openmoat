@@ -26,6 +26,8 @@ mod network;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod repo_net;
 
+/// `openmoat agent-account` refused off Windows and unelevated (ADR-129).
+mod agent_account;
 /// An agent's own configuration in the project stays out of commands' reach.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod agent_config;
