@@ -353,7 +353,7 @@ machine type each time, put the median per hook call at 32 ms for 0.19.0 and 64 
 being measured. The review and deny rates are 2.39 reviews and 0 denies per 100 ordinary
 calls, as on 0.27.0.
 
-The proof report of 0.27.0 on the same machine (`openmoat bench --report`, all
+The proof report of the same release on the same machine (`openmoat bench --report`, all
 14 hosts' models): 12 rows pass, 0 fail, 5 not tested here.
 
 | Promise | Policy decision | Host model | OS sandbox | Network boundary |
