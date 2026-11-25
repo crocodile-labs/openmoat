@@ -1,5 +1,6 @@
 //! Command dispatch.
 
+mod agent_account;
 mod allow;
 mod allowed;
 mod approvals;
@@ -42,9 +43,9 @@ mod why;
 use anyhow::Result;
 
 use crate::cli::{
-    ApprovalsCommand, AuditCommand, CaCommand, Cli, Command, DeliverCommand, GateCommand,
-    HooksCommand, McpCommand, PolicyCommand, ProxyCommand, SandboxCommand, SecretCommand,
-    TeamCommand,
+    AgentAccountCommand, ApprovalsCommand, AuditCommand, CaCommand, Cli, Command, DeliverCommand,
+    GateCommand, HooksCommand, McpCommand, PolicyCommand, ProxyCommand, SandboxCommand,
+    SecretCommand, TeamCommand,
 };
 use crate::exit::Code;
 
@@ -163,6 +164,11 @@ pub fn run(cli: Cli) -> Result<Code> {
             TeamCommand::Leave => team_mode::leave(),
         },
         Command::Inventory(args) => inventory::run(&args),
+        Command::AgentAccount { command } => match command {
+            AgentAccountCommand::Setup => agent_account::setup(),
+            AgentAccountCommand::Status => agent_account::status(),
+            AgentAccountCommand::Remove => agent_account::remove(),
+        },
     }
 }
 
@@ -194,6 +200,13 @@ pub fn run_listen_refused_here(port: u16) -> Option<String> {
 #[cfg(windows)]
 pub fn run_in_restricted_token() -> bool {
     run::windows::in_restricted_token()
+}
+
+/// Whether this process runs as an agent account an administrator set up
+/// (ADR-129), as a Windows run starts the agent and its hooks.
+#[cfg(windows)]
+pub fn run_as_agent_account() -> bool {
+    run::windows::account::current_is_agent_account()
 }
 
 /// The planned protection score of a plain `openmoat run` here (ADR-108 §2);

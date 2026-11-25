@@ -20,8 +20,15 @@
 //!   and its own token and job are read back before it runs a single
 //!   instruction; anything not confirmed stops it.
 //!
-//! There is no Isolated tier here. The Win32 calls are in `windows/win32.rs`,
-//! the one file of this tier with `unsafe`.
+//! Once a person ran `openmoat agent-account setup` (ADR-129), a run whose
+//! account record matches the system starts the agent as that account
+//! instead (`windows/account.rs`): its writes need the account granted,
+//! which it is on the write roots alone, and the places the policy's read
+//! denies name get deny entries for it, so Windows refuses those reads too.
+//! The network is held as above in both.
+//!
+//! There is no Isolated tier here. The Win32 calls are in `windows/win32.rs`
+//! and `windows/account/`, the files of this tier with `unsafe`.
 
 use std::os::windows::ffi::OsStrExt as _;
 use std::os::windows::process::ExitStatusExt as _;
@@ -39,6 +46,8 @@ use crate::exit::Code;
 use crate::sandbox::write_token::{self, Entry, Plan};
 use crate::sandbox::{Grants, Report};
 
+pub mod account;
+mod acl;
 mod win32;
 
 /// Why the network is not the agent's own here: what `--netns=require`, a
@@ -53,11 +62,27 @@ const WARNING: &str = "moat run: Windows preview tier: writes outside the projec
      restricted (the hook decides them) and the network goes through the proxy only for \
      programs that honour HTTP_PROXY";
 
-/// The agent, ready to start under its token.
+/// What the run says before the agent starts as the agent account.
+const ACCOUNT_WARNING: &str = "moat run: Windows preview tier, as the agent account (ADR-129): \
+     writes outside the project, the run's temp directory and --write paths, and the reads the \
+     policy denies in your profile, are refused by Windows; the network goes through the proxy \
+     only for programs that honour HTTP_PROXY (the network filters are the next step)";
+
+/// How the agent starts.
+enum Mode {
+    /// Under the write-restricted token whose SIDs `Plan` grants (ADR-115).
+    Token(Plan),
+    /// As the agent account (ADR-129).
+    Account(&'static account::Active),
+}
+
+/// The agent, ready to start under its token or as the agent account.
 pub struct Confined {
     command: Command,
     report: Report,
-    plan: Plan,
+    mode: Mode,
+    /// The project, which git must take from another account's files.
+    project: Option<String>,
 }
 
 pub fn confine(
@@ -72,9 +97,19 @@ pub fn confine(
     }
     let tmpdir = grants.tmpdir.clone();
     let exists = |path: &str| Path::new(path).exists();
-    let generated = crate::sandbox::write_token_plan(policy, ctx, grants, &exists)?;
-    refuse_state(&generated.plan, &path_string(state))?;
-    apply(&generated.plan)?;
+    let state = path_string(state);
+    let (report, mode) = if let Some(active) = account::active() {
+        let plan =
+            crate::sandbox::account_plan(policy, ctx, grants, &exists, &active.record.profile)?;
+        refuse_state(plan.roots.iter(), &state)?;
+        active.apply(&plan)?;
+        (plan.report, Mode::Account(active))
+    } else {
+        let generated = crate::sandbox::write_token_plan(policy, ctx, grants, &exists)?;
+        refuse_state(generated.plan.roots.iter().map(|(root, _)| root), &state)?;
+        apply(&generated.plan)?;
+        (generated.report, Mode::Token(generated.plan))
+    };
     // `canonicalize` gave a verbatim path (`\\?\C:\…`), which the program
     // would then see as its own name; start it by its plain one.
     let mut command = Command::new(strip_verbatim(&program.to_string_lossy()));
@@ -85,16 +120,17 @@ pub fn confine(
     }
     Ok(Confined {
         command,
-        report: generated.report,
-        plan: generated.plan,
+        report,
+        mode,
+        project: ctx.project.clone(),
     })
 }
 
 /// A write root at or inside OpenMoat's state directory is refused: its
 /// access list holds exactly two entries (ADR-083), and the run would add one.
-fn refuse_state(plan: &Plan, state: &str) -> Result<()> {
+fn refuse_state<'a>(roots: impl Iterator<Item = &'a String>, state: &str) -> Result<()> {
     let state = state.to_lowercase();
-    for (root, _) in &plan.roots {
+    for root in roots {
         let root = root.to_lowercase();
         if root == state || root.starts_with(&format!("{}/", state.trim_end_matches('/'))) {
             bail!(
@@ -131,7 +167,7 @@ fn apply(plan: &Plan) -> Result<()> {
 }
 
 fn set(entry: &Entry) -> Result<()> {
-    win32::add_entry(
+    acl::add_entry(
         &wide(&entry.path.replace('/', "\\"))?,
         &entry.sid,
         (entry.allows, entry.mask, entry.inherit),
@@ -170,6 +206,9 @@ pub const BASE_ENV: &[&str] = &[
     "PATHEXT",
     "Path",
     "USERPROFILE",
+    // Not Windows' own, but git and other ports read it: as the agent
+    // account the agent must still find the person's settings (ADR-129).
+    "HOME",
     "USERNAME",
     "USERDOMAIN",
     "HOMEDRIVE",
@@ -227,20 +266,27 @@ pub const TOOL_SHELL_GAP: Option<&str> =
 /// and the tier holds writes only. `--sandbox` still asks for it.
 pub const MCP_SANDBOX_BY_DEFAULT: bool = false;
 
-/// The restrictions a Windows run plans (ADR-115): the token and the job,
-/// both confirmed on the agent's process before it runs; the network filter
-/// and read denial, which this tier does not have, listed so the score
-/// counts them as missing.
+/// The restrictions a Windows run plans: as the agent account (ADR-129), the
+/// account, the job and the read denies, each confirmed on the agent's
+/// process before it runs; otherwise (ADR-115) the token and the job, with
+/// read denial named as what the account would bring. The network filter is
+/// listed in both so the score counts it as missing.
 pub fn restrictions(
     _isolated: bool,
     _port_only: bool,
     _kernel: Option<&crate::sandbox::landlock::abi::Kernel>,
 ) -> Vec<Restriction> {
+    let as_account = account::active().is_some();
+    let writes = if as_account {
+        Mechanism::AgentAccount
+    } else {
+        Mechanism::RestrictedToken
+    };
     vec![
-        Restriction::planned(Mechanism::RestrictedToken, true, true),
+        Restriction::planned(writes, true, true),
         Restriction::planned(Mechanism::JobObject, true, true),
         Restriction::planned(Mechanism::WfpNetwork, false, false),
-        Restriction::planned(Mechanism::WindowsReadDeny, false, false),
+        Restriction::planned(Mechanism::WindowsReadDeny, as_account, as_account),
     ]
 }
 
@@ -329,11 +375,14 @@ impl Confined {
     /// The tier's warning, which also makes the record name the network as
     /// weaker (`run.rs` reads it as the port-only one).
     #[expect(
-        clippy::unused_self,
-        reason = "the method every platform's `Confined` has; Linux's reads itself"
+        clippy::unnecessary_wraps,
+        reason = "the method every platform's `Confined` has; Linux's may have none"
     )]
     pub fn warning(&self) -> Option<&str> {
-        Some(WARNING)
+        Some(match self.mode {
+            Mode::Token(_) => WARNING,
+            Mode::Account(_) => ACCOUNT_WARNING,
+        })
     }
 
     /// None: the report names what stays open inside the project.
@@ -354,14 +403,20 @@ impl Confined {
         false
     }
 
-    /// Start the agent suspended under the token and in the job, read both
-    /// back from its process, tell `on_launch` (which writes the boundary
-    /// row and refuses what is missing), and only then let it run; wait for
-    /// it, and end every process left in the job.
+    /// Start the agent suspended under the token (or as the agent account)
+    /// and in the job, read both back from its process, tell `on_launch`
+    /// (which writes the boundary row and refuses what is missing), and only
+    /// then let it run; wait for it, and end every process left in the job.
     pub fn status(
-        self,
+        mut self,
         on_launch: impl FnOnce(Option<LaunchCheck>) -> Result<()>,
     ) -> Result<ExitStatus> {
+        if let (Mode::Account(_), Some(project)) = (&self.mode, &self.project) {
+            // The project's files are the person's, and git refuses a
+            // repository another account owns unless it is named safe.
+            let vars = safe_directory(&self.command, project)?;
+            self.command.envs(vars);
+        }
         let program: Vec<u16> = self.command.get_program().encode_wide().collect();
         let args: Vec<Vec<u16>> = self
             .command
@@ -380,15 +435,32 @@ impl Confined {
         let env = command_line::environment_block(inherited, changes)?;
         let mut application = program;
         application.push(0);
-        let token = win32::restricted_token(&self.plan.sids()).context("making the token")?;
         let job = win32::Job::new().context("making the job object")?;
-        let started = win32::start(&token, &job, &application, line, &env)?;
-        let check = LaunchCheck {
-            restricted_token: Some(true),
-            agent_token_restricted: Some(started.token_restricted),
-            job_object: Some(true),
-            agent_in_job: Some(started.in_job),
-            ..LaunchCheck::default()
+        let (started, check) = match &self.mode {
+            Mode::Token(plan) => {
+                let token = win32::restricted_token(&plan.sids()).context("making the token")?;
+                let started = win32::start(&token, &job, &application, line, &env)?;
+                let check = LaunchCheck {
+                    restricted_token: Some(true),
+                    agent_token_restricted: Some(started.token_restricted),
+                    job_object: Some(true),
+                    agent_in_job: Some(started.in_job),
+                    ..LaunchCheck::default()
+                };
+                (started, check)
+            }
+            Mode::Account(active) => {
+                let started = active.start(&job, &application, line, &env)?;
+                let check = LaunchCheck {
+                    agent_account: Some(true),
+                    agent_token_account: Some(started.user_is_account),
+                    job_object: Some(true),
+                    agent_in_job: Some(started.started.in_job),
+                    read_denies: Some(true),
+                    ..LaunchCheck::default()
+                };
+                (started.started, check)
+            }
         };
         if let Err(error) = on_launch(Some(check)) {
             job.terminate();
@@ -400,6 +472,29 @@ impl Confined {
         job.terminate();
         Ok(ExitStatus::from_raw(code?))
     }
+}
+
+/// The `GIT_CONFIG_*` variables that add `safe.directory=<project>` after
+/// those `command` and this process already set (git reads the key only
+/// from protected configuration, which these are).
+fn safe_directory(command: &Command, project: &str) -> Result<Vec<(String, String)>> {
+    let set: Vec<(String, Option<String>)> = command
+        .get_envs()
+        .map(|(name, value)| {
+            (
+                name.to_string_lossy().into_owned(),
+                value.map(|v| v.to_string_lossy().into_owned()),
+            )
+        })
+        .collect();
+    let lookup = |var: &str| match set.iter().find(|(name, _)| name.eq_ignore_ascii_case(var)) {
+        Some((_, value)) => value.clone(),
+        None => std::env::var(var).ok(),
+    };
+    crate::sandbox::git_env::append(
+        &lookup,
+        vec![("safe.directory".to_owned(), project.to_owned())],
+    )
 }
 
 fn units(text: &std::ffi::OsStr) -> Vec<u16> {

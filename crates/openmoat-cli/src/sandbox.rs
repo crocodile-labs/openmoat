@@ -212,6 +212,20 @@ pub fn write_token_plan(
     write_token::generate(&ir, &grants, exists)
 }
 
+/// What a run as the agent account sets on Windows (ADR-129): the write
+/// plan for the account, and the read denies in `profile` and the roots.
+#[cfg(windows)]
+pub fn account_plan(
+    policy: &Policy,
+    ctx: &EvalContext,
+    grants: Grants,
+    exists: &dyn Fn(&str) -> bool,
+    profile: &str,
+) -> anyhow::Result<write_token::account::AccountPlan> {
+    let (ir, grants) = lower_for_session(policy, ctx, grants)?;
+    write_token::account::generate(&ir, &grants, exists, profile)
+}
+
 /// The Landlock rules `moat run` applies on Linux.
 pub fn landlock_rules(
     policy: &Policy,

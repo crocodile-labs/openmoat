@@ -1,7 +1,7 @@
 //! The Win32 calls behind `openmoat run` on Windows (ADR-115): the
 //! write-restricted token, the job object, starting the agent suspended under
-//! both, and the access-list entries for the run's SIDs. The only file of the
-//! Windows tier with `unsafe`: every call here is foreign code. Each handle is
+//! both (the access-list entries are in `acl.rs`, the agent account's calls
+//! in `account/`). Every call here is foreign code. Each handle is
 //! closed by an [`Owned`] guard and each buffer Windows allocates freed by a
 //! [`Local`] guard, on every path out.
 //!
@@ -19,7 +19,6 @@
 //! - `PROC_THREAD_ATTRIBUTE_HANDLE_LIST`, so the agent inherits its three
 //!   standard handles and nothing else this process holds:
 //!   <https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute>.
-//! - `SetEntriesInAclW`: <https://learn.microsoft.com/windows/win32/api/aclapi/nf-aclapi-setentriesinaclw>.
 
 use std::ffi::c_void;
 use std::mem::size_of;
@@ -28,23 +27,16 @@ use std::ptr::{self, addr_of};
 
 use anyhow::{Result, bail};
 use windows_sys::Win32::Foundation::{
-    CloseHandle, DUPLICATE_SAME_ACCESS, DuplicateHandle, ERROR_SUCCESS, GENERIC_ALL, HANDLE,
-    INVALID_HANDLE_VALUE, LocalFree, WAIT_OBJECT_0,
+    CloseHandle, DUPLICATE_SAME_ACCESS, DuplicateHandle, GENERIC_ALL, HANDLE, INVALID_HANDLE_VALUE,
+    LocalFree, WAIT_OBJECT_0,
 };
-use windows_sys::Win32::Security::Authorization::{
-    ConvertSidToStringSidW, ConvertStringSidToSidW, DENY_ACCESS, EXPLICIT_ACCESS_W, GRANT_ACCESS,
-    GetNamedSecurityInfoW, NO_MULTIPLE_TRUSTEE, SE_FILE_OBJECT, SetEntriesInAclW,
-    SetNamedSecurityInfoW, TRUSTEE_IS_SID, TRUSTEE_IS_UNKNOWN, TRUSTEE_W,
-};
+use windows_sys::Win32::Security::Authorization::{ConvertSidToStringSidW, ConvertStringSidToSidW};
 use windows_sys::Win32::Security::{
     ACCESS_ALLOWED_ACE, ACL, ACL_REVISION, AddAccessAllowedAce, CreateRestrictedToken,
-    DACL_SECURITY_INFORMATION, DISABLE_MAX_PRIVILEGE, GetLengthSid, GetSecurityDescriptorControl,
-    GetTokenInformation, InitializeAcl, IsTokenRestricted, NO_INHERITANCE,
-    PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SE_DACL_PROTECTED,
-    SID_AND_ATTRIBUTES, SUB_CONTAINERS_AND_OBJECTS_INHERIT, SetTokenInformation,
-    TOKEN_ADJUST_DEFAULT, TOKEN_ASSIGN_PRIMARY, TOKEN_DEFAULT_DACL, TOKEN_DUPLICATE, TOKEN_GROUPS,
-    TOKEN_INFORMATION_CLASS, TOKEN_QUERY, TOKEN_USER, TokenDefaultDacl, TokenGroups, TokenUser,
-    UNPROTECTED_DACL_SECURITY_INFORMATION, WRITE_RESTRICTED,
+    DISABLE_MAX_PRIVILEGE, GetLengthSid, GetTokenInformation, InitializeAcl, IsTokenRestricted,
+    PSID, SID_AND_ATTRIBUTES, SetTokenInformation, TOKEN_ADJUST_DEFAULT, TOKEN_ASSIGN_PRIMARY,
+    TOKEN_DEFAULT_DACL, TOKEN_DUPLICATE, TOKEN_GROUPS, TOKEN_INFORMATION_CLASS, TOKEN_QUERY,
+    TOKEN_USER, TokenDefaultDacl, TokenGroups, TokenUser, WRITE_RESTRICTED,
 };
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, IsProcessInJob,
@@ -74,7 +66,7 @@ const SYSTEM: &str = "S-1-5-18";
 const SE_GROUP_LOGON_ID: u32 = 0xC000_0000;
 
 /// A handle this process owns, closed when dropped.
-pub struct Owned(HANDLE);
+pub struct Owned(pub(super) HANDLE);
 
 impl Drop for Owned {
     #[expect(unsafe_code, reason = "CloseHandle is foreign code")]
@@ -88,7 +80,7 @@ impl Drop for Owned {
 }
 
 /// A buffer Windows allocated with `LocalAlloc`, freed when dropped.
-struct Local(*mut c_void);
+pub(super) struct Local(pub(super) *mut c_void);
 
 impl Drop for Local {
     #[expect(unsafe_code, reason = "LocalFree is foreign code")]
@@ -101,13 +93,13 @@ impl Drop for Local {
     }
 }
 
-fn last_error() -> std::io::Error {
+pub(super) fn last_error() -> std::io::Error {
     std::io::Error::last_os_error()
 }
 
 /// A SID from its string, freed when the guard drops.
 #[expect(unsafe_code, reason = "ConvertStringSidToSidW is foreign code")]
-fn sid_from(text: &str) -> Result<Local> {
+pub(super) fn sid_from(text: &str) -> Result<Local> {
     let wide: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
     let mut sid: PSID = ptr::null_mut();
     // SAFETY: `wide` is NUL-terminated; `sid` receives a LocalAlloc'd SID.
@@ -119,7 +111,7 @@ fn sid_from(text: &str) -> Result<Local> {
 
 /// `sid` as a string (`S-1-5-21-…`).
 #[expect(unsafe_code, reason = "ConvertSidToStringSidW is foreign code")]
-fn sid_string(sid: PSID) -> Result<String> {
+pub(super) fn sid_string(sid: PSID) -> Result<String> {
     let mut text: *mut u16 = ptr::null_mut();
     // SAFETY: `sid` points at a valid SID that outlives this call; `text`
     // receives a LocalAlloc'd, NUL-terminated string.
@@ -141,7 +133,7 @@ fn sid_string(sid: PSID) -> Result<String> {
 /// `class` of `token`, in a buffer of u64s so that it is aligned for every
 /// structure Windows writes there.
 #[expect(unsafe_code, reason = "GetTokenInformation is foreign code")]
-fn token_info(token: HANDLE, class: TOKEN_INFORMATION_CLASS) -> Result<Vec<u64>> {
+pub(super) fn token_info(token: HANDLE, class: TOKEN_INFORMATION_CLASS) -> Result<Vec<u64>> {
     let mut len: u32 = 0;
     // SAFETY: a size query: no buffer, the size needed is written to `len`.
     unsafe { GetTokenInformation(token, class, ptr::null_mut(), 0, &raw mut len) };
@@ -160,7 +152,7 @@ fn token_info(token: HANDLE, class: TOKEN_INFORMATION_CLASS) -> Result<Vec<u64>>
 
 /// The account of `token`.
 #[expect(unsafe_code, reason = "reading TOKEN_USER that Windows wrote")]
-fn user_sid(token: HANDLE) -> Result<String> {
+pub(super) fn user_sid(token: HANDLE) -> Result<String> {
     let buffer = token_info(token, TokenUser)?;
     // SAFETY: GetTokenInformation wrote a TOKEN_USER at the start of the
     // 8-byte aligned `buffer`; its SID points into `buffer`, alive here.
@@ -328,7 +320,7 @@ pub fn current_token_restricted() -> bool {
 
 /// A job object whose processes all end when its last handle closes, and
 /// from which no process may break away.
-pub struct Job(Owned);
+pub struct Job(pub(super) Owned);
 
 impl Job {
     #[expect(unsafe_code, reason = "job object calls are foreign code")]
@@ -389,7 +381,7 @@ impl Drop for Attributes {
 /// `None` when one is missing or cannot be copied, and the agent then gets
 /// the console's own.
 #[expect(unsafe_code, reason = "DuplicateHandle is foreign code")]
-fn standard_handles() -> Option<[Owned; 3]> {
+pub(super) fn standard_handles() -> Option<[Owned; 3]> {
     let streams = [
         std::io::stdin().as_raw_handle(),
         std::io::stdout().as_raw_handle(),
@@ -403,11 +395,11 @@ fn standard_handles() -> Option<[Owned; 3]> {
         let mut copy: HANDLE = ptr::null_mut();
         // SAFETY: `stream` is a handle of this process (its standard
         // stream); the copy, inheritable, is this process's to close.
-        let copied = unsafe {
+        let duplicated = unsafe {
             let me = GetCurrentProcess();
             DuplicateHandle(me, stream, me, &raw mut copy, 0, 1, DUPLICATE_SAME_ACCESS)
         };
-        if copied == 0 {
+        if duplicated == 0 {
             return None;
         }
         copies.push(Owned(copy));
@@ -457,12 +449,39 @@ fn handle_list(handles: &[HANDLE]) -> Result<Attributes> {
 
 /// The agent, created suspended in the job: nothing of it has run yet.
 pub struct Started {
-    process: Owned,
-    thread: Owned,
+    pub(super) process: Owned,
+    pub(super) thread: Owned,
     /// The agent's own token, read back, is restricted.
     pub token_restricted: bool,
     /// The agent's process, read back, is in the job.
     pub in_job: bool,
+}
+
+/// Put the suspended `process` (with its first `thread`) in `job` and read
+/// its membership back; a process that cannot be put in the job is ended
+/// before it runs.
+#[expect(unsafe_code, reason = "job object calls are foreign code")]
+pub(super) fn contain(job: &Job, process: Owned, thread: Owned) -> Result<Started> {
+    let started = Started {
+        process,
+        thread,
+        token_restricted: false,
+        in_job: false,
+    };
+    // SAFETY: both handles are open; the process has not run.
+    if unsafe { AssignProcessToJobObject(job.0.0, started.process.0) } == 0 {
+        let error = last_error();
+        // SAFETY: the process handle is open, with every right.
+        unsafe { TerminateProcess(started.process.0, 1) };
+        bail!("putting the agent in its job object: {error}");
+    }
+    let mut in_job = 0;
+    // SAFETY: both handles are open; `in_job` receives the answer.
+    let asked = unsafe { IsProcessInJob(started.process.0, job.0.0, &raw mut in_job) };
+    Ok(Started {
+        in_job: asked != 0 && in_job != 0,
+        ..started
+    })
 }
 
 /// Create `application` with command line `line` and environment block
@@ -526,25 +545,9 @@ pub fn start(
     if created == 0 {
         bail!("starting the agent under its token: {}", last_error());
     }
-    let started = Started {
-        process: Owned(process.hProcess),
-        thread: Owned(process.hThread),
-        token_restricted: false,
-        in_job: false,
-    };
-    // SAFETY: both handles are open; the process has not run.
-    if unsafe { AssignProcessToJobObject(job.0.0, started.process.0) } == 0 {
-        let error = last_error();
-        // SAFETY: the process handle is open, with every right.
-        unsafe { TerminateProcess(started.process.0, 1) };
-        bail!("putting the agent in its job object: {error}");
-    }
-    let mut in_job = 0;
-    // SAFETY: both handles are open; `in_job` receives the answer.
-    let asked = unsafe { IsProcessInJob(started.process.0, job.0.0, &raw mut in_job) };
+    let started = contain(job, Owned(process.hProcess), Owned(process.hThread))?;
     Ok(Started {
         token_restricted: token_restricted(started.process.0),
-        in_job: asked != 0 && in_job != 0,
         ..started
     })
 }
@@ -574,90 +577,4 @@ impl Started {
         }
         Ok(code)
     }
-}
-
-/// Add one entry for `sid` to the access list of `path` (NUL-terminated
-/// UTF-16): `allows` or denies `mask`, handed to everything below when
-/// `inherit`. The list keeps every entry it had, and whether it inherits
-/// from its folder.
-#[expect(unsafe_code, reason = "access list calls are foreign code")]
-pub fn add_entry(
-    path: &[u16],
-    sid: &str,
-    (allows, mask, inherit): (bool, u32, bool),
-) -> Result<()> {
-    let sid = sid_from(sid)?;
-    let mut dacl: *mut ACL = ptr::null_mut();
-    let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
-    // SAFETY: `path` is NUL-terminated; `dacl` points into the LocalAlloc'd
-    // descriptor, which `_descriptor` frees after the last use of `dacl`.
-    let status = unsafe {
-        GetNamedSecurityInfoW(
-            path.as_ptr(),
-            SE_FILE_OBJECT,
-            DACL_SECURITY_INFORMATION,
-            ptr::null_mut(),
-            ptr::null_mut(),
-            &raw mut dacl,
-            ptr::null_mut(),
-            &raw mut descriptor,
-        )
-    };
-    if status != ERROR_SUCCESS {
-        bail!("reading the access list: Windows error {status}");
-    }
-    let _descriptor = Local(descriptor);
-    let mut control: u16 = 0;
-    let mut revision: u32 = 0;
-    // SAFETY: `descriptor` is the valid descriptor returned above.
-    if unsafe { GetSecurityDescriptorControl(descriptor, &raw mut control, &raw mut revision) } == 0
-    {
-        bail!("reading the access list's flags: {}", last_error());
-    }
-    let access = EXPLICIT_ACCESS_W {
-        grfAccessPermissions: mask,
-        grfAccessMode: if allows { GRANT_ACCESS } else { DENY_ACCESS },
-        grfInheritance: if inherit {
-            SUB_CONTAINERS_AND_OBJECTS_INHERIT
-        } else {
-            NO_INHERITANCE
-        },
-        Trustee: TRUSTEE_W {
-            pMultipleTrustee: ptr::null_mut(),
-            MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
-            TrusteeForm: TRUSTEE_IS_SID,
-            TrusteeType: TRUSTEE_IS_UNKNOWN,
-            ptstrName: sid.0.cast(),
-        },
-    };
-    let mut merged: *mut ACL = ptr::null_mut();
-    // SAFETY: one entry, whose SID lives in `sid`; `dacl` is the current list
-    // (or null); `merged` receives a LocalAlloc'd list.
-    let status = unsafe { SetEntriesInAclW(1, &raw const access, dacl, &raw mut merged) };
-    if status != ERROR_SUCCESS {
-        bail!("adding the entry: Windows error {status}");
-    }
-    let _merged = Local(merged.cast());
-    let protection = if control & SE_DACL_PROTECTED == 0 {
-        UNPROTECTED_DACL_SECURITY_INFORMATION
-    } else {
-        PROTECTED_DACL_SECURITY_INFORMATION
-    };
-    // SAFETY: `path` is NUL-terminated and `merged` a valid ACL that
-    // outlives the call; no owner, group or SACL is set.
-    let status = unsafe {
-        SetNamedSecurityInfoW(
-            path.as_ptr(),
-            SE_FILE_OBJECT,
-            DACL_SECURITY_INFORMATION | protection,
-            ptr::null_mut(),
-            ptr::null_mut(),
-            merged,
-            ptr::null(),
-        )
-    };
-    if status != ERROR_SUCCESS {
-        bail!("setting the access list: Windows error {status}");
-    }
-    Ok(())
 }

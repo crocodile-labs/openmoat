@@ -68,6 +68,9 @@ const SID_PREFIX: &str = "S-1-5-21";
 /// The allowance id for the denies the token cannot hold.
 pub const UNHELD: &str = "windows.hook-only";
 
+/// The allowance id for the read denies the operating system does not hold.
+pub const READS: &str = "windows.reads";
+
 /// One access-list entry to set.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
@@ -212,9 +215,9 @@ pub fn generate(
         .collect();
     if !reads.is_empty() {
         let message = "a write-restricted token does not restrict reads: every read the policy \
-                       denies is open to the agent's commands, and the hook alone decides it";
-        g.report
-            .allowance(Kind::FsRead, "windows.reads", reads, message);
+                       denies is open to the agent's commands, and the hook alone decides it; \
+                       `openmoat agent-account setup` makes Windows refuse them (ADR-129)";
+        g.report.allowance(Kind::FsRead, READS, reads, message);
     }
     let message = "no Windows Filtering Platform filter: the proxy variables send programs \
                    through OpenMoat's proxy, and a program that ignores them connects directly";
@@ -378,6 +381,9 @@ pub fn needs_change(aces: &[RawAce], entry: &Entry) -> bool {
             && (!entry.inherit || ace.flags & INHERIT == INHERIT)
     })
 }
+
+/// The same plan for the agent account (ADR-129), and its read denies.
+pub mod account;
 
 #[cfg(test)]
 mod tests;

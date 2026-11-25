@@ -4,6 +4,17 @@
 //! by `openmoat-core`. Exit codes are a stable contract used by host hooks:
 //! see [`exit::Code`].
 
+/// The agent account of `openmoat run` on Windows (ADR-129); its pure parts
+/// are tested on every system.
+#[cfg(any(windows, test))]
+#[cfg_attr(
+    not(windows),
+    expect(
+        dead_code,
+        reason = "the Windows tier uses all of it; tests elsewhere only its pure parts"
+    )
+)]
+mod agent_account;
 mod anchor;
 mod approvals;
 mod arguments;

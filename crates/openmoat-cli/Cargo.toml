@@ -67,13 +67,22 @@ libc.workspace = true
 # PowerShell, whose start-up cost seconds per `init` (ADR-083,
 # `state_acl/windows/win32.rs`); and `openmoat run`'s write-restricted token
 # and job object, which std cannot start a process under (ADR-115,
-# `commands/run/windows/win32.rs`).
+# `commands/run/windows/win32.rs`); and the agent account of ADR-129
+# (`commands/run/windows/account/`): the account and its groups
+# (NetManagement), its logon rights (the LSA, Authentication_Identity), its
+# password encrypted with DPAPI (Cryptography), its place off the sign-in
+# screen (Registry) and its profile's removal (`DeleteProfileW`, UI_Shell).
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
+    "Win32_NetworkManagement_NetManagement",
     "Win32_Security",
+    "Win32_Security_Authentication_Identity",
     "Win32_Security_Authorization",
+    "Win32_Security_Cryptography",
     "Win32_System_JobObjects",
+    "Win32_System_Registry",
     "Win32_System_Threading",
+    "Win32_UI_Shell",
 ] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

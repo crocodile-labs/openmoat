@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use openmoat_hosts::Host;
 
+mod agent_account;
 mod approvals;
 mod audit;
 mod credential;
@@ -17,6 +18,7 @@ mod team;
 
 mod timeline;
 
+pub use agent_account::AgentAccountCommand;
 pub use approvals::{
     ApprovalsCommand, ApprovalsStatusArgs, ApproverArgs, ConnectArgs, ListenArgs, WaitArgs,
 };
@@ -229,6 +231,14 @@ Guide: docs/USAGE.md, \"Ask for a code before anything is loosened\".")]
     Gate {
         #[command(subcommand)]
         command: GateCommand,
+    },
+    /// Windows: a local account of its own that `openmoat run` starts the agent as, so
+    /// Windows refuses its reads of the places the policy denies as well as its writes
+    /// outside the project (ADR-129, a preview). Set up once from an administrator terminal.
+    #[command(after_help = agent_account::HELP)]
+    AgentAccount {
+        #[command(subcommand)]
+        command: AgentAccountCommand,
     },
 }
 
