@@ -269,7 +269,7 @@ and [docs/SANDBOX.md](docs/SANDBOX.md).
 
 ## Proof
 
-**Our own scenarios (MoatBench, OpenMoat 0.27.0, macOS 12).** `openmoat bench` sends each
+**Our own scenarios (MoatBench, OpenMoat 0.28.0, macOS 12, the same totals as 0.27.0).** `openmoat bench` sends each
 scenario as each of the 14 agents' hook payloads:
 
 | | Runs | Denied | Held for review | Left to OS sandbox | Left to agent's prompt | Allowed |
@@ -277,7 +277,7 @@ scenario as each of the 14 agents' hook payloads:
 | Attacks | 762 | 538 | 155 | 9 | 60 | 0 |
 | Normal developer work | 844 steps | 0 | 26 (all expected) | – | – | the rest |
 
-0 false positives, 0 mismatches. The proof report on the same machine: 12 pass, 0 fail,
+0 false positives, 0 mismatches. The proof report on the same machine (0.27.0): 12 pass, 0 fail,
 5 not tested there (4 need `openmoat run` on macOS 13 or later, 1 needs the real agent).
 The scenarios were written by OpenMoat's authors, so this shows that the policy and the
 benchmark agree, not that OpenMoat is complete ([docs/MOATBENCH.md](docs/MOATBENCH.md)).

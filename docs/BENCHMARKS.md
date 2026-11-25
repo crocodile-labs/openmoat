@@ -507,7 +507,7 @@ hosts' models, no host program run): 12 checks pass, 0 fail, 5 not tested here. 
 sandbox rows (reading `~/.ssh/id_rsa`, a build script reading an agent's login, turning
 OpenMoat off, a tool reading the relay token) need `openmoat run`, which needs macOS 13 or
 later; the fifth is the real host's behaviour when its hook fails, which the report never
-runs. The table per promise is in [MOATBENCH.md](MOATBENCH.md#scorecard-openmoat-0270-fourteen-agents).
+runs. The table per promise is in [MOATBENCH.md](MOATBENCH.md#scorecard-fourteen-agents).
 
 The `moatbench` end-to-end test runs `openmoat
 bench` in CI's `test` job on every change and fails on any mismatch or false positive, so
