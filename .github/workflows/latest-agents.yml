@@ -165,7 +165,7 @@ jobs:
 
   report:
     name: report
-    needs: agent
+    needs: [plan, agent]
     if: always() && needs.agent.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -184,6 +184,7 @@ jobs:
           RESULTS: ${{ runner.temp }}/results
           ON_MAIN: ${{ github.ref == 'refs/heads/main' }}
           AGENT_RESULT: ${{ needs.agent.result }}
+          MATRIX: ${{ needs.plan.outputs.matrix }}
         run: |
           shopt -s nullglob
           results=("$RESULTS"/*/result.json)
@@ -198,6 +199,21 @@ jobs:
             echo
             echo "A version newer than the checked one is reported, not failed: read that release's changes."
           } >> "$GITHUB_STEP_SUMMARY"
+          # An agent whose every planned runner passed on main closes the issue this job
+          # opened for it; a runner that was cancelled wrote no result, so it proves nothing.
+          if [ "$ON_MAIN" = true ]; then
+            gh issue list --repo "$REPO" --state open --limit 200 --search 'in:title "breaks OpenMoat"' \
+              --json number,title > "$RUNNER_TEMP/open-pass.json"
+            for agent in $(jq -r '[.include[].agent] | unique[]' <<<"$MATRIX"); do
+              want=$(jq --arg a "$agent" '[.include[] | select(.agent == $a)] | length' <<<"$MATRIX")
+              got=$(jq -s --arg a "$agent" '[.[] | select(.agent == $a and .outcome == "passed")] | length' "${results[@]}" /dev/null)
+              [ "$got" -eq "$want" ] || continue
+              number=$(jq -r --arg a "$agent" '[.[] | select(.title | startswith("latest " + $a + " ")) | select(.title | endswith(" breaks OpenMoat"))] | first | .number // empty' "$RUNNER_TEMP/open-pass.json")
+              [ -n "$number" ] || continue
+              gh issue close "$number" --repo "$REPO" --comment "Every runner of \`$agent\` passed in $RUN_URL on main."
+              echo "closed #$number: $agent passes"
+            done
+          fi
           failed=$(jq -s -r '[.[] | select(.outcome == "failed") | .agent] | unique | .[]' "${results[@]}" /dev/null)
           if [ -z "$failed" ]; then
             if [ "$AGENT_RESULT" != success ]; then

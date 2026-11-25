@@ -282,8 +282,8 @@ scenario as each of the 14 agents' hook payloads:
 The scenarios were written by OpenMoat's authors, so this shows that the policy and the
 benchmark agree, not that OpenMoat is complete ([docs/MOATBENCH.md](docs/MOATBENCH.md)).
 The [MoatBench repository](https://github.com/crocodile-labs/moatbench), which anyone can
-re-run, last published OpenMoat 0.19.0
-([results](https://github.com/crocodile-labs/moatbench/tree/main/runs/2026-11-09-openmoat-0.19.0)).
+re-run, last published OpenMoat 0.28.0: 43 of 45 attacks stopped, 0 of 84 ordinary steps blocked
+([results](https://github.com/crocodile-labs/moatbench/tree/main/runs/2026-11-25-openmoat-0.28.0)).
 
 **Attack sets written by others (decision engine, default policy).** 0.25.0 → 0.26.0
 (the rules this measurement led to, ADR-112) → 0.27.0 → 0.28.0 (ADR-123:

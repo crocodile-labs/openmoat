@@ -24,7 +24,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: crocodile-labs/openmoat@1dd88d81246a60ffa318f619375628128d5b7ece # v0.23.0
+      - uses: crocodile-labs/openmoat@bc13e29f91b82a1f4197f5966516f185b51dc1f2 # v0.28.0
         with:
-          version: 0.23.0
+          version: 0.28.0
           fail-on: deny
