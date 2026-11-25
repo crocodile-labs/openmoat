@@ -39,8 +39,8 @@ Then run `openmoat init` ([below](#set-up-with-openmoat-init)).
 > **Windows.** On Windows, OpenMoat applies the policy through the agents' hooks. It
 > sets up no OS sandbox for Claude Code or Cursor (Codex's own sandbox settings are
 > written as on other systems), `openmoat run` starts a preview tier that refuses writes
-> outside the project and ends the agent's processes but holds neither reads nor the
-> network ([SANDBOX.md](SANDBOX.md#openmoat-run-on-windows-preview-writes-only)), and `openmoat proxy` cannot
+> outside the project and ends the agent's processes, and holds reads and the network too
+> once `openmoat agent-account setup` has run (a preview; [SANDBOX.md](SANDBOX.md#openmoat-run-on-windows-preview)), and `openmoat proxy` cannot
 > be installed as a service. `openmoat init` gives the state directory an access list of
 > your account and `SYSTEM` only (on an NTFS drive; it refuses a folder another account
 > owns), which keeps other accounts out but not the agent, which runs as you: the hook's
@@ -593,7 +593,7 @@ What you will see, and what to run:
   `require.run: full-boundary` still refuse there. Start the agent's `.exe`, not an npm
   `.cmd` shim, which is refused. The first run in a folder adds one access-list entry for
   a SID no account has (`icacls <folder>` lists it) and keeps it, so later runs change
-  nothing ([SANDBOX.md](SANDBOX.md#openmoat-run-on-windows-preview-writes-only)).
+  nothing ([SANDBOX.md](SANDBOX.md#openmoat-run-on-windows-preview)).
 - **Wrapped MCP servers' sampling requests are refused** unless the policy sets
   `mcp: { allow_sampling: true }`, and a link a server asks you to open must be `https`
   to a host the policy allows (`openmoat allow --site <host>` for a server's own sign-in

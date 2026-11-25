@@ -1,2 +1,4 @@
 ### Changed
 - The authenticator-code gate's docs, `openmoat gate --help` and `openmoat gate setup` no longer assume the app is on a phone, and say what to do when the app no longer has OpenMoat's entry: delete `~/.moat/audit.key.gate` and `~/.moat/gate.json` in your own terminal, which turns the gate off, then set it up again; a wrong code's refusal points there ([#867](https://github.com/crocodile-labs/openmoat/pull/867)).
+- The docs and the commands' messages say "readable by your account alone" where they said "owner-only" ([#867](https://github.com/crocodile-labs/openmoat/pull/867)).
+- SANDBOX.md, INSTALL.md, USAGE.md and PROTECTION.md no longer say Windows `openmoat run` holds writes only without naming the agent account, which holds reads and the network too; LIMITS.md says the MCP flow check also reads remote servers added with `openmoat mcp login` ([#867](https://github.com/crocodile-labs/openmoat/pull/867)).

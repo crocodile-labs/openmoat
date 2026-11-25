@@ -97,7 +97,7 @@ Each agent's gaps and the reasons are in
   tree takes a while once. A run under the token scores at most 55/100, so
   `require.run: full-boundary` and `sandbox.strict: true` refuse there. No real agent has
   been run under it yet: the tests start `cmd.exe`
-  ([SANDBOX.md](SANDBOX.md#openmoat-run-on-windows-preview-writes-only)).
+  ([SANDBOX.md](SANDBOX.md#openmoat-run-on-windows-preview)).
 - **The Windows agent account holds reads in your profile only, and the network but name
   lookups (preview, ADR-129).** After `openmoat agent-account setup` the agent runs as an
   account of its own: Windows refuses its reads of the literal places the policy denies in
@@ -640,11 +640,12 @@ call.
   `~/.ssh` is not yours. What the container is given of this machine (`--privileged`,
   `-v /:/host`, the Docker socket) is checked by `container-host`; a folder mounted
   some other way is not.
-- **The MCP flow check sees wrapped servers and exact text only.** Results of a server
-  not run through `openmoat mcp wrap` (remote HTTP, plugin or managed servers) are not
-  recorded, and text the agent rewrites, encodes, splits or shortens below eight words
+- **The MCP flow check sees servers that go through the gateway, and exact text only.**
+  Results of a server that runs neither through `openmoat mcp wrap` nor, for a remote
+  HTTP server, through `openmoat mcp login` (plugin or managed servers, or a remote server
+  the agent reaches directly) are not recorded, and text the agent rewrites, encodes, splits or shortens below eight words
   is not found; a tool's own annotations or its name decide whether it writes or sends
-  ([ADR-058](adr/ADR-058-mcp-cross-server-flow.md)).
+  ([ADR-058](adr/ADR-058-mcp-cross-server-flow.md), [ADR-127](adr/ADR-127-remote-mcp-gateway.md)).
 - **The card check is narrow and can misfire.** `card-egress` reads only the text a call
   shows: a number in a file (`curl -d @cards.csv`), encoded or split is not seen. A
   contiguous number counts only in a card's context (a card field's value, or beside a

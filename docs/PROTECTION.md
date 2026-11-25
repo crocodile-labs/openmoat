@@ -19,7 +19,8 @@ claim more than the tests show (ADR-079). `openmoat doctor --verbose` points her
 - **`openmoat run`** is the tier it starts the agent in ([SANDBOX.md](SANDBOX.md)):
   Isolated on Linux where bubblewrap works, Lightweight on macOS, and on Windows a
   write-restricted token in a job object, which holds writes and processes but not reads
-  or the network (ADR-115). **(preview)** means no test starts that agent under it on
+  or the network (ADR-115), or, after `openmoat agent-account setup`, the agent's own
+  account, which holds reads and the network too (ADR-129). **(preview)** means no test starts that agent under it on
   that OS.
 
 <!-- generated:protection-summary -->

@@ -373,7 +373,7 @@ leaves `sandbox.json` alone and `openmoat status` reports Cursor as `hook only`.
 On Linux `openmoat run` starts the Isolated tier (below) by default where bubblewrap
 works, and the Lightweight tier otherwise (ADR-080). macOS has the Lightweight tier only.
 Windows has a preview tier that holds writes and the process tree only
-([below](#openmoat-run-on-windows-preview-writes-only), ADR-115), and reads and the
+([below](#openmoat-run-on-windows-preview), ADR-115), and reads and the
 network too once `openmoat agent-account setup` made the agent an account of its own
 (ADR-129).
 
@@ -919,11 +919,14 @@ openmoat policy lint bad.yaml                         # refused: sandbox.vm.imag
 cd / && rm -rf /tmp/om-vm                             # undo
 ```
 
-## `openmoat run` on Windows (preview: writes only)
+## `openmoat run` on Windows (preview)
 
-On native Windows `openmoat run` starts the program under a **write-restricted token**,
-in a **job object**, with the proxy variables pointing at the run's proxy (ADR-115). It is
-a preview: it holds writes and the process tree, and nothing else.
+On native Windows `openmoat run` starts the program in one of two ways, both previews.
+Until `openmoat agent-account setup` has run, it starts it under a **write-restricted
+token**, in a **job object**, with the proxy variables pointing at the run's proxy
+(ADR-115): that holds writes and the process tree, and nothing else, as this section
+describes. After the setup it starts it as the agent's own account, which holds reads and
+the network too ([As the agent account](#as-the-agent-account-reads-and-the-network-held-too-preview-adr-129), ADR-129).
 
 ```powershell
 openmoat run --write $HOME\.claude -- claude          # the agent's .exe, not an npm .cmd shim
