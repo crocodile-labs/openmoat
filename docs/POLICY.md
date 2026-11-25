@@ -320,7 +320,7 @@ sandbox can broker it too, below).
   ([ADR-043](adr/ADR-043-tls-termination-for-brokered-secrets.md)). `host` must be a DNS
   name. It needs the proxy CA: `openmoat proxy ca init` (person-only, asks first) makes
   one that can sign for the terminated hosts only (X.509 name constraints; names under
-  them included), keeps its key in `~/.moat/proxy-ca/` (owner-only, `kernel-self`) and
+  them included), keeps its key in `~/.moat/proxy-ca/` (readable by your account alone, denied to agents by `kernel-self`) and
   pins both files in the lock. `openmoat run` refuses to start when no pinned CA covers
   every terminated host today, and gives the agent's clients the CA through
   `NODE_EXTRA_CA_CERTS` and a bundle with the system's roots in `SSL_CERT_FILE`,

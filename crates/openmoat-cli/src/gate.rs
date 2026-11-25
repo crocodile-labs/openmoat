@@ -171,7 +171,9 @@ fn take(
             let hint = match refusal {
                 totp::Refusal::Replayed => "wait for the next code and run it again",
                 totp::Refusal::Missing | totp::Refusal::Malformed | totp::Refusal::Wrong => {
-                    "type the six digits your authenticator app shows for OpenMoat now"
+                    "type the six digits your authenticator app shows for OpenMoat now; if the app \
+                     no longer has that entry, docs/USAGE.md \"If you can no longer get a code\" \
+                     says how to turn the gate off"
                 }
             };
             bail!(

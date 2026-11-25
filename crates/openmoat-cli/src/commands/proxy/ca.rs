@@ -69,7 +69,7 @@ pub(in crate::commands) fn make(home: &Home, policy: &Policy, out: &mut Deferred
     )?;
     writeln!(
         out,
-        "  Its key goes to {} (owner-only), which no OpenMoat sandbox lets the agent read,\n  \
+        "  Its key goes to {} (readable by your account alone), which no OpenMoat sandbox lets the agent read,\n  \
          and both files are pinned in the policy lock.",
         key.display()
     )?;

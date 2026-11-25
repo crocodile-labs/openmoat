@@ -50,13 +50,14 @@ Each agent's gaps and the reasons are in
   stops. The end follows the machine's clock: moving the clock forward ends a rule early,
   moving it back makes it last longer by as much, and moving it back to before the rule
   was given ends it.
-- **The gate's code proves a phone, not a person, and only where its secret stays
-  hidden.** With `openmoat gate setup`, a command that loosens the policy also asks for
+- **The gate's code proves that whoever types it holds your authenticator app, not who
+  they are, and only where its secret stays hidden.** With `openmoat gate setup`, a command that loosens the policy also asks for
   a code from your authenticator app (ADR-117). The secret is a file in `~/.moat`,
-  owner-only and denied to agents' own calls; a program running as you outside every
-  hook and sandbox can read it, or delete it and turn the gate off. Lose the phone and
-  you remove the file yourself (`~/.moat/audit.key.gate` and `~/.moat/gate.json`) and
-  set it up again. Approving one held call is not a policy change and asks no code.
+  readable by your account alone and denied to agents' own calls; a program running as
+  you outside every hook and sandbox can read it, or delete it and turn the gate off. If
+  your app no longer has the OpenMoat entry, you delete the two files yourself
+  (`~/.moat/audit.key.gate` and `~/.moat/gate.json`), which turns the gate off, and set it
+  up again ([USAGE.md](USAGE.md#if-you-can-no-longer-get-a-code)). Approving one held call is not a policy change and asks no code.
 
 ## Sandboxes and allowed code
 

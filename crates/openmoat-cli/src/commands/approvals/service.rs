@@ -33,7 +33,7 @@ pub fn install() -> Result<Code> {
     writeln!(
         out,
         "  `openmoat approvals listen` now runs at login, restarts when it fails, and logs \
-         to {} (owner-only).",
+         to {} (readable by your account alone).",
         home.root().join("logs").join("approvals.err.log").display()
     )?;
     writeln!(

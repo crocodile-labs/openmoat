@@ -162,7 +162,7 @@ test`).
 
 ## Files
 
-Everything is under `~/.moat/remote/`, owner-only. The default policy denies agents
+Everything is under `~/.moat/remote/`, readable by your account alone. The default policy denies agents
 reading any of it and writing anywhere under `~/.moat`.
 
 | File | What it holds |
@@ -177,7 +177,7 @@ reading any of it and writing anywhere under `~/.moat`.
 | `listen.lock` | held by the one running listener |
 
 The service's log files are `~/.moat/logs/approvals.out.log` and `approvals.err.log`,
-owner-only. They name approvers, request codes and sessions, never the credential, and
+readable by your account alone. They name approvers, request codes and sessions, never the credential, and
 they grow until you delete them.
 
 ## Limits
@@ -219,7 +219,7 @@ they grow until you delete them.
 | An approval reused for another call | each approval is bound to the digest of the exact call |
 | An approval used twice, or put back from a backup | each one is marked used before the call runs, and a used mark is never removed while its request could be valid |
 | A late answer | each request expires; the listener and the hook both check |
-| The agent reads the bot token or the key | the default policy denies reading `~/.moat/remote`, in the hook and in the agents' sandboxes; the files are owner-only and refused when others may read them |
+| The agent reads the bot token or the key | the default policy denies reading `~/.moat/remote`, in the hook and in the agents' sandboxes; the files are readable by your account alone and refused when others may read them |
 | The agent runs `openmoat approvals allow` | denied by the policy, and refused because an agent started it |
 | The agent edits the approver list | writes are denied, and the list is signed |
 | The agent's command tries to persuade you | OpenMoat writes the message, labels the agent's text, sends it as plain text with no link previews, and redacts secrets in it |
@@ -252,7 +252,7 @@ ADR-078, "Channel architecture". To add one called `example`:
    - `fields`: every value `connect` takes, each a `Field { key, ask, secret, valid }`
      with a strict check. Mark tokens and keys `secret: true`: they are asked at the
      terminal or read with `--credential-file` (when there is one), never taken from
-     `--set`, and stored together in `~/.moat/remote/example/credential`, owner-only.
+     `--set`, and stored together in `~/.moat/remote/example/credential`, readable by your account alone.
      The others (a room, a workspace) go in the channel's signed settings and can be
      given with `--set KEY=VALUE`. Both are checked again on every load;
    - `user_id` and `valid_user`, a strict check of a user id on the channel;

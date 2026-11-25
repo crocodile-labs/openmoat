@@ -35,7 +35,7 @@ pub fn setup() -> Result<Code> {
     writeln!(
         out,
         "Add this account to your authenticator app (any app that takes TOTP codes: SHA-1, \
-         6 digits, 30 seconds).\nOpen the link, or a QR code of it, on your phone:\n\n  {}\n\n\
+         6 digits, 30 seconds), on your phone or another device.\nOpen the link in the app, or a QR code made from it:\n\n  {}\n\n\
          or type the key by hand:\n\n  {}\n\nIt is shown only now: OpenMoat never prints it \
          again. Keep the app's copy; without it, a loosening can no longer be confirmed. Clear \
          your terminal's scrollback after this.",

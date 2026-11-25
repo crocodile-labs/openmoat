@@ -151,7 +151,7 @@ pub fn connect(args: &ConnectArgs) -> Result<Code> {
     let mut out = Deferred::default();
     writeln!(
         out,
-        "connected {} as {account}; its credential is in {} (owner-only)",
+        "connected {} as {account}; its credential is in {} (readable by your account alone)",
         spec.title,
         store.channel(spec).credential_path().display()
     )?;

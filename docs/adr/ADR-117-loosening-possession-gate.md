@@ -130,7 +130,7 @@ keychain entitlement, which `cargo install` builds do not have.
   says the gate is off. An agent that can type arbitrary lines into the person's
   terminal while the person is away is such a process: it can run `cat` there too.
   THREAT_MODEL and LIMITS say so.
-- Losing the phone means losing the factor: the person removes
+- Losing the authenticator app's entry (a lost or reset device) means losing the factor: the person removes
   `~/.moat/audit.key.gate` and `gate.json` by hand in their own terminal, which an
   agent's hook-checked calls cannot do (`kernel-self`), then runs `openmoat gate
   setup` again. That is the recovery path and the limit above at once.

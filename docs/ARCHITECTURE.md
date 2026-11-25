@@ -955,7 +955,7 @@ MAC that matches, and event `after` must still be there with that hash
 the key file, not the database, so someone who can write the database but not the key
 can neither strip the MACs and move the boundary, nor drop the keyed events and
 rewrite those before the key. The file is made like `proxy.key`: 32 random bytes,
-written once and owner-only (`home::write_private_new`, through a temporary
+written once and private to the account (`home::write_private_new`, through a temporary
 `audit.key.<pid>.<nanos>.tmp`), refused when others may read or replace it
 (`key_file::read`, whose advice for this key never says to remove it alone), and denied
 to agents by `kernel-self` (`audit.key*` for reads, so the temporary file and kept old
@@ -974,7 +974,7 @@ the mark says. Making a key in any writer would let whoever can write the databa
 strip the MACs, move the mark, delete the key and have a new one made. Recovery is a
 person's: put the key back, or move the log aside as evidence and run `openmoat init`,
 which starts a new log with a new key and keeps the old one as `audit.key.<ms>.old`
-(owner-only), saying so. A trigger (`events_keyed`) refuses an insert past the mark
+(private to the account), saying so. A trigger (`events_keyed`) refuses an insert past the mark
 without a MAC, so a long-running process of an older build (a standalone `openmoat
 proxy`, an `openmoat mcp proxy`) that opened the log before the upgrade fails closed
 until restarted instead of appending events that read as rewritten. Read-only handles
@@ -995,7 +995,7 @@ data)`, a node as `SHA-256(0x01 || left || right)`. The text is C2SP's `tlog-che
 <base64(key id || signature)>`); the key's name and the origin are
 `openmoat.dev/audit/<first 16 hex of SHA-256(public key)>`, and the verifier key is
 written `<name>+<hex key id>+<base64(0x01 || key)>`. The key is the seed in
-`~/.moat/audit.key.ed25519`, made like the audit key (owner-only, through
+`~/.moat/audit.key.ed25519`, made like the audit key (private to the account, through
 `audit.key.ed25519.<pid>.<nanos>.tmp`, `key_file::read`, `kernel-self`'s `audit.key*`)
 and only by a person's `init`, `audit anchor` or `audit checkpoint`. The guard signs one
 at every 1000th event when the key is there, best effort, from the Merkle frontier (the

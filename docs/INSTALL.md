@@ -178,7 +178,7 @@ never ask and change nothing here (ADR-106).
 
 - **Decoy keys.** Fake keys at names no program loads, beside the files a key hunter
   looks for: `~/.aws/credentials.bak` (only when `~/.aws` exists), `~/.git-credentials.bak`
-  and `~/.npmrc.bak`. Each is created only where nothing is at that name, owner-only; no
+  and `~/.npmrc.bak`. Each is created only where nothing is at that name, readable by your account alone; no
   real file is read, changed or replaced. The keys look like real ones to a scanner and
   carry `OpenMoatDecoy`, so you can tell them apart. No real work touches them: a call
   that reads or changes one, or carries one of their values in a command, a URL, a file it
@@ -668,7 +668,7 @@ Windows has no user service yet (#272): `openmoat proxy install` and `openmoat p
 status` refuse with exit 64 and say to run `openmoat proxy` in a terminal.
 
 The plist/unit holds only `MOAT_HOME` (a path, never a secret) and the
-pinned `openmoat` binary. On Linux the file is written owner-only (`0o600`);
+pinned `openmoat` binary. On Linux the file is written readable by your account alone (`0o600`);
 on macOS the `LaunchAgents` directory already restricts access to the
 user. Token values the policy brokers are read from the user's
 environment at run time by the proxy itself; they never touch the service
@@ -683,7 +683,7 @@ writes for the current binary and state directory. Each difference is a problem,
   `LD_PRELOAD`, `HTTPS_PROXY`), or a systemd `EnvironmentFile=` or `PassEnvironment=`;
 - any other change (another binary, an `ExecStartPre=`, extra arguments), or a file in
   a form it cannot read (a binary plist);
-- a mode that lets others read or write it (anything but owner-only).
+- a mode that lets others read or write it (anything but readable and writable by your account alone).
 
 ```bash
 openmoat doctor   # ✗ service file     ~/.config/systemd/user/moat-proxy.service sets environment the proxy is started with beyond `MOAT_HOME`: LD_PRELOAD; `openmoat proxy install` writes it again

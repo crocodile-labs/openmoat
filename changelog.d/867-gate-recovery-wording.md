@@ -1,0 +1,2 @@
+### Changed
+- The authenticator-code gate's docs, `openmoat gate --help` and `openmoat gate setup` no longer assume the app is on a phone, and say what to do when the app no longer has OpenMoat's entry: delete `~/.moat/audit.key.gate` and `~/.moat/gate.json` in your own terminal, which turns the gate off, then set it up again; a wrong code's refusal points there ([#867](https://github.com/crocodile-labs/openmoat/pull/867)).

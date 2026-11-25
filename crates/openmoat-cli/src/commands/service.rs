@@ -281,7 +281,7 @@ fn prepare_logs(job: &Job) -> Result<()> {
             .open(path)
             .with_context(|| format!("creating {}", path.display()))?;
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
-            .with_context(|| format!("making {} owner-only", path.display()))?;
+            .with_context(|| format!("making {} readable by your account alone", path.display()))?;
     }
     Ok(())
 }

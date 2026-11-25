@@ -385,7 +385,7 @@ nothing that was there before. `openmoat doctor --accept` asks about them too.
 OpenClaw, pi and OpenCode run OpenMoat through a plugin they load, and each starts
 without a plugin it cannot load, running every call unchecked. So the plugin runs
 `openmoat guard --heartbeat --host <id>` as it loads, which records the time in
-`loaded/<id>.json` in the state directory (owner-only; the agent, the time and the
+`loaded/<id>.json` in the state directory (readable by your account alone; the agent, the time and the
 OpenMoat release, nothing else). Under the agent's hook line, `openmoat status` and
 `openmoat doctor` then print one of:
 
@@ -1176,8 +1176,10 @@ the upgrade.
 
 The commands that loosen your protection run only for a person at a terminal, with no
 agent among the programs that started them. A program that gets a line typed into your
-terminal passes that check. Turn on the gate and each of them also asks for a code from
-the authenticator app on your phone (any app that takes TOTP codes):
+terminal passes that check. Turn on the gate and each of them also asks for a six-digit
+code from an authenticator app: any app that shows time-based (TOTP) codes, such as Google
+Authenticator, Microsoft Authenticator, 1Password or Bitwarden, on your phone or on another
+device:
 
 ```bash
 openmoat gate setup    # shows a link and a key once; type the code your app then shows
@@ -1209,8 +1211,8 @@ case it moves toward allow), the account and whether a code was given; refusals 
 openmoat show --session policy-changes
 ```
 
-Try it, in your own terminal (agents are denied these commands), with any authenticator
-app on your phone:
+Try it, in your own terminal (agents are denied these commands), with an authenticator
+app at hand:
 
 ```bash
 openmoat gate setup                         # scan the link or type the key into the app, then type its code
@@ -1220,11 +1222,28 @@ openmoat allow --remove approved-1          # the undo line `allow` printed; tig
 openmoat gate remove                        # asks for a code once more; the gate is off
 ```
 
-The secret is kept in `~/.moat/audit.key.gate`, owner-only and denied to agents like the
-audit key. A program running as you outside every hook and sandbox can still read it
-([LIMITS.md](LIMITS.md#approvals-and-prompts)). If you lose your phone, remove
-`~/.moat/audit.key.gate` and `~/.moat/gate.json` in your own terminal and run
-`openmoat gate setup` again.
+The secret the codes are made from is kept in `~/.moat/audit.key.gate`, readable by your
+account alone and denied to agents like the audit key. A program running as you outside
+every hook and sandbox can still read it ([LIMITS.md](LIMITS.md#approvals-and-prompts)).
+
+#### If you can no longer get a code
+
+The codes come from the OpenMoat entry `openmoat gate setup` added to your authenticator
+app. If that entry is gone (you lost or reset the device the app was on, or deleted the
+entry), no command that asks for a code can run, `openmoat gate remove` included, since it
+asks for one too. Delete the gate's two files yourself, in your own terminal:
+
+```bash
+rm ~/.moat/audit.key.gate ~/.moat/gate.json   # the secret the codes are made from, and the gate's state
+openmoat gate status                          # the gate is off
+openmoat gate setup                           # optional: a new secret, added to your app as a new entry
+```
+
+On Windows the files are in `%USERPROFILE%\.moat\`. Agents cannot do this for you:
+`kernel-self` denies their calls on both files. Until you set the gate up again, loosening
+commands ask for no code, as before the gate, and are still recorded. If an old device
+still shows an OpenMoat entry, remove it from the app: its codes no longer work.
+
 [ADR-117](adr/ADR-117-loosening-possession-gate.md) has the design.
 
 ## Share rules with your team

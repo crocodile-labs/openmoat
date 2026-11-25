@@ -222,11 +222,13 @@ Guide: docs/TEAM.md")]
     /// set up, `allow`, `trust`, `edit`, `doctor --accept` and the other commands that
     /// widen or re-pin ask for a code from your authenticator app as well.
     #[command(after_help = "\
-Try it, with any authenticator app on your phone:
+Try it, with an authenticator app (any that shows time-based codes, on your phone or another device):
   openmoat gate setup                       scan the link or type the key, then type the app's code
   openmoat allow --site example.com         now asks for a code first
   openmoat show --session policy-changes    every change, with whether a code was given
   openmoat gate remove                      asks for a code, then turns it off
+No code any more (the app's OpenMoat entry is gone): delete ~/.moat/audit.key.gate and
+~/.moat/gate.json in your own terminal; the gate is then off.
 Guide: docs/USAGE.md, \"Ask for a code before anything is loosened\".")]
     Gate {
         #[command(subcommand)]

@@ -105,7 +105,7 @@ something OpenMoat claims to stop.
   every hook and sandbox (malware running as the user, or an agent that can type any
   line into the person's terminal while nobody watches), which reads the secret as it
   could the audit key, or removes it and the state directory and runs `openmoat init`
-  afresh. The secret is an owner-only file, not a keychain item or a hardware key:
+  afresh. The secret is a file readable by the person's account alone, not a keychain item or a hardware key:
   Touch ID and FIDO2 are future work. Without enrolment nothing changes, and every
   loosening is still recorded in the audit log's `policy-changes` session.
 
@@ -739,7 +739,7 @@ something OpenMoat claims to stop.
   the audit log the issue must be recorded in first. What it does not stop: Claude Code keeps the credential in the session's environment file
   (`CLAUDE_ENV_FILE`, under `~/.claude/session-env/`) and runs that file's lines before
   each Bash command, by its own account inlining them into the command line it starts.
-  OpenMoat makes the file owner-only, but a process of the same user that can read
+  OpenMoat makes the file readable by the person's account alone, but a process of the same user that can read
   another session's file, or the command lines of its shell, can send as that session.
   A tainted session that does so sends under a clean session's taint. The default
   policy does not deny reading `~/.claude/session-env/` to sandboxed commands, since
@@ -869,7 +869,7 @@ something OpenMoat claims to stop.
   - *A forged upstream.* The proxy verifies the host's certificate against the system's
     roots with the CONNECT host as the name, before any byte of the request is sent.
   - *The CA's key.* `openmoat proxy ca init` is person-only (`kernel-self` denies an
-    agent's run of it, also under the pseudo-terminal wrappers); the key is owner-only in
+    agent's run of it, also under the pseudo-terminal wrappers); the key is readable by the person's account alone in
     `~/.moat/proxy-ca/`, which `kernel-self` denies reading and no sandbox OpenMoat writes
     grants (Seatbelt, Landlock and bubblewrap in `openmoat run`; Claude Code's
     `denyRead`; Codex and Cursor grant named paths only). `openmoat run` refuses to start
@@ -1677,7 +1677,7 @@ something OpenMoat claims to stop.
   write `~/.moat/audit.db` but cannot read the key (a copy of the file, a backup, a
   bundle, a process or sandbox granted the database and not the key) can no longer
   rewrite events and recompute the hashes after them: the MACs stop matching. That is
-  all the key adds. It is a file beside the log, owner-only and denied to agents by
+  all the key adds. It is a file beside the log, readable by the person's account alone and denied to agents by
   `kernel-self` and the sandboxes, not a secret in hardware or the OS keychain, so code
   running as the user outside any sandbox (the user's account, or an allowed command,
   see "Outside the sandboxes") reads it as easily as it writes the log, and can rewrite
