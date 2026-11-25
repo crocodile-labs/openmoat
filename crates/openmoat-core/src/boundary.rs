@@ -126,6 +126,10 @@ pub enum Weaker {
     /// person's own `sandbox.project_top: writable` (ADR-090): `.env`,
     /// `.git/hooks` and `.moat` there are open to commands.
     ProjectTop,
+    /// Name lookups go through the system's resolver, which resolves under
+    /// its own account, so a lookup the agent asks for leaves the machine
+    /// (Windows as the agent account with its network filters, ADR-129).
+    Dns,
 }
 
 /// How the agent's network is held.
@@ -153,6 +157,10 @@ pub enum NetworkMode {
     /// the operating system holds the network, so a program that ignores them
     /// connects directly (Windows, ADR-115).
     ProxyVariables,
+    /// Windows Filtering Platform filters for the agent account refuse every
+    /// connection and listen of its processes but one to loopback on the
+    /// proxy's port range (Windows as the agent account, ADR-129).
+    WfpAccount,
 }
 
 /// The Landlock part of the record (Linux).
@@ -234,9 +242,10 @@ pub enum Mechanism {
     /// else in the person's profile. Stands in for [`Self::RestrictedToken`]
     /// in the score of a run that has it.
     AgentAccount,
-    /// Windows: a Windows Filtering Platform filter holding the network to
-    /// the proxy. Not part of OpenMoat's Windows tier yet (ADR-129's second
-    /// step), so never in force.
+    /// Windows: the Windows Filtering Platform filters that `openmoat
+    /// agent-account setup` installed for the agent account (ADR-129), which
+    /// hold its network to the proxy. Only a run as that account has it, and
+    /// only once the filters were read back as recorded.
     WfpNetwork,
     /// Windows: reads the policy denies refused by the operating system: deny
     /// entries for the agent account (ADR-129). Only a run as that account
@@ -325,7 +334,7 @@ impl Restriction {
     /// (`applied`). Best-effort steps and Seatbelt, which nothing reports,
     /// are missing only when reported off. On Windows the token, the account,
     /// the job and the read denies must be confirmed on the agent's own
-    /// process (`tested`).
+    /// process, and the network filters with it (`tested`).
     #[must_use]
     pub fn missing(&self, launched: bool) -> bool {
         if !self.configured || !self.available {
@@ -338,6 +347,7 @@ impl Restriction {
             | Mechanism::RestrictedToken
             | Mechanism::AgentAccount
             | Mechanism::WindowsReadDeny
+            | Mechanism::WfpNetwork
             | Mechanism::JobObject => self.tested == Some(true),
             Mechanism::LandlockFilesystem
             | Mechanism::LandlockTcpPort
@@ -346,8 +356,7 @@ impl Restriction {
             Mechanism::LandlockScopes
             | Mechanism::LandlockResolveUnix
             | Mechanism::LandlockUdp
-            | Mechanism::Seatbelt
-            | Mechanism::WfpNetwork => true,
+            | Mechanism::Seatbelt => true,
             // the microVM tier is not built: nothing reports it (ADR-128)
             Mechanism::VmHypervisor
             | Mechanism::VmProjectOnly
@@ -414,6 +423,11 @@ pub struct LaunchCheck {
     /// read denies name were set before the agent started.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub read_denies: Option<bool>,
+    /// Windows: the agent account's network filters were read back from the
+    /// system as `openmoat agent-account setup` recorded them, before the
+    /// agent started, and the proxy listens on their permitted range.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wfp_filters: Option<bool>,
     /// Why the launch was stopped, when it was.
     pub failure: Option<String>,
 }
@@ -506,8 +520,15 @@ impl EffectiveBoundary {
                 Mechanism::AgentAccount => (check.agent_account, check.agent_token_account),
                 // The entries name the account: in force once the agent is it.
                 Mechanism::WindowsReadDeny => (check.read_denies, check.agent_token_account),
+                // The filters name the account too: in force once the agent is it.
+                Mechanism::WfpNetwork => (
+                    check.wfp_filters,
+                    check
+                        .wfp_filters
+                        .zip(check.agent_token_account)
+                        .map(|(filters, account)| filters && account),
+                ),
                 Mechanism::Seatbelt
-                | Mechanism::WfpNetwork
                 | Mechanism::VmHypervisor
                 | Mechanism::VmProjectOnly
                 | Mechanism::VmProxyNetwork

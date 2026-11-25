@@ -38,9 +38,10 @@ pub const WEIGHTS_MACOS: [(Mechanism, u32); 1] = [(Mechanism::Seatbelt, 100)];
 /// A run under the token has neither (a write-restricted token does not
 /// restrict reads), so it scores at most 55; a run as the agent account
 /// (ADR-129) holds writes by the account (which stands in for the token, see
-/// [`stand_in`]) and reads by its deny entries, and scores at most 70 until
-/// the network filter is built: the number says how much of a full boundary
-/// is missing, not only what is there.
+/// [`stand_in`]) and reads by its deny entries, and scores 70 without the
+/// account's network filters and 100 with them, its name lookups named as a
+/// `dns` downgrade beside the number: the number says how much of a full
+/// boundary is missing, not only what is there.
 pub const WEIGHTS_WINDOWS: [(Mechanism, u32); 4] = [
     (Mechanism::RestrictedToken, 45),
     (Mechanism::JobObject, 10),
@@ -60,11 +61,11 @@ pub fn weights(os: &str) -> &'static [(Mechanism, u32)] {
     }
 }
 
-/// Whether OpenMoat's sandbox has `name` at all: the Windows network filter
-/// is weighted but not built (ADR-129's second step), so it is named as such
-/// rather than as something this system lacks.
+/// Whether OpenMoat's sandbox has `name` at all: the microVM tier's features
+/// are designed, not built (ADR-128), so they are named as such rather than
+/// as something this system lacks.
 fn built(name: Mechanism) -> bool {
-    name != Mechanism::WfpNetwork && !super::vm::is_vm(name)
+    !super::vm::is_vm(name)
 }
 
 /// The mechanism that holds what `name` weighs for in a run that has it in
@@ -156,8 +157,9 @@ fn needs(name: Mechanism) -> &'static str {
             "needs `openmoat agent-account setup`, once, from an administrator terminal (ADR-129)"
         }
         Mechanism::WfpNetwork => {
-            "a Windows Filtering Platform filter for the agent account, the next step of ADR-129; \
-             until then the network goes through the proxy only for programs that honour \
+            "needs the agent account's network filters: `openmoat agent-account setup`, once, \
+             from an administrator terminal (ADR-129), and a terminal that can read them back; \
+             without them the network goes through the proxy only for programs that honour \
              HTTP_PROXY and HTTPS_PROXY"
         }
         Mechanism::WindowsReadDeny => {
@@ -198,10 +200,7 @@ pub(super) fn of(record: &EffectiveBoundary) -> ProtectionScore {
             let name = found.map_or(weighed, |r| r.name);
             let missing = match found {
                 None => Some("not part of this run's sandbox".to_owned()),
-                Some(_) if !built(name) => Some(format!(
-                    "not in OpenMoat's Windows tier yet: {}",
-                    needs(name)
-                )),
+                Some(_) if !built(name) => Some(format!("not in OpenMoat yet: {}", needs(name))),
                 // `--no-isolate` gives the tier's namespace and view up on purpose.
                 Some(r) if !r.available && tier_chosen_away && bubblewrap(name) => {
                     Some(format!("this run does not ask for it: {}", needs(name)))
