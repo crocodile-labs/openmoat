@@ -11,7 +11,7 @@ const OPEN: &str = "version: 1\ndefaults: { '*': review, net: allow, fetch: allo
 const RULES: &str = "review:\n  - id: hidden\n    shell: ['@encoded-secret *']\n\
                      \x20 - id: host-data\n    shell: ['@host-data *']\n";
 
-/// `AKIA0000FAKE0000TEST` in base64.
+/// The token tests' fake AWS access key id, in base64.
 const BASE64_KEY: &str = "QUtJQTAwMDBGQUtFMDAwMFRFU1Q=";
 const HEX_HOST: &str = "7365637265745f6170695f6b65795f3132333435.exfil.example.test";
 

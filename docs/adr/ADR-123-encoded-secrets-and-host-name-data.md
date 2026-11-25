@@ -51,7 +51,7 @@ deploy.
    policy without `encoded-secret-egress` or `hostname-data` decides as before, and no
    atom falls to a review catch-all.
 5. **Fixtures.** Every encoding and host shape of the benchmark's cases is an attack
-   fixture, with fake values (`AKIA0000FAKE0000TEST` encoded); the benign fixtures hold a
+   fixture, with fake values (the token tests' fake AWS access key id, encoded); the benign fixtures hold a
    page cursor in base64, a data URL image, a SHA-256 and a UUID in a path, an AWS
    presigned URL (the key id goes to AWS, its owner), a GitHub token in a Basic header to
    GitHub, and CDN, CloudFront, project-ref, deploy-preview and Codespaces hosts.

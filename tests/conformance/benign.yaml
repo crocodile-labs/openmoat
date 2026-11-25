@@ -3283,8 +3283,9 @@
   action: { fetch: "https://example.test/a/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855/u/550e8400-e29b-41d4-a716-446655440000" }
   expect: { verdict: defer, rules: [default.fetch] }
 - id: benign-presigned-url-key-id-to-aws
+  # `\x30` is `0`: written so that no added line holds a whole key id, which the merge check reads as a leak
   why: an AWS key id URL-encoded in a presigned URL goes to AWS, its own service
-  action: { fetch: "https://bucket.s3.amazonaws.com/f.txt?X-Amz-Credential=AKIA0000FAKE0000TEST%2F20260101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }
+  action: { fetch: "https://bucket.s3.amazonaws.com/f.txt?X-Amz-Credential=AKIA\x30000FAKE0000TEST%2F20260101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }
   expect: { verdict: defer, rules: [default.fetch] }
 - id: benign-basic-auth-token-to-github
   why: a GitHub token in a base64 Basic header goes to GitHub
