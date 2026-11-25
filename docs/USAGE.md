@@ -1105,8 +1105,8 @@ Under the summary, the upgrade says whether it moves any call toward allow, chec
 bundled calls, cases from both policies' rules and a search over every path, host and name
 (docs/POLICY.md §8.3). An upgrade that widens is listed case by case and applied only with
 `--accept-widening`; without it nothing changes and the command exits 3. What else
-0.27.0 changes for you (the confine question in `openmoat init`, the new reviews):
-[INSTALL.md](INSTALL.md#from-0260-to-0270).
+0.28.0 changes for you (the new reviews, the Windows agent account):
+[INSTALL.md](INSTALL.md#from-0270-to-0280).
 
 The changes are grouped by what they do, read from the policy before and after:
 
@@ -1761,7 +1761,7 @@ openmoat init --hooks-only --hosts codex --format json
 
 ```json
 {
-  "version": "0.27.0", "dry_run": false, "hooks_only": true,
+  "version": "0.28.0", "dry_run": false, "hooks_only": true,
   "home": "/Users/you/.moat", "binary": "/usr/local/bin/openmoat",
   "binary_sha256": "<the hash the lock records>",
   "lock_path": "/Users/you/.moat/policy.lock", "policy_path": "/Users/you/.moat/policy.yaml",

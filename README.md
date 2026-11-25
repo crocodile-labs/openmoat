@@ -45,7 +45,7 @@ shows one line per agent it finds and asks `Protect? [Y/n/d]` (`d` shows the ful
 Every file is backed up before it changes. An agent already set up is not asked again:
 
 ```
-OpenMoat 0.27.0 · protecting the agents on this machine
+OpenMoat 0.28.0 · protecting the agents on this machine
 
   Each file is backed up first · d shows the full diff · openmoat uninstall undoes it
 
@@ -168,16 +168,19 @@ Which agents and operating systems each feature works with: [docs/FEATURES.md](d
 | **Merge check** | Flags what a pull request's changes do: CI and hook edits, agent settings, look-alike packages (in lockfiles too, where a dependency pulls them in), install scripts a lockfile records, a lockfile hash swapped for the same version, new hosts, a policy change that lets more through ([docs/MERGE_CHECK.md](docs/MERGE_CHECK.md#supply-chain)). | `openmoat policy check-diff` |
 | **Policy lock** | Pins the policy and hook files: an agent's call that changes the rules, approves its own block or switches OpenMoat off is denied. It also records the other hooks, plugin hooks and git programs the agents run, and names a new or changed one until you accept it ([docs/USAGE.md](docs/USAGE.md#other-hooks-the-agents-run)). With `openmoat gate setup`, every command that loosens the protection also asks for a code from your authenticator app, and every policy change is recorded in the audit log. | `openmoat doctor` · `openmoat gate setup` |
 
-**New in 0.27.0, and how to start each:**
+**New in 0.28.0, and how to start each:**
 
 | Feature | First command | How to use it |
 |---|---|---|
-| Team rules from a signed bundle that only narrows, and an inventory of each machine | `openmoat team join <folder> --signer "<key line>"` | [Try it in two minutes](docs/TEAM.md#try-it-in-two-minutes) |
-| A code from your authenticator app before anything is loosened | `openmoat gate setup` | [Try it](docs/USAGE.md#ask-for-a-code-before-anything-is-loosened) |
-| Short-lived git and AWS credentials for an agent (preview) | add a `mint:` secret, then `openmoat run -- <agent>` | [Step by step](docs/POLICY.md#221-minted-narrowed-credentials-source-mint-helper-preview) |
-| Typing an agent's name starts it confined | `openmoat confine <agent>` | [How each agent is protected](docs/USAGE.md#how-each-agent-is-protected) |
-| Hidden or obfuscated commands, and PowerShell, are read | nothing to run: on by default after `openmoat policy upgrade` | [See it decide](#see-it-decide) |
-| A slow check is denied, never run unchecked | nothing to run: on by default | [docs/LIMITS.md](docs/LIMITS.md) |
+| Windows: the agent runs as its own account, so Windows refuses its reads and its network as well as its writes (preview) | `openmoat agent-account setup`, once, from an administrator terminal | [Try it](docs/USAGE.md#run-the-agent-as-its-own-windows-account) |
+| Secrets hidden by an encoding, and data in a host name, are held for review | `openmoat policy check --kind fetch '<url>'` (after `openmoat policy upgrade`) | [Try it](docs/POLICY.md#6-the-default-policy-in-one-table) |
+| Data labels by source: one MCP server's data sent through another's tool, however it was reworded (preview) | `openmoat policy check '@data-flow mcp:tickets mcp-send mcp:slack'` | [Try it](docs/POLICY.md#47-data-labels-rules-on-where-data-from-a-source-may-go-preview) |
+| Remote MCP servers through the gateway, the agent never holding the token (preview) | `openmoat mcp login <server> --url <url>` | [Try it](docs/USAGE.md#remote-mcp-servers) |
+| Look-alike packages and install scripts in lockfiles, and a hash swapped for the same version | `openmoat policy check-diff` | [Try it](docs/MERGE_CHECK.md#supply-chain) |
+
+What 0.27.0 added (team rules, the authenticator-code gate, minted credentials, `openmoat
+confine`, hidden commands and PowerShell, the slow-check deny) is in the
+[CHANGELOG](CHANGELOG.md#0270---2026-11-24).
 
 By risk: secrets read or sent (also hidden by base64, hex or URL encoding, held for review:
 `openmoat policy check --kind fetch '<url>'` shows it), data sent to unlisted hosts or
@@ -283,7 +286,7 @@ re-run, last published OpenMoat 0.19.0
 ([results](https://github.com/crocodile-labs/moatbench/tree/main/runs/2026-11-09-openmoat-0.19.0)).
 
 **Attack sets written by others (decision engine, default policy).** 0.25.0 → 0.26.0
-(the rules this measurement led to, ADR-112) → 0.27.0 → the next release (ADR-123:
+(the rules this measurement led to, ADR-112) → 0.27.0 → 0.28.0 (ADR-123:
 secrets hidden by an encoding and data in host names, held for review):
 
 | Benchmark | Cases | Denied | Denied or held | Allowed | False positives |
@@ -339,13 +342,13 @@ The full list: [docs/LIMITS.md](docs/LIMITS.md). Per agent:
 
 ## Status
 
-**Usable daily.** The latest release is `0.27.0`. The policy format and the commands can
+**Usable daily.** The latest release is `0.28.0`. The policy format and the commands can
 still change before 1.0; every such change has a CHANGELOG line. What comes next:
 [docs/ROADMAP.md](docs/ROADMAP.md). To upgrade, update the binary the way you installed
 it, then run `openmoat doctor` and `openmoat policy upgrade` in your own terminal
 ([docs/INSTALL.md](docs/INSTALL.md#upgrading)); each release's own steps are in its
-[CHANGELOG](CHANGELOG.md) "Upgrading" line, and what 0.27.0 changes
-for you is in [docs/INSTALL.md](docs/INSTALL.md#from-0260-to-0270). Releases up to 0.7.0 called the command
+[CHANGELOG](CHANGELOG.md) "Upgrading" line, and what 0.28.0 changes
+for you is in [docs/INSTALL.md](docs/INSTALL.md#from-0270-to-0280). Releases up to 0.7.0 called the command
 `moat`; that name still runs `openmoat` for a few releases.
 
 ## Contributing

@@ -10,7 +10,7 @@ maintainer: "Crocodile Labs"
 tier: community
 requires_hermes: ">=0.22.5"
 docs_url: "https://github.com/crocodile-labs/openmoat/blob/main/docs/INSTALL.md"
-version: "0.27.0"
+version: "0.28.0"
 title: "OpenMoat"
 capabilities:
   provides_tools: []

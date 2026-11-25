@@ -493,6 +493,31 @@ Then, in a terminal of your own:
    sandboxes as `openmoat sandbox sync` does. `openmoat` alone offers the same at a
    terminal.
 
+### From 0.27.0 to 0.28.0
+
+What you will see, and what to run:
+
+- **`openmoat policy upgrade` offers the new default rules**: `encoded-secret-egress`
+  holds a token or credential sent hidden by an encoding (URL encoding, base64, hex,
+  zero-width characters), `hostname-data` holds encoded bytes in the labels of a host no
+  allow rule lists (ADR-123), the `data-flow` review holds an MCP tool that acts after
+  another MCP server's result (ADR-126, preview), and `kernel-self` also keeps agents away
+  from `openmoat mcp login` and its token folder. The upgrade from the 0.27.0 default only
+  narrows. To see what a URL gets:
+  `openmoat policy check --kind fetch '<url>'`.
+- **On Windows, `openmoat run` can hold reads and the network too** (ADR-129, preview):
+  run `openmoat agent-account setup` once from an administrator terminal, and later runs
+  start the agent as its own local account; Windows then refuses the reads your policy
+  denies and every connection but the one to the run's proxy. Without it, Windows runs are as in
+  0.27.0. How to try it:
+  [USAGE.md](USAGE.md#run-the-agent-as-its-own-windows-account).
+- **`openmoat policy check-diff` reads lockfiles** (ADR-125): a look-alike name, an
+  install script the lockfile records or a `go.sum` hash changed for the same version is
+  flagged in a pull request even when a dependency pulls it in.
+- **New, all optional**: remote (Streamable HTTP) MCP servers through the gateway with
+  `openmoat mcp login <server> --url <url>` (ADR-127, preview), the agent never holding
+  the token.
+
 ### From 0.26.0 to 0.27.0
 
 What you will see, and what to run:

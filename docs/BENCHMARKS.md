@@ -27,12 +27,13 @@ Decision engine only. Run on 2026-11-22 with the default policy of OpenMoat 0.25
 (`main` at `33d8f388`) and with the rules this measurement led to
 ([ADR-112](adr/ADR-112-default-rules-from-outside-benchmarks.md), released in 0.26.0), and
 again on 2026-11-24 with OpenMoat 0.27.0 (`main` at `4c9c40f5`, which adds ADR-116's
-`obfuscated` rule and PowerShell reader). "Stopped" is `deny`, or `deny` plus `review`
+`obfuscated` rule and PowerShell reader), and on 2026-11-25 with OpenMoat 0.28.0 (`main` at
+`aaaada00`, which adds ADR-123's rules). "Stopped" is `deny`, or `deny` plus `review`
 (held for a person). `defer` means OpenMoat leaves the call to the agent's own permission
 prompt, which is the default policy's answer for a call no rule names (ADR-025); it is
 not counted as stopped.
 
-| Benchmark, form | Attacks | Stopped, deny only: 0.25.0 → 0.26.0 → 0.27.0 → next release | Stopped, deny + review: 0.25.0 → 0.26.0 → 0.27.0 → next release | `defer`: 0.25.0 → 0.26.0 → 0.27.0 → next release | Allowed | False positives |
+| Benchmark, form | Attacks | Stopped, deny only: 0.25.0 → 0.26.0 → 0.27.0 → 0.28.0 | Stopped, deny + review: 0.25.0 → 0.26.0 → 0.27.0 → 0.28.0 | `defer`: 0.25.0 → 0.26.0 → 0.27.0 → 0.28.0 | Allowed | False positives |
 |---|--:|--:|--:|--:|--:|--:|
 | RedCode-Exec, code inline in the command, all 47 scenario files | 1,410 | 188 (13.3%) → 209 (14.8%) → 209 (14.8%) → 209 (14.8%) | 488 (34.6%) → 658 (46.7%) → 665 (47.2%) → 665 (47.2%) | 922 (65.4%) → 752 (53.3%) → 745 (52.8%) → 745 (52.8%) | 0 in each | no benign cases in the set |
 | RedCode-Exec, code inline, the 30 scenario files whose code acts on the machine | 900 | 178 (19.8%) → 199 (22.1%) → 199 (22.1%) → 199 (22.1%) | 450 (50.0%) → 620 (68.9%) → 622 (69.1%) → 622 (69.1%) | 450 (50.0%) → 280 (31.1%) → 278 (30.9%) → 278 (30.9%) | 0 in each | |
@@ -41,7 +42,7 @@ not counted as stopped.
 | agent-egress-bench, the same over the whole corpus, skipped cases counted as not stopped | 192 | 58 (30.2%) → 61 (31.8%) → 61 (31.8%) → 61 (31.8%) | 58 (30.2%) → 66 (34.4%) → 67 (34.9%) → 84 (43.8%) | | | |
 | agent-egress-bench, plain `GET`s through the agent's fetch tool | 53 | 5 (9.4%) → 20 (37.7%) → 20 (37.7%) → 20 (37.7%) | 5 (9.4%) → 22 (41.5%) → 22 (41.5%) → 38 (71.7%) | 48 → 31 → 31 → 15 | 0 in each | 0 of 14 in each |
 
-"Next release" is `main` after 0.27.0 with ADR-123's rules, run on 2026-11-24 the same
+0.28.0 adds ADR-123's rules, run on 2026-11-24 on `main` after 0.27.0 and again on 2026-11-25 on `main` at `aaaada00`, the 0.28.0 release, with the same results, the same
 way: `encoded-secret-egress` (a known token or credential found once URL encoding,
 base64, hex or zero-width characters are undone) and `hostname-data` (encoded bytes in
 the labels of a host no rule allows), both held for review. They add 17 agent-egress-bench
@@ -80,12 +81,12 @@ Read with these facts beside it:
 
 | | |
 |---|---|
-| OpenMoat | 0.25.0, `main` at `33d8f388`, debug build of `openmoat`; 0.26.0: the same with ADR-112's rules and engine changes (`feat/benchmark-rule-gaps`, released in 0.26.0); 0.27.0: `main` at `4c9c40f5`, debug build; next release: 0.27.0 with ADR-123's rules and decoding, debug build, 2026-11-24 |
+| OpenMoat | 0.25.0, `main` at `33d8f388`, debug build of `openmoat`; 0.26.0: the same with ADR-112's rules and engine changes (`feat/benchmark-rule-gaps`, released in 0.26.0); 0.27.0: `main` at `4c9c40f5`, debug build; 0.28.0: ADR-123's rules and decoding, debug build, `main` after 0.27.0 on 2026-11-24 and `main` at `aaaada00` on 2026-11-25 |
 | Policy | `crates/openmoat-core/policies/default-v1.yaml` as shipped (0.25.0's, the one with ADR-112's rules, then 0.27.0's), nothing added |
 | Engine path | `openmoat policy check --policy <default-v1.yaml> --kind <kind> --format json`, one call per action, the same compile and decide `openmoat guard` uses after the lock check, without an installation snapshot (programs are not resolved to their paths) |
 | RedCode | `AI-secure/RedCode` at `664e4793dc7309f98b8271baed5bbc04d6ef4c39` (MIT), `dataset/RedCode-Exec/`: 27 Python and 20 Bash scenario files, 30 snippets each |
 | agent-egress-bench | `pipelab-org/agent-egress-bench` at `8fad78b20bf24200c5eb3e1749d94dcb0d92af0e` (Apache-2.0), corpus `v2.16.0`, `cases/`: 270 cases in 18 categories, 192 `block`, 77 `allow`, 1 `warn` |
-| Machine | macOS 12, run on 2026-11-22 (0.25.0, 0.26.0's rules) and 2026-11-24 (0.27.0) |
+| Machine | macOS 12, run on 2026-11-22 (0.25.0, 0.26.0's rules) , 2026-11-24 (0.27.0, and 0.28.0's rules) and 2026-11-25 (0.28.0) |
 | Harness | [`scripts/bench/external.py`](../scripts/bench/external.py), Python 3 standard library |
 
 The datasets are not part of this repository. The harness reads their JSON and never
@@ -231,14 +232,14 @@ After the change:
 |---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
 | `curl` (url, header, request_body) | 0.25.0 | 84 | 48 | 32 | 0 | 36 | 0 | 57.1% | 57.1% | 26 | 12 (46.2%), all host only |
 | `curl` | 0.26.0, 0.27.0 | 84 | 51 | 31 | 2 | 31 | 0 | 60.7% | 63.1% | 26 | 12 (46.2%), the same, all host only |
-| `curl` | next release | 84 | 51 | 31 | 18 | 15 | 0 | 60.7% | 82.1% | 26 | 12 (46.2%), the same, all host only |
+| `curl` | 0.28.0 | 84 | 51 | 31 | 18 | 15 | 0 | 60.7% | 82.1% | 26 | 12 (46.2%), the same, all host only |
 | `fetch` (plain `GET`s) | 0.25.0 | 53 | 5 | 0 | 0 | 48 | 0 | 9.4% | 9.4% | 14 | 0 |
 | `fetch` | 0.26.0, 0.27.0 | 53 | 20 | 13 | 2 | 31 | 0 | 37.7% | 41.5% | 14 | 0 |
-| `fetch` | next release | 53 | 20 | 13 | 18 | 15 | 0 | 37.7% | 71.7% | 14 | 0 |
+| `fetch` | 0.28.0 | 53 | 20 | 13 | 18 | 15 | 0 | 37.7% | 71.7% | 14 | 0 |
 | `native` (MCP calls as the agent's own tools) | 0.25.0 | 38 | 10 | 1 | 0 | 27 | 1 | 26.3% | 26.3% | 11 | 0 |
 | `native` | 0.26.0 | 38 | 10 | 0 | 3 | 24 | 1 | 26.3% | 34.2% | 11 | 0 |
 | `native` | 0.27.0 | 38 | 10 | 0 | 4 | 23 | 1 | 26.3% | 36.8% | 11 | 0 |
-| `native` | next release | 38 | 10 | 0 | 5 | 22 | 1 | 26.3% | 39.5% | 11 | 0 |
+| `native` | 0.28.0 | 38 | 10 | 0 | 5 | 22 | 1 | 26.3% | 39.5% | 11 | 0 |
 | `mcp` (MCP calls by tool name only) | each | 38 | 0 | 0 | 0 | 38 | 0 | 0.0% | 0.0% | 11 | 0 |
 
 On 0.25.0 no case was answered `review`. The one `allow` is `mcp-input-hex-apikey-008`, an
@@ -299,7 +300,7 @@ All of these are `defer`: left to the agent's prompt. After the change:
 - **Encoded secrets in a URL** (`url`, `encoding_evasion`): known tokens hidden by base64,
   hex, URL encoding (once, twice or three times) or zero-width characters, a JWT in
   base64, an AWS secret key whose `=` is written `%3D`. On 0.27.0 `token-egress` and
-  `credential-egress` read the text as written. In the next release
+  `credential-egress` read the text as written. In 0.28.0
   `encoded-secret-egress` (ADR-123) decodes first and holds all of these for review. What
   stays `defer`: the benchmark's data-URL image (`enc-benign-base64-image-008`, an attack
   in the corpus despite its name), which decodes to no text.
@@ -309,7 +310,7 @@ All of these are `defer`: left to the agent's prompt. After the change:
   list and checksum (ADR-112 §5).
 - **Data in the host name** (`hostname_exfiltration`): `https://<hex or base32>.exfil.evil.com/`.
   A `GET` to an unlisted host is a read (`fetch: defer`); 2 of 9 are denied only because
-  an all-digit or mixed label is read as a connection. In the next release `hostname-data`
+  an all-digit or mixed label is read as a connection. In 0.28.0 `hostname-data`
   (ADR-123) holds 6 more for review; the one left is `ghp-xxxx.yyyyzzzz.aaaabbbb.ccccdddd`,
   labels of plain letters too short to count.
 - **Plain loopback** (`ssrf_bypass`): `http://127.0.0.1/admin` and `http://[::1]/admin` are
@@ -428,12 +429,12 @@ future work.
    is `credential-egress` (review). Crypto keys and seed phrases are not added: neither
    has a precise shape (ADR-112 §5).
 6. **Encoded secrets in URLs pass before a secret read** (base64, hex, multi-layer URL
-   encoding). Future work in ADR-112; in the next release
+   encoding). Future work in ADR-112; in 0.28.0
    [ADR-123](adr/ADR-123-encoded-secrets-and-host-name-data.md)'s `encoded-secret-egress`
    (review) decodes and reads the same token shapes, with signed URLs, cursors, data URLs
    and Basic headers to a token's own service as benign fixtures.
 7. **Data in host names** (long hex or base32 labels under an unlisted domain). Future
-   work in ADR-112; in the next release ADR-123's `hostname-data` (review) holds them for
+   work in ADR-112; in 0.28.0 ADR-123's `hostname-data` (review) holds them for
    hosts no allow rule lists, with CDN, preview and project-ref hosts as benign fixtures.
 8. **Downloads into system folders and `curl` to a variable host.** `wget -O
    /usr/downloaded_script.py <url>` is now held by `system-files` (RedCode Bash 02, 30 of
