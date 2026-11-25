@@ -1,5 +1,8 @@
 use super::*;
 
+/// Windows' records: the token, the agent account, its network filters.
+mod windows;
+
 /// A Linux Lightweight run without bubblewrap, as planned before the start.
 fn port_only() -> EffectiveBoundary {
     use Mechanism::*;
@@ -285,110 +288,6 @@ fn every_platforms_weights_add_up_to_100() {
         }
     }
     assert_eq!(weights("freebsd"), []);
-}
-
-/// A Windows run (ADR-115) with its token and job confirmed scores 55: the
-/// network filter and read denial are weighted, not built, and named so.
-#[test]
-fn a_confirmed_windows_run_scores_55_and_names_network_and_reads() {
-    let mut record = port_only();
-    record.os = "windows".to_owned();
-    record.landlock = None;
-    record.network.mode = NetworkMode::ProxyVariables;
-    record.restrictions = vec![
-        Restriction::planned(Mechanism::RestrictedToken, true, true),
-        Restriction::planned(Mechanism::JobObject, true, true),
-        Restriction::planned(Mechanism::WfpNetwork, false, false),
-        Restriction::planned(Mechanism::WindowsReadDeny, false, false),
-    ];
-    record.rescore();
-    assert_eq!(record.score.as_ref().unwrap().points, 55);
-    record.launched(LaunchCheck {
-        restricted_token: Some(true),
-        agent_token_restricted: Some(true),
-        job_object: Some(true),
-        agent_in_job: Some(true),
-        ..LaunchCheck::default()
-    });
-    assert!(record.missing().is_empty(), "{:?}", record.missing());
-    let score = record.score.clone().unwrap();
-    assert_eq!(score.points, 55, "{score:?}");
-    assert!(!score.complete());
-    let line = score.line();
-    assert!(
-        line.contains("wfp_network (not in OpenMoat's Windows tier yet"),
-        "{line}"
-    );
-    assert!(
-        line.contains("windows_read_deny (not on this system: needs the agent account"),
-        "{line}"
-    );
-    assert!(line.contains("openmoat agent-account setup"), "{line}");
-
-    // A token the agent's own process does not show is missing: the run stops.
-    record.launched(LaunchCheck {
-        restricted_token: Some(true),
-        agent_token_restricted: Some(false),
-        job_object: Some(true),
-        agent_in_job: Some(true),
-        ..LaunchCheck::default()
-    });
-    assert_eq!(record.missing(), ["restricted_token"]);
-    assert_eq!(record.score.unwrap().points, 10);
-}
-
-/// A run as the agent account (ADR-129): the account stands in for the token
-/// in the score, the read denies count once the agent's token shows the
-/// account, and the network filter is still named as not built: 70.
-#[test]
-fn a_confirmed_account_run_scores_70_and_counts_reads_only_when_confirmed() {
-    let mut record = port_only();
-    record.os = "windows".to_owned();
-    record.landlock = None;
-    record.network.mode = NetworkMode::ProxyVariables;
-    record.restrictions = vec![
-        Restriction::planned(Mechanism::AgentAccount, true, true),
-        Restriction::planned(Mechanism::JobObject, true, true),
-        Restriction::planned(Mechanism::WfpNetwork, false, false),
-        Restriction::planned(Mechanism::WindowsReadDeny, true, true),
-    ];
-    record.rescore();
-    let planned = record.score.clone().unwrap();
-    assert_eq!(planned.points, 70, "{planned:?}");
-    assert_eq!(planned.items[0].name, Mechanism::AgentAccount);
-    let confirmed = LaunchCheck {
-        agent_account: Some(true),
-        agent_token_account: Some(true),
-        job_object: Some(true),
-        agent_in_job: Some(true),
-        read_denies: Some(true),
-        ..LaunchCheck::default()
-    };
-    record.launched(confirmed.clone());
-    assert!(record.missing().is_empty(), "{:?}", record.missing());
-    let score = record.score.clone().unwrap();
-    assert_eq!(score.points, 70, "{score:?}");
-    assert!(
-        score
-            .line()
-            .contains("wfp_network (not in OpenMoat's Windows tier yet")
-    );
-
-    // A token whose user is not the account: neither writes nor reads count,
-    // and the run stops.
-    record.launched(LaunchCheck {
-        agent_token_account: Some(false),
-        ..confirmed.clone()
-    });
-    assert_eq!(record.missing(), ["agent_account", "windows_read_deny"]);
-    assert_eq!(record.score.clone().unwrap().points, 10);
-
-    // Nothing read back is not confirmation either.
-    record.launched(LaunchCheck {
-        agent_token_account: None,
-        ..confirmed
-    });
-    assert_eq!(record.missing(), ["agent_account", "windows_read_deny"]);
 }
 
 /// The port-only plan on ABI 4: files, the TCP port, seccomp and

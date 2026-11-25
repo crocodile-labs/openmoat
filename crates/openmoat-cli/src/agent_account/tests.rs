@@ -41,7 +41,85 @@ fn clean() -> Observed {
         relay: Some("s-1-5-21-1-2-3-1001".to_owned()),
         profile_entry: true,
         password: true,
+        wfp: wfp::Read::NotAsked,
     }
+}
+
+/// A record of both steps: the account and its network filters.
+fn filtered() -> Record {
+    let keys: Vec<u128> = (1..=10).collect();
+    Record {
+        wfp: Some(Wfp::new(&keys, [47_320, 47_327]).unwrap()),
+        ..record()
+    }
+}
+
+/// What the system holds when the filters of [`filtered`] are as recorded.
+fn clean_filtered() -> Observed {
+    let record = filtered();
+    let wfp = record.wfp.as_ref().unwrap();
+    let facts = |f: &wfp::Filter| wfp::Facts {
+        layer: Some(f.layer),
+        permit: f.permit,
+        sublayer: wfp.sublayer.clone(),
+        provider: Some(wfp.provider.clone()),
+        conditions: f.conditions(),
+    };
+    Observed {
+        wfp: wfp::Read::Seen(wfp::Seen {
+            provider: true,
+            sublayer: true,
+            filters: wfp.filters.iter().map(|f| Some(facts(f))).collect(),
+        }),
+        ..clean()
+    }
+}
+
+/// A record with filters round-trips; one whose filters no setup writes is
+/// refused as a whole, so no run trusts it.
+#[test]
+fn a_record_with_network_filters_round_trips_and_a_foreign_one_is_refused() {
+    let record = filtered();
+    let json = record.to_json().unwrap();
+    assert!(
+        json.contains("\"ports\": [\n      47320,\n      47327\n    ]"),
+        "{json}"
+    );
+    assert_eq!(Record::parse(&json).unwrap(), record);
+    let opened = json.replace("47327", "47400");
+    let error = format!("{:#}", Record::parse(&opened).unwrap_err());
+    assert!(error.contains("network filters"), "{error}");
+}
+
+/// The filters as recorded are no drift; one gone is, and names the filter.
+/// Filters this process cannot read are named as unread, not judged; an
+/// existing step-1 record (`"wfp": null`) has none to read or judge.
+#[test]
+fn the_network_filters_drift_or_are_named_unread() {
+    assert_eq!(drift(&filtered(), &clean_filtered()), Vec::<String>::new());
+    let mut gone = clean_filtered();
+    if let wfp::Read::Seen(seen) = &mut gone.wfp {
+        seen.filters[3] = None;
+    }
+    let found = drift(&filtered(), &gone);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        found[0].contains("ConnectV6") && found[0].contains("is gone"),
+        "{found:?}"
+    );
+
+    let unreadable = Observed {
+        wfp: wfp::Read::Unread,
+        ..clean()
+    };
+    assert_eq!(drift(&filtered(), &unreadable), Vec::<String>::new());
+    assert_eq!(unread(&unreadable), ["its network filters"]);
+    let unasked = clean();
+    assert_eq!(
+        drift(&filtered(), &unasked),
+        ["the network filters were not read back"]
+    );
+    assert_eq!(drift(&record(), &clean()), Vec::<String>::new());
 }
 
 #[test]
@@ -67,8 +145,8 @@ fn the_password_keeps_the_random_hex_and_adds_three_kinds() {
     assert_eq!(password.len(), 67);
 }
 
-/// The record round-trips, says `"wfp": null` while the network filters are
-/// not built, and a record setup does not write is refused.
+/// A record of ADR-129's first step round-trips with `"wfp": null`, and a
+/// record setup does not write is refused.
 #[test]
 fn the_record_round_trips_and_names_the_network_filters_absent() {
     let mut record = record();

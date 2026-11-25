@@ -14,7 +14,7 @@ fn planned(asked: Asked, tier: &Tier, port_only: Option<&str>) -> EffectiveBound
         token: ToolToken::Withheld,
         port: Some(41_000),
         project_top_open: false,
-        agent_account: false,
+        agent_account: RunAs::Person,
     })
 }
 
@@ -39,6 +39,50 @@ fn a_forced_fallback_is_two_downgrades() {
     assert!(record.downgrades.iter().all(|d| !d.chosen && d.why == why));
     assert_eq!(record.landlock.as_ref().unwrap().abi, Some(5));
     assert!(record.launch.is_none());
+}
+
+/// As the Windows agent account with its network filters (ADR-129) the
+/// network is the filters' (`wfp_account`), and the name lookups that leave
+/// through the system's resolver are a forced `dns` downgrade, named in the
+/// JSON and the text; the account without filters keeps the platform's mode.
+#[test]
+fn the_filtered_account_holds_the_network_and_names_dns() {
+    let tier = Tier::Lightweight(Lightweight::Platform);
+    let record = plan(Plan {
+        asked: Asked::Default,
+        tier: &tier,
+        port_only: None,
+        kernel: None,
+        token: ToolToken::UnknownAgent,
+        port: Some(47_320),
+        project_top_open: false,
+        agent_account: RunAs::Filtered,
+    });
+    assert_eq!(record.network.mode, NetworkMode::WfpAccount);
+    assert_eq!(record.downgrades.len(), 1, "{:?}", record.downgrades);
+    let dns = &record.downgrades[0];
+    assert_eq!(dns.what, Weaker::Dns);
+    assert!(!dns.chosen);
+    assert!(dns.why.contains("DNS Client"), "{}", dns.why);
+    let json = serde_json::to_value(&record).unwrap();
+    assert_eq!(json["network"]["mode"], "wfp_account");
+    assert_eq!(json["downgrades"][0]["what"], "dns");
+    let shown = render::boundary::lines(&record).join("\n");
+    assert!(shown.contains("downgrade (dns, forced)"), "{shown}");
+    assert!(shown.contains("Windows Filtering Platform"), "{shown}");
+
+    let record = plan(Plan {
+        asked: Asked::Default,
+        tier: &tier,
+        port_only: None,
+        kernel: None,
+        token: ToolToken::UnknownAgent,
+        port: None,
+        project_top_open: false,
+        agent_account: RunAs::Account,
+    });
+    assert_eq!(record.network.mode, platform::NETWORK);
+    assert!(!record.downgraded());
 }
 
 #[test]
@@ -78,7 +122,7 @@ fn an_open_project_top_is_a_chosen_downgrade() {
         token: ToolToken::Withheld,
         port: None,
         project_top_open: true,
-        agent_account: false,
+        agent_account: RunAs::Person,
     });
     assert_eq!(record.downgrades.len(), 3, "{:?}", record.downgrades);
     let top = &record.downgrades[2];
