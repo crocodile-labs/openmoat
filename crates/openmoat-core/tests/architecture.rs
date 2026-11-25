@@ -184,6 +184,10 @@ const UNSAFE_ALLOWED: &[&str] = &[
     "openmoat-wasm/src/lib.rs",
     "openmoat-cli/src/commands/run/inherited.rs",
     "openmoat-cli/src/commands/run/windows/win32.rs",
+    "openmoat-cli/src/commands/run/windows/acl.rs",
+    "openmoat-cli/src/commands/run/windows/account/logon.rs",
+    "openmoat-cli/src/commands/run/windows/account/registry.rs",
+    "openmoat-cli/src/commands/run/windows/account/system.rs",
     "openmoat-cli/src/state_acl/windows/win32.rs",
 ];
 

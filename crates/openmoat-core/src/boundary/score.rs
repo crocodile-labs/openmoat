@@ -34,10 +34,13 @@ pub const WEIGHTS_LINUX: [(Mechanism, u32); 9] = [
 pub const WEIGHTS_MACOS: [(Mechanism, u32); 1] = [(Mechanism::Seatbelt, 100)];
 
 /// The weights on Windows (ADR-115): the write-restricted token holds writes,
-/// the job object the process tree. The network and reads carry weight too,
-/// and OpenMoat's Windows tier has neither (no WFP filter; a write-restricted
-/// token does not restrict reads), so a Windows run scores at most 55: the
-/// number says how much of a full boundary is missing, not only what is there.
+/// the job object the process tree. The network and reads carry weight too.
+/// A run under the token has neither (a write-restricted token does not
+/// restrict reads), so it scores at most 55; a run as the agent account
+/// (ADR-129) holds writes by the account (which stands in for the token, see
+/// [`stand_in`]) and reads by its deny entries, and scores at most 70 until
+/// the network filter is built: the number says how much of a full boundary
+/// is missing, not only what is there.
 pub const WEIGHTS_WINDOWS: [(Mechanism, u32); 4] = [
     (Mechanism::RestrictedToken, 45),
     (Mechanism::JobObject, 10),
@@ -58,10 +61,17 @@ pub fn weights(os: &str) -> &'static [(Mechanism, u32)] {
 }
 
 /// Whether OpenMoat's sandbox has `name` at all: the Windows network filter
-/// and read denial are weighted but not built, so they are named as such
+/// is weighted but not built (ADR-129's second step), so it is named as such
 /// rather than as something this system lacks.
 fn built(name: Mechanism) -> bool {
-    !matches!(name, Mechanism::WfpNetwork | Mechanism::WindowsReadDeny) && !super::vm::is_vm(name)
+    name != Mechanism::WfpNetwork && !super::vm::is_vm(name)
+}
+
+/// The mechanism that holds what `name` weighs for in a run that has it in
+/// place of `name`: on Windows the agent account holds writes where the
+/// write-restricted token would (ADR-129), so a run has one or the other.
+fn stand_in(name: Mechanism) -> Option<Mechanism> {
+    (name == Mechanism::RestrictedToken).then_some(Mechanism::AgentAccount)
 }
 
 /// A run's score.
@@ -142,12 +152,18 @@ fn needs(name: Mechanism) -> &'static str {
         Mechanism::Seatbelt => "needs `sandbox-exec`",
         Mechanism::RestrictedToken => "needs `CreateRestrictedToken` and `CreateProcessAsUserW`",
         Mechanism::JobObject => "needs a job object the agent can be put in",
+        Mechanism::AgentAccount => {
+            "needs `openmoat agent-account setup`, once, from an administrator terminal (ADR-129)"
+        }
         Mechanism::WfpNetwork => {
-            "a Windows Filtering Platform filter; until then the network goes through the proxy \
-             only for programs that honour HTTP_PROXY and HTTPS_PROXY"
+            "a Windows Filtering Platform filter for the agent account, the next step of ADR-129; \
+             until then the network goes through the proxy only for programs that honour \
+             HTTP_PROXY and HTTPS_PROXY"
         }
         Mechanism::WindowsReadDeny => {
-            "a write-restricted token does not restrict reads, so the hook decides every read"
+            "needs the agent account: `openmoat agent-account setup`, once, from an administrator \
+             terminal (ADR-129); a write-restricted token does not restrict reads, so without it \
+             the hook decides every read"
         }
         Mechanism::VmHypervisor
         | Mechanism::VmProjectOnly
@@ -175,8 +191,12 @@ pub(super) fn of(record: &EffectiveBoundary) -> ProtectionScore {
     let bubblewrap = |name| matches!(name, Mechanism::IsolatedView | Mechanism::NetworkNamespace);
     let items: Vec<ScoreItem> = weights(&record.os)
         .iter()
-        .map(|&(name, weight)| {
-            let missing = match record.restriction(name) {
+        .map(|&(weighed, weight)| {
+            let found = record
+                .restriction(weighed)
+                .or_else(|| stand_in(weighed).and_then(|other| record.restriction(other)));
+            let name = found.map_or(weighed, |r| r.name);
+            let missing = match found {
                 None => Some("not part of this run's sandbox".to_owned()),
                 Some(_) if !built(name) => Some(format!(
                     "not in OpenMoat's Windows tier yet: {}",

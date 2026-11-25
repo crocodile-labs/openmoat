@@ -228,12 +228,19 @@ pub enum Mechanism {
     /// Windows: the job object the agent and every process it starts are in,
     /// which kills them all when the run ends and lets none break away.
     JobObject,
+    /// Windows: the agent runs as OpenMoat's dedicated local account
+    /// (ADR-129), set up once by `openmoat agent-account setup`. A write
+    /// needs that account granted, which it is on the write roots and nowhere
+    /// else in the person's profile. Stands in for [`Self::RestrictedToken`]
+    /// in the score of a run that has it.
+    AgentAccount,
     /// Windows: a Windows Filtering Platform filter holding the network to
-    /// the proxy. Not part of OpenMoat's Windows tier yet, so never in force.
+    /// the proxy. Not part of OpenMoat's Windows tier yet (ADR-129's second
+    /// step), so never in force.
     WfpNetwork,
-    /// Windows: reads the policy denies refused by the operating system. A
-    /// write-restricted token does not restrict reads, so never in force;
-    /// the hook decides every read.
+    /// Windows: reads the policy denies refused by the operating system: deny
+    /// entries for the agent account (ADR-129). Only a run as that account
+    /// has it; a write-restricted token does not restrict reads.
     WindowsReadDeny,
     /// The microVM tier (ADR-128, not built): the agent runs on a kernel of
     /// its own under a VM monitor (KVM, Virtualization.framework).
@@ -267,6 +274,7 @@ impl Mechanism {
             Self::IsolatedView => "isolated_view",
             Self::RestrictedToken => "restricted_token",
             Self::JobObject => "job_object",
+            Self::AgentAccount => "agent_account",
             Self::WfpNetwork => "wfp_network",
             Self::WindowsReadDeny => "windows_read_deny",
             Self::VmHypervisor => "vm_hypervisor",
@@ -315,8 +323,9 @@ impl Restriction {
     /// for the seccomp filters and `no_new_privs` (`tested`), and for
     /// Landlock's required rights and bubblewrap's namespace and view
     /// (`applied`). Best-effort steps and Seatbelt, which nothing reports,
-    /// are missing only when reported off. On Windows the token and the job
-    /// must be confirmed on the agent's own process (`tested`).
+    /// are missing only when reported off. On Windows the token, the account,
+    /// the job and the read denies must be confirmed on the agent's own
+    /// process (`tested`).
     #[must_use]
     pub fn missing(&self, launched: bool) -> bool {
         if !self.configured || !self.available {
@@ -327,6 +336,8 @@ impl Restriction {
             Mechanism::Seccomp
             | Mechanism::NoNewPrivs
             | Mechanism::RestrictedToken
+            | Mechanism::AgentAccount
+            | Mechanism::WindowsReadDeny
             | Mechanism::JobObject => self.tested == Some(true),
             Mechanism::LandlockFilesystem
             | Mechanism::LandlockTcpPort
@@ -336,8 +347,7 @@ impl Restriction {
             | Mechanism::LandlockResolveUnix
             | Mechanism::LandlockUdp
             | Mechanism::Seatbelt
-            | Mechanism::WfpNetwork
-            | Mechanism::WindowsReadDeny => true,
+            | Mechanism::WfpNetwork => true,
             // the microVM tier is not built: nothing reports it (ADR-128)
             Mechanism::VmHypervisor
             | Mechanism::VmProjectOnly
@@ -392,6 +402,18 @@ pub struct LaunchCheck {
     /// (`IsProcessInJob`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_in_job: Option<bool>,
+    /// Windows: the agent was started as OpenMoat's agent account
+    /// (`CreateProcessWithLogonW`, ADR-129).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_account: Option<bool>,
+    /// Windows: the user of the agent's own token, read back before it ran,
+    /// is the account's SID that `openmoat agent-account setup` recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_token_account: Option<bool>,
+    /// Windows: the deny entries for the account on the places the policy's
+    /// read denies name were set before the agent started.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_denies: Option<bool>,
     /// Why the launch was stopped, when it was.
     pub failure: Option<String>,
 }
@@ -481,9 +503,11 @@ impl EffectiveBoundary {
                     (check.restricted_token, check.agent_token_restricted)
                 }
                 Mechanism::JobObject => (check.job_object, check.agent_in_job),
+                Mechanism::AgentAccount => (check.agent_account, check.agent_token_account),
+                // The entries name the account: in force once the agent is it.
+                Mechanism::WindowsReadDeny => (check.read_denies, check.agent_token_account),
                 Mechanism::Seatbelt
                 | Mechanism::WfpNetwork
-                | Mechanism::WindowsReadDeny
                 | Mechanism::VmHypervisor
                 | Mechanism::VmProjectOnly
                 | Mechanism::VmProxyNetwork
