@@ -68,7 +68,7 @@ impl Defaults {
 use serde::{Deserialize, Serialize};
 
 use crate::kind::Kind;
-use crate::pattern::{GlobPattern, ShellPattern};
+use crate::pattern::{Checked, GlobPattern, ShellPattern};
 use crate::secret::{self, Secret};
 use crate::staging::{self, StagingSettings};
 use crate::taint::{self, TaintSettings};
@@ -180,12 +180,17 @@ impl RuleGroup {
     /// # Errors
     /// [`PolicyError::Rule`] for the first pattern that does not parse.
     pub fn check_patterns(&self) -> Result<(), PolicyError> {
+        self.check_patterns_in(&mut Checked::default())
+    }
+
+    /// [`Self::check_patterns`], not building again what `checked` holds.
+    fn check_patterns_in(&self, checked: &mut Checked) -> Result<(), PolicyError> {
         for kind in Kind::ALL {
             for p in self.patterns(kind) {
                 let compiled = if kind == Kind::Shell {
-                    ShellPattern::compile(p).map(drop)
+                    ShellPattern::check(p, checked)
                 } else {
-                    GlobPattern::compile(p, false).map(drop)
+                    GlobPattern::check(p, checked)
                 };
                 compiled.map_err(|e| rule_err(&self.id, &e))?;
             }
@@ -642,7 +647,9 @@ impl Policy {
     /// and every pattern's syntax ([`RuleGroup::check_patterns`]).
     pub fn lint(&self) -> Result<(), PolicyError> {
         self.lint_structure()?;
-        self.groups().try_for_each(RuleGroup::check_patterns)
+        let mut checked = Checked::default();
+        self.groups()
+            .try_for_each(|group| group.check_patterns_in(&mut checked))
     }
 
     /// [`Self::lint`] without parsing each pattern again, for a policy that

@@ -4,6 +4,8 @@ use std::sync::OnceLock;
 
 use globset::{Glob, GlobMatcher};
 
+use super::tail::Tail;
+
 /// Parsing a glob is what can fail, so it happens when the policy is compiled
 /// and a bad pattern is still reported (and still fails `moat guard` closed)
 /// before any decision. Building the regex behind the matcher cannot fail
@@ -12,13 +14,17 @@ use globset::{Glob, GlobMatcher};
 /// rest are never built. Of those, a candidate that cannot begin as the
 /// glob's literal start does (`/Users/me/.ssh/id_rsa` against
 /// `/Users/me/.hermes/{…}`) is refused without building it, so a policy
-/// with more patterns does not make each call build more regexes.
+/// with more patterns does not make each call build more regexes. So is one
+/// that cannot end as the glob's literal end does (`/p/src/lib.rs` against
+/// `**/.env`, `git` against `{gh,*/gh}`, [`Tail`]).
 #[derive(Debug, Clone)]
 pub(super) struct LazyGlob {
     glob: Glob,
     /// The ASCII text the glob starts with, up to its first `*`, `?`, `[`,
     /// `{` or `\`, which every match begins with.
     prefix: String,
+    /// The text every match ends with or holds.
+    tail: Tail,
     case_insensitive: bool,
     matcher: OnceLock<GlobMatcher>,
 }
@@ -35,9 +41,11 @@ pub(super) fn literal_start(glob: &str) -> &str {
 impl LazyGlob {
     pub(super) fn new(glob: Glob, case_insensitive: bool) -> Self {
         let prefix = literal_start(glob.glob()).to_owned();
+        let tail = Tail::of(glob.glob());
         Self {
             glob,
             prefix,
+            tail,
             case_insensitive,
             matcher: OnceLock::new(),
         }
@@ -50,10 +58,13 @@ impl LazyGlob {
     }
 
     pub(super) fn is_match(&self, candidate: &str) -> bool {
-        self.may_match(candidate) && self.regex_match(candidate)
+        self.may_match(candidate)
+            && self.tail.may_match(candidate, self.case_insensitive)
+            && self.regex_match(candidate)
     }
 
-    fn regex_match(&self, candidate: &str) -> bool {
+    /// The regex's own answer, without the prefix and tail checks.
+    pub(super) fn regex_match(&self, candidate: &str) -> bool {
         self.matcher
             .get_or_init(|| self.glob.compile_matcher())
             .is_match(candidate)
@@ -97,8 +108,8 @@ mod tests {
         LazyGlob::new(built, case_insensitive)
     }
 
-    /// The prefix check never changes a verdict: for every pattern and
-    /// candidate, in both case modes, the answer is the regex's own.
+    /// The prefix and tail checks never change a verdict: for every pattern
+    /// and candidate, in both case modes, the answer is the regex's own.
     #[test]
     fn the_prefix_check_agrees_with_the_regex() {
         let patterns = [
@@ -116,6 +127,18 @@ mod tests {
             "C:/Users/me/.ssh/**",
             "/",
             "",
+            // ends and holds the tail check reads
+            "**/.git/hooks/**",
+            "**/.git/hooks",
+            "**/{.envrc,.env.*}",
+            "**/{a,**/b}",
+            "{gh,*/gh}",
+            "**/*.{pem,key}",
+            "**/sécret/key",
+            "**/sécret",
+            "**/[}]x",
+            "**/a\\}",
+            "**/a/**/b/**",
         ];
         let candidates = [
             "/Users/me/.ssh/id_rsa",
@@ -140,18 +163,58 @@ mod tests {
             "key.pem",
             "/Users/me/projects/b1/x",
             "/Users/me/esc*aped",
+            "/p/.git/hooks",
+            "/p/.GIT/Hooks/pre-commit",
+            "/p/.git/hooksx/y",
+            ".git/hooks",
+            "/p/.envrc",
+            "/p/.env.x",
+            "b",
+            "/x/b",
+            "/x/a",
+            "a",
+            "gh",
+            "/usr/bin/gh",
+            "ghx",
+            "/k/x.PEM",
+            "/k/x.key",
+            "/k/sécret/key",
+            "/k/s\u{e9}cret",
+            "/k/sEcret",
+            "/k/}x",
+            "/k/a}",
+            "/k/a/w/b/c",
+            "/k/a/b",
+            "C:\\p\\.git\\hooks\\x",
         ];
+        // A `\` escapes on Unix and separates on Windows (globset's default
+        // per platform), so each reading is checked on every platform; a
+        // pattern only one reading parses (`**/a\}`) is checked in that one.
         for pattern in patterns {
-            for case_insensitive in [false, true] {
-                let g = glob(pattern, case_insensitive);
-                for candidate in candidates {
-                    assert_eq!(
-                        g.is_match(candidate),
-                        g.regex_match(candidate),
-                        "{pattern:?} {candidate:?} case_insensitive={case_insensitive}"
-                    );
+            let mut built = false;
+            for backslash_escape in [true, false] {
+                for case_insensitive in [false, true] {
+                    let Ok(g) = GlobBuilder::new(pattern)
+                        .literal_separator(true)
+                        .backslash_escape(backslash_escape)
+                        .case_insensitive(case_insensitive)
+                        .build()
+                    else {
+                        continue;
+                    };
+                    built = true;
+                    let g = LazyGlob::new(g, case_insensitive);
+                    for candidate in candidates {
+                        assert_eq!(
+                            g.is_match(candidate),
+                            g.regex_match(candidate),
+                            "{pattern:?} {candidate:?} case_insensitive={case_insensitive} \
+                             backslash_escape={backslash_escape}"
+                        );
+                    }
                 }
             }
+            assert!(built, "{pattern:?} parses under neither reading of `\\`");
         }
     }
 

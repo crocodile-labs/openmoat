@@ -16,6 +16,14 @@ const BACKSLASH: &str = "\u{1}";
 /// inside those but are cheap to send down the glob path.
 const GLOB_CHARS: [char; 9] = ['*', '?', '[', ']', '{', '}', '\\', ',', '!'];
 
+/// Whether globset parses `glob` whatever its options, so its glob need not be
+/// built to know that. Its parser fails only on a class (`[`), an alternation
+/// (`{`, `}`) or an escape (`\`); `*`, `**`, `?`, `,` and `!` outside those
+/// always parse (globset 0.4's `Parser::parse`, held by the tests below).
+pub(super) fn cannot_fail(glob: &str) -> bool {
+    !glob.contains(['[', '{', '}', '\\'])
+}
+
 /// A glob for one shell word. A backslash escapes the next character on every
 /// platform, as in a POSIX shell, so `\\` is a literal backslash.
 ///
@@ -120,6 +128,31 @@ mod tests {
         }
     }
 
+    /// Every string over the characters [`cannot_fail`] lets through, up to
+    /// five long, parses as a path glob and as a word glob: what lets the
+    /// policy lint skip building them.
+    #[test]
+    fn what_cannot_fail_always_parses() {
+        let alphabet = ['a', '/', '*', '?', ',', '!', '.', '-', 'é', ']'];
+        let mut strings = vec![String::new()];
+        let mut last = vec![String::new()];
+        for _ in 0..5 {
+            last = last
+                .iter()
+                .flat_map(|s| alphabet.iter().map(move |c| format!("{s}{c}")))
+                .collect();
+            strings.extend(last.iter().cloned());
+        }
+        for s in &strings {
+            assert!(cannot_fail(s));
+            assert!(WordGlob::new(s).is_ok(), "{s:?}");
+            for separator in [false, true] {
+                let built = GlobBuilder::new(s).literal_separator(separator).build();
+                assert!(built.is_ok(), "{s:?}");
+            }
+        }
+    }
+
     #[test]
     fn glob_syntax_still_compiles_to_a_glob() {
         for word in [
@@ -129,6 +162,9 @@ mod tests {
                 matches!(WordGlob::new(word), Ok(WordGlob::Glob(_))),
                 "{word}"
             );
+        }
+        for malformed in ["{a", "[a", "b}", "a\\", "[z-a]", "{a,{b}"] {
+            assert!(!cannot_fail(malformed), "{malformed}");
         }
         for malformed in ["{a", "[a", "b}"] {
             assert!(

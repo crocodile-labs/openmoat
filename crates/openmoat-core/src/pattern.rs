@@ -2,10 +2,13 @@
 
 use globset::GlobBuilder;
 
+mod check;
 mod lazy;
 mod literal;
 mod sequence;
+mod tail;
 mod word;
+pub(crate) use check::Checked;
 pub use literal::literal_shell_pattern;
 
 use crate::lexer;
@@ -195,6 +198,34 @@ pub struct ShellPattern {
 
 impl ShellPattern {
     pub fn compile(raw: &str) -> Result<Self, PolicyError> {
+        let (negated, words, anchored) = Self::words(raw)?;
+        let mut tokens = words
+            .iter()
+            .map(|w| {
+                if w == "*" {
+                    return Ok(Token::Any);
+                }
+                WordGlob::new(w)
+                    .map(|g| Token::One(g, w.clone()))
+                    .map_err(|e| PolicyError::BadGlob {
+                        pattern: raw.to_owned(),
+                        error: e,
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if anchored {
+            tokens.push(Token::End);
+        }
+        Ok(Self {
+            source: raw.to_owned(),
+            tokens,
+            negated,
+        })
+    }
+
+    /// Whether `raw` is an exclusion, its words, and whether it ends with `$`
+    /// (which is not among the words).
+    fn words(raw: &str) -> Result<(bool, Vec<String>, bool), PolicyError> {
         // Patterns are tokenised with the same lexer as commands so that `a|b`
         // and `a | b` mean the same thing on both sides of the match.
         let (negated, body) = split_negation(raw);
@@ -220,28 +251,7 @@ impl ShellPattern {
         if words.is_empty() {
             return Err(PolicyError::EmptyPattern);
         }
-        let mut tokens = words
-            .iter()
-            .map(|w| {
-                if w == "*" {
-                    return Ok(Token::Any);
-                }
-                WordGlob::new(w)
-                    .map(|g| Token::One(g, w.clone()))
-                    .map_err(|e| PolicyError::BadGlob {
-                        pattern: raw.to_owned(),
-                        error: e,
-                    })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        if anchored {
-            tokens.push(Token::End);
-        }
-        Ok(Self {
-            source: raw.to_owned(),
-            tokens,
-            negated,
-        })
+        Ok((negated, words, anchored))
     }
 
     #[must_use]
