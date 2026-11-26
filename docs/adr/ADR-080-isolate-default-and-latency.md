@@ -172,3 +172,62 @@ process grown by more than 32 MiB after its first window. It runs weekly on
 `ubuntu-latest` and `macos-15` (not a required check). Only that job can show the numbers;
 nothing of it ran on the development machine, whose `openmoat init` refuses to run under an
 agent.
+
+## Amendment 2026-11-26: fewer globs built per guard process
+
+`openmoat bench` on 0.28's `main` (f2c45a0c) put the guard's own time in loading the policy
+(`context`, p50 13.7 ms), compiling and deciding (`compile`, 49.3 ms) and the session checks
+(`taint`, 23.2 ms). A sampling profile of one process's work on the default policy (105 KB)
+showed most of it in globset, building globs nobody needed:
+
+- **Loading.** Three quarters of `Policy::parse` was the lint building every pattern's glob
+  (globset's parse and its regex text) to learn that it parses; the engine then builds them
+  again for its context. Deserializing was the other quarter.
+- **The first decision.** Nine tenths of a first `decide` was building regexes. A glob's
+  literal start already refused most paths, but over 150 default patterns begin with `**/` and
+  most shell programs are written `{gh,*/gh}`, whose start is empty: a write in the project
+  built a regex for every one of them, a `git status` one for every program glob.
+
+Two changes, neither changing a decision, an error, or what the guard trusts:
+
+1. The lint builds a glob only when it may fail to parse. globset's parser fails only on a
+   class, an alternation or an escape (`[`, `{`, `}`, `\`); a test parses every string up to
+   five characters long over the other glob characters, and a text the policy repeats is
+   built once per lint. The error for the first pattern that does not compile is the one
+   compiling gives.
+2. Before building a glob's regex, a candidate is checked against the glob's literal end
+   (`**/.env` needs `.env` at the end, `{gh,*/gh}` needs `gh`, `dir/**` needs `dir`'s end
+   inside), as the literal start already was. A candidate with a non-ASCII character or a
+   backslash goes to the regex; a test checks every default-policy glob, spelled for a
+   context in both case modes, and every shell word, against its regex on its own matches,
+   near misses and their case-flipped forms.
+
+In-process, per fresh round on the default policy (40 rounds of 7 actions, this development
+Mac, under load; p50 / p95 in ms):
+
+| Step | Before | Lint (1) | Lint and tail (1, 2) |
+|---|---|---|---|
+| `Policy::parse` | 13.2 / 23.3 | 6.2 / 10.9 | 6.5 / 10.4 |
+| `CompiledPolicy::compile` | 13.2 / 24.5 | 12.6 / 20.9 | 12.9 / 20.0 |
+| first `decide`, write in the project | 19.6 / 39.8 | 17.7 / 30.9 | 0.27 / 0.43 |
+| first `decide`, `git status` | 6.0 / 9.9 | 5.4 / 8.1 | 0.58 / 0.96 |
+| first `decide`, read in the project | 2.2 / 5.8 | 1.6 / 3.3 | 0.42 / 0.71 |
+| fold of one earlier call and the session checks | 0.85 / 1.78 | 0.84 / 1.54 | 0.25 / 0.43 |
+| parse, compile and first decide | 36.6 / 66.3 | 26.8 / 47.1 | 20.2 / 29.3 |
+
+What was measured and left alone:
+
+- **Compiling** is now the larger part (globset building each spelled glob's regex text,
+  most of it). Deferring that build to first use would need an infallible constructor,
+  which globset does not have, so a deferred build would add an error branch inside the
+  matcher with no safe answer for an allow list. Sharing each repeated shell word's glob
+  across a compile (559 globbed words, 309 texts) measured within the run-to-run spread
+  and was not kept.
+- **Deserializing** the YAML is about a quarter of loading. The parser stays (ADR-024).
+- **The audit log** (measured on a fresh log in a temporary directory): `open_read_only`
+  1.3 ms p50 (one `user_version` read), the first session lookup 0.47 ms (SQLite reading the
+  schema), the next 0.04 ms; the session fold's digest of the effective policy (JSON and
+  SHA-256) 0.35 ms. Each is done once per process and none repeats work.
+- **Classifying a call again** in each session check (`with_injected`, `with_taint`,
+  `with_staging`, `with_trifecta`, the provenance step) costs tens of microseconds each once
+  the globs are built.

@@ -70,8 +70,20 @@ mod tests {
     #[test]
     fn check_answers_as_compile_does() {
         let globs = [
-            "/a/**", "!/a/**", "", "!", "**/.env", "/a/{b,c}", "/a/{b", "/a/b}", "[z-a]", "a\\",
-            "/x/[ab]/**", "/x/{a/**", "*.pem", "é/*",
+            "/a/**",
+            "!/a/**",
+            "",
+            "!",
+            "**/.env",
+            "/a/{b,c}",
+            "/a/{b",
+            "/a/b}",
+            "[z-a]",
+            "a\\",
+            "/x/[ab]/**",
+            "/x/{a/**",
+            "*.pem",
+            "é/*",
         ];
         let mut checked = Checked::default();
         for g in globs.iter().chain(&globs) {

@@ -1,0 +1,2 @@
+### Changed
+- `openmoat guard` starts faster, with every decision and error the same: loading the policy no longer builds the globs that cannot fail to parse, and builds a repeated one once; and a path or a command is checked against a glob's literal end before the glob's regex is built, so the first decision of a process builds a handful of regexes instead of hundreds ([#0](https://github.com/crocodile-labs/openmoat/pull/0)).

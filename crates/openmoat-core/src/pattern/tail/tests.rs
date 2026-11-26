@@ -22,7 +22,10 @@ fn the_tail_is_the_literal_end_of_the_glob() {
         ("**/{a,**/b}", ends(&["a", "b"])),
         ("**/*.{pem,key}", ends(&["pem", "key"])),
         ("x{a,b}.json", ends(&[".json"])),
-        ("**/.git/hooks/**", Tail::Contains(vec![".git/hooks".into()])),
+        (
+            "**/.git/hooks/**",
+            Tail::Contains(vec![".git/hooks".into()]),
+        ),
         ("**/sécret/key", ends(&["cret/key"])),
         ("[ab]c", ends(&["c"])),
         ("a\\*b", ends(&["b"])),
@@ -31,8 +34,21 @@ fn the_tail_is_the_literal_end_of_the_glob() {
     }
     // nothing literal at the end, or an end this does not read
     for glob in [
-        "**", "*", "a*", "a?", "[ab]", "{a,*}", "{a,b*}", "**/é", "{a,{b,c}}", "[}]",
-        "a\\}", "{a,[b]}", "/**", "a/**/**", "/",
+        "**",
+        "*",
+        "a*",
+        "a?",
+        "[ab]",
+        "{a,*}",
+        "{a,b*}",
+        "**/é",
+        "{a,{b,c}}",
+        "[}]",
+        "a\\}",
+        "{a,[b]}",
+        "/**",
+        "a/**/**",
+        "/",
     ] {
         assert_eq!(Tail::of(glob), Tail::Any, "{glob}");
     }
@@ -44,8 +60,14 @@ fn only_an_ascii_candidate_without_a_backslash_is_refused() {
     assert!(!tail.may_match("/p/.envx", false));
     assert!(!tail.may_match("/p/.ENV", false));
     assert!(tail.may_match("/p/.ENV", true));
-    assert!(tail.may_match("/p/é/x", false), "non-ASCII goes to the regex");
-    assert!(tail.may_match("C:\\p\\x", false), "a `\\` goes to the regex");
+    assert!(
+        tail.may_match("/p/é/x", false),
+        "non-ASCII goes to the regex"
+    );
+    assert!(
+        tail.may_match("C:\\p\\x", false),
+        "a `\\` goes to the regex"
+    );
     let dir = Tail::of("**/.git/hooks/**");
     assert!(dir.may_match("/p/.git/hooks/pre-commit", false));
     assert!(!dir.may_match("/p/.git/config", false));
@@ -140,14 +162,27 @@ fn every_default_shell_word_answers_as_its_regex() {
         .chain(&policy.allow)
         .chain(&policy.review)
         .chain(&policy.defer);
-    let programs = ["git", "gh", "/usr/bin/gh", "GH", "docker", "sh", "bash", "x\\y", "é"];
+    let programs = [
+        "git",
+        "gh",
+        "/usr/bin/gh",
+        "GH",
+        "docker",
+        "sh",
+        "bash",
+        "x\\y",
+        "é",
+    ];
     let mut checked = 0;
     for pattern in groups.flat_map(|g| &g.shell) {
         let body = pattern.strip_prefix('!').unwrap_or(pattern);
-        let words = crate::lexer::lex(body).unwrap().into_iter().filter_map(|t| match t {
-            crate::lexer::Token::Word(w) => Some(w.text),
-            _ => None,
-        });
+        let words = crate::lexer::lex(body)
+            .unwrap()
+            .into_iter()
+            .filter_map(|t| match t {
+                crate::lexer::Token::Word(w) => Some(w.text),
+                _ => None,
+            });
         for word in words {
             let Ok(WordGlob::Glob(glob)) = WordGlob::new(&word) else {
                 continue;
