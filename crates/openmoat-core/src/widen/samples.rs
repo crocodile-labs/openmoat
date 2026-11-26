@@ -27,7 +27,7 @@ enum Fill {
 /// Strings `glob` matches (each brace alternative, each fill) and the near
 /// misses at its edges. `glob` is one spelling as [`crate::EvalContext::spellings`]
 /// gives it; a leading `!` is ignored.
-pub(super) fn glob(glob: &str) -> Vec<String> {
+pub(crate) fn glob(glob: &str) -> Vec<String> {
     let body = glob.strip_prefix('!').unwrap_or(glob);
     let mut out = Vec::new();
     for alternative in crate::ir::brace_alternatives(body) {

@@ -6,6 +6,7 @@ mod check;
 mod lazy;
 mod literal;
 mod sequence;
+mod tail;
 mod word;
 pub(crate) use check::Checked;
 pub use literal::literal_shell_pattern;

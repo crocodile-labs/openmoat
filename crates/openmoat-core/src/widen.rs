@@ -36,7 +36,7 @@ mod generate;
 mod nfa;
 mod proof;
 mod relevant;
-mod samples;
+pub(crate) mod samples;
 mod settings;
 
 pub use corpus::{Case, Probe, WideningSource, fixtures};
