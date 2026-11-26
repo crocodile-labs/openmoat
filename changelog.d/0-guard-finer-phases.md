@@ -1,2 +1,0 @@
-### Changed
-- `openmoat audit stats` and `openmoat bench` split the guard's time more finely: `parse`, `lock`, `placed`, `context`, `policy`, `secrets`, `snapshot`, `compile` (the policy's compile only), `decide` (the path and program lookups on disk), `audit` (opening the audit log) and `taint` are each their own phase, and a deadline's deny names the finer step it was in. Rows recorded with the earlier, coarser names are still reported under those names ([#0](https://github.com/crocodile-labs/openmoat/pull/0)).
