@@ -94,6 +94,36 @@ fn row(out: &mut String, name: &str, f: &Figures) {
     );
 }
 
+/// The decision time split by the guard's phases, over every agent's calls
+/// that recorded them (ADR-130); nothing when none did.
+fn phases(out: &mut String, d: &Disturbance) {
+    let Some(longest) = d.overall.phases.iter().map(|p| p.phase.len()).max() else {
+        return;
+    };
+    let w = longest.max("phase".len());
+    let _ = writeln!(
+        out,
+        "time per guard phase, all calls in the table (`record` counts up to the row's write):"
+    );
+    let _ = writeln!(
+        out,
+        "  {:<w$} {:>7} {:>7} {:>7} {:>7}",
+        "phase", "calls", "p50 ms", "p95 ms", "p99 ms"
+    );
+    for p in &d.overall.phases {
+        let l = &p.latency;
+        let _ = writeln!(
+            out,
+            "  {:<w$} {:>7} {:>7} {:>7} {:>7}",
+            p.phase,
+            p.calls,
+            ms(l.p50),
+            ms(l.p95),
+            ms(l.p99)
+        );
+    }
+}
+
 /// The report as text: a table per agent and over all, then each agent's
 /// held calls, guard failures and hook-failure facts.
 fn text(stats: &Stats) -> String {
@@ -129,6 +159,7 @@ fn text(stats: &Stats) -> String {
     if d.agents.len() > 1 {
         row(&mut out, "all agents", &d.overall);
     }
+    phases(&mut out, d);
     for agent in &d.agents {
         let f = &agent.figures;
         let h = &agent.hook_failure;

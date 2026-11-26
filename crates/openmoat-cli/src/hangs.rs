@@ -22,6 +22,10 @@ use openmoat_hosts::Host;
 
 use crate::home::{self, Home};
 
+mod times;
+
+pub use times::spent;
+
 /// The side file stops growing at this size, so a stream of hangs cannot fill
 /// the disk; 64 KiB holds a few thousand lines.
 const MAX_BYTES: u64 = 64 * 1024;
@@ -104,6 +108,14 @@ impl Phase {
         }
     }
 
+    /// Where the guard takes this phase among the others: 0 for the first.
+    pub fn order(self) -> usize {
+        PHASES
+            .iter()
+            .position(|p| *p == self)
+            .unwrap_or(PHASES.len())
+    }
+
     /// The phase named `name` in a hangs line.
     pub fn from_name(name: &str) -> Option<Self> {
         PHASES.into_iter().find(|p| p.name() == name)
@@ -113,10 +125,12 @@ impl Phase {
 /// The guard's current phase, as an index into [`PHASES`]; one guard per process.
 static CURRENT: AtomicU8 = AtomicU8::new(0);
 
-/// The guard moves on to `phase`.
+/// The guard moves on to `phase`; the time since the last phase began goes
+/// to that phase ([`spent`]).
 pub fn enter(phase: Phase) {
     let index = PHASES.iter().position(|p| *p == phase).unwrap_or(0);
     CURRENT.store(u8::try_from(index).unwrap_or(0), Ordering::Relaxed);
+    times::entered(phase);
     stall_at(phase);
 }
 

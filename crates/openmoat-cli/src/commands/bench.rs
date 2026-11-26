@@ -425,6 +425,9 @@ fn print_text(report: &Report<'_>) -> Result<()> {
              {:.2} reviews and {:.2} denies per 100 calls (`openmoat audit stats` figures)",
             f.calls, f.per_100_calls.review, f.per_100_calls.deny
         )?;
+        if !f.phases.is_empty() {
+            writeln!(out, "{}", phase_line(&f.phases))?;
+        }
     }
     if !report.hook_failure.is_empty() {
         writeln!(
@@ -436,4 +439,14 @@ fn print_text(report: &Report<'_>) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// The ordinary work's decision time split by the guard's phases (ADR-130),
+/// p50 and p95 in microseconds, so each run shows which phase took the time.
+fn phase_line(phases: &[crate::disturbance::PhaseLatency]) -> String {
+    let each: Vec<String> = phases
+        .iter()
+        .map(|p| format!("{} {}/{}", p.phase, p.latency.p50, p.latency.p95))
+        .collect();
+    format!("  by guard phase (p50/p95 µs): {}", each.join(", "))
 }

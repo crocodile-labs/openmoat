@@ -5,7 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, 
 use super::StoreError;
 
 /// Schema version this build writes, kept in `PRAGMA user_version`.
-pub(super) const SCHEMA_VERSION: i64 = 12;
+pub(super) const SCHEMA_VERSION: i64 = 13;
 
 /// The first version with the hash chain ([`V2`]).
 pub(super) const CHAIN_VERSION: i64 = 2;
@@ -28,6 +28,8 @@ pub(super) const INJECTED_INPUTS_VERSION: i64 = 10;
 pub(super) const PACKAGE_EVENTS_VERSION: i64 = 11;
 /// The first version whose events carry the audit key's MAC ([`V12`]).
 pub(super) const KEYED_VERSION: i64 = 12;
+/// The first version whose events carry the guard's step times ([`V13`]).
+pub(super) const PHASES_VERSION: i64 = 13;
 
 /// Version 1: the events table.
 const V1: &str = "
@@ -316,6 +318,15 @@ CREATE TRIGGER IF NOT EXISTS events_keyed BEFORE INSERT ON events
     BEGIN SELECT RAISE(ABORT, 'an audit event needs the audit key''s MAC (ADR-101): restart this OpenMoat process'); END;
 ";
 
+/// Version 13: how long each step of `openmoat guard` took on the call, beside
+/// `latency_us` (ADR-130, `phases.rs`). Rows already present get none, and
+/// readers take a missing value as none. Outside the hash chain, so no chain
+/// or MAC changes. Adding a column copies no row; added only when it is not
+/// there yet, as for [`V7`].
+const V13: &str = "
+ALTER TABLE events ADD COLUMN phases_us TEXT;
+";
+
 /// A `CHECK` of one table that a step widens: `from` becomes `to`, which
 /// accepts every value `from` accepts, and more.
 struct Widening {
@@ -483,6 +494,9 @@ fn climb(tx: &Transaction<'_>, found: i64, to: i64) -> Result<bool, StoreError> 
             added_mac = true;
         }
         tx.execute_batch(V12_MARK)?;
+    }
+    if step(PHASES_VERSION) && !has_column(tx, "events", "phases_us")? {
+        tx.execute_batch(V13)?;
     }
     Ok(added_mac)
 }

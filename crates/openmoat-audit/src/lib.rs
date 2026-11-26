@@ -29,7 +29,7 @@ pub use store::{
     AnchorCheck, BreakKind, Cached, ChainBreak, ChainHead, ChainReport, Event, EventId,
     ExportBreak, ExportFilter, ExportFormat, ExportReport, ExportedEvent, Exposure, FileProvenance,
     GENESIS, HeldForReview, MAX_INJECTED_PER_SESSION, MCP_FLOW_MAX_AGE_MS, MCP_FLOW_SESSION_ROWS,
-    MCP_TICKET_MAX_AGE_MS, NewEvent, NewInjected, NewProvenance, NewTicket, ProvenanceKind,
-    RAN_AFTER_REVIEW_TOOL, RecordedWrite, RuleSeen, SHOWN_PREFIX, SessionWrite, StartedSession,
-    Store, StoreError, Ticket, Written, verify_export, verify_export_keyed,
+    MCP_TICKET_MAX_AGE_MS, NewEvent, NewInjected, NewProvenance, NewTicket, PhaseTimes,
+    ProvenanceKind, RAN_AFTER_REVIEW_TOOL, RecordedWrite, RuleSeen, SHOWN_PREFIX, SessionWrite,
+    StartedSession, Store, StoreError, Ticket, Written, verify_export, verify_export_keyed,
 };

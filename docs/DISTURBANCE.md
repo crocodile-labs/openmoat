@@ -30,8 +30,9 @@ own terminal: an agent's sandbox may block reading the log. It exits 0, or 64 on
 usage error such as a window it cannot parse.
 
 The text output is one table row per agent with calls in the window, a row over all
-agents when there are several, then a line per agent with its held calls, the guard's
-own failures and what the agent does when the hook fails. `--format json` prints a
+agents when there are several, a table of the time per guard phase over the calls in
+the table (when their rows have phase times), then a line per agent with its held
+calls, the guard's own failures and what the agent does when the hook fails. `--format json` prints a
 document with `"format": "openmoat-stats-v1"`, the `window`, `overall`, `agents` (one
 object per agent, with `host`, `name` and the figures below) and `other_rows`.
 
@@ -41,6 +42,7 @@ object per agent, with `host`, `name` and the figures below) and `other_rows`.
 |---|---|---|
 | calls | `calls` | Tool calls the guard decided and recorded for the agent in the window. Rows that are not an agent's tool call (the proxy's connections, `openmoat run`'s links, a remote approval's own row, live delivery's rows) are left out and counted in `other_rows`. |
 | p50, p95, p99 | `latency.p50_us`, `p95_us`, `p99_us`, `max_us` | The time `openmoat guard` spent on a call, from its start to the moment it recorded the decision (`latency_us` in every row), nearest-rank percentiles. The text shows milliseconds; JSON gives microseconds. The agent's own time to start the hook process is not in it. No calls, no percentiles: the field is `null`, not `0`. |
+| time per guard phase | `phases`: one object per phase with `phase`, `calls`, `p50_us`, `p95_us`, `p99_us`, `max_us` | The same decision time split by the steps `openmoat guard` takes, in that order: `stdin` (reading the tool call), `relay`, `lock` (checking the policy lock), `context` (loading the policy and its context), `compile` (compiling the policy and deciding), `taint` (reading the session's earlier calls), `approval` (waiting for an approver on another device), `cache` (writing the session cache), `record` (writing the audit log) and `answer`. Each row records the microseconds the call spent in each step it went through (`phases_us`, beside `latency_us`, [ADR-130](adr/ADR-130-guard-phase-times.md)); `calls` is how many calls went through that step. `record` counts only up to the moment the row is written, since the row cannot hold the time of its own write, and `answer` comes after the write, so it is never in a row. Rows an older build wrote have no phase times and are left out of this table: the list is empty when no row has them. Only durations and the step's fixed name are recorded, nothing from the call. |
 | allow, defer, review, deny | `verdicts` | Calls per verdict. `defer` leaves the call to the agent's own permission prompt, exactly as without OpenMoat ([POLICY.md](POLICY.md)). |
 | per 100 calls | `per_100_calls` | The same per 100 calls, to two decimals. `review` per 100 calls is the number of prompts OpenMoat added; `deny` per 100 calls is how often it stopped a call outright. |
 | approved | `approved` | Calls that ran because you approved them: `openmoat allow` for the session (`approved-session`) or an approval from another device (`approved-remote`). |
@@ -72,7 +74,11 @@ its report now ends with `ordinary work`: the figures above, computed by the sam
 as `openmoat audit stats`, over the steps of the `benign` and `workflows` scenarios
 (everyday development, where the only reviews are the ones the policy intends, such as
 an install or a push), read back from the throwaway audit log. `--format json` gives
-them as `ordinary_work`, in the shape `openmoat audit stats --format json` uses.
+them as `ordinary_work`, in the shape `openmoat audit stats --format json` uses. The
+text adds one line with each guard phase's p50 and p95 in microseconds, for example
+`by guard phase (p50/p95 µs): stdin 80/120, lock 900/2400, …`, and the JSON has the
+same as `ordinary_work.overall.phases`, so every CI run shows which phase the decision
+time went to.
 
 CI's end-to-end test `moatbench_mini_openmoat_meets_every_expectation`
 (`crates/openmoat-cli/tests/e2e/moatbench.rs`) runs `openmoat bench --format json` on

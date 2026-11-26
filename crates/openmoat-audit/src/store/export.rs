@@ -149,6 +149,8 @@ impl ExportedEvent {
             rules: list(&self.rules)?,
             reasons: list(&self.reasons)?,
             latency_us: self.latency_us,
+            // Outside the chain, so not in an export (`phases.rs`).
+            phases_us: None,
             prev_hash: Some(self.prev_hash.clone()),
             hash: Some(self.hash.clone()),
         })

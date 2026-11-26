@@ -29,6 +29,7 @@ fn event(home: &str, secret: &str) -> Event {
         rules: vec!["secrets-in-commands".to_owned()],
         reasons: vec![format!("reads {home}/.ssh/id_ed25519 with {secret}")],
         latency_us: 120,
+        phases_us: None,
         prev_hash: None,
         hash: None,
     }

@@ -104,6 +104,9 @@ pub(super) fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
         decision,
         latency_us,
     };
+    // The time of each phase so far, beside `latency_us` (ADR-130): `record`
+    // counts up to here, just before the row's write.
+    let store = store.with_phase_times(&hangs::spent());
     let id = record_then(&store, &event, |id| {
         // A call that may have run wrote and read what it named (ADR-029); like
         // the row, provenance that cannot be written fails the call.

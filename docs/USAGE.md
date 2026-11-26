@@ -1708,7 +1708,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat audit report <file>…` | one report over verified exports from several machines |
 | `openmoat audit deliver status` · `test [--sink <id>]` · `flush` (each `[--format json]`) | live delivery to the sinks in `~/.moat/delivery.yaml`: each sink's progress and last failure · one test record to each sink · deliver now, resuming a paused sink; exit 64 when the file is not honoured, a test is not accepted or a flush stopped ([DELIVERY.md](DELIVERY.md)) |
 | `openmoat audit evidence [--since …] [--until …] [--host …] [--samples N] [--format json]` | evidence for a window per control of OWASP Top 10 for LLM Applications 2025, SOC 2 and ISO/IEC 27001:2022 Annex A: rules that fired, decisions by verdict, redacted samples, the chain head, and the policy, lock and protections now; evidence, not a certification ([COMPLIANCE.md](COMPLIANCE.md)) |
-| `openmoat audit stats [--since 7d] [--until …] [--host …] [--format json]` | how much OpenMoat got in the way over a window, per agent and over all: calls, p50/p95/p99 decision time, verdicts and per 100 calls, calls approved or allowed later, the guard's own failures, and each agent's hook-failure facts; reads the log only ([DISTURBANCE.md](DISTURBANCE.md)) |
+| `openmoat audit stats [--since 7d] [--until …] [--host …] [--format json]` | how much OpenMoat got in the way over a window, per agent and over all: calls, p50/p95/p99 decision time and the same per guard phase ([example](#audit-stats-time-per-guard-phase)), verdicts and per 100 calls, calls approved or allowed later, the guard's own failures, and each agent's hook-failure facts; reads the log only ([DISTURBANCE.md](DISTURBANCE.md)) |
 | `openmoat allow --last [--always]` | turn the last `review` (a command or a file action) into a session grant (24 h; a command's only in the project it was held in) or a permanent rule for exactly that command or those paths |
 | `openmoat allow "<command>" --host <id> --session <id> [--project <dir>]` | approve one exact command for one agent session, in the project of the current directory or `--project` |
 | `openmoat allow --site <host>` · `--dir <path>` · `--remove <id>` | allow a site or a directory until you remove it · take such a rule out again |
@@ -1758,6 +1758,28 @@ is still running, and the proxy exits 1 with the reason on standard error (ADR-1
 On Unix the server runs in its own process group, so what it started is stopped
 with it. If you run `openmoat mcp proxy` by hand in a terminal, Ctrl-C stops the
 proxy but does not reach the server: the server sees its input close.
+
+### `audit stats`: time per guard phase
+
+Each call's audit row records how long `openmoat guard` spent in each of its phases
+(reading the call, checking the policy lock, loading the policy, deciding, reading the
+session's earlier calls, writing the session cache and the audit log). `openmoat audit
+stats` prints a table of them after the per-agent table:
+
+```text
+time per guard phase, all calls in the table (`record` counts up to the row's write):
+  phase     calls  p50 ms  p95 ms  p99 ms
+  stdin         4     0.1     0.1     0.1
+  lock          4     4.0     8.0     8.0
+  compile       4     9.0     9.0     9.0
+  record        4     1.5     1.5     1.5
+```
+
+`calls` is how many calls went through the phase. `--format json` gives the same as
+`phases` in `overall` and in each agent, in microseconds (`p50_us`, `p95_us`, `p99_us`,
+`max_us`). Rows an older build wrote have no phase times, so the table is missing until
+new calls are recorded. Only durations and the phase names are stored
+([DISTURBANCE.md](DISTURBANCE.md#what-each-number-means), ADR-130).
 
 ### `init` for scripts: hooks only and JSON
 

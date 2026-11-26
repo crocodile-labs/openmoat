@@ -22,10 +22,12 @@ mod injected_inputs;
 mod mcp_flow;
 mod mcp_tickets;
 mod package;
+mod phases;
 mod provenance;
 mod rules;
 mod schema;
 mod seen;
+mod select;
 mod session_cache;
 mod session_writes;
 mod shown;
@@ -40,6 +42,7 @@ pub use export_verify::{
 pub use injected_inputs::{MAX_PER_SESSION as MAX_INJECTED_PER_SESSION, NewInjected};
 pub use mcp_flow::{MAX_AGE_MS as MCP_FLOW_MAX_AGE_MS, MAX_SESSION_ROWS as MCP_FLOW_SESSION_ROWS};
 pub use mcp_tickets::{MAX_AGE_MS as MCP_TICKET_MAX_AGE_MS, NewTicket, Ticket};
+pub use phases::PhaseTimes;
 pub use provenance::{Exposure, FileProvenance, NewProvenance, ProvenanceKind};
 pub use rules::RuleSeen;
 #[cfg(any(test, feature = "test-support"))]
@@ -245,6 +248,11 @@ pub struct Event {
     pub reasons: Vec<String>,
     /// Time spent deciding, in microseconds.
     pub latency_us: i64,
+    /// How long each step of `openmoat guard` took on the call, in
+    /// microseconds, by step name (`phases.rs`); `None` for a row from before
+    /// schema version 13 or from another writer. Not in the hash chain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phases_us: Option<PhaseTimes>,
     /// Hash of the event before it in the chain; `None` for an event written
     /// before the chain existed.
     #[serde(default)]
@@ -274,6 +282,8 @@ pub struct Store {
     key: Option<Box<ChainKey>>,
     /// This handle upgraded the database from a version below 12 itself.
     upgraded_to_keyed: bool,
+    /// The guard's step times, recorded with each event ([`Store::with_phase_times`]).
+    phase_times: Option<Vec<(&'static str, u64)>>,
 }
 
 impl Store {
@@ -319,6 +329,7 @@ impl Store {
             from_package: false,
             key: None,
             upgraded_to_keyed: false,
+            phase_times: None,
         })
     }
 
@@ -340,6 +351,7 @@ impl Store {
             from_package: false,
             key: None,
             upgraded_to_keyed: added_mac,
+            phase_times: None,
         })
     }
 
@@ -524,8 +536,8 @@ impl Store {
         };
         let hash = fields.hash();
         tx.execute(
-            "INSERT INTO events (id, ts_ms, host, session_id, call_id, cwd, tool, action, verdict, rules, reasons, latency_us, prev_hash, hash, mac)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            "INSERT INTO events (id, ts_ms, host, session_id, call_id, cwd, tool, action, verdict, rules, reasons, latency_us, prev_hash, hash, mac, phases_us)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 fields.id,
                 fields.ts_ms,
@@ -542,6 +554,7 @@ impl Store {
                 fields.prev_hash,
                 hash,
                 key.mac(&hash),
+                self.phases_cell(),
             ],
         )?;
         if self.from_package {
@@ -593,20 +606,6 @@ impl Store {
     }
 }
 
-const SELECT_CHAINED: &str = "SELECT id, ts_ms, host, session_id, call_id, cwd, tool, action, verdict, rules, reasons, latency_us, prev_hash, hash FROM events";
-const SELECT_UNCHAINED: &str = "SELECT id, ts_ms, host, session_id, call_id, cwd, tool, action, verdict, rules, reasons, latency_us, NULL, NULL FROM events";
-
-impl Store {
-    /// The event query for this database's schema, for [`row_to_event`].
-    pub(crate) fn select(&self) -> &'static str {
-        if self.chained() {
-            SELECT_CHAINED
-        } else {
-            SELECT_UNCHAINED
-        }
-    }
-}
-
 pub(crate) fn row_to_event(row: &rusqlite::Row<'_>) -> rusqlite::Result<Event> {
     fn decode<T: serde::de::DeserializeOwned>(
         row: &rusqlite::Row<'_>,
@@ -640,6 +639,7 @@ pub(crate) fn row_to_event(row: &rusqlite::Row<'_>) -> rusqlite::Result<Event> {
         latency_us: row.get(11)?,
         prev_hash: row.get(12)?,
         hash: row.get(13)?,
+        phases_us: phases::decode(row.get::<_, Option<String>>(14)?.as_deref()),
     })
 }
 

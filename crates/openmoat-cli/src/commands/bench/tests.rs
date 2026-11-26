@@ -178,3 +178,23 @@ fn an_error_reply_names_its_cause() {
 fn the_time_limit_is_past_the_guards_own_budget() {
     assert!(super::hook::TIMEOUT.as_secs() > crate::install::GUARD_BUDGET_S);
 }
+
+#[test]
+fn the_phase_line_gives_each_phase_p50_and_p95_in_order() {
+    use crate::disturbance::{Latency, PhaseLatency};
+    let phase = |name: &str, p50, p95| PhaseLatency {
+        phase: name.to_owned(),
+        calls: 3,
+        latency: Latency {
+            p50,
+            p95,
+            p99: p95,
+            max: p95,
+        },
+    };
+    let line = super::phase_line(&[phase("stdin", 80, 120), phase("lock", 900, 2_400)]);
+    assert_eq!(
+        line,
+        "  by guard phase (p50/p95 µs): stdin 80/120, lock 900/2400"
+    );
+}

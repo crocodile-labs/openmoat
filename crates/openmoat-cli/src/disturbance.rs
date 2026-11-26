@@ -14,6 +14,8 @@ use openmoat_audit::Event;
 use openmoat_core::Verdict;
 use openmoat_core::rule_id::{APPROVED_REMOTE, APPROVED_SESSION, KERNEL_ERROR, RUN_GUARD_OUTSIDE};
 use openmoat_hosts::{FailureOutcome, Host};
+
+use crate::hangs::Phase;
 use serde::Serialize;
 
 #[cfg(test)]
@@ -86,6 +88,10 @@ pub struct Figures {
     pub per_100_calls: Verdicts<f64>,
     /// Decision time; `None` without calls.
     pub latency: Option<Latency>,
+    /// The decision time split by the guard's phases, in the order the guard
+    /// takes them, from the calls that recorded them (ADR-130); empty when
+    /// none did (rows an older build wrote have no phase times).
+    pub phases: Vec<PhaseLatency>,
     /// Calls that ran because a person approved them (`openmoat allow` for the
     /// session, or an approval from another device).
     pub approved: u64,
@@ -148,6 +154,40 @@ impl Latency {
             p99: at(99)?,
             max: *samples.last()?,
         })
+    }
+}
+
+/// The time one phase of the guard took, over the calls that went through it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PhaseLatency {
+    /// The phase's name (`stdin`, `lock`, `context`, …).
+    pub phase: String,
+    /// Calls that went through it.
+    pub calls: u64,
+    /// Its percentiles.
+    #[serde(flatten)]
+    pub latency: Latency,
+}
+
+impl PhaseLatency {
+    /// One entry per phase in `samples`: the guard's phases in their order,
+    /// then any name this build does not know, by name.
+    fn of(samples: BTreeMap<String, Vec<u64>>) -> Vec<Self> {
+        let order = |name: &str| Phase::from_name(name).map_or(usize::MAX, Phase::order);
+        let mut phases: Vec<Self> = samples
+            .into_iter()
+            .filter_map(|(phase, samples)| {
+                let calls = u64::try_from(samples.len()).unwrap_or(u64::MAX);
+                Some(Self {
+                    latency: Latency::of(samples)?,
+                    phase,
+                    calls,
+                })
+            })
+            .collect();
+        // Stable: names this build does not know stay sorted by name.
+        phases.sort_by_key(|p| order(&p.phase));
+        phases
     }
 }
 
@@ -245,6 +285,7 @@ fn later_allowed(events: &[Event]) -> HashSet<usize> {
 struct Tally {
     figures: Figures,
     latencies: Vec<u64>,
+    phases: BTreeMap<String, Vec<u64>>,
 }
 
 impl Tally {
@@ -275,6 +316,9 @@ impl Tally {
         }
         self.latencies
             .push(u64::try_from(event.latency_us).unwrap_or(0));
+        for (phase, us) in event.phases_us.iter().flatten() {
+            self.phases.entry(phase.clone()).or_default().push(*us);
+        }
     }
 
     fn merge(&mut self, other: &Self) {
@@ -290,6 +334,12 @@ impl Tally {
         f.kernel_errors += o.kernel_errors;
         f.guard_timeouts += o.guard_timeouts;
         self.latencies.extend_from_slice(&other.latencies);
+        for (phase, samples) in &other.phases {
+            self.phases
+                .entry(phase.clone())
+                .or_default()
+                .extend_from_slice(samples);
+        }
     }
 
     fn finish(self) -> Figures {
@@ -302,6 +352,7 @@ impl Tally {
             deny: per_100(v.deny, calls),
         };
         f.latency = Latency::of(self.latencies);
+        f.phases = PhaseLatency::of(self.phases);
         f
     }
 }
