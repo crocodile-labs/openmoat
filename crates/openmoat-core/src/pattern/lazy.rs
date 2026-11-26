@@ -187,17 +187,34 @@ mod tests {
             "/k/a/b",
             "C:\\p\\.git\\hooks\\x",
         ];
+        // A `\` escapes on Unix and separates on Windows (globset's default
+        // per platform), so each reading is checked on every platform; a
+        // pattern only one reading parses (`**/a\}`) is checked in that one.
         for pattern in patterns {
-            for case_insensitive in [false, true] {
-                let g = glob(pattern, case_insensitive);
-                for candidate in candidates {
-                    assert_eq!(
-                        g.is_match(candidate),
-                        g.regex_match(candidate),
-                        "{pattern:?} {candidate:?} case_insensitive={case_insensitive}"
-                    );
+            let mut built = false;
+            for backslash_escape in [true, false] {
+                for case_insensitive in [false, true] {
+                    let Ok(g) = GlobBuilder::new(pattern)
+                        .literal_separator(true)
+                        .backslash_escape(backslash_escape)
+                        .case_insensitive(case_insensitive)
+                        .build()
+                    else {
+                        continue;
+                    };
+                    built = true;
+                    let g = LazyGlob::new(g, case_insensitive);
+                    for candidate in candidates {
+                        assert_eq!(
+                            g.is_match(candidate),
+                            g.regex_match(candidate),
+                            "{pattern:?} {candidate:?} case_insensitive={case_insensitive} \
+                             backslash_escape={backslash_escape}"
+                        );
+                    }
                 }
             }
+            assert!(built, "{pattern:?} parses under neither reading of `\\`");
         }
     }
 
