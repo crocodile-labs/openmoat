@@ -29,6 +29,7 @@ use crate::taint;
 /// its fingerprints are kept; exit 2 with the reason on stderr when they
 /// cannot be.
 pub(super) fn answer(host: Host, payload: &str, event: &HookEvent) -> Code {
+    hangs::enter(Phase::Parse);
     let decision = host
         .parse_request_as(payload, super::entry::event())
         .context("parsing hook payload")
@@ -47,6 +48,7 @@ pub(super) fn answer(host: Host, payload: &str, event: &HookEvent) -> Code {
 fn kept(host: Host, request: HookRequest, output: &str) -> Result<Decision> {
     let started = Instant::now();
     let home = Home::locate()?;
+    hangs::enter(Phase::Lock);
     let verified = integrity::check(&home)?;
     if let Some(deny) = verified.checked.deny {
         return Ok(deny);
@@ -60,6 +62,7 @@ fn kept(host: Host, request: HookRequest, output: &str) -> Result<Decision> {
     }
     let drifted = verified.checked.relaxed;
     let home = verified.home;
+    hangs::enter(Phase::Placed);
     let request = super::placed::placed(&home, host, request, &drifted)?;
     let Some(action) = &request.action else {
         return Ok(Decision::new(Verdict::Allow));
@@ -72,12 +75,14 @@ fn kept(host: Host, request: HookRequest, output: &str) -> Result<Decision> {
         .context("resolving working directory")?;
     hangs::enter(Phase::Context);
     let ctx = context::eval_context(&home, Some(&cwd), None)?;
+    hangs::enter(Phase::Policy);
     let policy = crate::repo::effective_policy(&home, &ctx)?;
     hangs::enter(Phase::Compile);
     let compiled = CompiledPolicy::compile(&policy, &ctx)?;
-    hangs::enter(Phase::Record);
+    hangs::enter(Phase::Audit);
     home.require_exists()?;
     let store = crate::audit_key::open_existing(&home)?;
+    hangs::enter(Phase::Record);
     let output = taint::injected::Output {
         host,
         session: &request.session_id,

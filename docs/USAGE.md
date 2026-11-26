@@ -1762,20 +1762,32 @@ proxy but does not reach the server: the server sees its input close.
 ### `audit stats`: time per guard phase
 
 Each call's audit row records how long `openmoat guard` spent in each of its phases
-(reading the call, checking the policy lock, loading the policy, deciding, reading the
-session's earlier calls, writing the session cache and the audit log). `openmoat audit
-stats` prints a table of them after the per-agent table:
+(reading and parsing the call, checking the policy lock, placing the call, loading its
+context, the policy, the secrets and the search path snapshot, compiling the policy,
+deciding, opening the audit log, reading the session's earlier calls, writing the
+session cache and the audit log). `openmoat audit stats` prints a table of them after
+the per-agent table:
 
 ```text
 time per guard phase, all calls in the table (`record` counts up to the row's write):
-  phase     calls  p50 ms  p95 ms  p99 ms
-  stdin         4     0.1     0.1     0.1
-  lock          4     4.0     8.0     8.0
-  compile       4     9.0     9.0     9.0
-  record        4     1.5     1.5     1.5
+  phase      calls  p50 ms  p95 ms  p99 ms
+  stdin          4     0.1     0.1     0.1
+  parse          4     0.4     0.5     0.5
+  lock           4     4.0     8.0     8.0
+  placed         4     0.6     0.7     0.7
+  context        4     3.0     3.4     3.4
+  policy         4     5.0     5.6     5.6
+  secrets        4     0.1     0.1     0.1
+  snapshot       4     0.3     0.3     0.3
+  compile        4     9.0     9.0     9.0
+  decide         4     2.0     2.4     2.4
+  audit          4     1.0     1.2     1.2
+  taint          4     2.5     3.1     3.1
+  record         4     1.5     1.5     1.5
 ```
 
-`calls` is how many calls went through the phase. `--format json` gives the same as
+`calls` is how many calls went through the phase. [DISTURBANCE.md](DISTURBANCE.md#what-each-number-means)
+says what each phase covers; rows from builds with the coarser split keep their names. `--format json` gives the same as
 `phases` in `overall` and in each agent, in microseconds (`p50_us`, `p95_us`, `p99_us`,
 `max_us`). Rows an older build wrote have no phase times, so the table is missing until
 new calls are recorded. Only durations and the phase names are stored
