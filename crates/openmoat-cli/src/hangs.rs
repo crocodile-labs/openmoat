@@ -44,12 +44,26 @@ pub enum Phase {
     /// Inside `moat run`: waiting for the run's process outside the sandbox
     /// to decide (its own guard records the phase it reached).
     Relay,
+    /// Parsing the payload into a call and finding the state directory.
+    Parse,
     /// Checking the policy lock.
     Lock,
-    /// Loading the policy, its context, secrets and search path.
+    /// Placing the call (its paths and agent) and checking its MCP server.
+    Placed,
+    /// Loading the call's context (project, home, search path) and the decoy keys.
     Context,
-    /// Compiling the policy and deciding the call.
+    /// Loading the person's policy with the project's.
+    Policy,
+    /// Reading the secret values to mask and the required protection level.
+    Secrets,
+    /// Loading `moat init`'s snapshot of the search path and its programs.
+    Snapshot,
+    /// Compiling the policy.
     Compile,
+    /// Deciding the call: resolving its paths and programs on disk.
+    Decide,
+    /// Opening the audit log.
+    Audit,
     /// Reading the session's earlier calls from the audit log.
     Taint,
     /// Waiting for an approver's answer from another device (ADR-093).
@@ -62,12 +76,19 @@ pub enum Phase {
     Answer,
 }
 
-const PHASES: [Phase; 10] = [
+const PHASES: [Phase; 17] = [
     Phase::Stdin,
     Phase::Relay,
+    Phase::Parse,
     Phase::Lock,
+    Phase::Placed,
     Phase::Context,
+    Phase::Policy,
+    Phase::Secrets,
+    Phase::Snapshot,
     Phase::Compile,
+    Phase::Decide,
+    Phase::Audit,
     Phase::Taint,
     Phase::Approval,
     Phase::Cache,
@@ -81,9 +102,16 @@ impl Phase {
         match self {
             Self::Stdin => "stdin",
             Self::Relay => "relay",
+            Self::Parse => "parse",
             Self::Lock => "lock",
+            Self::Placed => "placed",
             Self::Context => "context",
+            Self::Policy => "policy",
+            Self::Secrets => "secrets",
+            Self::Snapshot => "snapshot",
             Self::Compile => "compile",
+            Self::Decide => "decide",
+            Self::Audit => "audit",
             Self::Taint => "taint",
             Self::Approval => "approval",
             Self::Cache => "cache",
@@ -97,9 +125,16 @@ impl Phase {
         match self {
             Self::Stdin => "reading the tool call",
             Self::Relay => "waiting for `openmoat run` to decide",
+            Self::Parse => "parsing the tool call",
             Self::Lock => "checking the policy lock",
-            Self::Context => "loading the policy",
-            Self::Compile => "deciding",
+            Self::Placed => "placing the call and checking its MCP server",
+            Self::Context => "loading the call's context",
+            Self::Policy => "loading the policy",
+            Self::Secrets => "reading the secrets to mask",
+            Self::Snapshot => "loading the search path snapshot",
+            Self::Compile => "compiling the policy",
+            Self::Decide => "deciding",
+            Self::Audit => "opening the audit log",
             Self::Taint => "reading the session's earlier calls",
             Self::Approval => "waiting for an approver's answer",
             Self::Cache => "writing the session cache",
@@ -389,7 +424,10 @@ mod tests {
     fn every_phase_has_a_distinct_name_that_reads_back() {
         let mut names: Vec<&str> = PHASES.iter().map(|p| p.name()).collect();
         for phase in PHASES {
-            assert_eq!(Phase::from_name(phase.name()), Some(phase));
+            // The audit store keeps only such names (ADR-130).
+            let name = phase.name();
+            assert!(name.len() <= 16 && name.bytes().all(|b| b.is_ascii_lowercase()));
+            assert_eq!(Phase::from_name(name), Some(phase));
             enter(phase);
             assert_eq!(current(), phase);
         }

@@ -64,3 +64,29 @@ whole policy document twice, once only to read `version:` (about 3 ms a call).
 - A database at version 13 is refused by builds that know only version 12, as every
   schema step before it.
 - Rows grow by a few dozen bytes per call.
+
+## Amendment 2026-11-26: a finer split
+
+The first split was too coarse to act on. An `openmoat bench` on a macOS machine
+(main at `bfcad080`) gave, p50/p95 in µs: `stdin` 71/104, `lock` 13549/20054,
+`context` 9123/14499, `compile` 44195/67997, `taint` 23375/36835, `cache` 524/965,
+`record` 813/1396. In-process, `CompiledPolicy::compile` takes about 13 ms and a first
+decision under 1 ms, so about 30 ms of `compile` was something else: that phase also
+held the decision's path and program lookups on disk and the project settings check.
+Likewise `lock` held the payload's parse and the placing, `context` the policy and the
+secrets, and `taint` the audit log's open.
+
+So each costly step is its own phase, in call order: `stdin`, `relay`, `parse` (the
+payload, `Home::locate`), `lock` (`integrity::check`), `placed` (placing the call and
+its MCP server's pin check), `context` (`eval_context`, the decoy keys), `policy`
+(`effective_policy`), `secrets` (`secrets::known_with`, the required level), `snapshot`
+(`Snapshot::load_in`), `compile` (`CompiledPolicy::compile` only), `decide`
+(`decide_with`, the project settings check), `audit` (`open_audit`), `taint` (the
+session's lookups and checks), `approval`, `cache`, `record`, `answer`. `secrets` comes
+after `policy` because it reads the policy's secrets. Each move is one `hangs::enter`:
+no I/O, and no decision changes.
+
+Rows written with the first split keep their names; `openmoat audit stats` reports the
+names a row has, the known ones in the guard's order and any other after them, so a
+window holding both kinds counts the older rows' wider `lock`, `context`, `compile` and
+`taint` under those names.

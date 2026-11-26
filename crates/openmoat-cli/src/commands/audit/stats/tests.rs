@@ -149,6 +149,89 @@ fn the_json_gives_each_phase_in_microseconds() {
     assert_eq!(json["agents"][0]["phases"][1]["phase"], "taint");
 }
 
+/// Rows from before the finer split (`lock` held the parse and placing,
+/// `compile` the deciding, `taint` the audit log's open) are still read: each
+/// name a row has is reported, the known ones in the guard's order and a name
+/// this build does not know after them.
+#[test]
+fn rows_in_the_older_and_the_finer_naming_read_together() {
+    let mut store = Store::open_in_memory().unwrap();
+    let older: &[(&str, u64)] = &[
+        ("stdin", 70),
+        ("lock", 13_000),
+        ("context", 9_000),
+        ("compile", 44_000),
+        ("taint", 23_000),
+        ("cache", 500),
+        ("record", 800),
+    ];
+    let finer: &[(&str, u64)] = &[
+        ("stdin", 72),
+        ("parse", 400),
+        ("lock", 12_000),
+        ("placed", 600),
+        ("context", 3_000),
+        ("policy", 5_000),
+        ("secrets", 100),
+        ("snapshot", 300),
+        ("compile", 13_000),
+        ("decide", 30_000),
+        ("audit", 8_000),
+        ("taint", 15_000),
+        ("record", 810),
+        ("nap", 5),
+    ];
+    let decision = Decision::new(Verdict::Allow);
+    for (i, times) in [older, finer].into_iter().enumerate() {
+        store = store.with_phase_times(times);
+        let event = NewEvent {
+            host: Host::ALL[0].id(),
+            session_id: "s",
+            call_id: None,
+            cwd: None,
+            tool: "Bash",
+            action: None,
+            decision: &decision,
+            latency_us: 100_000,
+        };
+        store
+            .record_at(&event, 1_000 + i64::try_from(i).unwrap())
+            .unwrap();
+    }
+    let json = serde_json::to_value(stats(&store.since(0, None).unwrap())).unwrap();
+    let phases = json["overall"]["phases"].as_array().unwrap();
+    let named: Vec<(&str, u64)> = phases
+        .iter()
+        .map(|p| (p["phase"].as_str().unwrap(), p["calls"].as_u64().unwrap()))
+        .collect();
+    assert_eq!(
+        named,
+        [
+            ("stdin", 2),
+            ("parse", 1),
+            ("lock", 2),
+            ("placed", 1),
+            ("context", 2),
+            ("policy", 1),
+            ("secrets", 1),
+            ("snapshot", 1),
+            ("compile", 2),
+            ("decide", 1),
+            ("audit", 1),
+            ("taint", 2),
+            ("cache", 1),
+            ("record", 2),
+            ("nap", 1),
+        ]
+    );
+    let out = text(&stats(&store.since(0, None).unwrap()));
+    assert!(out.contains("time per guard phase"), "{out}");
+    assert!(
+        out.lines().any(|l| l.trim_start().starts_with("decide")),
+        "{out}"
+    );
+}
+
 #[test]
 fn the_json_document_names_its_format_and_window() {
     let json = serde_json::to_value(stats(&[])).unwrap();

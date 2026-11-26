@@ -372,7 +372,7 @@ fn evaluate(
     out: &mut Evaluated,
     (started, within_run): (Instant, bool),
 ) -> Result<(Option<HookRequest>, Decision)> {
-    hangs::enter(Phase::Lock);
+    hangs::enter(Phase::Parse);
     let request = host
         .parse_request_as(payload, entry::event())
         .context("parsing hook payload")?;
@@ -398,6 +398,7 @@ fn evaluate(
     // files drifted would tell whoever tampered that nothing noticed. Drift of
     // only Claude Code toggles and permission lists changes no decision, so the
     // call is decided as usual and the drift recorded (`integrity/relaxed.rs`).
+    hangs::enter(Phase::Lock);
     let verified = integrity::check(&home)?;
     if let Some(decision) = verified.checked.deny {
         return Ok((Some(request), decision));
@@ -405,6 +406,7 @@ fn evaluate(
     out.drifted = verified.checked.relaxed;
     // From here each pinned state file is read as the lock check matched it.
     let home = verified.home;
+    hangs::enter(Phase::Placed);
     let request = placed::placed(&home, host, request, &out.drifted)?;
     // A server whose definition a person has not accepted runs a command
     // nobody reviewed; only its own tool calls are held back (ADR-026).
@@ -435,8 +437,10 @@ fn evaluate(
     // The decoy keys a person had `init` plant (ADR-106): their paths are the
     // first deny rule, their values masked and refused below.
     let decoys = crate::canary::Record::load(&home)?.decoys();
+    hangs::enter(Phase::Policy);
     let mut policy = crate::repo::effective_policy(&home, &ctx)?;
     decoys.guard(&mut policy);
+    hangs::enter(Phase::Secrets);
     out.known = secrets::known_with(&policy.secrets, &ctx.home, &decoys.values)?;
     out.unattended = policy.unattended();
     // An agent below the level the policy requires gets no decision but this
@@ -450,9 +454,11 @@ fn evaluate(
     if let Some(decision) = required::unmet(&call, &policy) {
         return Ok((Some(request), decision));
     }
+    hangs::enter(Phase::Snapshot);
     let snapshot = Snapshot::load_in(&home)?;
     hangs::enter(Phase::Compile);
     let compiled = CompiledPolicy::compile(&policy, &ctx)?;
+    hangs::enter(Phase::Decide);
     let programs = WithOwnBinary {
         snapshot: &snapshot,
         binary: &verified.lock.binary,
@@ -461,8 +467,9 @@ fn evaluate(
     // A write that leaves a project settings file turning its host's hook off;
     // only tightens, and before the grant, which cannot lift a deny.
     let decision = crate::project_settings::written::checked(&home, &request, &ctx, decision);
-    hangs::enter(Phase::Taint);
+    hangs::enter(Phase::Audit);
     let store = home.open_audit()?;
+    hangs::enter(Phase::Taint);
     // A part of the call that came from untrusted output the session read
     // (ADR-057); before the grant, so a person's grant for this exact call
     // answers it.
