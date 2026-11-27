@@ -349,8 +349,9 @@ above they were p50 225 ms, p95 562 ms and p99 797 ms per call; on the same lapt
 gave p50 113 ms, p95 208 ms and p99 258 ms. They depend on the machine and its load, but
 the direction is real: MoatBench's own runs on GitHub's runners, which use the same
 machine type each time, put the median per hook call at 32 ms for 0.19.0 and 64 ms
-(Ubuntu) and 73 ms (macOS) for 0.28.0, process start included. Where the time went is
-being measured. The review and deny rates are 2.39 reviews and 0 denies per 100 ordinary
+(Ubuntu) and 73 ms (macOS) for 0.28.0, process start included. From 0.29.0, `openmoat bench`
+also prints each guard phase's p50 and p95, and `openmoat audit stats` the same for
+recorded calls ([USAGE.md](USAGE.md#audit-stats-time-per-guard-phase)). The review and deny rates are 2.39 reviews and 0 denies per 100 ordinary
 calls, as on 0.27.0.
 
 The proof report of the same release on the same machine (`openmoat bench --report`, all
