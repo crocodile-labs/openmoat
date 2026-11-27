@@ -1,2 +1,0 @@
-### Security
-- A home directory, project, moved agent directory or resolved path whose name holds `*`, `?`, `[`, `]`, `{`, `}` or `,` is now matched literally by the rules naming it (`~`, `${project}`), instead of as a wildcard that could match other directories; such a project's rules now apply instead of being dropped, and such a home no longer stops the policy from compiling ([#0](https://github.com/crocodile-labs/openmoat/pull/0)).
