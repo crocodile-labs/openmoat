@@ -2,8 +2,6 @@
 
 use std::sync::Arc;
 
-use globset::GlobBuilder;
-
 use super::{Built, LazyGlob};
 
 /// Stands in for a literal backslash while matching one shell word. globset
@@ -52,7 +50,7 @@ impl WordGlob {
             return Ok(Self::Literal(word.to_owned()));
         }
         built
-            .word(word, || {
+            .word(word, |defer| {
                 let mut glob = String::with_capacity(word.len());
                 let mut chars = word.chars().peekable();
                 while let Some(c) = chars.next() {
@@ -63,12 +61,14 @@ impl WordGlob {
                         glob.push(c);
                     }
                 }
-                GlobBuilder::new(&glob)
-                    .literal_separator(false)
-                    .backslash_escape(true)
-                    .build()
-                    // Shell words compare case-sensitively.
-                    .map(|g| LazyGlob::new(g, false))
+                // Shell words compare case-sensitively. Whether the glob may
+                // wait is read from the text globset parses, after the swap.
+                let options = super::lazy::Options {
+                    literal_separator: false,
+                    case_insensitive: false,
+                    backslash_escape: Some(true),
+                };
+                LazyGlob::build(&glob, options, defer)
             })
             .map(Self::Glob)
     }
@@ -86,6 +86,9 @@ impl WordGlob {
 
 #[cfg(test)]
 mod tests {
+    use globset::GlobBuilder;
+
+    use super::super::lazy::{Defer, Options};
     use super::*;
 
     /// The string comparison must agree with the regex globset would have
@@ -123,14 +126,14 @@ mod tests {
         for word in words {
             let literal = WordGlob::new(word).unwrap();
             assert!(matches!(literal, WordGlob::Literal(_)), "{word}");
-            let glob = WordGlob::Glob(Arc::new(LazyGlob::new(
-                GlobBuilder::new(word)
-                    .literal_separator(false)
-                    .backslash_escape(true)
-                    .build()
-                    .unwrap(),
-                false,
-            )));
+            let options = Options {
+                literal_separator: false,
+                case_insensitive: false,
+                backslash_escape: Some(true),
+            };
+            let glob = WordGlob::Glob(Arc::new(
+                LazyGlob::build(word, options, &Defer::Never).unwrap(),
+            ));
             for candidate in candidates {
                 assert_eq!(
                     literal.is_match(candidate),
@@ -141,29 +144,58 @@ mod tests {
         }
     }
 
-    /// Every string over the characters [`cannot_fail`] lets through, up to
-    /// five long, parses as a path glob and as a word glob: what lets the
-    /// policy lint skip building them.
-    #[test]
-    fn what_cannot_fail_always_parses() {
-        let alphabet = ['a', '/', '*', '?', ',', '!', '.', '-', 'é', ']'];
+    /// Every string up to `len` long over `alphabet`.
+    fn strings(alphabet: &[char], len: usize) -> Vec<String> {
         let mut strings = vec![String::new()];
         let mut last = vec![String::new()];
-        for _ in 0..5 {
+        for _ in 0..len {
             last = last
                 .iter()
                 .flat_map(|s| alphabet.iter().map(move |c| format!("{s}{c}")))
                 .collect();
             strings.extend(last.iter().cloned());
         }
-        for s in &strings {
+        strings
+    }
+
+    /// Whether `s` builds as a path glob in every option it can be built
+    /// with: both case modes, with and without `literal_separator`, and `\`
+    /// read as an escape and as a separator; and as a word glob.
+    fn builds_every_way(s: &str) -> bool {
+        WordGlob::new(s).is_ok()
+            && [false, true].into_iter().all(|separator| {
+                [false, true].into_iter().all(|case_insensitive| {
+                    [false, true].into_iter().all(|backslash_escape| {
+                        GlobBuilder::new(s)
+                            .literal_separator(separator)
+                            .case_insensitive(case_insensitive)
+                            .backslash_escape(backslash_escape)
+                            .build()
+                            .is_ok()
+                    })
+                })
+            })
+    }
+
+    /// Every string over the characters [`cannot_fail`] lets through parses
+    /// as a path glob and as a word glob in every option: what lets the
+    /// policy lint skip building them, and a policy compile build them on
+    /// first use (ADR-132). Up to four characters over the glob characters,
+    /// letters with non-ASCII case foldings (`K`, `ſ`), `é`, `~`, `$` and a
+    /// space; up to five over the glob characters and two letters.
+    #[test]
+    fn what_cannot_fail_always_parses() {
+        let wide = [
+            'a', '/', '*', '?', ',', '!', '.', '-', ']', 'é', '\u{212A}', '\u{17F}', '~', '$', ' ',
+        ];
+        let long = ['a', '/', '*', '?', ',', '!', '.', '-', 'é', ']'];
+        let mut checked = 0;
+        for s in strings(&wide, 4).iter().chain(&strings(&long, 5)) {
             assert!(cannot_fail(s));
-            assert!(WordGlob::new(s).is_ok(), "{s:?}");
-            for separator in [false, true] {
-                let built = GlobBuilder::new(s).literal_separator(separator).build();
-                assert!(built.is_ok(), "{s:?}");
-            }
+            assert!(builds_every_way(s), "{s:?}");
+            checked += 1;
         }
+        assert!(checked > 150_000, "{checked}");
     }
 
     #[test]

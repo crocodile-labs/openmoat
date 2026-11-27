@@ -25,6 +25,7 @@ use worst::worst_taint;
 
 mod arguments;
 mod decoys;
+mod deferral;
 mod evidence;
 mod owasp;
 mod stateful;

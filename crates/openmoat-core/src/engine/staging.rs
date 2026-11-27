@@ -217,9 +217,21 @@ impl CompiledPolicy<'_> {
     /// collects, when the session already collected any) reached a threshold of the policy's `staging:` section and the
     /// send carries a body, or the send names a staged file. Where a deny or
     /// review rule names the atom, its decision is merged (strictest wins);
-    /// otherwise a reason records it and the verdict stays as it was.
+    /// otherwise a reason records it and the verdict stays as it was. Once a
+    /// glob did not build, the `kernel-error` deny (`engine/unbuilt.rs`).
     #[must_use]
     pub fn with_staging(
+        &self,
+        decision: Decision,
+        action: &Action,
+        paths: &dyn PathResolver,
+        staging: &Staging,
+        is_dir: &dyn Fn(&str) -> bool,
+    ) -> Decision {
+        self.checked(self.staged_send(decision, action, paths, staging, is_dir))
+    }
+
+    fn staged_send(
         &self,
         decision: Decision,
         action: &Action,

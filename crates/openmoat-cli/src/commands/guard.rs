@@ -42,6 +42,7 @@ mod required;
 mod session_start;
 mod shown;
 mod unattended;
+mod unbuilt;
 mod unseen;
 
 /// How far into its host's deadline ([`deadline::of`]) the session's taint
@@ -606,6 +607,8 @@ fn evaluate(
     // grant, which cannot answer it (ADR-109).
     let hold = crate::hook_ledger::violation(&home, &verified.lock, host, Some(&cwd), &compiled);
     let decision = crate::hook_ledger::tightened(decision, hold);
+    // After every check that matches the compile's globs (ADR-132).
+    unbuilt::checked(&compiled, out)?;
     // A decoy's value anywhere in the call, content and arguments included.
     let decision = decoys.checked_text(payload, decoys.checked(action, decision));
     out.titles = notice::Titles::of(compiled.policy(), &decision);

@@ -9,11 +9,16 @@
 //! it. A glob is the same for the same text and options, so sharing changes
 //! no answer; a text that does not build is not kept, so each pattern that
 //! names it reports its own error, where it always did.
+//!
+//! A policy compile also lets most globs wait for their first use
+//! ([`Built::deferring`], ADR-132); a pattern compiled alone builds its globs
+//! at once.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::LazyGlob;
+use super::lazy::{Defer, Unbuilt};
 
 /// The globs of one compile, by text: path globs per case mode, and shell
 /// words, which are built with their own options.
@@ -23,27 +28,50 @@ pub(crate) struct Built {
     paths: [HashMap<String, Arc<LazyGlob>>; 2],
     /// Shell words, by the word as the pattern spells it.
     words: HashMap<String, Arc<LazyGlob>>,
+    defer: Defer,
 }
 
 impl Built {
+    /// For a compile whose globs whose text cannot fail to parse are built on
+    /// first use, with `mark` set if one fails anyway.
+    pub(crate) fn deferring(mark: &Arc<Unbuilt>) -> Self {
+        Self {
+            defer: Defer::Safe(Arc::clone(mark)),
+            ..Self::default()
+        }
+    }
+
+    /// For a compile whose every glob is built on first use: only tests of
+    /// the mark use it.
+    pub(crate) fn deferring_every_text(mark: &Arc<Unbuilt>) -> Self {
+        Self {
+            defer: Defer::Every(Arc::clone(mark)),
+            ..Self::default()
+        }
+    }
+
     /// The path glob for `glob` in this case mode: the one already built, or
-    /// `build`'s, kept when it succeeds.
+    /// `build`'s, kept when it succeeds. `build` is told whether it may wait.
     pub(super) fn path<E>(
         &mut self,
         glob: &str,
         case_insensitive: bool,
-        build: impl FnOnce() -> Result<LazyGlob, E>,
+        build: impl FnOnce(&Defer) -> Result<LazyGlob, E>,
     ) -> Result<Arc<LazyGlob>, E> {
-        get_or_build(&mut self.paths[usize::from(case_insensitive)], glob, build)
+        let defer = &self.defer;
+        get_or_build(&mut self.paths[usize::from(case_insensitive)], glob, || {
+            build(defer)
+        })
     }
 
     /// The glob for the shell word `word`, as [`Self::path`].
     pub(super) fn word<E>(
         &mut self,
         word: &str,
-        build: impl FnOnce() -> Result<LazyGlob, E>,
+        build: impl FnOnce(&Defer) -> Result<LazyGlob, E>,
     ) -> Result<Arc<LazyGlob>, E> {
-        get_or_build(&mut self.words, word, build)
+        let defer = &self.defer;
+        get_or_build(&mut self.words, word, || build(defer))
     }
 }
 
