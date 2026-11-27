@@ -226,6 +226,19 @@ fn a_named_local_server_gets_the_token_and_its_session() {
                 }
                 head.push_str(&line);
             }
+            // Read the request's body before answering: a socket closed with
+            // bytes still unread is reset on Windows, which can abort the
+            // client's read of the answer (os error 10053).
+            let length = head
+                .lines()
+                .find_map(|l| {
+                    let (name, value) = l.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().ok())?
+                })
+                .unwrap_or(0);
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
             seen.push(head);
             let answer = if n == 0 {
                 let body = r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"}}"#;
