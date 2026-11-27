@@ -175,9 +175,11 @@ fn compile_errors_are_those_of_building_every_glob_at_compile() {
         );
         failed += usize::from(now.is_err());
     }
-    // the 18 added patterns; a home's glob characters fail too unless the
-    // spelling escapes them
-    assert!(failed >= 18, "{failed}");
+    // the added patterns, 18 where `\` escapes (Unix) and 15 where it is a
+    // separator (Windows), on which `/x/a\` is not a dangling escape but a
+    // path; a home's glob characters fail too unless the spelling escapes them
+    let dangling = usize::from(globset::Glob::new("/x/a\\").is_err());
+    assert!(failed >= 15 + 3 * dangling, "{failed}");
 }
 
 /// One compile decided from several threads at once, each glob built by
