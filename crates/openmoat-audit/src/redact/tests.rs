@@ -1,18 +1,19 @@
 use super::{
-    KnownSecrets, PATTERNS, SHAPES, TOKEN_SHAPES, mask_patterns, redact, redact_value, rules,
-    token_shape,
+    KnownSecrets, Mask, PATTERNS, SHAPES, TOKEN_SHAPES, gate, mask_patterns, redact, redact_value,
+    rule, rules, token_shape,
 };
 use serde_json::json;
 
+mod gated;
+mod needles;
 mod programs;
 
 #[test]
 fn every_pattern_compiles() {
-    assert!(
-        PATTERNS
-            .as_ref()
-            .is_some_and(|p| p.len() == rules().count())
-    );
+    assert_eq!(PATTERNS.len(), rules().count());
+    for pattern in PATTERNS.iter() {
+        assert!(pattern.regex().is_some(), "{}", pattern.rule.pattern);
+    }
     assert!(
         SHAPES
             .as_ref()
@@ -55,9 +56,18 @@ fn token_shapes_are_named_and_ordinary_text_has_none() {
 }
 
 #[test]
-fn without_patterns_nothing_is_kept() {
+fn a_pattern_that_does_not_compile_keeps_nothing_of_a_text_it_may_match() {
+    let broken = [gate::Lazy::new(rule(
+        "(token",
+        Mask::Text("[redacted]"),
+        &["token"],
+    ))];
     let text = "export TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123".to_owned();
-    assert_eq!(mask_patterns(None, text), "[redacted]");
+    assert_eq!(mask_patterns(&broken, text), "[redacted]");
+    assert_eq!(
+        mask_patterns(&broken, "git status".to_owned()),
+        "git status"
+    );
 }
 
 #[test]

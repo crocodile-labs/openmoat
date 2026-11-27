@@ -40,6 +40,8 @@ clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 rusqlite = { version = "0.41", features = ["bundled"] }
 regex = "1"
+# The parser `regex` itself uses, for the redaction gate's proof (openmoat-audit's tests only).
+regex-syntax = "0.8"
 sha2 = "0.11"
 # Random bytes from the OS on every platform: the proxy session key (ADR-044)
 # is made on Windows too, which has no `/dev/urandom`.
