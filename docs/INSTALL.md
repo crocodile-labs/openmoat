@@ -493,6 +493,29 @@ Then, in a terminal of your own:
    sandboxes as `openmoat sandbox sync` does. `openmoat` alone offers the same at a
    terminal.
 
+### From 0.28.0 to 0.29.0
+
+What you will see, and what to run:
+
+- **The audit log moves to schema version 13** (ADR-130): a `phases_us` column, which
+  holds how long each call spent in each of the guard's phases. The new `openmoat` adds
+  it the first time it opens the log; nothing to run. An older `openmoat` then refuses
+  to open the log ("schema version 13 is newer than this build supports"), and its hook denies every call. So update every
+  `openmoat` on the machine together (a Homebrew install beside a `cargo install`, say:
+  [Upgrading](#upgrading)), and restart a running `openmoat proxy`, `openmoat approvals
+  listen` and any agent with a wrapped MCP server, so that no process of the older build
+  is left. `openmoat doctor` names a hook that still runs another binary.
+- **Decisions are faster, with the same answers**: the guard builds only the globs and
+  redaction patterns a call needs. On one developer Mac, `openmoat bench`'s ordinary
+  work went from p50 102 ms, p95 192 ms and p99 260 ms on 0.28.0 to 87, 123 and 156 ms,
+  and reading the session's earlier calls from 22.7 to 10.9 ms. Your times depend on
+  the machine and its load.
+- **`openmoat audit stats` shows where the time goes**, phase by phase, for calls
+  recorded after the upgrade ([USAGE.md](USAGE.md#audit-stats-time-per-guard-phase)),
+  and `openmoat bench` prints each phase's p50 and p95.
+- **The default policy is unchanged**, so `openmoat policy upgrade` has nothing new to
+  offer.
+
 ### From 0.27.0 to 0.28.0
 
 What you will see, and what to run:
@@ -619,7 +642,7 @@ Read the [CHANGELOG](../CHANGELOG.md) entries since your version first; so far t
 kinds of change have happened:
 
 - **The audit log schema moves forward** (version 3 in 0.5.0, version 4 in 0.6.0,
-  version 5 in 0.11.0, version 7 in 0.12.0, version 8 in 0.14.0, version 10 in 0.16.0, version 11 in the release after 0.21.0). The
+  version 5 in 0.11.0, version 7 in 0.12.0, version 8 in 0.14.0, version 10 in 0.16.0, version 11 in the release after 0.21.0, version 13 in 0.29.0). The
   new `openmoat` updates the log when it first opens it; an older `openmoat` then refuses to
   open it (`schema too new`), and its hook denies every call. Going back to an older
   release is not supported.

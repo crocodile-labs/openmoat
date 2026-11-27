@@ -8,6 +8,23 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-11-27
+
+**Upgrading:** update every `openmoat` on the machine together, restart a running `openmoat proxy`, `openmoat approvals listen` and any agent with a wrapped MCP server, then run `openmoat doctor` in your own terminal. The audit log moves to schema version 13 (a `phases_us` column, added the first time the new build opens the log); an older build then refuses to open it and its hook denies every call. The default policy is unchanged, so `openmoat policy upgrade` has nothing new to offer. Decisions are faster: on one developer Mac, `openmoat bench`'s ordinary work went from p50 102 ms, p95 192 ms and p99 260 ms on 0.28.0 to 87, 123 and 156 ms, and reading the session's earlier calls from 22.7 to 10.9 ms; the time depends on the machine. Details: [INSTALL.md](docs/INSTALL.md#from-0280-to-0290).
+
+### Added
+- Each call's audit row records how long `openmoat guard` spent in each of its phases (reading the call, the lock check, loading the policy, deciding, reading the session's earlier calls, the session cache, the audit write), in microseconds; `openmoat audit stats` prints p50, p95 and p99 per phase in text and `--format json`, and `openmoat bench` prints each phase's p50 and p95 for its ordinary work. Only durations and the phase names are recorded. The audit log moves to schema version 13 ([#873](https://github.com/crocodile-labs/openmoat/pull/873)).
+
+### Changed
+- The authenticator-code gate's docs, `openmoat gate --help` and `openmoat gate setup` no longer assume the app is on a phone, and say what to do when the app no longer has OpenMoat's entry: delete `~/.moat/audit.key.gate` and `~/.moat/gate.json` in your own terminal, which turns the gate off, then set it up again; a wrong code's refusal points there ([#867](https://github.com/crocodile-labs/openmoat/pull/867)).
+- The docs and the commands' messages say "readable by your account alone" where they said "owner-only" ([#867](https://github.com/crocodile-labs/openmoat/pull/867)).
+- SANDBOX.md, INSTALL.md, USAGE.md and PROTECTION.md no longer say Windows `openmoat run` holds writes only without naming the agent account, which holds reads and the network too; LIMITS.md says the MCP flow check also reads remote servers added with `openmoat mcp login` ([#867](https://github.com/crocodile-labs/openmoat/pull/867)).
+- Loading a policy deserializes the document once instead of twice: the schema version is read from the full parse ([#873](https://github.com/crocodile-labs/openmoat/pull/873)).
+- `openmoat guard` starts faster, with every decision and error the same: loading the policy no longer builds the globs that cannot fail to parse, and builds a repeated one once; and a path or a command is checked against a glob's literal end before the glob's regex is built, so the first decision of a process builds a handful of regexes instead of hundreds ([#874](https://github.com/crocodile-labs/openmoat/pull/874)).
+- `openmoat audit stats` and `openmoat bench` split the guard's time more finely: `parse`, `lock`, `placed`, `context`, `policy`, `secrets`, `snapshot`, `compile` (the policy's compile only), `decide` (the path and program lookups on disk), `audit` (opening the audit log) and `taint` are each their own phase, and a deadline's deny names the finer step it was in. Rows recorded with the earlier, coarser names are still reported under those names ([#875](https://github.com/crocodile-labs/openmoat/pull/875)).
+- Compiling a policy builds each glob text once and shares it, and its regex, with every pattern that names the same text: an anchor's list under two kinds, a `dir/**` beside its `dir`, a path in a deny rule and in the taint list, a shell program in many rules. No decision or error changes ([#876](https://github.com/crocodile-labs/openmoat/pull/876)).
+- `openmoat guard` spends about 12 ms less per call reading the session's earlier calls: the audit log's redaction builds each of its credential patterns only the first time a text could hold a match, instead of all of them on the first lookup; what is masked is unchanged ([#876](https://github.com/crocodile-labs/openmoat/pull/876)).
+
 ## [0.28.0] - 2026-11-25
 
 **Upgrading:** run `openmoat policy upgrade` in your own terminal for the new default rules (`encoded-secret-egress`, `hostname-data`, the `data-flow` review, and the remote MCP token folder in `kernel-self`). On Windows, `openmoat agent-account setup` (once, from an administrator terminal) makes `openmoat run` hold reads and the network as well as writes; without it, Windows runs are as in 0.27.0.
@@ -1488,7 +1505,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.29.0...HEAD
+[0.29.0]: https://github.com/crocodile-labs/openmoat/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/crocodile-labs/openmoat/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/crocodile-labs/openmoat/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/crocodile-labs/openmoat/compare/v0.25.0...v0.26.0
