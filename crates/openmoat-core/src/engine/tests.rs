@@ -6,6 +6,7 @@ mod glob;
 mod hidden;
 mod installs;
 mod labels;
+mod literal_dirs;
 mod moved_dirs;
 mod personal;
 mod staging;
@@ -467,14 +468,12 @@ fn roots_match_under_their_resolved_spelling_too() {
 /// Matchers are built on first use, but a pattern that does not parse must
 /// still fail the compile, before any decision, whichever kind it belongs to.
 #[test]
-fn a_pattern_broken_by_expansion_fails_the_compile_up_front() {
-    let p = policy("version: 1\ndeny:\n  - id: secret\n    fs.read: ['~/.ssh/**']\n");
-    let broken_home = EvalContext {
-        home: "/h{x".into(),
-        ..ctx()
-    };
+fn a_pattern_that_does_not_parse_fails_the_compile_up_front() {
+    let mut p = policy("version: 1\ndeny:\n  - id: secret\n    fs.read: ['~/.ssh/**']\n");
+    // past the lint, as a policy built in code may be
+    p.deny[0].fs_read = vec!["~/.ssh/[z-a]".into()];
     assert!(matches!(
-        CompiledPolicy::compile(&p, &broken_home),
+        CompiledPolicy::compile(&p, &ctx()),
         Err(PolicyError::BadGlob { .. })
     ));
 }

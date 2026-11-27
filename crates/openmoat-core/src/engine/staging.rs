@@ -111,10 +111,11 @@ pub(super) fn compile_inside(
     ctx: &EvalContext,
     built: &mut Built,
 ) -> Result<Vec<GlobPattern>, PolicyError> {
-    let homes: Vec<&str> = [Some(&ctx.home), ctx.real_home.as_ref()]
+    // Spelled as the roots are: glob text (`paths::glob_literal`).
+    let homes: Vec<String> = [Some(&ctx.home), ctx.real_home.as_ref()]
         .into_iter()
         .flatten()
-        .map(|h| h.trim_end_matches('/'))
+        .map(|h| crate::paths::glob_literal(h.trim_end_matches('/')))
         .collect();
     // A read root that holds the home directory (a home below `/tmp` in a test
     // sandbox or on a CI runner) would make no read in the home count.

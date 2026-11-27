@@ -335,6 +335,9 @@ mod tests {
             ("/h/caf\u{e9}/*", false),
             ("/h/[\u{e9}]", false),
             ("/h/a\\*b", false),
+            // a spliced directory's literal glob characters (`paths::glob_literal`)
+            ("/h/a[*]b", false),
+            ("/h/a[?][[][]][{][,][}]/**", true),
         ];
         let candidates = [
             "",
@@ -363,6 +366,9 @@ mod tests {
             "/h/\u{e9}",
             "/h/a*b",
             "/h/axb",
+            "/h/a?[]{,}",
+            "/h/A?[]{,}/x",
+            "/h/ax[]{,}/x",
         ];
         for (glob, ci) in globs {
             let g = globset::GlobBuilder::new(glob)

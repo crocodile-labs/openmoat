@@ -139,6 +139,11 @@ mod tests {
             "**/[}]x",
             "**/a\\}",
             "**/a/**/b/**",
+            // a spliced directory's literal glob characters (`paths::glob_literal`)
+            "/Users/a[*]b/.ssh/**",
+            "/Users/a[[]x[]]b/.ssh",
+            "/k/p[{]q[,]r[}]/{a,b}",
+            "**/s[?]",
         ];
         let candidates = [
             "/Users/me/.ssh/id_rsa",
@@ -186,6 +191,15 @@ mod tests {
             "/k/a/w/b/c",
             "/k/a/b",
             "C:\\p\\.git\\hooks\\x",
+            "/Users/a*b/.ssh/id_rsa",
+            "/Users/a*b/.ssh",
+            "/Users/aXb/.ssh/id_rsa",
+            "/Users/a[x]b/.ssh",
+            "/Users/axb/.ssh",
+            "/k/p{q,r}/a",
+            "/k/pqr/b",
+            "/k/s?",
+            "/k/sx",
         ];
         // A `\` escapes on Unix and separates on Windows (globset's default
         // per platform), so each reading is checked on every platform; a

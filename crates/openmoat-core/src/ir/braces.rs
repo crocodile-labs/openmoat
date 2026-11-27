@@ -41,12 +41,20 @@ fn expand(pattern: &str, out: &mut Vec<String>) -> bool {
 fn first_group(pattern: &str) -> Option<(usize, usize, Vec<&str>)> {
     let (mut depth, mut open, mut start) = (0usize, None, 0);
     let mut options = Vec::new();
+    // The end of the class being skipped, if any.
+    let mut skip_to = 0;
     let mut chars = pattern.char_indices();
     while let Some((i, c)) = chars.next() {
+        if i < skip_to {
+            continue;
+        }
         match c {
             '\\' => {
                 chars.next();
             }
+            // A class's members are text, not group syntax (`[{]`, `[,]`: how
+            // a spliced directory is written, `paths::glob_literal`).
+            '[' => skip_to = class_end(pattern, i).unwrap_or(0),
             '{' => {
                 if depth == 0 {
                     open = Some(i);
@@ -69,6 +77,22 @@ fn first_group(pattern: &str) -> Option<(usize, usize, Vec<&str>)> {
         }
     }
     None
+}
+
+/// The byte just past the `]` that closes the class opening at `open`, as
+/// globset reads it: after an optional `!` or `^`, a `]` first is a member.
+/// `None` when the class is not closed (globset refuses the pattern then).
+fn class_end(pattern: &str, open: usize) -> Option<usize> {
+    let bytes = pattern.as_bytes();
+    let mut at = open + 1;
+    if matches!(bytes.get(at), Some(b'!' | b'^')) {
+        at += 1;
+    }
+    if bytes.get(at) == Some(&b']') {
+        at += 1;
+    }
+    let close = at + pattern.get(at..)?.find(']')?;
+    Some(close + 1)
 }
 
 #[cfg(test)]
@@ -99,6 +123,16 @@ mod tests {
             owned(&[r"/a/\{b,c}"]),
             "escaped"
         );
+        // a class's `{`, `}` and `,` are members, as a spliced directory has them
+        assert_eq!(
+            alternatives("/h/a[{]b[,]c[}]/{x,y}"),
+            owned(&["/h/a[{]b[,]c[}]/x", "/h/a[{]b[,]c[}]/y"])
+        );
+        assert_eq!(
+            alternatives("/h/[]]{x,y}[!,]"),
+            owned(&["/h/[]]x[!,]", "/h/[]]y[!,]"])
+        );
+        assert_eq!(alternatives("/h/[{]x"), owned(&["/h/[{]x"]));
         let wide = "/{a,b}{c,d}{e,f}{g,h}{i,j}{k,l}{m,n}";
         assert_eq!(alternatives(wide), owned(&[wide]), "past the bound");
     }

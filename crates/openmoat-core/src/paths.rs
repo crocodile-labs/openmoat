@@ -70,15 +70,21 @@ pub fn has_dotdot(path: &str) -> bool {
 /// [`resolve`] before `.` and `..` are collapsed.
 fn absolute(raw: &str, home: &str, project: Option<&str>, cwd: Option<&str>) -> Option<String> {
     let unified = raw.replace('\\', "/");
+    // The home and project are spliced in with the same `/` the rest of the
+    // path gets, so `~/x` and the home's own spelling name one path.
+    let slashed_home = home.replace('\\', "/");
     let expanded = match dir_stack_tilde(&unified) {
         Some(('+', rest)) => format!("{}{rest}", cwd?),
         Some(_) => return None,
-        None => expand_home(&unified, home)?,
+        None => expand_home(&unified, home, &slashed_home)?,
     };
     let mut s = expanded
-        .replace("${project}", project.unwrap_or_default())
-        .replace("${HOME}", home)
-        .replace("$HOME", home);
+        .replace(
+            "${project}",
+            &project.unwrap_or_default().replace('\\', "/"),
+        )
+        .replace("${HOME}", &slashed_home)
+        .replace("$HOME", &slashed_home);
     // `$PWD` is the working directory, when it is known
     if s.contains("$PWD") || s.contains("${PWD}") {
         let dir = cwd?;
@@ -178,22 +184,20 @@ pub(crate) fn split_root(path: &str) -> (String, &str) {
 ///
 /// `None` when the pattern names `${project}` and there is no project: such a
 /// pattern names no location, so it can match nothing (and exclude nothing).
-/// A project whose path holds a glob character (`*`, `?`, `[`, `]`, `{`, `}`)
-/// is treated the same way: spliced into a pattern it would match far more
-/// than the project (a directory named `*` in the home would make
-/// `${project}/**` the whole home), so its rules name nothing and its files
-/// are decided by the rest of the policy.
+///
+/// The home and the project are spliced in as literal text ([`glob_literal`]):
+/// a project at `/w/a*b` makes `${project}/**` name `/w/a*b` and what is in
+/// it, not `/w/aXb`.
 #[must_use]
 pub fn expand_pattern(raw: &str, home: &str, project: Option<&str>) -> Option<String> {
-    let project = project.filter(|p| !p.contains(['*', '?', '[', ']', '{', '}']));
     let (negated, body) = crate::pattern::split_negation(raw);
     // A pattern naming another user's home (`~alice/.ssh/**`) stays literal:
     // paths are normalised through `resolve`, which refuses `~<otheruser>`
     // (#400), so such a pattern names no reachable path. Keep the raw text so
     // the pattern is still a well-formed glob and the lint still sees it.
-    let body = expand_home(body, home).unwrap_or_else(|| body.to_owned());
+    let body = expand_home(body, home, &glob_literal(home)).unwrap_or_else(|| body.to_owned());
     let expanded = match project {
-        Some(project) => body.replace("${project}", project),
+        Some(project) => body.replace("${project}", &glob_literal(project)),
         None if body.contains("${project}") => return None,
         None => body,
     };
@@ -204,6 +208,37 @@ pub fn expand_pattern(raw: &str, home: &str, project: Option<&str>) -> Option<St
     })
 }
 
+/// Characters a policy glob reads as syntax: wildcards, classes and
+/// alternations (`,` only inside `{…}`, but a directory may be spliced there).
+const GLOB_SYNTAX: [char; 7] = ['*', '?', '[', ']', '{', '}', ','];
+
+/// The directory `dir` (a home, project, moved or resolved directory) as glob
+/// text that matches exactly the paths it names.
+///
+/// Each glob character becomes a one-character class (`*` → `[*]`, `[` → `[[]`,
+/// `]` → `[]]`): globset reads a class the same whether `\` escapes (Unix) or
+/// separates (Windows), so the text means one thing on every platform. A `\`
+/// becomes `/`, as it does in every path the engine checks ([`normalise`]): a
+/// Windows path written with `\` is the same path with `/`, and on Unix a
+/// directory named `a\b` is checked as `a/b`, the spelling its paths have once
+/// normalised. A directory without these characters is returned unchanged.
+#[must_use]
+pub fn glob_literal(dir: &str) -> String {
+    let mut out = String::with_capacity(dir.len());
+    for c in dir.chars() {
+        match c {
+            '\\' => out.push('/'),
+            c if GLOB_SYNTAX.contains(&c) => {
+                out.push('[');
+                out.push(c);
+                out.push(']');
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 /// Expand a leading `~` or `~name`, as a POSIX shell does — safely.
 ///
 /// `~` is `home`. `~name` is `home` when `name` is the last component of
@@ -212,14 +247,16 @@ pub fn expand_pattern(raw: &str, home: &str, project: Option<&str>) -> Option<St
 /// guessed `/<parent-of-home>/<name>` can judge one path while the OS reads
 /// another (#400). Return `None` for that case; the caller maps it to `review`
 /// through `unparseable`. A leading `~` that is not followed by a valid login
-/// name (`~a$b`) stays literal (`Some(raw)`).
-fn expand_home(raw: &str, home: &str) -> Option<String> {
+/// name (`~a$b`) stays literal (`Some(raw)`). `spliced` is the text that
+/// stands for `home`: the home itself in a path, [`glob_literal`] of it in a
+/// pattern.
+fn expand_home(raw: &str, home: &str, spliced: &str) -> Option<String> {
     let Some((name, tail)) = home_prefix(raw) else {
         return Some(raw.to_owned());
     };
     let (_parent, user) = home.rsplit_once('/').unwrap_or(("", home));
     if name.is_empty() || name == user {
-        Some(format!("{home}{tail}"))
+        Some(format!("{spliced}{tail}"))
     } else {
         // Another user's home — unresolvable from inside the pure core.
         None
@@ -335,6 +372,49 @@ mod tests {
             Some("/h/.ssh/**")
         );
         assert_eq!(normalise("${project}/x", "/h", None, "/c"), "/x");
+    }
+
+    /// A spliced directory is literal under both readings of `\` globset has
+    /// (escape on Unix, separator on Windows): its text holds no `\`.
+    #[test]
+    fn spliced_directories_are_literal_on_every_platform() {
+        assert_eq!(glob_literal("/Users/me/src/app"), "/Users/me/src/app");
+        assert_eq!(glob_literal("C:/Users/me"), "C:/Users/me");
+        assert_eq!(glob_literal(r"C:\Users\me"), "C:/Users/me");
+        assert_eq!(glob_literal("/a*b?[c]{d,e}"), "/a[*]b[?][[]c[]][{]d[,]e[}]");
+        for (home, own, near) in [
+            ("/Users/a*b", "/Users/a*b/.ssh/k", "/Users/aXb/.ssh/k"),
+            ("/Users/a?b", "/Users/a?b/.ssh/k", "/Users/aXb/.ssh/k"),
+            ("/Users/a[x]b", "/Users/a[x]b/.ssh/k", "/Users/axb/.ssh/k"),
+            ("/Users/a[!x]b", "/Users/a[!x]b/.ssh/k", "/Users/ayb/.ssh/k"),
+            ("/Users/a]b", "/Users/a]b/.ssh/k", "/Users/ab/.ssh/k"),
+            (
+                "/Users/a{x,y}b",
+                "/Users/a{x,y}b/.ssh/k",
+                "/Users/axb/.ssh/k",
+            ),
+            ("/Users/a}b", "/Users/a}b/.ssh/k", "/Users/ab/.ssh/k"),
+            ("/Users/a b", "/Users/a b/.ssh/k", "/Users/ab/.ssh/k"),
+            (r"/Users/a\b", "/Users/a/b/.ssh/k", "/Users/ab/.ssh/k"),
+            ("C:/Users/a*b", "C:/Users/a*b/.ssh/k", "C:/Users/aXb/.ssh/k"),
+        ] {
+            let spelled = expand_pattern("~/.ssh/**", home, None).unwrap();
+            for backslash_escape in [true, false] {
+                let glob = globset::GlobBuilder::new(&spelled)
+                    .literal_separator(true)
+                    .backslash_escape(backslash_escape)
+                    .build()
+                    .unwrap()
+                    .compile_matcher();
+                assert!(glob.is_match(own), "{spelled} {own} {backslash_escape}");
+                assert!(!glob.is_match(near), "{spelled} {near} {backslash_escape}");
+            }
+        }
+        // in an alternation, a spliced `,` or `}` does not split or close it
+        let spelled = expand_pattern("{${project}/a,${project}/b}", "/h", Some("/w/p,}q")).unwrap();
+        let glob = globset::Glob::new(&spelled).unwrap().compile_matcher();
+        assert!(glob.is_match("/w/p,}q/a") && glob.is_match("/w/p,}q/b"));
+        assert!(!glob.is_match("/w/p") && !glob.is_match("q/a"));
     }
 
     #[test]
