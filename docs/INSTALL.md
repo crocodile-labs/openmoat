@@ -493,6 +493,30 @@ Then, in a terminal of your own:
    sandboxes as `openmoat sandbox sync` does. `openmoat` alone offers the same at a
    terminal.
 
+### From 0.29.0 to 0.30.0
+
+What you will see, and what to run:
+
+- **Nothing to run beyond the upgrade itself**: update every `openmoat` on the machine
+  together ([Upgrading](#upgrading)), then run `openmoat doctor` in your own terminal. The
+  audit log stays at schema version 13, so an older `openmoat` beside the new one still
+  opens it.
+- **Home, project and moved directory names are matched literally** (#881): when a rule
+  names `~`, `${project}` or a moved agent directory, a name holding `*`, `?`, `[`, `]`,
+  `{`, `}` or `,` is now matched as written, not as a wildcard that could match other
+  directories, and a `\` in such a name is read as `/`, as in every path a rule is matched
+  against. A project whose path holds one of these characters now gets the rules that name
+  `${project}`, which before matched nothing for it, and such a home no longer stops the
+  policy from compiling ([POLICY.md §3.2](POLICY.md#32-path-host-and-name-globs)). A name
+  without these characters is matched as before.
+- **Decisions are faster, with the same answers**: the policy builds each pattern's
+  matcher only when a call first needs it (ADR-132). On one developer Mac, `openmoat
+  bench`'s ordinary work went from p50 77 ms, p95 123 ms and p99 193 ms on 0.29.0 to 41,
+  67 and 109 ms, and its `compile` phase from 36.9 to 8.7 ms. Your times depend on the
+  machine and its load.
+- **The default policy is unchanged**, so `openmoat policy upgrade` has nothing new to
+  offer.
+
 ### From 0.28.0 to 0.29.0
 
 What you will see, and what to run:
