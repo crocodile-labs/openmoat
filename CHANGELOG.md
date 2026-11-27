@@ -8,6 +8,18 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-11-27
+
+**Upgrading:** update every `openmoat` on the machine together, then run `openmoat doctor` in your own terminal; there is nothing else to run. The audit log stays at schema version 13, and the default policy is unchanged, so `openmoat policy upgrade` has nothing new to offer. A home directory, project or moved agent directory whose name holds `*`, `?`, `[`, `]`, `{`, `}` or `,` is now matched literally by the rules naming it, instead of as a wildcard, and a `\` in such a name is read as `/`, as in every path a rule is matched against; a project whose path holds one of these characters now gets the rules that name `${project}`, which before matched nothing for it. Decisions are faster, with the same answers: on one developer Mac, `openmoat bench`'s ordinary work went from p50 77 ms, p95 123 ms and p99 193 ms on 0.29.0 to 41, 67 and 109 ms, and its `compile` phase from 36.9 to 8.7 ms; the time depends on the machine. Details: [INSTALL.md](docs/INSTALL.md#from-0290-to-0300).
+
+### Security
+- A home directory, project, moved agent directory or resolved path whose name holds `*`, `?`, `[`, `]`, `{`, `}` or `,` is now matched literally by the rules naming it (`~`, `${project}`), instead of as a wildcard that could match other directories; such a project's rules now apply instead of being dropped, and such a home no longer stops the policy from compiling ([#881](https://github.com/crocodile-labs/openmoat/pull/881)).
+
+### Changed
+- Compiling a policy builds a glob whose text cannot fail to parse (no `[`, `{`, `}` or `\`) only when a call first needs it, instead of all of them up front: a call uses at most a few of the 1,300 or more globs the default policy spells. Every other glob is still built when the policy is compiled, so a bad pattern fails as before. Should a glob built later fail anyway, every decision of that compile is the same `kernel-error` deny a compile error gives. No decision or error changes ([#882](https://github.com/crocodile-labs/openmoat/pull/882)).
+- A policy pattern is spelled once per home directory spelling only when it names `~`, and once per project spelling only when it names `${project}`; the folder check reuses the deny rules' spellings. The spellings are the same ([#882](https://github.com/crocodile-labs/openmoat/pull/882)).
+- `openmoat bench` creates its throwaway home under the resolved temporary directory (`/private/var/…` on macOS), so the home has one spelling and the `compile` phase it reports is what a guard in an ordinary home pays ([#882](https://github.com/crocodile-labs/openmoat/pull/882)).
+
 ## [0.29.0] - 2026-11-27
 
 **Upgrading:** update every `openmoat` on the machine together, restart a running `openmoat proxy`, `openmoat approvals listen` and any agent with a wrapped MCP server, then run `openmoat doctor` in your own terminal. The audit log moves to schema version 13 (a `phases_us` column, added the first time the new build opens the log); an older build then refuses to open it and its hook denies every call. The default policy is unchanged, so `openmoat policy upgrade` has nothing new to offer. Decisions are faster: on one developer Mac, `openmoat bench`'s ordinary work went from p50 102 ms, p95 192 ms and p99 260 ms on 0.28.0 to 87, 123 and 156 ms, and reading the session's earlier calls from 22.7 to 10.9 ms; the time depends on the machine. Details: [INSTALL.md](docs/INSTALL.md#from-0280-to-0290).
@@ -1505,7 +1517,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.29.0...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.30.0...HEAD
+[0.30.0]: https://github.com/crocodile-labs/openmoat/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/crocodile-labs/openmoat/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/crocodile-labs/openmoat/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/crocodile-labs/openmoat/compare/v0.26.0...v0.27.0

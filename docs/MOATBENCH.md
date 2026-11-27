@@ -362,11 +362,13 @@ That `compile` figure was inflated by the bench's own home. The bench works in a
 throwaway home under the system's temporary directory, which on macOS is reached
 through a link (`/var` is `/private/var`), so the home had two spellings and every
 policy pattern that names `~` or `${project}` was compiled for both: about three times
-what a guard in a home such as `/Users/<name>` pays. From the next release the bench
+what a guard in a home such as `/Users/<name>` pays. From 0.30.0 the bench
 creates its home under the resolved temporary directory, so its `compile` line is what
 a guard in an ordinary home pays, and the policy builds each pattern's matcher only when
 a call first needs it ([ADR-132](adr/ADR-132-glob-builds-on-first-use.md)). A home
-given with `--scratch-dir` is used as written.
+given with `--scratch-dir` is used as written. On the same Mac, 0.30.0's ordinary work
+gave p50 41 ms, p95 67 ms and p99 109 ms, and its `compile` phase p50 8.7 ms, down from
+36.9 ms on 0.29.0.
 The review and deny rates are 2.39 reviews and 0 denies per 100 ordinary calls, as on
 0.27.0 and 0.28.0.
 
