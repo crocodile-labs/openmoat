@@ -103,9 +103,21 @@ impl CompiledPolicy<'_> {
     /// sent them (an MCP tool's), flattened by the caller; the action's own
     /// path, URL, command or query are added to them. `seen` answers
     /// `provenance: untrusted`. Merging keeps the strictest verdict, so this
-    /// never loosens a decision.
+    /// never loosens a decision; once a glob did not build, the `kernel-error`
+    /// deny (`engine/unbuilt.rs`).
     #[must_use]
     pub fn with_arguments(
+        &self,
+        decision: Decision,
+        action: &Action,
+        paths: &dyn PathResolver,
+        args: &Arguments,
+        seen: &dyn InjectedLookup,
+    ) -> Decision {
+        self.checked(self.argued(decision, action, paths, args, seen))
+    }
+
+    fn argued(
         &self,
         decision: Decision,
         action: &Action,

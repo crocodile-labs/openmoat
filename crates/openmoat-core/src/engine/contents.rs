@@ -20,11 +20,10 @@
 //! holds every program's temp files, so `cd /tmp` would need review for the ticket
 //! caches `secrets-paths` names in it; a folder below it is checked as anywhere.
 
-use super::EvalContext;
+use super::{CompiledGroup, EvalContext};
 use crate::action::AtomicAction;
 use crate::kind::Kind;
 use crate::pattern::{literal_folder, split_negation};
-use crate::policy::RuleGroup;
 use crate::rule_id::PROTECTED_CONTENTS as HOLDS_PROTECTED_RULE;
 use crate::verdict::{Decision, Verdict};
 
@@ -53,27 +52,23 @@ struct Folder {
 
 impl ProtectedFolders {
     /// The folders of every non-negated `fs.read` and `fs.write` pattern of
-    /// `deny`, in every spelling the patterns are compiled with.
-    pub(super) fn compile(deny: &[RuleGroup], ctx: &EvalContext) -> Self {
+    /// `deny`, in every spelling the patterns are compiled with: the compiled
+    /// deny groups' own, so they are not spelled again. A spelling keeps its
+    /// pattern's `!`, so the negated patterns are the negated spellings.
+    pub(super) fn compile(deny: &[CompiledGroup], ctx: &EvalContext) -> Self {
         let case_insensitive = ctx.case_insensitive_paths;
         let folders = |kind: Kind| {
             let mut out: Vec<Folder> = deny
                 .iter()
                 .flat_map(|group| {
-                    group
-                        .patterns(kind)
-                        .iter()
-                        .filter(|p| !split_negation(p).0)
-                        .flat_map(|p| ctx.spellings(p))
-                        .filter_map(|spelled| {
-                            let (negated, body) = split_negation(&spelled);
-                            let folder = literal_folder(body).filter(|_| !negated)?;
-                            Some(Folder {
-                                path: fold(folder, case_insensitive),
-                                rule: group.id.clone(),
-                            })
+                    group.globs(kind).iter().filter_map(|glob| {
+                        let (negated, body) = split_negation(glob.source());
+                        let folder = literal_folder(body).filter(|_| !negated)?;
+                        Some(Folder {
+                            path: fold(folder, case_insensitive),
+                            rule: group.id().to_owned(),
                         })
-                        .collect::<Vec<_>>()
+                    })
                 })
                 .collect();
             out.sort();
@@ -156,9 +151,11 @@ fn fold(path: &str, case_insensitive: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{HOLDS_PROTECTED_RULE, ProtectedFolders, holds};
+    use super::{Folder, HOLDS_PROTECTED_RULE, ProtectedFolders, fold, holds};
     use crate::action::AtomicAction;
-    use crate::engine::EvalContext;
+    use crate::engine::{CompiledPolicy, EvalContext};
+    use crate::kind::Kind;
+    use crate::pattern::{literal_folder, split_negation};
     use crate::policy::Policy;
     use crate::verdict::Verdict;
 
@@ -174,9 +171,7 @@ mod tests {
         }
     }
 
-    fn folders(case_insensitive: bool) -> ProtectedFolders {
-        let policy = Policy::parse(
-            r#"
+    const POLICY: &str = r#"
 version: 1
 deny:
   - id: creds
@@ -185,10 +180,59 @@ deny:
     fs.write: ["~/.moat/**"]
   - id: keys
     fs.read: ["~/.ssh/**"]
-"#,
-        )
-        .unwrap();
-        ProtectedFolders::compile(&policy.deny, &ctx(case_insensitive))
+"#;
+
+    fn folders(case_insensitive: bool) -> ProtectedFolders {
+        let policy = Policy::parse(POLICY).unwrap();
+        CompiledPolicy::compile(&policy, &ctx(case_insensitive))
+            .unwrap()
+            .folders
+    }
+
+    /// The folders as they were found before they were taken from the
+    /// compiled deny groups: every non-negated pattern spelled again.
+    fn spelled_again(policy: &Policy, ctx: &EvalContext, kind: Kind) -> Vec<Folder> {
+        let mut out: Vec<Folder> = policy
+            .deny
+            .iter()
+            .flat_map(|group| {
+                group
+                    .patterns(kind)
+                    .iter()
+                    .filter(|p| !split_negation(p).0)
+                    .flat_map(|p| ctx.spellings(p))
+                    .filter_map(|spelled| {
+                        let (negated, body) = split_negation(&spelled);
+                        let folder = literal_folder(body).filter(|_| !negated)?;
+                        Some(Folder {
+                            path: fold(folder, ctx.case_insensitive_paths),
+                            rule: group.id.clone(),
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    /// Taking the folders from the deny groups' own spellings finds the same
+    /// folders as spelling the deny patterns again (ADR-132, option D), for
+    /// the default policy and this module's, in every sample context.
+    #[test]
+    fn the_folders_are_those_of_the_deny_patterns_spelled_again() {
+        let mut compared = 0;
+        for policy in [crate::DEFAULT_POLICY, POLICY] {
+            let policy = Policy::parse(policy).unwrap();
+            for ctx in crate::engine::sample_contexts() {
+                let folders = CompiledPolicy::compile(&policy, &ctx).unwrap().folders;
+                assert_eq!(folders.reads, spelled_again(&policy, &ctx, Kind::FsRead));
+                assert_eq!(folders.writes, spelled_again(&policy, &ctx, Kind::FsWrite));
+                compared += folders.reads.len() + folders.writes.len();
+            }
+        }
+        assert!(compared > 100, "{compared}");
     }
 
     fn read(path: &str) -> AtomicAction {

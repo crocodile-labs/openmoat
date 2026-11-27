@@ -296,9 +296,20 @@ impl CompiledPolicy<'_> {
     /// network to any host but the secret's own, and every MCP call, web
     /// search and unknown tool (the hosts they reach are unknown), needs review; after untrusted content, a write to
     /// a protected path needs review. Merging keeps the strictest verdict, so this
-    /// never loosens a decision.
+    /// never loosens a decision. Once a glob did not build, the `kernel-error`
+    /// deny (`engine/unbuilt.rs`).
     #[must_use]
     pub fn with_taint(
+        &self,
+        decision: Decision,
+        action: &Action,
+        paths: &dyn PathResolver,
+        taint: &Taint,
+    ) -> Decision {
+        self.checked(self.tightened_by(decision, action, paths, taint))
+    }
+
+    fn tightened_by(
         &self,
         decision: Decision,
         action: &Action,

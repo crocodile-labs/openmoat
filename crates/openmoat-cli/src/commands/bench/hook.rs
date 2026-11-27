@@ -82,6 +82,21 @@ impl Reply {
     }
 }
 
+/// The system temporary directory, resolved (macOS's `/var/folders/…` is
+/// `/private/var/folders/…`, a Windows short name the long one, without the
+/// verbatim prefix), so a throwaway home under it has one spelling, as a home
+/// in `/Users/<name>` has. With two, every `~` and `${project}` pattern was
+/// compiled for both and the `compile` phase measured more than a guard in an
+/// ordinary home pays (ADR-132).
+fn resolved_temp_dir() -> Result<PathBuf> {
+    let tmp = std::env::temp_dir();
+    let real =
+        std::fs::canonicalize(&tmp).with_context(|| format!("resolving {}", tmp.display()))?;
+    Ok(PathBuf::from(crate::context::strip_verbatim(
+        &real.to_string_lossy(),
+    )))
+}
+
 /// A throwaway directory holding the home and the project the hook sees,
 /// removed when dropped.
 pub struct Scratch {
@@ -119,7 +134,7 @@ impl Scratch {
                 std::path::absolute(dir)
                     .with_context(|| format!("--scratch-dir {}", dir.display()))?
             }
-            None => std::env::temp_dir(),
+            None => resolved_temp_dir()?,
         };
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)

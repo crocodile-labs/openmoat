@@ -39,6 +39,11 @@ impl EvalContext {
     /// [`Self::moved_dirs`] it falls under; empty when it names no location.
     /// The policy compiler (`ir`) lowers patterns through the same expansion,
     /// and `openmoat run` finds where a policy pattern points with it.
+    ///
+    /// A pattern is expanded once per home spelling only when it starts with
+    /// `~`, and once per project spelling only when it names `${project}`
+    /// (or its home does): the expansion of any other gives the same text for
+    /// each, so the set is the one every combination gives.
     #[must_use]
     pub fn spellings(&self, raw: &str) -> Vec<String> {
         let (negated, body) = crate::pattern::split_negation(raw);
@@ -59,15 +64,28 @@ impl EvalContext {
                 .collect(),
             None => vec![None],
         };
-        let mut out = Vec::new();
-        for home in [Some(&self.home), self.real_home.as_ref()]
+        let homes: Vec<&str> = [Some(&self.home), self.real_home.as_ref()]
             .into_iter()
             .flatten()
-        {
-            for project in &projects {
+            .map(String::as_str)
+            .collect();
+        let mut out = Vec::new();
+        for raw in &raws {
+            let body = crate::pattern::split_negation(raw).1;
+            let names_home = body.starts_with('~');
+            let names_project = body.contains("${project}")
+                || (names_home && homes.iter().any(|h| h.contains("${project}")));
+            let homes = if names_home { &homes[..] } else { &homes[..1] };
+            let projects = if names_project {
+                &projects[..]
+            } else {
+                &projects[..1]
+            };
+            for home in homes {
                 out.extend(
-                    raws.iter()
-                        .filter_map(|raw| paths::expand_pattern(raw, home, *project)),
+                    projects
+                        .iter()
+                        .filter_map(|project| paths::expand_pattern(raw, home, *project)),
                 );
             }
         }
@@ -76,3 +94,47 @@ impl EvalContext {
         out
     }
 }
+
+/// Contexts the engine's tests spell and compile patterns for: a home of 9,
+/// 30 and 120 characters, the last also with resolved spellings of the home
+/// and project (`/private/var/…`, as `openmoat bench`'s throwaway home on
+/// macOS had), with and without moved directories, in both case modes.
+#[cfg(test)]
+pub(crate) fn sample_contexts() -> Vec<EvalContext> {
+    let long = format!("/var/folders/{}/T/moat-bench/home", "x".repeat(87));
+    let homes = [
+        ("/Users/me".to_owned(), None),
+        (format!("/Users/{}", "n".repeat(23)), None),
+        (long.clone(), None),
+        (long.clone(), Some(format!("/private{long}"))),
+    ];
+    let mut out = Vec::new();
+    for (home, real_home) in homes {
+        for moved in [false, true] {
+            for case_insensitive_paths in [false, true] {
+                let project = format!("{home}/proj");
+                let moved_dirs = if moved {
+                    vec![
+                        ("~/.codex".to_owned(), "/srv/codex".to_owned()),
+                        ("~/.claude".to_owned(), format!("{home}/elsewhere/claude")),
+                    ]
+                } else {
+                    Vec::new()
+                };
+                out.push(EvalContext {
+                    real_project: real_home.as_ref().map(|r| format!("{r}/proj")),
+                    real_home: real_home.clone(),
+                    cwd: project.clone(),
+                    project: Some(project),
+                    home: home.clone(),
+                    moved_dirs,
+                    case_insensitive_paths,
+                });
+            }
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests;

@@ -94,3 +94,40 @@ fn a_bad_context_is_an_error_not_an_engine() {
     let bad_move = Context::new("/h", "/p").moved_dir("/", "/srv");
     assert!(Engine::new(p, &bad_move).is_err());
 }
+
+/// Should a glob the engine builds on first use not build (ADR-132), the
+/// call that reached it and every later one is the core's `kernel-error`
+/// deny, through the SDK's own decision.
+#[test]
+fn a_glob_that_did_not_build_denies_every_call() {
+    let ctx = Context::new("/h", "/p").project("/p").to_core().unwrap();
+    // a pattern added after the lint, which no text the engine defers can be
+    let mut policy = Policy::parse(DEFAULT_POLICY).unwrap().into_core();
+    policy.deny[0].fs_read.push("/x/{a".into());
+    let e = Engine {
+        compiled: openmoat_core::CompiledPolicy::compile_owned_building(
+            policy,
+            &ctx,
+            openmoat_core::GlobBuilds::EveryOnFirstUse,
+        )
+        .unwrap(),
+    };
+    assert_eq!(
+        e.decide(&Action::read("/p/src/main.rs")).verdict,
+        Verdict::Allow
+    );
+    let denied = e.decide(&Action::read("/x/{a"));
+    assert_eq!(
+        (denied.verdict, denied.rules.as_slice()),
+        (Verdict::Deny, &["kernel-error".to_owned()][..])
+    );
+    assert!(
+        denied
+            .reason()
+            .starts_with("kernel could not evaluate this action: bad glob"),
+        "{}",
+        denied.reason()
+    );
+    let later = e.decide(&Action::read("/p/src/main.rs"));
+    assert_eq!(later.rules, ["kernel-error"]);
+}

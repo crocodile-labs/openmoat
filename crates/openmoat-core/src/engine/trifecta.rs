@@ -219,8 +219,19 @@ impl CompiledPolicy<'_> {
     /// `lethal-trifecta`, with a reason naming the three parts. A secret with
     /// its own host (a brokered one) going to that host alone is no part.
     /// Merging keeps the strictest verdict, so this never loosens a decision.
+    /// Once a glob did not build, the `kernel-error` deny (`engine/unbuilt.rs`).
     #[must_use]
     pub fn with_trifecta(
+        &self,
+        decision: Decision,
+        action: &Action,
+        paths: &dyn PathResolver,
+        taint: &Taint,
+    ) -> Decision {
+        self.checked(self.trifecta_of(decision, action, paths, taint))
+    }
+
+    fn trifecta_of(
         &self,
         decision: Decision,
         action: &Action,

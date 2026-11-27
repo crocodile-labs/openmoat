@@ -2,8 +2,6 @@
 
 use std::sync::Arc;
 
-use globset::GlobBuilder;
-
 mod built;
 mod check;
 mod lazy;
@@ -13,6 +11,7 @@ mod tail;
 mod word;
 pub(crate) use built::Built;
 pub(crate) use check::Checked;
+pub(crate) use lazy::Unbuilt;
 pub use literal::literal_shell_pattern;
 
 use crate::lexer;
@@ -122,17 +121,17 @@ impl GlobPattern {
         if body.is_empty() {
             return Err(PolicyError::EmptyPattern);
         }
+        let options = lazy::Options {
+            literal_separator: true,
+            case_insensitive,
+            backslash_escape: None,
+        };
         let mut glob_of = |glob: &str| -> Result<Arc<LazyGlob>, PolicyError> {
-            built.path(glob, case_insensitive, || {
-                GlobBuilder::new(glob)
-                    .literal_separator(true)
-                    .case_insensitive(case_insensitive)
-                    .build()
-                    .map(|g| LazyGlob::new(g, case_insensitive))
-                    .map_err(|e| PolicyError::BadGlob {
-                        pattern: raw.to_owned(),
-                        error: e,
-                    })
+            built.path(glob, case_insensitive, |defer| {
+                LazyGlob::build(glob, options, defer).map_err(|e| PolicyError::BadGlob {
+                    pattern: raw.to_owned(),
+                    error: e,
+                })
             })
         };
         let dir = match body.strip_suffix("/**") {
@@ -156,6 +155,12 @@ impl GlobPattern {
     /// matching is a match: the glob's, and for `dir/**` also `dir`'s.
     pub(crate) fn regexes(&self) -> impl Iterator<Item = &str> {
         std::iter::once(self.matcher.regex()).chain(self.dir.as_deref().map(LazyGlob::regex))
+    }
+
+    /// The pattern as it was compiled, `!` included: for a policy's pattern,
+    /// one of its spellings ([`crate::EvalContext::spellings`]).
+    pub(crate) fn source(&self) -> &str {
+        &self.source
     }
 
     /// True when every candidate `other` matches is also matched by `self`.

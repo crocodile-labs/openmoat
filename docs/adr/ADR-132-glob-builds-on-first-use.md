@@ -1,6 +1,6 @@
 # ADR-132: Building each policy glob when a call first needs it
 
-Status: proposed (design only, nothing built) · Date: 2026-11-27 · Builds on ADR-080 (the
+Status: accepted · Date: 2026-11-27 · Builds on ADR-080 (the
 latency budget and its two 2026-11-26 amendments), ADR-111 (the never-widen proof),
 ADR-130 (the phase times), ADR-131 (its option E, deferred)
 
@@ -346,15 +346,75 @@ used is waste that a one-file change in the core removes.
 
 ## Decision
 
-1. **Build C in its safe mode:** defer the build of every glob whose spelled text holds no
-   `[`, `{`, `}` or `\`; build the others at compile as today; keep a failure mark that
-   `decide`, `decide_with` and the guard turn into the `kernel-error` deny.
-2. **Build D** in the same change or the next: the same output with less string work.
-3. **Measure again** (below) before anything more. The second step of C (an own parse check
-   so that every text is deferred) is built only if the user asks for it after those
-   numbers.
-4. **A and B are not proposed.** A changes what the never-widen proof reads; B needs a new
-   direct dependency in the core. After C neither has much left to save.
+The user answered the questions this ADR first ended with (2026-11-27):
+
+1. **C, in its safe mode.** A glob is built on first use only when its spelled text holds
+   none of `[`, `{`, `}` and `\`, the only characters globset's parser can refuse; every
+   other glob is built at compile, as before, so a bad pattern fails the compile exactly as
+   it did. A deferred build that fails anyway answers "no match" and sets the compiled
+   policy's failure mark. This reverses ADR-080's second amendment ("deferring the build
+   stays out") for those texts only.
+2. **The mark is read inside the core.** Every public decision entry point of
+   `CompiledPolicy` (`decide`, `decide_with`, `evaluate_atomic`, `with_arguments`,
+   `with_injected`, `with_taint`, `with_staging`, `with_trifecta`) returns, once the mark
+   is set, the deny a compile error gives in `openmoat guard`: rule `kernel-error`, reason
+   "kernel could not evaluate this action: " and the compile error's words (`bad glob
+   ``…``: …`, naming the spelled text). So every caller of the core (the guard, the SDK,
+   the proxy, `openmoat policy`) gets that deny with no code of its own. The guard reads the
+   mark again after its session checks, which match globs outside those entry points, and
+   fails the call through its error path, as a compile error does.
+3. **The safe mode only.** No own parse check for the texts still built at compile.
+4. **D in the same change**, with a test that the set of spellings is the same.
+5. **`openmoat bench`'s throwaway home** is created under the resolved temporary
+   directory, so it has one spelling and the bench's `compile` line is what a guard in an
+   ordinary home pays (question 5 below). A home given with `--scratch-dir` is used as
+   written.
+6. **The unescaped home** (question 6, the side finding under A) was fixed in its own
+   change before this one (#881): a home, project or moved directory is spliced in as
+   literal text, each glob character as a one-character class (`/Users/a*b` as
+   `/Users/a[*]b`). Such a spelling holds `[`, so it is built at compile; a home no longer
+   makes a compile fail, and the failure mark's tests reach it with a pattern added after
+   the lint instead.
+
+A and B are not built: A changes what the never-widen proof reads, B needs a new direct
+dependency in the core, and after C neither has much left to save.
+
+## What was built
+
+- **`pattern/lazy.rs`.** `LazyGlob` keeps its text and globset options, the literal start
+  and end it reads from that text, the `Glob` behind a `OnceLock<Option<Glob>>` and the
+  matcher behind another. `LazyGlob::build` builds at once unless the compile defers and
+  the text passes `cannot_fail` (`pattern/word.rs`, the lint's own test), which is read
+  from the text globset is given: for a path glob its spelled text, wherever a character
+  came from (the policy, the home, the project, a pattern the CLI adds after the lint); for
+  a shell word the text after `\\` is swapped out. `regex()` builds on demand and is empty
+  for a glob that did not build, which the never-widen proof reads as an unsupported regex
+  and reports as not proven. The failure mark (`Unbuilt`) keeps the first failure's words.
+- **`pattern/built.rs`.** A compile's glob store says whether its globs may wait:
+  `Built::default()` (a pattern compiled alone, `GlobPattern::compile`) builds everything
+  at once, `Built::deferring` is what `CompiledPolicy::compile` uses.
+- **`engine/unbuilt.rs`.** The mark's reads (`CompiledPolicy::unbuilt`, and the check each
+  entry point above applies last), and a hidden `GlobBuilds` mode (`AtCompile`,
+  `OnFirstUse`, `EveryOnFirstUse`) with `CompiledPolicy::compile_owned_building`, not a
+  stable API: tests compare the modes, and reach the mark with every glob deferred, which
+  no text the safe mode defers can do.
+- **`openmoat guard`** (`commands/guard/unbuilt.rs`): after the last check that uses the
+  compile, a set mark fails the call, which the guard answers with the `kernel-error` deny,
+  and the session cache and provenance the call computed are dropped. The fold of the
+  session's earlier calls (`taint.rs`) also refuses to write a cache row while the mark is
+  set, so a fold that may have missed what tainted the session is never kept, by the guard
+  or by `catch_up` after a call ran.
+- **D** (`engine/context.rs`, `engine/contents.rs`): `EvalContext::spellings` expands a
+  pattern under every home spelling only when it starts with `~`, and under every project
+  spelling only when it names `${project}` (or the home it is spelled with does); any other
+  expansion gives the same text under each. `ProtectedFolders` reads the deny groups'
+  compiled spellings (`GlobPattern::source`) instead of spelling the deny patterns again; a
+  spelling keeps its pattern's `!`, so the negated patterns are the negated spellings.
+  `paths::expand_pattern` is unchanged.
+- **`openmoat bench`** (`commands/bench/hook.rs`): the scratch root is under
+  `canonicalize(temp_dir())`, without Windows' verbatim prefix. Nothing else read the
+  unresolved path: the hook, the OS sandbox proof and the run proof take the paths from
+  the scratch directory itself.
 
 ## Proof plan
 
@@ -396,6 +456,41 @@ Every decision and every error must be what it is today. The tests:
    and gets the same answers (`OnceLock` builds each glob once).
 8. **D.** The set test in option D.
 
+## Measured after the change
+
+The method above (scratch code, not committed: the core's tests built with the release
+profile, the default policy, the four contexts with the project at `<home>/proj` and
+case-insensitive paths, 60 rounds, the homes taken in turn within each round), run on
+`main` before this change (66419da1) and on this change in turn, three passes. "First
+decisions" is `decide_with` and `exposure_and_collection` of `git status`, a read and a
+write in the project, summed, on the fresh compile. The development Mac was far busier than
+for the prototype (load average 28 to 77 from other work), so every figure is higher than
+the prototype's, and the p95s are wide; the proportions are what to read. p50 / p95 in µs:
+
+| `compile` | 9 | 30 | 120 | 120 + resolved (the bench's home before) |
+|---|---|---|---|---|
+| before, pass 1 | 23,890 / 73,295 | 27,569 / 76,602 | 41,557 / 97,114 | 86,334 / 170,989 |
+| after, pass 1 | 10,016 / 26,776 | 10,439 / 35,936 | 11,528 / 26,492 | 15,081 / 32,952 |
+| before, pass 2 | 17,629 / 36,715 | 20,255 / 33,224 | 31,694 / 54,063 | 64,252 / 99,171 |
+| after, pass 2 | 9,517 / 28,187 | 10,077 / 42,530 | 10,809 / 34,101 | 15,671 / 40,731 |
+| before, pass 3 | 19,736 / 70,600 | 21,201 / 48,368 | 32,785 / 78,120 | 66,113 / 112,472 |
+| after, pass 3 | 9,675 / 17,146 | 9,542 / 15,065 | 10,727 / 18,445 | 13,221 / 28,058 |
+
+| First decisions | 9 | 30 | 120 | 120 + resolved |
+|---|---|---|---|---|
+| before, passes 1 to 3 | 1,727; 1,619; 1,737 | 1,811; 1,802; 1,823 | 2,346; 2,298; 2,377 | 2,440; 2,342; 2,497 |
+| after, passes 1 to 3 | 1,737; 1,699; 1,683 | 1,862; 1,873; 1,824 | 2,406; 2,386; 2,373 | 2,467; 2,474; 2,402 |
+
+(First decisions are p50s; their p95s, 2.6 to 20 ms on both sides, are the load's.)
+
+- `compile` fell to about half for the 9- and 30-character homes, to a third for the
+  120-character home, and to a fifth for the two-spelling home; it now grows little with
+  the home's length, since most texts are no longer built.
+- The first decisions did not move beyond their spread: the few globs a call builds cost
+  what the regex they then compile already cost.
+- With `openmoat bench`'s home resolved, the bench now measures the "120" column, not the
+  "120 + resolved" one.
+
 ## Measurement in CI
 
 - `openmoat bench`'s phase line (ADR-130) in MoatBench's CI job and on the user's machine,
@@ -420,7 +515,7 @@ Every decision and every error must be what it is today. The tests:
   engine did before at compile.
 - Nothing is kept between calls; ADR-131's cache stays deferred.
 
-## Questions for the user before any code
+## The questions the user answered (see the decision)
 
 1. May C reverse ADR-080's second amendment for texts without `[`, `{`, `}` or `\`, with the
    failure mark turning into the `kernel-error` deny?

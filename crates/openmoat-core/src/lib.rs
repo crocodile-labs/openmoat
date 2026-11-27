@@ -69,6 +69,10 @@ pub use engine::{
     CompiledPolicy, DATA_FLOW_ATOM, EvalContext, Label as TaintLabel, STAGING_ATOM,
     Secret as TaintSecret, Staging, Taint, UntrustedKind, evaluate,
 };
+// Public only for tests that compare when globs are built (ADR-132); not a
+// stable API.
+#[doc(hidden)]
+pub use engine::GlobBuilds;
 pub use host::{
     MAX_DNS_LABEL_LEN, MAX_DNS_NAME_LEN, file_url_path, malformed_port_pattern, port_pattern,
 };

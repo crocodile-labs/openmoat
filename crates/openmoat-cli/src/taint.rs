@@ -144,6 +144,11 @@ fn fold_session(
     };
     let mut saved = Instant::now();
     let write = |out: &SessionTaint, upto: EventId| -> Result<CacheWrite> {
+        // A glob that did not build answered "no match" (ADR-132): a fold that
+        // may have missed what tainted the session is never kept.
+        if let Some(why) = policy.unbuilt() {
+            bail!("{why}");
+        }
         Ok(CacheWrite {
             session: session.to_owned(),
             host,

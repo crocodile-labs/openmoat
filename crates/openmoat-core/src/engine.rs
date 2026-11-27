@@ -6,10 +6,11 @@
 //! is expressed through per-kind `defaults`, never through a deny rule.
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use crate::action::{Action, AtomicAction};
 use crate::kind::Kind;
-use crate::pattern::{Built, GlobPattern, ShellPattern, any_match};
+use crate::pattern::{Built, GlobPattern, ShellPattern, Unbuilt, any_match};
 use crate::policy::{Policy, PolicyError, RuleGroup};
 use crate::programs::{self, NoResolver, ProgramResolver};
 use crate::realpath::PathResolver;
@@ -28,12 +29,16 @@ mod sections;
 mod staging;
 mod taint;
 mod trifecta;
+mod unbuilt;
 
 use atoms::{checked_atoms, value_read_atoms};
+#[cfg(test)]
+pub(crate) use context::sample_contexts;
 pub use labels::{DATA_FLOW_ATOM, Label};
 pub(crate) use sections::Section;
 pub use staging::{STAGING_ATOM, Staging};
 pub use taint::{Secret, Taint, UntrustedKind};
+pub use unbuilt::GlobBuilds;
 
 /// Everything the engine needs from the environment. Supplied by the caller.
 #[derive(Debug, Clone)]
@@ -94,6 +99,8 @@ pub struct CompiledPolicy<'p> {
     requests: crate::requests::RequestRules,
     /// Paths `taint.private_paths` names, whose reads are private data (ADR-113).
     private: Vec<GlobPattern>,
+    /// Set when a glob built on first use did not build (`engine/unbuilt.rs`).
+    unbuilt: Arc<Unbuilt>,
 }
 
 #[derive(Debug)]
@@ -126,8 +133,12 @@ impl<'p> CompiledPolicy<'p> {
     /// Compile every pattern of `policy` for `ctx`. Fails on a pattern that does
     /// not compile, and on a `moved_dirs` entry whose `default` could alias every
     /// pattern (empty, bare `/`, or not an absolute or `~/`-rooted directory).
+    ///
+    /// A glob whose text cannot fail to parse is built when a call first needs
+    /// it (ADR-132); every other is built here, so every compile error comes
+    /// from here as before.
     pub fn compile(policy: &'p Policy, ctx: &EvalContext) -> Result<Self, PolicyError> {
-        Self::build(Cow::Borrowed(policy), ctx)
+        Self::build(Cow::Borrowed(policy), ctx, GlobBuilds::OnFirstUse)
     }
 
     /// [`Self::compile`] for a policy the result keeps, so it borrows nothing.
@@ -135,13 +146,18 @@ impl<'p> CompiledPolicy<'p> {
         policy: Policy,
         ctx: &EvalContext,
     ) -> Result<CompiledPolicy<'static>, PolicyError> {
-        CompiledPolicy::build(Cow::Owned(policy), ctx)
+        CompiledPolicy::build(Cow::Owned(policy), ctx, GlobBuilds::OnFirstUse)
     }
 
-    fn build(policy: Cow<'p, Policy>, ctx: &EvalContext) -> Result<Self, PolicyError> {
+    fn build(
+        policy: Cow<'p, Policy>,
+        ctx: &EvalContext,
+        builds: GlobBuilds,
+    ) -> Result<Self, PolicyError> {
         ctx.validate_moved_dirs()?;
         // Each text the policy names is built once (`pattern/built.rs`).
-        let mut built = Built::default();
+        let unbuilt = Arc::<Unbuilt>::default();
+        let mut built = builds.store(&unbuilt);
         let mut compile_list = |groups: &[RuleGroup], allow: bool| {
             groups
                 .iter()
@@ -153,6 +169,8 @@ impl<'p> CompiledPolicy<'p> {
         let allow = compile_list(&policy.allow, true)?;
         let review = compile_list(&policy.review, false)?;
         let defer = compile_list(&policy.defer, false)?;
+        // From the spellings the deny groups were compiled with.
+        let folders = contents::ProtectedFolders::compile(&deny, ctx);
         Ok(Self {
             ctx: ctx.clone(),
             deny,
@@ -161,11 +179,12 @@ impl<'p> CompiledPolicy<'p> {
             review,
             defer,
             protected: taint::compile_protected(&policy, ctx, &mut built)?,
-            folders: contents::ProtectedFolders::compile(&policy.deny, ctx),
+            folders,
             inside: staging::compile_inside(&policy, ctx, &mut built)?,
             requests: crate::requests::RequestRules::for_hook(&policy.requests)?,
             private: taint::compile_private(&policy, ctx, &mut built)?,
             policy,
+            unbuilt,
         })
     }
 
@@ -192,8 +211,17 @@ impl<'p> CompiledPolicy<'p> {
     /// Returns `None` for a whole-pipeline atom that no rule mentions: pipelines
     /// are only there so rules like `curl * | sh` can see across `|`; the
     /// per-sub-command atoms carry the default verdict.
+    ///
+    /// Once a glob of this compile did not build, the `kernel-error` deny
+    /// (`engine/unbuilt.rs`).
     #[must_use]
     pub fn evaluate_atomic(&self, action: &AtomicAction) -> Option<Decision> {
+        let decided = self.atomic(action);
+        self.failed().or(decided)
+    }
+
+    /// [`Self::evaluate_atomic`] before the failure mark is read.
+    fn atomic(&self, action: &AtomicAction) -> Option<Decision> {
         if let Some(deny) = Self::hit(&self.deny, Verdict::Deny, action) {
             return Some(deny);
         }
@@ -487,9 +515,9 @@ impl CompiledPolicy<'_> {
         // The requests a command or fetch tool sends to a `requests:` host
         // (ADR-062): a deny or a review, never an allow.
         let requests = crate::requests::hook::decisions(&self.requests, action, &atoms);
-        atoms
+        let decided = atoms
             .iter()
-            .filter_map(|atom| self.evaluate_atomic(atom))
+            .filter_map(|atom| self.atomic(atom))
             .chain(folders)
             .chain(requests)
             .chain(aliased)
@@ -502,7 +530,9 @@ impl CompiledPolicy<'_> {
                 acc.merge(next);
                 acc
             })
-            .unwrap_or_else(|| unparseable(verdict, "action has no evaluable parts".to_owned()))
+            .unwrap_or_else(|| unparseable(verdict, "action has no evaluable parts".to_owned()));
+        // Last, once every glob the decision needed was asked (ADR-132).
+        self.checked(decided)
     }
 }
 

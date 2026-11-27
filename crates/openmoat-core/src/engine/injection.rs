@@ -168,9 +168,20 @@ impl CompiledPolicy<'_> {
     /// call also reaches a host or a file outside the project that the policy
     /// does not allow. A command of a shell the classifier cannot read
     /// (PowerShell) is checked on its text: a host or a path outside the
-    /// project it names ([`foreign`]). Never loosens; a deny stays.
+    /// project it names ([`foreign`]). Never loosens; a deny stays. Once a
+    /// glob did not build, the `kernel-error` deny (`engine/unbuilt.rs`).
     #[must_use]
     pub fn with_injected(
+        &self,
+        decision: Decision,
+        action: &Action,
+        paths: &dyn PathResolver,
+        seen: &dyn InjectedLookup,
+    ) -> Decision {
+        self.checked(self.planted_in(decision, action, paths, seen))
+    }
+
+    fn planted_in(
         &self,
         decision: Decision,
         action: &Action,
