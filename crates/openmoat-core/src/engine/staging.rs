@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{CompiledPolicy, EvalContext, checked_atoms, egress};
 use crate::action::{Action, AtomicAction};
-use crate::pattern::{GlobPattern, any_match};
+use crate::pattern::{Built, GlobPattern, any_match};
 use crate::policy::{Policy, PolicyError};
 use crate::realpath::PathResolver;
 use crate::staging::StagingSettings;
@@ -109,6 +109,7 @@ fn keep(list: &mut Vec<String>, new: Vec<String>, cap: usize, newest: bool) {
 pub(super) fn compile_inside(
     policy: &Policy,
     ctx: &EvalContext,
+    built: &mut Built,
 ) -> Result<Vec<GlobPattern>, PolicyError> {
     let homes: Vec<&str> = [Some(&ctx.home), ctx.real_home.as_ref()]
         .into_iter()
@@ -136,7 +137,7 @@ pub(super) fn compile_inside(
         .chain(roots)
         .chain(crate::staging::ignored(policy).map(str::to_owned))
         .flat_map(|p| ctx.spellings(&p))
-        .map(|p| GlobPattern::compile(&p, ctx.case_insensitive_paths))
+        .map(|p| GlobPattern::compile_in(&p, ctx.case_insensitive_paths, built))
         .collect()
 }
 

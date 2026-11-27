@@ -1,8 +1,10 @@
 //! Matching one shell word against one pattern word.
 
+use std::sync::Arc;
+
 use globset::GlobBuilder;
 
-use super::LazyGlob;
+use super::{Built, LazyGlob};
 
 /// Stands in for a literal backslash while matching one shell word. globset
 /// rewrites `\` to `/` in every candidate on Windows (it assumes paths), so a
@@ -34,30 +36,41 @@ pub(super) fn cannot_fail(glob: &str) -> bool {
 #[derive(Debug, Clone)]
 pub(super) enum WordGlob {
     Literal(String),
-    Glob(Box<LazyGlob>),
+    /// Shared with every word of the same compile spelled the same ([`Built`]).
+    Glob(Arc<LazyGlob>),
 }
 
 impl WordGlob {
     pub(super) fn new(word: &str) -> Result<Self, globset::Error> {
+        Self::new_in(word, &mut Built::default())
+    }
+
+    /// [`Self::new`], taking the glob from `built` when the same compile
+    /// already built one for `word`.
+    pub(super) fn new_in(word: &str, built: &mut Built) -> Result<Self, globset::Error> {
         if !word.contains(GLOB_CHARS) {
             return Ok(Self::Literal(word.to_owned()));
         }
-        let mut glob = String::with_capacity(word.len());
-        let mut chars = word.chars().peekable();
-        while let Some(c) = chars.next() {
-            if c == '\\' && chars.peek() == Some(&'\\') {
-                chars.next();
-                glob.push_str(BACKSLASH);
-            } else {
-                glob.push(c);
-            }
-        }
-        GlobBuilder::new(&glob)
-            .literal_separator(false)
-            .backslash_escape(true)
-            .build()
-            // Shell words compare case-sensitively.
-            .map(|g| Self::Glob(Box::new(LazyGlob::new(g, false))))
+        built
+            .word(word, || {
+                let mut glob = String::with_capacity(word.len());
+                let mut chars = word.chars().peekable();
+                while let Some(c) = chars.next() {
+                    if c == '\\' && chars.peek() == Some(&'\\') {
+                        chars.next();
+                        glob.push_str(BACKSLASH);
+                    } else {
+                        glob.push(c);
+                    }
+                }
+                GlobBuilder::new(&glob)
+                    .literal_separator(false)
+                    .backslash_escape(true)
+                    .build()
+                    // Shell words compare case-sensitively.
+                    .map(|g| LazyGlob::new(g, false))
+            })
+            .map(Self::Glob)
     }
 
     pub(super) fn is_match(&self, word: &str) -> bool {
@@ -110,7 +123,7 @@ mod tests {
         for word in words {
             let literal = WordGlob::new(word).unwrap();
             assert!(matches!(literal, WordGlob::Literal(_)), "{word}");
-            let glob = WordGlob::Glob(Box::new(LazyGlob::new(
+            let glob = WordGlob::Glob(Arc::new(LazyGlob::new(
                 GlobBuilder::new(word)
                     .literal_separator(false)
                     .backslash_escape(true)

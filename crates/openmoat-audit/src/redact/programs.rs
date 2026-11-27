@@ -11,7 +11,7 @@
 use regex::Captures;
 
 use super::judge::{HTTP_CLIENTS, program_before};
-use super::{Mask, REPLACEMENT};
+use super::{Mask, REPLACEMENT, Rule, rule};
 
 /// A flag's value: a double-quoted or single-quoted word, or a bare one up to
 /// the next space or shell operator.
@@ -38,108 +38,133 @@ macro_rules! program_flag {
     };
 }
 
-pub(super) const RULES: &[(&str, Mask)] = &[
+pub(super) const RULES: &[Rule] = &[
     // An environment name whose last part, or glued tail, is a credential word:
     // `PGPASSWORD`, `MYSQL_PWD`, `OPENAI_KEY`, `REDISCLI_AUTH`. Upper case
     // only, as environment names are written, so `sort_key=` in code and `PWD`
     // or `OLDPWD` keep their values.
-    (
+    rule(
         concat!(
             r#"(?P<key>(?:^|[\s;&|(\x22'])(?:[A-Z][A-Z0-9_]*(?:PASSWORD|PASSWD|_PWD|_PASS|_KEY|_SECRET|_AUTH|_CREDENTIALS?)|PGPASS)=)"#,
             value!()
         ),
         Mask::With(env_value),
+        &[
+            "_auth",
+            "_credential",
+            "_key",
+            "_pass",
+            "_pwd",
+            "_secret",
+            "passw",
+            "pgpass",
+        ],
     ),
     // The MySQL and MariaDB clients take the password glued to `-p`; a bare
     // `-p` asks for it, and `-P` is the port.
-    (
+    rule(
         program_flag!(
             "mysql|mysqldump|mysqladmin|mysqlimport|mysqlshow|mysqlcheck|mysqlpump|mysqlslap|mariadb|mariadb-dump|mariadb-admin",
             r"\s-p"
         ),
         Mask::Text("${pre}[redacted]"),
+        &["mysql", "mariadb"],
     ),
     // 7-Zip, glued too: `7z a -psecret x.7z`.
-    (
+    rule(
         program_flag!("7z|7za|7zz|7zr", r"\s-p"),
         Mask::Text("${pre}[redacted]"),
+        &["7z"],
     ),
     // `sshpass -p <password>` (or glued).
-    (
+    rule(
         program_flag!("sshpass", r"\s-p\s*"),
         Mask::Text("${pre}[redacted]"),
+        &["sshpass"],
     ),
     // A registry login's `-p <password>` (`--password` is a named flag).
-    (
+    rule(
         program_flag!(
             r"(?:docker|podman|buildah|skopeo|nerdctl|oras)\s+login|helm\s+registry\s+login|crane\s+auth\s+login",
             r"\s-p\s+"
         ),
         Mask::Text("${pre}[redacted]"),
+        &["crane", "login", "registry"],
     ),
     // `redis-cli -a <password>` and `--pass <password>`.
-    (
+    rule(
         program_flag!("redis-cli", r"\s(?:-a|--pass)\s+"),
         Mask::Text("${pre}[redacted]"),
+        &["redis-cli"],
     ),
     // `openssl enc -k <password>`; `-kfile` names a file.
-    (
+    rule(
         program_flag!("openssl", r"\s-k\s+"),
         Mask::Text("${pre}[redacted]"),
+        &["openssl"],
     ),
     // OpenSSL's `-pass`, `-passin` and `-passout` with a `pass:` value; `env:`,
     // `file:`, `fd:` and `stdin` name where the password is and are kept.
-    (
+    rule(
         r"(?P<pre>\s-pass(?:in|out)?\s+['\x22]?pass:)(?P<v>[^\s'\x22]+)",
         Mask::Text("${pre}[redacted]"),
+        &["-pass"],
     ),
     // `zip -P <password>`, `unzip -P`, `zipcloak -P`.
-    (
+    rule(
         program_flag!("zip|unzip|zipcloak", r"\s-P\s+"),
         Mask::Text("${pre}[redacted]"),
+        &["zip"],
     ),
     // `htpasswd -b[c] file user password`, `htpasswd -nb user password`.
-    (
+    rule(
         r"(?P<pre>(?:^|[\s;&|(/\x22'])htpasswd)(?P<args>(?:\s+[^\s;&|]+)+)",
         Mask::With(htpasswd),
+        &["htpasswd"],
     ),
     // `aws configure set [profile.]aws_secret_access_key <value>`, and the
     // session token.
-    (
+    rule(
         concat!(
             r"(?P<pre>\baws\s+configure\s+set\s+(?:--profile\s+\S+\s+)?(?:\S+\.)?(?:aws_secret_access_key|aws_session_token)\s+)",
             value!()
         ),
         Mask::Text("${pre}[redacted]"),
+        &["aws_se"],
     ),
     // A `Cookie:` or `Set-Cookie:` header with a `name=value`: its whole value,
     // to the end of the header (a quote or a line break). Prose such as
     // `fix cookie: expiry` has no `=` and is kept.
-    (
+    rule(
         r"(?i)(?P<pre>(?:^|[\s'\x22])(?:set-)?cookie\s*:[ \t]*)(?P<v>[^\s'\x22=;]+=[^\r\n'\x22]*)",
         Mask::Text("${pre}[redacted]"),
+        &["cookie"],
     ),
     // An HTTP client's `-b`/`--cookie name=value`; a value without `=` is a
     // cookie file and is kept, and so is another program's `-b`.
-    (
+    rule(
         r"(?P<pre>\s(?:-b|--cookie)(?:=|\s+)['\x22]?)(?P<v>[^\s'\x22=;]+=[^\s'\x22]*)",
         Mask::With(cookie_flag),
+        &["-b", "--cookie"],
     ),
     // Slack and Discord webhook URLs: the path is the credential.
-    (
+    rule(
         r"(?P<pre>https?://hooks\.slack\.com/(?:services|workflows|triggers)/)[A-Za-z0-9/_-]+",
         Mask::Text("${pre}[redacted]"),
+        &["hooks.slack.com/"],
     ),
-    (
+    rule(
         r"(?P<pre>https?://(?:[a-z]+\.)?discord(?:app)?\.com/api/webhooks/)[0-9]+/[A-Za-z0-9_-]+",
         Mask::Text("${pre}[redacted]"),
+        &["/api/webhooks/"],
     ),
     // A URL whose user part is a key and has no password (a Sentry DSN
     // `https://<key>@o1.ingest.sentry.io/1`, a token given as the user to git
     // over HTTPS). A short or digitless user (`ssh://git@host`) is kept.
-    (
+    rule(
         r"(?P<pre>://)(?P<v>[A-Za-z0-9_.~-]{20,})@",
         Mask::With(url_user),
+        &["://"],
     ),
 ];
 

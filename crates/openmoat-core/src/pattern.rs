@@ -1,13 +1,17 @@
 //! Pattern matching helpers shared by all rule kinds (docs/POLICY.md §3).
 
+use std::sync::Arc;
+
 use globset::GlobBuilder;
 
+mod built;
 mod check;
 mod lazy;
 mod literal;
 mod sequence;
 mod tail;
 mod word;
+pub(crate) use built::Built;
 pub(crate) use check::Checked;
 pub use literal::literal_shell_pattern;
 
@@ -73,9 +77,11 @@ pub(crate) fn any_match<C: ?Sized, M: Matcher<C>>(patterns: &[M], candidate: &C)
 #[derive(Debug, Clone)]
 pub struct GlobPattern {
     source: String,
-    matcher: LazyGlob,
+    /// Shared with every other pattern of the same compile built from the
+    /// same text ([`Built`]).
+    matcher: Arc<LazyGlob>,
     /// Matcher for `dir` when the pattern is `dir/**`.
-    dir: Option<LazyGlob>,
+    dir: Option<Arc<LazyGlob>>,
     /// `!pattern` inside an allow list excludes matches (docs/POLICY.md §3).
     pub negated: bool,
 }
@@ -102,28 +108,40 @@ impl Matcher<[String]> for ShellPattern {
 
 impl GlobPattern {
     pub fn compile(raw: &str, case_insensitive: bool) -> Result<Self, PolicyError> {
+        Self::compile_in(raw, case_insensitive, &mut Built::default())
+    }
+
+    /// [`Self::compile`], taking a glob `built` already holds for the same
+    /// text and case mode instead of building it again.
+    pub(crate) fn compile_in(
+        raw: &str,
+        case_insensitive: bool,
+        built: &mut Built,
+    ) -> Result<Self, PolicyError> {
         let (negated, body) = split_negation(raw);
         if body.is_empty() {
             return Err(PolicyError::EmptyPattern);
         }
-        let build = |glob: &str| -> Result<LazyGlob, PolicyError> {
-            GlobBuilder::new(glob)
-                .literal_separator(true)
-                .case_insensitive(case_insensitive)
-                .build()
-                .map(|g| LazyGlob::new(g, case_insensitive))
-                .map_err(|e| PolicyError::BadGlob {
-                    pattern: raw.to_owned(),
-                    error: e,
-                })
+        let mut glob_of = |glob: &str| -> Result<Arc<LazyGlob>, PolicyError> {
+            built.path(glob, case_insensitive, || {
+                GlobBuilder::new(glob)
+                    .literal_separator(true)
+                    .case_insensitive(case_insensitive)
+                    .build()
+                    .map(|g| LazyGlob::new(g, case_insensitive))
+                    .map_err(|e| PolicyError::BadGlob {
+                        pattern: raw.to_owned(),
+                        error: e,
+                    })
+            })
         };
         let dir = match body.strip_suffix("/**") {
-            Some(dir) if !dir.is_empty() => Some(build(dir)?),
+            Some(dir) if !dir.is_empty() => Some(glob_of(dir)?),
             _ => None,
         };
         Ok(Self {
             source: raw.to_owned(),
-            matcher: build(body)?,
+            matcher: glob_of(body)?,
             dir,
             negated,
         })
@@ -137,7 +155,7 @@ impl GlobPattern {
     /// The regular expressions a candidate is matched against, any of which
     /// matching is a match: the glob's, and for `dir/**` also `dir`'s.
     pub(crate) fn regexes(&self) -> impl Iterator<Item = &str> {
-        std::iter::once(self.matcher.regex()).chain(self.dir.as_ref().map(LazyGlob::regex))
+        std::iter::once(self.matcher.regex()).chain(self.dir.as_deref().map(LazyGlob::regex))
     }
 
     /// True when every candidate `other` matches is also matched by `self`.
@@ -198,6 +216,12 @@ pub struct ShellPattern {
 
 impl ShellPattern {
     pub fn compile(raw: &str) -> Result<Self, PolicyError> {
+        Self::compile_in(raw, &mut Built::default())
+    }
+
+    /// [`Self::compile`], taking each word's glob from `built` when the same
+    /// compile already built it.
+    pub(crate) fn compile_in(raw: &str, built: &mut Built) -> Result<Self, PolicyError> {
         let (negated, words, anchored) = Self::words(raw)?;
         let mut tokens = words
             .iter()
@@ -205,7 +229,7 @@ impl ShellPattern {
                 if w == "*" {
                     return Ok(Token::Any);
                 }
-                WordGlob::new(w)
+                WordGlob::new_in(w, built)
                     .map(|g| Token::One(g, w.clone()))
                     .map_err(|e| PolicyError::BadGlob {
                         pattern: raw.to_owned(),

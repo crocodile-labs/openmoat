@@ -231,3 +231,101 @@ What was measured and left alone:
 - **Classifying a call again** in each session check (`with_injected`, `with_taint`,
   `with_staging`, `with_trifecta`, the provenance step) costs tens of microseconds each once
   the globs are built.
+
+## Amendment 2026-11-26 (second): the session checks' redaction and globs built once
+
+`openmoat bench` on `main` (650860fa) put the guard's own time, by the phases of ADR-130,
+in `compile` (p50 42.8 ms), `taint` (22.7 ms) and `lock` (13.5 ms) of a 94 ms call. These
+two changes are to the first two; neither changes a decision, an error or what is recorded.
+
+### `taint`: the first lookup built every redaction pattern
+
+The suspicion was the audit log: lookups that scan or decode more rows as the log grows.
+A scratch harness filled a real audit store (through `openmoat guard` in a throwaway home,
+then copies of its rows) to 1,000, 10,000 and 50,000 rows in other sessions, and 5,000 in
+the call's own, and timed each step of the phase. `EXPLAIN QUERY PLAN` of every query on
+the guard's path is an index search: the session page (`events_session`), the fold cache
+and its other digests (the `session_folds` key, ≤ 16 rows sorted), the fingerprints,
+provenance, the files a session wrote and the MCP pieces (each table's own index), the
+newest id (the row id). The log's size was not the cause:
+
+| Rows in the log (in the call's session) | `taint` before | `taint` after |
+|---|---|---|
+| 88 (8) | 21.6 / 28.9 | 7.9 / 14.7 |
+| 1,088 (8) | 22.7 / 34.7 | 8.0 / 13.9 |
+| 10,088 (8) | 25.8 / 32.2 | 7.6 / 13.1 |
+| 50,088 (8) | 22.0 / 28.7 | 8.8 / 18.9 |
+| 55,088 (5,008) | 26.0 / 36.6 | 7.9 / 14.8 |
+
+(p50 / p95 in ms of the guard's own `taint` phase over 40 calls, builds of both commits
+with the same optimisation and no link-time optimisation, this development Mac under
+load. The session's fold reads on from its cached row, so its own size does not show.)
+
+Timing inside the phase put 14.9 ms of its 23.6 ms p50 in the first step,
+`taint::injected::checked`, whose only work for a session without fingerprints is one
+index probe. Its cost was the probe's arguments: every lookup by session passes the id
+through `KnownSecrets::redact`, as `Store::record` stored it, and the first redaction of a
+process compiled all 38 of the redaction's regexes (12.4 ms in a fresh process; the
+`(?i)`, Unicode `\b` and `\s` patterns 0.3 to 1.5 ms each). Every later step and the
+`record` phase then found them built.
+
+**Change.** Each pattern names texts one of which every match holds (`Rule::needs`: the
+credential words, the program names, `bearer`, `://`, the token prefixes), and is built the
+first time a text holds one of them in some letter case (`redact/gate.rs`). A text that
+holds none could not match and keeps what it is. A text with a non-ASCII character goes to
+every pattern, since case folding equates `ſ` with `s` and the Kelvin sign with `k`. A
+session id, a path or `git status` now builds none; a text that names a credential word
+builds the patterns that need it, once per process. The needles are proved, not trusted:
+a test reads each pattern as `regex` parses it (`regex-syntax`, a test-only dependency
+already in the build) and derives texts every match must hold (a literal or a one-letter
+class, runs of them in a concatenation, every branch of an alternation, a repetition of at
+least one); each must hold one of the rule's needles. A second test runs every pattern
+ungated over a corpus of the texts each pattern masks, near misses and ordinary calls, each
+also upper-cased, lower-cased and with `s` and `k` replaced by their non-ASCII foldings,
+and gets what the gated redaction gives. One difference remains where the patterns do not
+compile, which a test rules out: before, every text was then replaced whole; now a text
+that needs a broken pattern is.
+
+### `compile`: the same globs built again
+
+A single parse, compile and decide of the default policy in a fresh process, spawned 40
+times, costs what the same round costs warm (p50 compile 15 and 14 ms), and a second
+compile inside one `openmoat guard` process costs what its first does (31 and 32 ms). So
+the first compile pays no one-time cost of a cold process: no table built once, no first
+use. What it pays is length: with a 9-character home the compile took 14 to 18 ms, with
+the 120-character home of a throwaway directory (as `openmoat bench`'s) 27 to 47 ms. A
+sampling profile put 69 % of `CompiledPolicy::compile` in globset's `GlobBuilder::build`,
+45 % in its regex text (an allocation per character of the glob, most of the profile's top
+frames being the allocator), and showed the same texts built again: the default policy's
+1,211 glob patterns spell 1,000 distinct texts, 415 of them `dir/**` with their `dir` built
+beside them, and the shell patterns build 559 word globs from 309 texts.
+
+**Change.** One compile keeps each glob it built by its text and options
+(`pattern/built.rs`): path globs per case mode, shell words apart. A pattern that names a
+text already built shares it, and its regex once a candidate needs it; a text that does not
+build is not kept, so each pattern that names it reports its own error where it always did.
+Each pattern's globs and errors are those of compiling it alone (`pattern/built.rs`'s test);
+the conformance, never-widen and obfuscation tests decide with the shared ones.
+
+Fresh process, 40 runs each in turn, default policy (p50 / p95 in ms):
+
+| Home directory | `compile` before | `compile` after | `openmoat guard`'s `compile` phase before | after |
+|---|---|---|---|---|
+| `/Users/me` | 22.7 / 28.6 | 17.2 / 21.3 | | |
+| 120 characters, a throwaway home | 38.4 / 48.2 | 30.8 / 39.1 | 31.5 / 36.0, 36.7 / 47.8 | 25.9 / 32.5, 27.8 / 35.6 |
+
+(The guard's columns are two rounds of 40 calls each, its own phase times.) Over the same
+rounds the guard's phases together went from 79 to 59 ms at the median.
+
+### Measured and left alone
+
+- **The rest of `compile`** is globset's work per character of each distinct glob. Matching
+  the literal home prefix outside globset would change the regex text the never-widen proof
+  reads (`widen/nfa.rs`); deferring the build stays out for the reason the first amendment
+  gives.
+- **The rest of `taint`**, about 8 ms: the fold of the calls since the cached row and its
+  digest of the effective policy (about 2 ms), the provenance lookup (0.2 ms) and, after the
+  session checks, the push check, the hook ledger's review and the decoy checks (about 5 ms
+  together, not split further).
+- **Dropping the compiled policy** took about a tenth of a warm round in the profile; it
+  happens after the decision.

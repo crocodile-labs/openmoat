@@ -14,6 +14,7 @@ use serde_json::Value;
 
 use crate::StoreError;
 
+mod gate;
 mod judge;
 mod programs;
 
@@ -35,40 +36,79 @@ macro_rules! credential_word {
     };
 }
 
+/// One credential pattern, what replaces its match, and the texts one of which
+/// every match holds ([`gate`]).
+#[derive(Clone, Copy)]
+struct Rule {
+    pattern: &'static str,
+    mask: Mask,
+    /// Lowercase ASCII texts one of which every match of `pattern` in an
+    /// ASCII text holds, in some letter case (`redact/tests/needles.rs` proves
+    /// it from the pattern); empty when no such text is named.
+    needs: &'static [&'static str],
+}
+
+const fn rule(pattern: &'static str, mask: Mask, needs: &'static [&'static str]) -> Rule {
+    Rule {
+        pattern,
+        mask,
+        needs,
+    }
+}
+
+/// What every match of [`credential_word!`] holds.
+const CREDENTIAL_WORDS: &[&str] = &[
+    "access",
+    "api",
+    "authorization",
+    "passw",
+    "private",
+    "secret",
+    "token",
+];
+
+/// [`CREDENTIAL_WORDS`] without `authorization`, for the flags.
+const FLAG_WORDS: &[&str] = &["access", "api", "passw", "private", "secret", "token"];
+
 /// Credential patterns that run before [`TOKEN_SHAPES`], and what replaces each match.
-const NAMED: &[(&str, Mask)] = &[
+const NAMED: &[Rule] = &[
     // A named credential whose value is quoted, as the shell reads it: the
     // whole quoted value is masked, spaces included (`DB_PASSWORD="a b c"`).
     // The unquoted form below stops at the first space.
-    (
+    rule(
         concat!(
             r"(?i)\b(?P<key>(?:[a-z0-9]+[_-])*",
             credential_word!(),
             r#"(?:[_-][a-z0-9]+)*\s*[=:]\s*)(?P<q>\x22)(?P<scheme>(?:bearer|basic)\s+)?(?:\\.|[^\x22\\])+(?P<e>\x22)"#
         ),
         Mask::With(judge::named_value),
+        CREDENTIAL_WORDS,
     ),
-    (
+    rule(
         concat!(
             r"(?i)\b(?P<key>(?:[a-z0-9]+[_-])*",
             credential_word!(),
             r"(?:[_-][a-z0-9]+)*\s*[=:]\s*)(?P<q>')(?P<scheme>(?:bearer|basic)\s+)?[^']+(?P<e>')"
         ),
         Mask::With(judge::named_value),
+        CREDENTIAL_WORDS,
     ),
     // The same for a flag with its quoted value as the next argument.
-    (
+    rule(
         r"(?i)(\s--?(?:[a-z0-9]+[_-])*(?:api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|passw(?:or)?d|private[_-]?key)\s+)\x22(?:\\.|[^\x22\\])+\x22",
         Mask::Text("${1}\"[redacted]\""),
+        FLAG_WORDS,
     ),
-    (
+    rule(
         r"(?i)(\s--?(?:[a-z0-9]+[_-])*(?:api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|passw(?:or)?d|private[_-]?key)\s+)'[^']+'",
         Mask::Text("${1}'[redacted]'"),
+        FLAG_WORDS,
     ),
     // `-u "user:pass word"`: the quoted password, spaces included.
-    (
+    rule(
         r"(?P<pre>(?:^|\s)(?:-u|--user)(?:\s+|=)(?P<q>['\x22]))(?P<user>[^\s:'\x22]+):(?P<pass>[^'\x22]+)['\x22]",
         Mask::With(judge::quoted_user_password),
+        &["-u"],
     ),
     // Named credentials in key=value or key: value form; keep the key. The
     // credential word may be one `_`- or `-`-separated part of a longer name
@@ -76,46 +116,52 @@ const NAMED: &[(&str, Mask)] = &[
     // of a longer word (`tokenizer`, `secretary`, `max_tokens`). A name whose
     // last part says the value is about the credential, not the credential
     // (`token_count`, `--token-file`, `private_key_path`), keeps its value.
-    (
+    rule(
         concat!(
             r"(?i)\b(?P<key>(?:[a-z0-9]+[_-])*",
             credential_word!(),
             r"(?:[_-][a-z0-9]+)*\s*[=:]\s*)(?P<q>['\x22]?)(?P<scheme>(?:bearer|basic)\s+)?[^\s'\x22&;]+(?P<e>['\x22]?)"
         ),
         Mask::With(judge::named_value),
+        CREDENTIAL_WORDS,
     ),
     // The same names as a quoted key with a quoted value, as JSON and Python
     // literals write them (`{"token": "abc"}`, `{'password': 'a b'}`).
-    (
+    rule(
         concat!(
             r"(?i)(?P<key>['\x22](?:[a-z0-9]+[_-])*",
             credential_word!(),
             r#"(?:[_-][a-z0-9]+)*['\x22]\s*:\s*)(?P<v>\x22(?:\\.|[^\x22\\])+\x22|'(?:\\.|[^'\\])+')"#
         ),
         Mask::With(judge::quoted_value),
+        CREDENTIAL_WORDS,
     ),
     // The same names as a flag with its value as the next argument
     // (`--token abc`, `--db-password abc`). The name must end in the
     // credential word, so `--password-stdin` and `--with-token < file` keep
     // what follows, and a value cannot start with `-` (the next flag).
-    (
+    rule(
         r"(?i)(\s--?(?:[a-z0-9]+[_-])*(?:api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|passw(?:or)?d|private[_-]?key)\s+)(['\x22]?)[^\s'\x22&;|<>-][^\s'\x22&;|<>]*(['\x22]?)",
         Mask::Text("${1}${2}[redacted]${3}"),
+        FLAG_WORDS,
     ),
     // `user:password` given to `-u` or `--user` (curl and others); a value
     // without `:` (`git push -u origin`) has no password to mask, and one
     // outside an HTTP client that is a drive path or `uid:gid` keeps it.
-    (
+    rule(
         r"(?P<pre>(?:^|\s)(?:-u|--user)(?:\s+|=)['\x22]?)(?P<user>[^\s:'\x22]+):(?P<pass>[^\s'\x22]+)",
         Mask::With(judge::user_password),
+        &["-u"],
     ),
-    (
+    rule(
         r"(?i)\bbearer\s+(?P<v>[A-Za-z0-9._~+/=-]{8,})",
         Mask::With(judge::bearer),
+        &["bearer"],
     ),
-    (
+    rule(
         r"(?i)\bbasic\s+(?P<v>[A-Za-z0-9+/=]{8,})",
         Mask::With(judge::basic),
+        &["basic"],
     ),
 ];
 
@@ -147,22 +193,43 @@ pub const TOKEN_SHAPES: &[(&str, &str)] = &[
     ),
 ];
 
+/// The needles of each of [`TOKEN_SHAPES`], in its order, as [`Rule::needs`].
+const SHAPE_NEEDS: [&[&str]; TOKEN_SHAPES.len()] = [
+    &["ghp", "gho", "ghu", "ghs", "ghr"],
+    &["github_pat_"],
+    &["sk-"],
+    &["sk-"],
+    &["akia"],
+    &["xox"],
+    &["aiza"],
+    &["npm_"],
+    &[
+        "glpat", "gldt", "glrt", "glptt", "glft", "glsoat", "glcbt", "glimt", "glagent", "gloas",
+    ],
+];
+
 /// Credential patterns that run after [`TOKEN_SHAPES`]. A JSON web token is
 /// masked but not in [`TOKEN_SHAPES`]: sample ones are common in test data.
-const TAIL: &[(&str, Mask)] = &[
-    (
+const TAIL: &[Rule] = &[
+    rule(
         r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b",
         Mask::Text(REPLACEMENT),
+        &["eyj"],
     ),
     // Credentials embedded in URLs.
-    (r"(://[^/\s:@]+:)[^@/\s]+@", Mask::Text("${1}[redacted]@")),
+    rule(
+        r"(://[^/\s:@]+:)[^@/\s]+@",
+        Mask::Text("${1}[redacted]@"),
+        &["://"],
+    ),
 ];
 
 /// Every pattern in the order it runs, with what replaces its match.
-fn rules() -> impl Iterator<Item = (&'static str, Mask)> {
+fn rules() -> impl Iterator<Item = Rule> {
     let shapes = TOKEN_SHAPES
         .iter()
-        .map(|(_, p)| (*p, Mask::Text(REPLACEMENT)));
+        .zip(SHAPE_NEEDS)
+        .map(|((_, p), needs)| rule(p, Mask::Text(REPLACEMENT), needs));
     NAMED
         .iter()
         .copied()
@@ -171,16 +238,13 @@ fn rules() -> impl Iterator<Item = (&'static str, Mask)> {
         .chain(TAIL.iter().copied())
 }
 
-/// [`rules`] compiled; `None` when one does not compile, which a test rules
-/// out. Every text is then redacted whole rather than masked by fewer patterns.
-static PATTERNS: LazyLock<Option<Vec<(Regex, Mask)>>> = LazyLock::new(|| {
-    rules()
-        .map(|(pattern, replacement)| Regex::new(pattern).map(|re| (re, replacement)))
-        .collect::<Result<_, _>>()
-        .ok()
-});
+/// [`rules`], each compiled the first time a text may hold a match ([`gate`]):
+/// building them all took most of a hook call's first redaction (ADR-080).
+static PATTERNS: LazyLock<Vec<gate::Lazy>> =
+    LazyLock::new(|| rules().map(gate::Lazy::new).collect());
 
-/// [`TOKEN_SHAPES`] compiled, with their names; `None` as for [`PATTERNS`].
+/// [`TOKEN_SHAPES`] compiled, with their names; `None` when one does not
+/// compile, which a test rules out.
 static SHAPES: LazyLock<Option<Vec<(Regex, &'static str)>>> = LazyLock::new(|| {
     TOKEN_SHAPES
         .iter()
@@ -265,7 +329,7 @@ impl KnownSecrets {
             Some(re) => re.replace_all(text, REPLACEMENT),
             None => Cow::Borrowed(text),
         };
-        mask_patterns(PATTERNS.as_deref(), masked.into_owned())
+        mask_patterns(&PATTERNS, masked.into_owned())
     }
 
     /// [`redact_value`] after masking the known values.
@@ -286,17 +350,30 @@ impl KnownSecrets {
     }
 }
 
-/// Run `patterns` over `text`; with none, nothing of `text` is kept.
-fn mask_patterns(patterns: Option<&[(Regex, Mask)]>, text: String) -> String {
-    let Some(patterns) = patterns else {
-        return REPLACEMENT.to_owned();
-    };
-    patterns.iter().fold(text, |acc, (re, mask)| match mask {
-        Mask::Text(replacement) => re.replace_all(&acc, *replacement).into_owned(),
-        Mask::With(replace) => re
-            .replace_all(&acc, |caps: &Captures<'_>| replace(caps, &acc))
-            .into_owned(),
-    })
+/// Run `patterns` over `text`, in order, each on what the ones before left. A
+/// pattern whose needles the text does not hold could not match it and is
+/// passed by ([`gate::Lazy::may_match`]). When a pattern that may match does not
+/// compile, which a test rules out, nothing of `text` is kept.
+fn mask_patterns(patterns: &[gate::Lazy], text: String) -> String {
+    let mut acc = text;
+    let mut folded = gate::Folded::of(&acc);
+    for pattern in patterns {
+        if !pattern.may_match(&folded) {
+            continue;
+        }
+        let Some(re) = pattern.regex() else {
+            return REPLACEMENT.to_owned();
+        };
+        let masked = match pattern.rule.mask {
+            Mask::Text(replacement) => re.replace_all(&acc, replacement),
+            Mask::With(replace) => re.replace_all(&acc, |caps: &Captures<'_>| replace(caps, &acc)),
+        };
+        if let Cow::Owned(masked) = masked {
+            acc = masked;
+            folded = gate::Folded::of(&acc);
+        }
+    }
+    acc
 }
 
 /// Replace credential-looking substrings. Idempotent.

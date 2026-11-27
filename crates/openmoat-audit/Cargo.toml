@@ -33,3 +33,6 @@ workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# The proof that each redaction pattern's needles hold (`redact/tests/needles.rs`)
+# reads the pattern as `regex` parses it; already in the build through `regex`.
+regex-syntax.workspace = true
