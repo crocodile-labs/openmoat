@@ -43,9 +43,12 @@ impl EvalContext {
     pub fn spellings(&self, raw: &str) -> Vec<String> {
         let (negated, body) = crate::pattern::split_negation(raw);
         let bang = if negated { "!" } else { "" };
+        // The moved directory is spliced in as literal text, as the home and
+        // project are (`paths::glob_literal`).
         let moved = self.moved_dirs.iter().filter_map(|(default, dir)| {
             let rest = body.strip_prefix(default.as_str())?;
-            (rest.is_empty() || rest.starts_with('/')).then(|| format!("{bang}{dir}{rest}"))
+            (rest.is_empty() || rest.starts_with('/'))
+                .then(|| format!("{bang}{}{rest}", paths::glob_literal(dir)))
         });
         let raws: Vec<String> = std::iter::once(raw.to_owned()).chain(moved).collect();
         let projects: Vec<Option<&str>> = match &self.project {
