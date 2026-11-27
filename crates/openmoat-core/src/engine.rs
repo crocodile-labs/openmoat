@@ -33,7 +33,7 @@ mod unbuilt;
 
 use atoms::{checked_atoms, value_read_atoms};
 #[cfg(test)]
-pub(crate) use context::sample_contexts;
+pub(crate) use context::tests::sample_contexts;
 pub use labels::{DATA_FLOW_ATOM, Label};
 pub(crate) use sections::Section;
 pub use staging::{STAGING_ATOM, Staging};

@@ -95,46 +95,5 @@ impl EvalContext {
     }
 }
 
-/// Contexts the engine's tests spell and compile patterns for: a home of 9,
-/// 30 and 120 characters, the last also with resolved spellings of the home
-/// and project (`/private/var/…`, as `openmoat bench`'s throwaway home on
-/// macOS had), with and without moved directories, in both case modes.
 #[cfg(test)]
-pub(crate) fn sample_contexts() -> Vec<EvalContext> {
-    let long = format!("/var/folders/{}/T/moat-bench/home", "x".repeat(87));
-    let homes = [
-        ("/Users/me".to_owned(), None),
-        (format!("/Users/{}", "n".repeat(23)), None),
-        (long.clone(), None),
-        (long.clone(), Some(format!("/private{long}"))),
-    ];
-    let mut out = Vec::new();
-    for (home, real_home) in homes {
-        for moved in [false, true] {
-            for case_insensitive_paths in [false, true] {
-                let project = format!("{home}/proj");
-                let moved_dirs = if moved {
-                    vec![
-                        ("~/.codex".to_owned(), "/srv/codex".to_owned()),
-                        ("~/.claude".to_owned(), format!("{home}/elsewhere/claude")),
-                    ]
-                } else {
-                    Vec::new()
-                };
-                out.push(EvalContext {
-                    real_project: real_home.as_ref().map(|r| format!("{r}/proj")),
-                    real_home: real_home.clone(),
-                    cwd: project.clone(),
-                    project: Some(project),
-                    home: home.clone(),
-                    moved_dirs,
-                    case_insensitive_paths,
-                });
-            }
-        }
-    }
-    out
-}
-
-#[cfg(test)]
-mod tests;
+pub(crate) mod tests;
