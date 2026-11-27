@@ -1,6 +1,8 @@
 # ADR-131: Keeping the loaded policy between `openmoat guard` calls
 
-Status: proposed (design, nothing built) · Date: 2026-11-26 · Builds on ADR-071 (the
+Status: deferred (design kept, nothing built): the bench after #874 and #875 measured
+`policy` at 8.1 ms of a 94 ms call, so a kept policy would save little next to `compile`,
+`taint` and `lock`, which are worked on first · Date: 2026-11-26 · Builds on ADR-071 (the
 binary's digest), ADR-080 (the latency budget and its 2026-11-26 amendment), ADR-101 (the
 audit key), ADR-120 (the guard's phases), ADR-130 (the phase times)
 
