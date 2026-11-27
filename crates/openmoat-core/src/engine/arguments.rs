@@ -11,7 +11,7 @@ use super::{CompiledPolicy, EvalContext};
 use crate::action::{Action, AtomicAction};
 use crate::arguments::Arguments;
 use crate::injection::{InjectedLookup, Token, TokenKind};
-use crate::pattern::{GlobPattern, any_match};
+use crate::pattern::{Built, GlobPattern, any_match};
 use crate::policy::PolicyError;
 use crate::predicate::{Predicate, Test};
 use crate::realpath::PathResolver;
@@ -42,6 +42,7 @@ impl CompiledWhen {
     pub(super) fn compile(
         when: &[Predicate],
         ctx: &EvalContext,
+        built: &mut Built,
     ) -> Result<Option<Self>, PolicyError> {
         if when.is_empty() {
             return Ok(None);
@@ -50,7 +51,7 @@ impl CompiledWhen {
             .iter()
             .filter_map(|p| p.test().map(|t| (p, t)))
             .map(|(predicate, (test, negated, list))| {
-                let compile = |p: &str, ci: bool| GlobPattern::compile(p, ci);
+                let mut compile = |p: &str, ci: bool| GlobPattern::compile_in(p, ci, built);
                 let patterns = match test {
                     Test::Under => list
                         .iter()

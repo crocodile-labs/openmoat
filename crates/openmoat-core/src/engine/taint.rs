@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{CompiledPolicy, EvalContext, checked_atoms};
 use crate::action::{Action, AtomicAction};
-use crate::pattern::{GlobPattern, any_match};
+use crate::pattern::{Built, GlobPattern, any_match};
 use crate::policy::{Policy, PolicyError};
 use crate::realpath::PathResolver;
 use crate::repo::REPO_RULE_PREFIX;
@@ -140,10 +140,11 @@ impl Taint {
 pub(super) fn compile_protected(
     policy: &Policy,
     ctx: &EvalContext,
+    built: &mut Built,
 ) -> Result<Vec<GlobPattern>, PolicyError> {
     crate::taint::protected_writes(policy.taint.as_ref())
         .flat_map(|p| ctx.spellings(p))
-        .map(|p| GlobPattern::compile(&p, ctx.case_insensitive_paths))
+        .map(|p| GlobPattern::compile_in(&p, ctx.case_insensitive_paths, built))
         .collect()
 }
 
@@ -151,13 +152,14 @@ pub(super) fn compile_protected(
 pub(super) fn compile_private(
     policy: &Policy,
     ctx: &EvalContext,
+    built: &mut Built,
 ) -> Result<Vec<GlobPattern>, PolicyError> {
     policy
         .taint
         .iter()
         .flat_map(|t| &t.private_paths)
         .flat_map(|p| ctx.spellings(p))
-        .map(|p| GlobPattern::compile(&p, ctx.case_insensitive_paths))
+        .map(|p| GlobPattern::compile_in(&p, ctx.case_insensitive_paths, built))
         .collect()
 }
 

@@ -9,7 +9,7 @@ use std::borrow::Cow;
 
 use crate::action::{Action, AtomicAction};
 use crate::kind::Kind;
-use crate::pattern::{GlobPattern, ShellPattern, any_match};
+use crate::pattern::{Built, GlobPattern, ShellPattern, any_match};
 use crate::policy::{Policy, PolicyError, RuleGroup};
 use crate::programs::{self, NoResolver, ProgramResolver};
 use crate::realpath::PathResolver;
@@ -140,24 +140,31 @@ impl<'p> CompiledPolicy<'p> {
 
     fn build(policy: Cow<'p, Policy>, ctx: &EvalContext) -> Result<Self, PolicyError> {
         ctx.validate_moved_dirs()?;
-        let compile_list = |groups: &[RuleGroup], allow: bool| {
+        // Each text the policy names is built once (`pattern/built.rs`).
+        let mut built = Built::default();
+        let mut compile_list = |groups: &[RuleGroup], allow: bool| {
             groups
                 .iter()
-                .map(|g| CompiledGroup::compile(g, ctx, allow))
+                .map(|g| CompiledGroup::compile(g, ctx, allow, &mut built))
                 .collect::<Result<Vec<_>, _>>()
         };
+        let deny = compile_list(&policy.deny, false)?;
+        let repo_review = compile_list(&policy.repo_review, false)?;
+        let allow = compile_list(&policy.allow, true)?;
+        let review = compile_list(&policy.review, false)?;
+        let defer = compile_list(&policy.defer, false)?;
         Ok(Self {
             ctx: ctx.clone(),
-            deny: compile_list(&policy.deny, false)?,
-            repo_review: compile_list(&policy.repo_review, false)?,
-            allow: compile_list(&policy.allow, true)?,
-            review: compile_list(&policy.review, false)?,
-            defer: compile_list(&policy.defer, false)?,
-            protected: taint::compile_protected(&policy, ctx)?,
+            deny,
+            repo_review,
+            allow,
+            review,
+            defer,
+            protected: taint::compile_protected(&policy, ctx, &mut built)?,
             folders: contents::ProtectedFolders::compile(&policy.deny, ctx),
-            inside: staging::compile_inside(&policy, ctx)?,
+            inside: staging::compile_inside(&policy, ctx, &mut built)?,
             requests: crate::requests::RequestRules::for_hook(&policy.requests)?,
-            private: taint::compile_private(&policy, ctx)?,
+            private: taint::compile_private(&policy, ctx, &mut built)?,
             policy,
         })
     }
@@ -240,12 +247,18 @@ impl<'p> CompiledPolicy<'p> {
 }
 
 impl CompiledGroup {
-    /// `allow` says whether the group is an allow rule ([`Self::bare_hosts`]).
-    fn compile(group: &RuleGroup, ctx: &EvalContext, allow: bool) -> Result<Self, PolicyError> {
+    /// `allow` says whether the group is an allow rule ([`Self::bare_hosts`]);
+    /// `built`, the globs this compile built so far.
+    fn compile(
+        group: &RuleGroup,
+        ctx: &EvalContext,
+        allow: bool,
+        built: &mut Built,
+    ) -> Result<Self, PolicyError> {
         let shell = group
             .shell
             .iter()
-            .map(|p| ShellPattern::compile(p))
+            .map(|p| ShellPattern::compile_in(p, built))
             .collect::<Result<_, _>>()?;
         let mut globs: [Vec<GlobPattern>; Kind::ALL.len()] = Default::default();
         let mut bare: [Vec<GlobPattern>; Kind::ALL.len()] = Default::default();
@@ -255,10 +268,10 @@ impl CompiledGroup {
                 Kind::Net | Kind::Fetch => true,
                 _ => false,
             };
-            let compile = |patterns: &mut dyn Iterator<Item = &String>| {
+            let mut compile = |patterns: &mut dyn Iterator<Item = &String>| {
                 patterns
                     .flat_map(|p| ctx.spellings(p))
-                    .map(|p| GlobPattern::compile(&p, case_insensitive))
+                    .map(|p| GlobPattern::compile_in(&p, case_insensitive, built))
                     .collect::<Result<Vec<_>, _>>()
             };
             let patterns = group.patterns(kind);
@@ -273,7 +286,7 @@ impl CompiledGroup {
             shell,
             globs,
             bare_hosts: allow.then_some(bare),
-            when: arguments::CompiledWhen::compile(&group.when, ctx)?,
+            when: arguments::CompiledWhen::compile(&group.when, ctx, built)?,
         })
     }
 
