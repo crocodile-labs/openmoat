@@ -266,7 +266,7 @@ and [docs/SANDBOX.md](docs/SANDBOX.md).
 
 ## Proof
 
-**Our own scenarios (MoatBench, OpenMoat 0.29.0, macOS 12, the same totals as 0.25.0 to 0.28.0).** `openmoat bench` sends each
+**Our own scenarios (MoatBench, OpenMoat 0.30.0, macOS 12, the same totals as 0.25.0 to 0.29.0).** `openmoat bench` sends each
 scenario as each of the 14 agents' hook payloads:
 
 | | Runs | Denied | Held for review | Left to OS sandbox | Left to agent's prompt | Allowed |
@@ -279,9 +279,9 @@ scenario as each of the 14 agents' hook payloads:
 The scenarios were written by OpenMoat's authors, so this shows that the policy and the
 benchmark agree, not that OpenMoat is complete ([docs/MOATBENCH.md](docs/MOATBENCH.md)).
 The [MoatBench repository](https://github.com/crocodile-labs/moatbench), which anyone can
-re-run, last published OpenMoat 0.29.0: 43 of 45 attacks stopped, 0 of 84 ordinary steps blocked,
-every step answered as on 0.28.0, and a median of 16 ms (Ubuntu) and 61 ms (macOS) per hook call against
-0.28.0's 64 and 73 ms ([results](https://github.com/crocodile-labs/moatbench/tree/main/runs/2026-11-27-openmoat-0.29.0)).
+re-run, last published OpenMoat 0.30.0: 43 of 45 attacks stopped, 0 of 84 ordinary steps blocked,
+every step answered as on 0.28.0 and 0.29.0, and a median of 16 ms (Ubuntu) and 44 ms (macOS) per hook
+call against 0.28.0's 64 and 73 ms ([results](https://github.com/crocodile-labs/moatbench/tree/main/runs/2026-11-27-openmoat-0.30.0)).
 
 **Attack sets written by others (decision engine, default policy).** 0.25.0 → 0.26.0
 (the rules this measurement led to, ADR-112) → 0.27.0 → 0.28.0 (ADR-123:
