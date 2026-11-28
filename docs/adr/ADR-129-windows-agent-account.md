@@ -1,6 +1,6 @@
 # ADR-129: Windows `openmoat run` as a dedicated local account: the network and reads held
 
-Status: proposed · Date: 2026-11-25 · Builds on ADR-115 (the write-restricted Windows
+Status: accepted, steps 1 and 2 released as a preview in 0.28.0 · Date: 2026-11-25 · Builds on ADR-115 (the write-restricted Windows
 tier), ADR-124 (why the network and reads waited for this), ADR-083 (the state directory's
 access list), ADR-089 (the run's boundary record), ADR-108 (protection score), ADR-117 (the
 code gate) · Extends ADR-124 §Decision 2 and 3

@@ -1,6 +1,6 @@
 # ADR-111: Check every policy change for widening, and prove it where the rules are regular
 
-Status: proposed · Date: 2026-11-22 · Builds on ADR-019 (one policy, compiled; lowering
+Status: accepted, released in 0.26.0 · Date: 2026-11-22 · Builds on ADR-019 (one policy, compiled; lowering
 never widens), ADR-022 (repository policy), ADR-031 (policy packs), ADR-050 (merge
 check), ADR-062 (request rules)
 

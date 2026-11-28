@@ -235,8 +235,10 @@ Guide: docs/USAGE.md, \"Ask for a code before anything is loosened\".")]
         command: GateCommand,
     },
     /// Windows: a local account of its own that `openmoat run` starts the agent as, so
-    /// Windows refuses its reads of the places the policy denies as well as its writes
-    /// outside the project (ADR-129, a preview). Set up once from an administrator terminal.
+    /// Windows refuses its reads of the places the policy denies, its writes outside the
+    /// project and every connection but the one to its proxy (name lookups still leave
+    /// through Windows' DNS Client service) (ADR-129, a preview). Set up once from an
+    /// administrator terminal.
     #[command(after_help = agent_account::HELP)]
     AgentAccount {
         #[command(subcommand)]

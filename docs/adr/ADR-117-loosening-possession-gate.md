@@ -1,6 +1,6 @@
 # ADR-117: A possession factor on every loosening, and a policy-change ledger
 
-Status: proposed · Date: 2026-11-23 · Builds on ADR-022 (repository policy), ADR-101
+Status: accepted, released in 0.27.0; Touch ID and a FIDO2 key stay future work · Date: 2026-11-23 · Builds on ADR-022 (repository policy), ADR-101
 (keyed audit chain), ADR-110 (signed audit checkpoints), ADR-111 (never-widen check)
 
 ## Context

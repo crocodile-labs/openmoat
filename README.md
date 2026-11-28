@@ -231,7 +231,8 @@ sets up each:
 **hook + OS sandbox**: each call the hook reports is checked, and the agent's own sandbox,
 written from the same policy, confines the commands it runs. **hook only**: the hook's
 decision is the only check; start the agent with `openmoat run` (macOS, Linux; on
-Windows a preview that holds writes only) for OS confinement too (`openmoat status` names the command for each such agent). In editors: Claude Code's VS Code extension and JetBrains plugin use the
+Windows a preview that holds writes, and after `openmoat agent-account setup` also denied
+reads in your profile and the network but name lookups) for OS confinement too (`openmoat status` names the command for each such agent). In editors: Claude Code's VS Code extension and JetBrains plugin use the
 same hook, and Cursor's Tab is refused secret files ([docs/IDE.md](docs/IDE.md)).
 
 What each hook covers, tool by tool: [docs/INSTALL.md](docs/INSTALL.md#set-up-with-openmoat-init).

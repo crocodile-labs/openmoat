@@ -1,6 +1,6 @@
 # ADR-108: Landlock ABI 10, a protection score, strict mode, and more agents with an `openmoat run` command
 
-Status: proposed · Date: 2026-11-22 · Builds on ADR-018 (tiers), ADR-076 (the `openmoat
+Status: accepted, released in 0.26.0 (§7 and §8 in 0.27.0) · Date: 2026-11-22 · Builds on ADR-018 (tiers), ADR-076 (the `openmoat
 run` command for hook-only agents), ADR-077 (full boundary), ADR-082 (the Landlock ABI
 ladder), ADR-089 (the run's boundary record), ADR-106 (sandboxed start) · Numbered 108:
 109 to 114 are taken by changes open at the time of writing

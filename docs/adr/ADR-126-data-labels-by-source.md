@@ -1,6 +1,6 @@
 # ADR-126: Data labels by source, and rules on where labelled data may go
 
-Status: proposed · Date: 2026-11-24 · Builds on ADR-020, ADR-029, ADR-057, ADR-058,
+Status: accepted, released as a preview in 0.28.0 · Date: 2026-11-24 · Builds on ADR-020, ADR-029, ADR-057, ADR-058,
 ADR-061 and ADR-113
 
 ## Context

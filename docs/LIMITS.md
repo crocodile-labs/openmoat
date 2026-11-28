@@ -68,7 +68,8 @@ Each agent's gaps and the reasons are in
   so a classifier mistake is a bypass. `openmoat status` and `openmoat doctor` name the
   `openmoat run` command that puts each of them in an OS sandbox, or say why there is none
   (macOS before 13, Linux without bubblewrap; on Windows the command starts a preview tier
-  that holds writes only, below; the Continue CLI has no command, nor has OpenClaw on
+  that holds writes, and after `openmoat agent-account setup` denied reads in your
+  profile and the network but name lookups too, below; the Continue CLI has no command, nor has OpenClaw on
   Windows, [SANDBOX.md](SANDBOX.md#agents-openmoat-writes-no-sandbox-for)).
   The command is proved with a stand-in program, not the real agent. Confining stays
   your choice: `openmoat init` asks per agent and `openmoat confine` turns it on later;
@@ -83,7 +84,8 @@ Each agent's gaps and the reasons are in
   tool does not start in the sandbox; a Gateway installed as a launchd or systemd service
   does not go through the shim. Linux without a network namespace and Windows refuse
   `--listen`.
-- **`openmoat run` on Windows holds writes and the process tree only (preview, ADR-115).**
+- **`openmoat run` on Windows, without the agent account, holds writes and the process
+  tree only (preview, ADR-115).**
   A write-restricted token refuses writes outside the project, the run's temp directory
   and `--write` paths, and a job ends every process the agent started. Not covered:
   **reads** (the token is checked on writes only, so secrets, other agents' logins and

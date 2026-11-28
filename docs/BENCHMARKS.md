@@ -28,7 +28,8 @@ Decision engine only. Run on 2026-11-22 with the default policy of OpenMoat 0.25
 ([ADR-112](adr/ADR-112-default-rules-from-outside-benchmarks.md), released in 0.26.0), and
 again on 2026-11-24 with OpenMoat 0.27.0 (`main` at `4c9c40f5`, which adds ADR-116's
 `obfuscated` rule and PowerShell reader), and on 2026-11-25 with OpenMoat 0.28.0 (`main` at
-`aaaada00`, which adds ADR-123's rules). "Stopped" is `deny`, or `deny` plus `review`
+`aaaada00`, which adds ADR-123's rules). 0.29.0 and 0.30.0 leave the default policy
+unchanged; these two suites were not run again on them. "Stopped" is `deny`, or `deny` plus `review`
 (held for a person). `defer` means OpenMoat leaves the call to the agent's own permission
 prompt, which is the default policy's answer for a call no rule names (ADR-025); it is
 not counted as stopped.
@@ -477,7 +478,7 @@ future work.
 [MoatBench](MOATBENCH.md) drives `openmoat guard` with each agent's hook payloads, a
 session and an audit log, which the outside benchmarks above do not. Its scenarios were
 written by OpenMoat's authors, so it shows that the policy and its own expectations
-agree. OpenMoat 0.27.0, the released build, run by the maintainer on 2026-11-24 on macOS
+agree. OpenMoat 0.30.0, the released build, run on 2026-11-27 on macOS
 12.7.6 (x86_64), all 14 agents' payloads (Claude Code, Codex, Cursor,
 OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI,
 goose, the Antigravity CLI, Qwen Code, Crush):
@@ -499,7 +500,7 @@ goose, the Antigravity CLI, Qwen Code, Crush):
 eight developer workflows ran 844 steps with 26 reviews, all expected. "OS sandbox" is a
 step the hook allows where the scenario declares that OpenMoat's OS sandbox holds it;
 "left to the agent" is a call OpenMoat defers, or an allow on the agents that read it that
-way. 0.25.0 (2026-11-22, a debug build) and 0.26.0 gave the same totals. The scorecard also
+way. 0.25.0 to 0.29.0 gave the same totals. The scorecard also
 prints decision times; they depend on the machine and are not a performance figure.
 
 The proof report of the same build on the same machine (`openmoat bench --report`, the 14

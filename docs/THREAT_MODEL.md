@@ -121,13 +121,14 @@ something OpenMoat claims to stop.
     path or command from a call that is not a wrapped MCP tool is not linked to the later
     call that uses it, and only session taint applies.
   - Linked beyond exact matches are only spellings of the same request (ADR-063 §4): a
-    host in other case or with a trailing dot, an IPv4 address in another numeric form,
+    host in other case, with a trailing dot or percent-encoded, an IPv4 address in another numeric form,
     an IPv6 address uncompressed, a subdomain of a host a URL named (unless the policy
-    allows the parent), and a planted command run through `sudo`, `env`, `nohup`,
-    `sh -c` or after `VAR=value`.
+    allows the parent), a planted command run through `sudo`, `env`, `nohup`,
+    `sh -c` or after `VAR=value`, or written with its program's directory, `./` or `~`,
+    and a relative path, placed against the directory the output was read in (ADR-113).
   - Not linked: a host by another name (an IP address for a domain name, which would
-    need DNS), a subdomain of a host named only in prose, a reworded command
-    (`rm -r -f x` for `rm -rf x`), or a relative path.
+    need DNS), a subdomain of a host named only in prose, or a reworded command
+    (`rm -r -f x` for `rm -rf x`).
   - A command in plain prose is linked by its hosts and paths only.
   - Content that floods the bounds with decoys pushes a planted token out: 256 tokens per
     output, 4096 per session, the first 1 MiB.
