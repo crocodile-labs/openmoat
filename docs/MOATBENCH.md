@@ -313,8 +313,8 @@ fixture in `tests/conformance/benign.yaml` or `review.yaml`.
 
 ## Scorecard: fourteen agents
 
-Measured on OpenMoat 0.29.0 (2026-11-27, `openmoat bench`, the released build on macOS
-12.7.6, x86_64; 0.25.0 to 0.28.0 gave the same totals), every scenario run as the hook payloads of each of the fourteen agents: Claude
+Measured on OpenMoat 0.30.0 (2026-11-27, `openmoat bench`, the released build on macOS
+12.7.6, x86_64; 0.25.0 to 0.29.0 gave the same totals), every scenario run as the hook payloads of each of the fourteen agents: Claude
 Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes
 Agent, the Cline CLI, goose, the Antigravity CLI, Qwen Code and Crush. A later change to
 the scenarios or the policy gives other totals; run `openmoat bench` for today's. What
@@ -335,7 +335,7 @@ above).
 | workflows | 100 | 0 | 26 | 12 | 0 | 62 |
 | **total** | **970** | **538** | **181** | **120** | **9** | **122** |
 
-On 0.29.0: 0 false positives, 0 known gaps, 0 mismatches with the expected answers. The eight
+On 0.30.0: 0 false positives, 0 known gaps, 0 mismatches with the expected answers. The eight
 developer workflows (git feature branch, Node app, Python package, Rust crate, Go
 module, Docker image, make targets, editing project files) ran 844 steps with 26 reviews,
 all of them expected (12 in `docker-image`, 14 in `edit-project-files`). "OS sandbox"
@@ -345,17 +345,19 @@ sandbox holds it; `openmoat bench --report` runs those. "Left to the agent"
 deferred call, or an allow on the agents that read it that way.
 
 The scorecard also prints decision times for the ordinary work (1,088 calls). On the run
-above they were p50 77 ms, p95 123 ms and p99 193 ms per call; on the same laptop 0.28.0
-gave p50 225 ms, p95 562 ms and p99 797 ms, and 0.27.0 p50 113 ms, p95 208 ms and p99
-258 ms. They depend on the machine and its load: compare runs on one machine, not across
+above they were p50 39 ms, p95 52 ms and p99 72 ms per call; on the same laptop 0.29.0
+gave p50 77 ms, p95 123 ms and p99 193 ms, 0.28.0 p50 225 ms, p95 562 ms and p99 797 ms,
+and 0.27.0 p50 113 ms, p95 208 ms and p99 258 ms. They depend on the machine and its load: compare runs on one machine, not across
 machines. MoatBench's own runs on GitHub's runners, which use the same machine type each
 time, put the median per hook call, process start included, at 32 ms for 0.19.0, 64 ms
-(Ubuntu) and 73 ms (macOS) for 0.28.0, and 16 ms (Ubuntu) and 61 ms (macOS) for 0.29.0,
-which builds only the patterns a call needs, with the same answers at every step.
+(Ubuntu) and 73 ms (macOS) for 0.28.0, 16 ms (Ubuntu) and 61 ms (macOS) for 0.29.0,
+which builds only the patterns a call needs, and 16 ms (Ubuntu) and 44 ms (macOS) for
+0.30.0, which builds each pattern's matcher only when a call first needs it, with the
+same answers at every step.
 
 From 0.29.0, `openmoat bench` also prints each guard phase's p50 and p95, and
 `openmoat audit stats` the same for recorded calls
-([USAGE.md](USAGE.md#audit-stats-time-per-guard-phase)). On the run above, compiling the
+([USAGE.md](USAGE.md#audit-stats-time-per-guard-phase)). On 0.29.0's run, compiling the
 policy (`compile`, p50 37 ms) took the most, then the lock check (`lock`, 14 ms), reading
 the session's earlier calls (`taint`, 9 ms) and loading the policy (`policy`, 9 ms).
 That `compile` figure was inflated by the bench's own home. The bench works in a
@@ -366,11 +368,11 @@ what a guard in a home such as `/Users/<name>` pays. From 0.30.0 the bench
 creates its home under the resolved temporary directory, so its `compile` line is what
 a guard in an ordinary home pays, and the policy builds each pattern's matcher only when
 a call first needs it ([ADR-132](adr/ADR-132-glob-builds-on-first-use.md)). A home
-given with `--scratch-dir` is used as written. On the same Mac, 0.30.0's ordinary work
-gave p50 41 ms, p95 67 ms and p99 109 ms, and its `compile` phase p50 8.7 ms, down from
-36.9 ms on 0.29.0.
+given with `--scratch-dir` is used as written. On the run above (0.30.0), the phases at
+p50 were the lock check 9.7 ms, compiling the policy 8.4 ms, loading it 7.8 ms and
+reading the session's earlier calls 5.7 ms.
 The review and deny rates are 2.39 reviews and 0 denies per 100 ordinary calls, as on
-0.27.0 and 0.28.0.
+0.27.0 to 0.29.0.
 
 The proof report of the same release on the same machine (`openmoat bench --report`, all
 14 hosts' models): 12 rows pass, 0 fail, 5 not tested here.
