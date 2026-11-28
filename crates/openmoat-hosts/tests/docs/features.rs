@@ -77,7 +77,10 @@ fn run(spec: &HostSpec) -> String {
         .map(|os| match os {
             Os::Linux => "Linux",
             Os::Mac => "macOS 13+",
-            Os::Windows => "Windows (writes only, preview)",
+            Os::Windows => {
+                "Windows (preview: writes; with the agent account also reads and the network \
+                 but name lookups)"
+            }
         })
         .collect();
     if oses.is_empty() {

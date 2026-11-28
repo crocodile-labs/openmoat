@@ -1108,7 +1108,9 @@ OS sandbox: openmoat run --write ~/.gemini -- gemini (docs/SANDBOX.md)
 
 On macOS before 13 and on Linux without a network namespace (where `openmoat run`
 refuses a `--write` path outside the project) those commands name why there is none. On
-Windows they start the preview tier, which holds writes only; start the agent's `.exe`,
+Windows they start the preview tier, which holds writes, and after `openmoat
+agent-account setup` also denied reads in your profile and the network but name lookups
+([below](#openmoat-run-on-windows-preview)); start the agent's `.exe`,
 not an npm `.cmd` shim. OpenClaw gets no command on Windows, whose tier cannot hold a
 listening port to loopback. The Continue CLI gets none: which directories `cn` writes was
 not checked.

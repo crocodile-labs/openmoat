@@ -34,8 +34,10 @@ What exists:
   plugin, ADR-033), GitHub Copilot CLI, pi (an extension), Gemini CLI, OpenCode 1 and 2
   (one plugin on `tool.execute.before` and `execute.before`, ADR-040), Hermes Agent (a
   `pre_tool_call` shell hook, approved in its hook allowlist), the Cline CLI (`PreToolUse`
-  and `PostToolUse` hook scripts) and goose (a `PreToolUse` hook in a plugin), each through
-  its own hooks; the Continue CLI adapter waits for a `cn` release that runs hooks. Claude
+  and `PostToolUse` hook scripts), goose (a `PreToolUse` hook in a plugin), the
+  Antigravity CLI (a `PreToolUse` hook in `~/.gemini/config/hooks.json`), Qwen Code (a
+  `PreToolUse` hook in `settings.json`, preview) and Crush (a `PreToolUse` hook in
+  `crush.json`, preview), 14 agents, each through its own hooks; the Continue CLI adapter waits for a `cn` release that runs hooks. Claude
   Code in the VS Code extension and the JetBrains plugin goes through the same hook, and
   Cursor's Tab reads through `beforeTabFileRead` (ADR-060, [IDE.md](IDE.md)).
 - **Policy.** Kinds `shell`, `fs.read`, `fs.write`, `net`, `fetch`, `env.read`, `env.set`,
@@ -71,9 +73,13 @@ What exists:
   Claude Code, the Continue CLI, Codex, Gemini CLI, GitHub Copilot CLI, the Cline CLI and
   wrapped MCP servers, a later command or write that uses
   a host, path or command untrusted output named needs review (`injected-input`,
-  ADR-057), also in another spelling of the same request (ADR-063, proposed). A send after the session collected
-  files outside the project is recorded and counted in `openmoat report`, with no
-  verdict yet (ADR-061, proposed).
+  ADR-057), also in another spelling of the same request (ADR-063, proposed). A send of a
+  file the session packed from files outside the project, or any send after it wrote
+  private data into a file, needs review (`staging-egress`, ADR-061, ADR-113); a send
+  after many outside reads with nothing packed is recorded and counted in `openmoat
+  report`, with no verdict yet. After a session read private data and content someone
+  else may have written, every call that can send data out needs review
+  (`lethal-trifecta`, ADR-113).
 - **Package installs.** A name one typo away from a popular package needs review (ADR-030);
   `openmoat run` keeps npm and uv off versions published in the last 7 days.
 - **MCP.** Server definitions pinned in the lock (ADR-026); `openmoat mcp proxy`, opt-in
@@ -93,7 +99,10 @@ What exists:
   pinned from the policy (ADR-018), and a protection level per agent in `openmoat status`.
   Every sandbox denies the agents' logins to the commands they run (ADR-054).
 - **Lightweight tier.** `openmoat run`: Seatbelt on macOS 13 or later, Landlock and seccomp
-  on Linux, around the whole agent.
+  on Linux, around the whole agent. On Windows a preview: a write-restricted token in a
+  job object (ADR-115) and, after `openmoat agent-account setup`, the agent's own account,
+  whose denied reads in your profile and whose network but name lookups Windows refuses
+  (ADR-129).
 - **Isolated tier on Linux.** `openmoat run --isolate` under bubblewrap, rootless.
 - **Egress proxy.** `openmoat proxy`: default deny, SNI check, its own DNS, an audit
   row per connection, a secrets broker, and a user service on macOS and Linux. It serves
@@ -132,10 +141,9 @@ Making what exists solid in daily use, in the order of
 - The Continue CLI checked end to end once a released `cn` runs hooks (#264).
 - A bypass round with security people (#131); the public challenge is open
   ([CHALLENGE.md](CHALLENGE.md), #323).
-- The proposed ADRs' next steps: a default `staging-egress` rule once `openmoat report`
-  has measured real sessions (ADR-061); method and path rules (`requests:`) for allowed
-  hosts (ADR-062); after-call hooks of more agents, each once a real payload is captured
-  (ADR-063).
+- After-call hooks of more agents, each once a real payload is captured (ADR-063), and
+  a verdict for a send after many outside reads with nothing packed, once `openmoat
+  report` has measured its thresholds on real sessions (ADR-113).
 - Hook liveness (ADR-104) for the agents whose session files are not known yet (Cline,
   goose, Hermes Agent, Antigravity CLI, Crush), each once its session place is checked
   against a real run, and the session places the specs name checked by the weekly
@@ -147,13 +155,19 @@ Planned for 1.0 or after, not yet scheduled:
 
 - Sandboxed start for Claude Code, Codex and Cursor as well, once each one's write facts
   for `openmoat run` are in its spec (ADR-106 §4).
-- Windows enforcement: an OS sandbox on Windows (#135).
+- Windows enforcement out of preview: the Windows tier of `openmoat run` (ADR-115,
+  ADR-129) stays a preview until a test runs a real agent under it, and name lookups
+  under the agent account still leave through Windows' DNS Client service.
 - A user service for `openmoat proxy` on Windows (#272).
 - The Isolated tier on macOS: `openmoat run --isolate` in an Apple Virtualization guest (#175, ADR-023).
 - HTTPS injection of brokered secrets in the standalone `openmoat proxy`, and keep-alive
   inside a terminated tunnel; `openmoat run` has both injection and the method and path
   rules (ADR-043, #247).
-- A conservative PowerShell tokenizer; until then PowerShell is `unparseable` and defers.
+- More of PowerShell read. Since 0.27.0 a reader (preview, ADR-116) decides each simple
+  PowerShell statement as the POSIX command that does the same, so what a default rule
+  denies is denied; the line itself is still `unparseable`, never allowed on that reading
+  alone, and defers where no rule denies or reviews it. Here-strings, splatting, `-f`
+  formats and script blocks are not read.
 - A scrubbed environment by default for `openmoat run`, once real agent runs show its lists
   complete, and in the agents' own sandboxes once Claude Code's and Codex's switches are
   tried against OpenMoat's hook (ADR-105; `sandbox.env: scrubbed` turns it on today).

@@ -223,8 +223,10 @@ pub fn run(host: Host, os: Os, ev: &Evidence<'_>) -> Cell {
         Os::Windows => {
             "Write-restricted (ADR-115): writes held to the project and `--write` paths; reads \
              and the network not held by the OS. After `openmoat agent-account setup` (ADR-129, \
-             preview) the agent runs as its own account and the reads the policy denies are \
-             refused too; the network still not"
+             preview) the agent runs as its own account: the reads the policy denies in your \
+             profile are refused too, and its network filters refuse every connection but the \
+             one to the run's proxy, except name lookups, which leave through Windows' DNS \
+             Client service"
         }
     };
     let text = match command(spec, os) {

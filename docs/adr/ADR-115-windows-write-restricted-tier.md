@@ -1,6 +1,6 @@
 # ADR-115: A first Windows tier for `openmoat run`: a write-restricted token in a job object
 
-Status: proposed · Date: 2026-11-23 · Builds on ADR-018 (tiers), ADR-077 (full boundary),
+Status: accepted, released as a preview in 0.26.0; the network and reads it leaves out are ADR-129's · Date: 2026-11-23 · Builds on ADR-018 (tiers), ADR-077 (full boundary),
 ADR-083 (the state directory's access list), ADR-089 (the run's boundary record), ADR-105
 (scrubbed environment), ADR-108 (protection score) · Numbered 115: 114 is taken by a change
 open at the time of writing

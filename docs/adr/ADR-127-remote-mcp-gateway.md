@@ -1,6 +1,6 @@
 # ADR-127: The MCP gateway for remote servers: a pinned URL, a token the agent never holds, every address checked
 
-Status: proposed · Date: 2026-11-24 · Builds on ADR-020, ADR-026, ADR-045, ADR-069,
+Status: accepted, released as a preview in 0.28.0; its "Not built" part stays proposed · Date: 2026-11-24 · Builds on ADR-020, ADR-026, ADR-045, ADR-069,
 ADR-081, ADR-114 and ADR-117
 
 ## Context

@@ -163,7 +163,7 @@ set `speaks: Some(Host::ClaudeCode)` in its spec and end its host list line with
 | The tool | `Action` | Example |
 |---|---|---|
 | runs a POSIX shell command | `Shell { command }` | Claude Code `Bash`, Cursor `beforeShellExecution` |
-| runs a shell OpenMoat cannot parse | `ForeignShell { shell, command }` (always `unparseable`: `defer` under the default policy) | Claude Code `PowerShell` |
+| runs a shell OpenMoat cannot parse | `ForeignShell { shell, command }` (always `unparseable`: `defer` under the default policy, unless a rule denies or holds what the PowerShell reader, a preview, finds the line does, ADR-116) | Claude Code `PowerShell` |
 | reads one file or directory | `FsRead { path }` | `Read`, `beforeReadFile` |
 | reads several | `ReadFiles { paths }` | `SendFile`, Cursor search tools |
 | searches a directory | `FsRead` of its path, else the working directory (`search_root`) | `Grep`, `Glob` |

@@ -1,6 +1,6 @@
 # ADR-116: Obfuscation as a signal, and a PowerShell reader
 
-Status: proposed · Date: 2026-11-23 · Builds on ADR-013 (the classifier is triage),
+Status: accepted, released in 0.27.0; the PowerShell reader is a preview · Date: 2026-11-23 · Builds on ADR-013 (the classifier is triage),
 ADR-025 (`unparseable` defers), ADR-083 (Windows crossings, `@opaque-code`) · Numbered
 116: 114 and 115 are taken by changes open at the time of writing
 

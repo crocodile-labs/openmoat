@@ -1,6 +1,6 @@
 # ADR-119: Team mode without a hosted service: signed bundles, inventory and drift
 
-Status: proposed · Date: 2026-11-23 · Builds on ADR-022 (repository policy), ADR-031
+Status: accepted, released in 0.27.0 · Date: 2026-11-23 · Builds on ADR-022 (repository policy), ADR-031
 (signed policy and packs), ADR-064 (required protection level), ADR-081 (live audit
 delivery), ADR-104 (hook liveness), ADR-108 (protection score), ADR-109 (foreign-hook
 ledger), ADR-110 (signed checkpoints), ADR-111 (never-widen check), ADR-114 (MCP package

@@ -53,27 +53,27 @@ has each agent's case). What happens when the hook fails, case by case and with 
 <!-- generated:features-agents -->
 | Agent | Protection | Own OS sandbox (`openmoat init`) | `openmoat run` | A `review` becomes | MCP servers | Hook a project cannot turn off | Plugin package (preview) | When the hook fails, the agent |
 |---|---|---|---|---|---|---|---|---|
-| Claude Code | hook + OS sandbox (macOS, Linux, WSL2); hook only on native Windows | `settings.json`, not on native Windows | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | `openmoat init --managed` | Claude Code plugin marketplace | blocks it from 2.1.295; earlier versions run it |
-| Codex | hook + OS sandbox | `config.toml` | macOS 13+, Linux, Windows (writes only, preview) | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | an administrator writes it | — | blocks a slow check; runs it if the guard is stopped or killed |
-| Cursor | hook + OS sandbox (macOS, Linux); hook only on Windows | `sandbox.json`, not on native Windows | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | `openmoat init --managed` | Cursor Marketplace | blocks it |
+| Claude Code | hook + OS sandbox (macOS, Linux, WSL2); hook only on native Windows | `settings.json`, not on native Windows | macOS 13+, Linux, Windows (preview: writes; with the agent account also reads and the network but name lookups) | the agent's own prompt | pinned; stdio servers can be wrapped | `openmoat init --managed` | Claude Code plugin marketplace | blocks it from 2.1.295; earlier versions run it |
+| Codex | hook + OS sandbox | `config.toml` | macOS 13+, Linux, Windows (preview: writes; with the agent account also reads and the network but name lookups) | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | an administrator writes it | — | blocks a slow check; runs it if the guard is stopped or killed |
+| Cursor | hook + OS sandbox (macOS, Linux); hook only on Windows | `sandbox.json`, not on native Windows | macOS 13+, Linux, Windows (preview: writes; with the agent account also reads and the network but name lookups) | the agent's own prompt | pinned; stdio servers can be wrapped | `openmoat init --managed` | Cursor Marketplace | blocks it |
 | OpenClaw | hook only | — | Linux | the agent's own prompt | pinned; stdio servers can be wrapped | — | ClawHub | blocks it |
-| GitHub Copilot CLI | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | `openmoat init --managed` prints the root command | GitHub Copilot CLI plugins | blocks a slow check; runs it if the guard is stopped or killed |
-| pi | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | — | pi packages (npm, pi.dev gallery) | blocks it |
-| Gemini CLI | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | an administrator writes it | Gemini CLI extensions gallery | blocks a slow check; runs it if the guard is stopped or killed |
-| OpenCode | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | an administrator writes it | OpenCode plugins (npm) | blocks it |
-| Hermes Agent | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned | — | Hermes Agent Plugin Catalog | blocks it |
-| Cline CLI | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | — | — | runs it when the hook cannot start, crashes or exits non-zero |
-| goose | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | a deny you approve with `openmoat allow --last` | pinned | — | — | blocks it |
-| Antigravity CLI | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | — | Antigravity CLI plugins | blocks a slow check; runs it if the guard is stopped or killed |
-| Qwen Code | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | the agent's own prompt | pinned; stdio servers can be wrapped | an administrator writes it | — | blocks a slow check; runs it if the guard is stopped or killed |
-| Crush | hook only | — | macOS 13+, Linux, Windows (writes only, preview) | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | an administrator writes it | — | blocks a slow check; runs it if the guard is stopped or killed |
+| GitHub Copilot CLI | hook only | — | macOS 13+, Linux, Windows (preview: writes; with the agent account also reads and the network but name lookups) | the agent's own prompt | pinned; stdio servers can be wrapped | `openmoat init --managed` prints the root command | GitHub Copilot CLI plugins | blocks a slow check; runs it if the guard is stopped or killed |
+| pi | hook only | — | macOS 13+, Linux, Windows (preview: writes; with the agent account also reads and the network but name lookups) | the agent's own prompt | pinned; stdio servers can be wrapped | — | pi packages (npm, pi.dev gallery) | blocks it |
+| Gemini CLI | hook only | — | macOS 13+, Linux, Windows (preview: writes; with the agent account also reads and the network but name lookups) | the agent's own prompt | pinned; stdio servers can be wrapped | an administrator writes it | Gemini CLI extensions gallery | blocks a slow check; runs it if the guard is stopped or killed |
+| OpenCode | hook only | — | macOS 13+, Linux, Windows (preview: writes; with the agent account also reads and the network but name lookups) | the agent's own prompt | pinned; stdio servers can be wrapped | an administrator writes it | OpenCode plugins (npm) | blocks it |
+| Hermes Agent | hook only | — | macOS 13+, Linux, Windows (preview: writes; with the agent account also reads and the network but name lookups) | the agent's own prompt | pinned | — | Hermes Agent Plugin Catalog | blocks it |
+| Cline CLI | hook only | — | macOS 13+, Linux, Windows (preview: writes; with the agent account also reads and the network but name lookups) | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | — | — | runs it when the hook cannot start, crashes or exits non-zero |
+| goose | hook only | — | macOS 13+, Linux, Windows (preview: writes; with the agent account also reads and the network but name lookups) | a deny you approve with `openmoat allow --last` | pinned | — | — | blocks it |
+| Antigravity CLI | hook only | — | macOS 13+, Linux, Windows (preview: writes; with the agent account also reads and the network but name lookups) | the agent's own prompt | pinned; stdio servers can be wrapped | — | Antigravity CLI plugins | blocks a slow check; runs it if the guard is stopped or killed |
+| Qwen Code | hook only | — | macOS 13+, Linux, Windows (preview: writes; with the agent account also reads and the network but name lookups) | the agent's own prompt | pinned; stdio servers can be wrapped | an administrator writes it | — | blocks a slow check; runs it if the guard is stopped or killed |
+| Crush | hook only | — | macOS 13+, Linux, Windows (preview: writes; with the agent account also reads and the network but name lookups) | a deny you approve with `openmoat allow --last` | pinned; stdio servers can be wrapped | an administrator writes it | — | blocks a slow check; runs it if the guard is stopped or killed |
 | Continue CLI | not checked yet; use `openmoat run` | — | — | — | — | — | — | — |
 <!-- /generated -->
 
 | Protection | What it means |
 |---|---|
 | **hook + OS sandbox** | Each tool call the hook reports is checked, and the agent's own sandbox, written from the same policy, confines the commands it runs there. Not every tool runs there: Claude Code's file tools, `WebFetch` and MCP servers run outside its sandbox, and Cursor runs some commands outside its own ([LIMITS.md](LIMITS.md#sandboxes-and-allowed-code)). |
-| **hook only** | Every tool call the agent's hook reports is checked; the hook's decision is the only check. For OS confinement too, start the agent with `openmoat run` (macOS, Linux; on Windows a preview that holds writes only). |
+| **hook only** | Every tool call the agent's hook reports is checked; the hook's decision is the only check. For OS confinement too, start the agent with `openmoat run` (macOS, Linux; on Windows a preview that holds writes, and with its own agent account also denied reads in your profile and the network but name lookups). |
 
 ## Each operating system
 
@@ -81,7 +81,7 @@ has each agent's case). What happens when the hook fails, case by case and with 
 |---|---|---|---|
 | Hook and policy | yes | yes | yes |
 | The agents' own sandboxes | Claude Code, Codex, Cursor | Claude Code, Codex, Cursor | Codex only; for Claude Code's, run it inside WSL2 |
-| `openmoat run` | macOS 13 or later (Seatbelt) | Landlock and seccomp; bubblewrap with `--isolate` | preview: a write-restricted token in a job object; reads and network not held by the OS, `.cmd`/`.bat` programs refused; for the full tiers, run the agent and `openmoat` inside WSL2 |
+| `openmoat run` | macOS 13 or later (Seatbelt) | Landlock and seccomp; bubblewrap with `--isolate` | preview: a write-restricted token in a job object, which holds writes only, `.cmd`/`.bat` programs refused; after `openmoat agent-account setup` the agent runs as its own account, whose denied reads in your profile and whose network (all but name lookups) the OS refuses too; for the full tiers, run the agent and `openmoat` inside WSL2 |
 | `openmoat proxy install` (user service) | yes | yes | no |
 | Release builds | arm64, x64 | x64, arm64 (glibc and static musl) | x64 |
 

@@ -1,6 +1,6 @@
 # ADR-118: Short-lived, audience-bound credentials minted by the proxy
 
-Status: proposed · Date: 2026-11-23 · Builds on ADR-020 (egress proxy), ADR-027 (session
+Status: accepted, released as a preview in 0.27.0 · Date: 2026-11-23 · Builds on ADR-020 (egress proxy), ADR-027 (session
 credential), ADR-043 (TLS termination), ADR-087 (short-lived values from a program) ·
 Numbered 118: 116 and 117 are taken by changes open at the time of writing
 
